@@ -55,7 +55,7 @@ class ModelPaths:
     """模型和資料檔案路徑"""
     
     # YOLO 模型
-    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\AI_Project\cat_pose\v11s_66.pt")
+    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\AI_Project\cat_pose\v11s_68.pt")
     
     # ST-GCN 模型
     STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv.pth")
