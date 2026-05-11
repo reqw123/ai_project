@@ -1,0 +1,5 @@
+feature_mode,in_channels,best_val_acc,best_val_macro_f1,best_val_loss,model_path,results_dir
+xyv,4,0.9772727272727273,0.9805555555555556,0.8075488277456977,C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv_att_on_shake_on.pth,C:\AI_Project\cat_monitoring_system\run_xyv_att_on_shake_on
+xyv_conf,5,0.9886363636363636,0.9904342544791982,0.7979710373011503,C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv_conf_att_on_shake_on.pth,C:\AI_Project\cat_monitoring_system\run_xyv_conf_att_on_shake_on
+xyv_bone,6,0.9772727272727273,0.9724325571296748,0.8288090425458822,C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv_bone_att_on_shake_on.pth,C:\AI_Project\cat_monitoring_system\run_xyv_bone_att_on_shake_on
+xyv_conf_bone,7,0.9886363636363636,0.9904342544791982,0.8994357640093024,C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv_conf_bone_att_on_shake_on.pth,C:\AI_Project\cat_monitoring_system\run_xyv_conf_bone_att_on_shake_on

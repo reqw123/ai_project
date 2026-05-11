@@ -1,0 +1,6 @@
+{
+    "cmake.sourceDirectory": "C:/tinycnn/yolov12/examples/YOLOv8-LibTorch-CPP-Inference",
+    "claudeCodeChat.permissions.yoloMode": false,
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda"
+}

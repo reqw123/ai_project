@@ -1,0 +1,40 @@
+2026-05-11 00:37:29 | INFO | 開始比較任務
+2026-05-11 00:37:29 | INFO | 輸出目錄: jitter_compare_logs\20260511_003729
+2026-05-11 00:37:29 | INFO | 使用裝置: cuda:0
+2026-05-11 00:37:29 | INFO | 影片: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\2752855.mp4
+2026-05-11 00:37:29 | INFO | 模型數量: 2
+2026-05-11 00:37:29 | INFO | [1/2] 開始分析模型: C:\AI_Project\cat_pose\val_best.pt
+2026-05-11 00:37:29 | INFO | 載入模型: C:\AI_Project\cat_pose\val_best.pt
+2026-05-11 00:37:29 | INFO | 來源影片: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\2752855.mp4 | FPS=50.00 | 取樣步長=2 | 有效輸入FPS=25.00
+2026-05-11 00:37:31 | INFO | val_best.pt | 已處理 50 個取樣幀
+2026-05-11 00:37:33 | INFO | val_best.pt | 已處理 100 個取樣幀
+2026-05-11 00:37:35 | INFO | val_best.pt | 已處理 150 個取樣幀
+2026-05-11 00:37:36 | INFO | val_best.pt | 已處理 200 個取樣幀
+2026-05-11 00:37:38 | INFO | val_best.pt | 已處理 250 個取樣幀
+2026-05-11 00:37:39 | INFO | val_best.pt | 已處理 300 個取樣幀
+2026-05-11 00:37:41 | INFO | val_best.pt | 已處理 350 個取樣幀
+2026-05-11 00:37:42 | INFO | val_best.pt | 已處理 400 個取樣幀
+2026-05-11 00:37:44 | INFO | val_best.pt | 已處理 450 個取樣幀
+2026-05-11 00:37:45 | INFO | 完成 val_best | global_jitter=0.024202 | unstable_rate=0.00% | detection_rate=100.00%
+2026-05-11 00:37:45 | INFO | [2/2] 開始分析模型: C:\AI_Project\cat_pose\train_best.pt
+2026-05-11 00:37:45 | INFO | 載入模型: C:\AI_Project\cat_pose\train_best.pt
+2026-05-11 00:37:46 | INFO | 來源影片: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\2752855.mp4 | FPS=50.00 | 取樣步長=2 | 有效輸入FPS=25.00
+2026-05-11 00:37:47 | INFO | train_best.pt | 已處理 50 個取樣幀
+2026-05-11 00:37:49 | INFO | train_best.pt | 已處理 100 個取樣幀
+2026-05-11 00:37:50 | INFO | train_best.pt | 已處理 150 個取樣幀
+2026-05-11 00:37:52 | INFO | train_best.pt | 已處理 200 個取樣幀
+2026-05-11 00:37:54 | INFO | train_best.pt | 已處理 250 個取樣幀
+2026-05-11 00:37:55 | INFO | train_best.pt | 已處理 300 個取樣幀
+2026-05-11 00:37:56 | INFO | train_best.pt | 已處理 350 個取樣幀
+2026-05-11 00:37:58 | INFO | train_best.pt | 已處理 400 個取樣幀
+2026-05-11 00:38:00 | INFO | train_best.pt | 已處理 450 個取樣幀
+2026-05-11 00:38:01 | INFO | 完成 train_best | global_jitter=0.024109 | unstable_rate=0.00% | detection_rate=100.00%
+2026-05-11 00:38:01 | INFO | 新模型比舊模型關鍵點抖動幅度變好 0.39%
+2026-05-11 00:38:01 | INFO | 結果判定: 新模型較好（train_best）
+2026-05-11 00:38:01 | INFO | 比較完成
+2026-05-11 00:38:01 | INFO | 較佳模型: train_best
+2026-05-11 00:38:01 | INFO | 較差模型: val_best
+2026-05-11 00:38:01 | INFO | 詳細日誌: jitter_compare_logs\20260511_003729\comparison_report.log
+2026-05-11 00:38:01 | INFO | JSON 報告: jitter_compare_logs\20260511_003729\comparison_report.json
+2026-05-11 00:38:01 | INFO | 文字報告: jitter_compare_logs\20260511_003729\comparison_report.txt
+2026-05-11 00:38:01 | INFO | 逐幀 CSV: jitter_compare_logs\20260511_003729\frame_metrics.csv

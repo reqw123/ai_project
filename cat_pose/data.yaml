@@ -1,0 +1,16 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+kpt_shape: [17, 3]
+
+flip_idx: [0, 2, 1, 3, 4, 5, 8, 9, 6, 7, 12, 13, 10, 11, 14, 15, 16]
+nc: 1
+names: ['cat']
+
+roboflow:
+  workspace: project-aqzte
+  project: 11-ursme
+  version: 19
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/project-aqzte/11-ursme/dataset/19
