@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-修改 flows.json - 調試版本，寫入日誌
+修改 flows.json - 調試版本，寫入日誌。
 """
 
 import json

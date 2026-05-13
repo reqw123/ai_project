@@ -47,7 +47,7 @@ VIDEO_PATHS = [
    #r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\摳圖影片集\5923455_Black_Cat_Runs_1920x1080.mp4",#不要刪
   # r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試"
 ]
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_68.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_70_1.pt"
 STGCN_MODEL_PATH = r"C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv_att_on_shake_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
