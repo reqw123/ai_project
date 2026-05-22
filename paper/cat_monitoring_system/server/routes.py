@@ -11,31 +11,21 @@ from pathlib import Path
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-try:
-    from config import ModelPaths as _ModelPaths
-    from config import YOLOConfig as _YOLOConfig
-    from config import STGCNConfig as _STGCNConfig
-    from config import NodeRedConfig as _NodeRedConfig
-    from config import FlaskConfig as _FlaskConfig
-    _KP_EMA_ALPHA = _STGCNConfig.KP_EMA_ALPHA
-    _YOLO_MODEL_PATH = _ModelPaths.YOLO_MODEL
-    _STGCN_MODEL_PATH = _ModelPaths.STGCN_MODEL
-    _VIDEO_PATH = _ModelPaths.VIDEO_INPUT
-    _NODERED_RESULT_URL = _NodeRedConfig.ENDPOINT_RESULT
-    _IMAGE_SIZE = _YOLOConfig.IMAGE_SIZE
-    _CONF_THRES = _YOLOConfig.CONFIDENCE_THRESHOLD
-    _SEQUENCE_LENGTH = _STGCNConfig.SEQUENCE_LENGTH
-    _PORT = _FlaskConfig.PORT
-except Exception:
-    _KP_EMA_ALPHA = 1.0
-    _YOLO_MODEL_PATH = r'C:\cat_pose\v11s_10.pt'
-    _STGCN_MODEL_PATH = r'C:\cat_pose\gcn_pose\models\stgcn_best.pth'
-    _VIDEO_PATH = r'C:\cat_pose\模型測試影片\cat_run.mp4'
-    _NODERED_RESULT_URL = 'http://127.0.0.1:1880/yolo_result'
-    _IMAGE_SIZE = 640
-    _CONF_THRES = 0.5
-    _SEQUENCE_LENGTH = 32
-    _PORT = 5000
+from config import ModelPaths as _ModelPaths
+from config import YOLOConfig as _YOLOConfig
+from config import STGCNConfig as _STGCNConfig
+from config import NodeRedConfig as _NodeRedConfig
+from config import FlaskConfig as _FlaskConfig
+
+_KP_EMA_ALPHA = _STGCNConfig.KP_EMA_ALPHA
+_YOLO_MODEL_PATH = _ModelPaths.YOLO_MODEL
+_STGCN_MODEL_PATH = _ModelPaths.STGCN_MODEL
+_VIDEO_PATH = _ModelPaths.VIDEO_INPUT
+_NODERED_RESULT_URL = _NodeRedConfig.ENDPOINT_RESULT
+_IMAGE_SIZE = _YOLOConfig.IMAGE_SIZE
+_CONF_THRES = _YOLOConfig.CONFIDENCE_THRESHOLD
+_SEQUENCE_LENGTH = _STGCNConfig.SEQUENCE_LENGTH
+_PORT = _FlaskConfig.PORT
 from server.streaming import SharedFrameStreamer
 from processors.frame_processor import FrameProcessor
 from communication.nodered_client import NodeRedClient
@@ -60,38 +50,12 @@ def _resolve_runtime_device(preferred='cuda'):
         return 'cpu'
 
 
-def _pick_existing_path(primary_path, fallback_paths):
-    for p in [primary_path] + list(fallback_paths):
-        if p and Path(p).exists():
-            return str(p)
-    return str(primary_path)
-
-
 def _build_frame_processor():
     runtime_device = _resolve_runtime_device('cuda')
-    yolo_model_path = _pick_existing_path(
-        _YOLO_MODEL_PATH,
-        [
-            r'C:\cat_pose\v11s_10.pt',
-            Path(__file__).resolve().parent.parent / 'yolov8n-pose.pt',
-        ],
-    )
-    stgcn_model_path = _pick_existing_path(
-        _STGCN_MODEL_PATH,
-        [
-            r'C:\cat_pose\gcn_pose\models\stgcn_best.pth',
-        ],
-    )
-    video_path = _pick_existing_path(
-        _VIDEO_PATH,
-        [
-            r'C:\cat_pose\模型測試影片\cat_run.mp4',
-        ],
-    )
     return FrameProcessor(
-        yolo_model_path=yolo_model_path,
-        stgcn_model_path=stgcn_model_path,
-        video_path=video_path,
+        yolo_model_path=_YOLO_MODEL_PATH,
+        stgcn_model_path=_STGCN_MODEL_PATH,
+        video_path=_VIDEO_PATH,
         csv_path='cat_monitoring_log.csv',
         segments_csv_path='behavior_segments.csv',
         nodered_url=_NODERED_RESULT_URL,
@@ -143,13 +107,7 @@ def register_routes(app):
         data = request.get_json(force=True)
         ip = data.get('ip')
         print(f"[Node-RED] Python 上線通知，收到 IP: {ip}")
-        return jsonify({'status': 'ok', 'msg': 'Python online received', 'ip': ip})
-    @app.route('/python_online_ack', methods=['POST'])
-    def python_online_ack():
-        data = request.get_json(force=True)
-        ip = data.get('ip')
-        print(f"[Node-RED] 已收到 Python IP: {ip}")
-        return jsonify({'status': 'ok', 'msg': 'Python ACK received', 'ip': ip})
+        return jsonify({'ip': ip})
 
     @app.route('/stream')
     def stream():

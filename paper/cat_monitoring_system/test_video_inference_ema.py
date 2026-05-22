@@ -36,18 +36,18 @@ from utils.constants import (
 # 配置
 # VIDEO_PATHS 每個元素可為：2
 # 1) 單一影片檔案路徑
-# 2) 資料夾路徑（會遞迴搜尋常見影片副檔名）
+# 2) 資料夾路q徑（會遞迴搜尋常見影片副檔名）
 VIDEO_PATHS = [
- #  r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk", 
-    r"C:\Users\homec\Downloads\5月9日 (2).mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\2752855.mp4",
-    r"C:\Users\homec\Downloads\0_Small_Kitty_Stray_1920x1080.mp4",
-    r"C:\Users\homec\Downloads\5月9日 (1)(1).mp4",#不要刪
+ "http://192.168.4.1:81/stream", 
+    #r"C:\Users\homec\Downloads\5月9日 (2).mp4",
+    #r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\2752855.mp4",
+    #r"C:\Users\homec\Downloads\0_Small_Kitty_Stray_1920x1080.mp4",
+   # r"C:\Users\homec\Downloads\5月9日 (1)(1).mp4",#不要刪
     #r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\摳圖影片集\5913249_Cat_Feline_1920x1080.mp4",#不要刪
    #r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\摳圖影片集\5923455_Black_Cat_Runs_1920x1080.mp4",#不要刪
   # r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試"
 ]
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_70_1.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_72.pt"
 STGCN_MODEL_PATH = r"C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv_att_on_shake_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
@@ -152,12 +152,25 @@ SUPPORTED_VIDEO_EXTS = {
 }
 
 
+def _is_stream_url(path_str: str) -> bool:
+    """判斷是否為 IP 串流 URL。"""
+    lowered = str(path_str).lower()
+    return lowered.startswith(("http://", "https://", "rtsp://", "rtsps://", "rtmp://"))
+
+
 def resolve_video_paths(video_sources: Iterable[str]):
     """將來源清單展開成影片檔路徑；來源可為影片檔或資料夾。"""
     resolved = []
     seen = set()
 
     for src in video_sources:
+        if _is_stream_url(src):
+            key = str(src).strip().lower()
+            if key not in seen:
+                seen.add(key)
+                resolved.append(str(src).strip())
+            continue
+
         p = Path(src).expanduser()
 
         if p.is_file():
@@ -671,7 +684,8 @@ def main():
 
     while not stop_requested:
         video_path = video_paths[current_video_idx]
-        if not Path(video_path).exists():
+        is_stream_url = _is_stream_url(video_path)
+        if not is_stream_url and not Path(video_path).exists():
             print(f"❌ 影片不存在，跳過: {video_path}")
             if is_stats_mode:
                 current_video_idx += 1
@@ -693,6 +707,8 @@ def main():
             continue
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if is_stream_url and total_frames <= 0:
+            total_frames = 0
         source_fps = cap.get(cv2.CAP_PROP_FPS)
         if source_fps <= 1:
             source_fps = TARGET_MODEL_FPS
@@ -755,6 +771,14 @@ def main():
         while True:
             ret, frame = cap.read()
             if not ret:
+                if is_stream_url:
+                    print(f"⚠ 串流讀取失敗，嘗試重新連線: {video_path}")
+                    cap.release()
+                    cap = cv2.VideoCapture(video_path)
+                    if cap.isOpened():
+                        continue
+                    print(f"❌ 串流無法重新開啟，跳過: {video_path}")
+                    break
                 # 影片播放完畢
                 if loop_playback and not stop_requested:
                     if local_loop_count == 0:
@@ -1107,6 +1131,9 @@ def main():
         else:
             if switch_delta != 0:
                 current_video_idx = (current_video_idx + switch_delta) % len(video_paths)
+            elif is_stream_url:
+                # 串流不做循環播放，結束後維持在當前來源即可
+                break
             elif not loop_playback:
                 break
 

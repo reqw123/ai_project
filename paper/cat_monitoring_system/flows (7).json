@@ -1,0 +1,299 @@
+[
+    {
+        "id": "89dc755a187e8b2a",
+        "type": "tab",
+        "label": "😺 貓咪健康監測系統",
+        "disabled": false,
+        "info": "完整的貓咪健康監測系統\n- 行為識別：走動(walk) / 舔舐(lick) / 搔抓(scratch) / 甩頭(shake)\n- 即時影像串流\n- 行為時間記錄\n- 詳細統計分析\n- 健康警示系統"
+    },
+    {
+        "id": "76dd5ae52c233d0d",
+        "type": "http in",
+        "z": "89dc755a187e8b2a",
+        "name": "接收Python數據",
+        "url": "/yolo_result",
+        "method": "post",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 300,
+        "wires": [
+            [
+                "c9122db2bba56bbc",
+                "9788051351772439"
+            ]
+        ]
+    },
+    {
+        "id": "9788051351772439",
+        "type": "http response",
+        "z": "89dc755a187e8b2a",
+        "name": "回應200",
+        "statusCode": "200",
+        "x": 140,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "c9122db2bba56bbc",
+        "type": "json",
+        "z": "89dc755a187e8b2a",
+        "name": "解析JSON",
+        "property": "payload",
+        "action": "obj",
+        "pretty": false,
+        "x": 340,
+        "y": 300,
+        "wires": [
+            [
+                "583503209c7f6b21"
+            ]
+        ]
+    },
+    {
+        "id": "583503209c7f6b21",
+        "type": "function",
+        "z": "89dc755a187e8b2a",
+        "name": "數據分發器",
+        "func": "let data = msg.payload;\n\n// === 防呆 ===\nif (!data) return null;\n\n// === 修正 behavior_log（讓 UI 正常吃）===\nif (data.behavior_log) {\n    data.behavior_log = data.behavior_log.map(item => {\n        return {\n            behavior: item.behavior,   // 保持 lick / scratch / walk / shake\n            time: item.time,\n            duration: item.duration,\n            emoji: getEmoji(item.behavior)\n        };\n    });\n}\n\n// === 補 emoji（確保 UI 不炸）===\nif (data.current && !data.current.emoji) {\n    data.current.emoji = getEmoji(data.current.behavior);\n}\n\n// === UI 主輸出 ===\nlet ui_msg = {\n    payload: data\n};\n\n// === Gauge 專用 ===\nlet gauge_msg = {\n    payload: data.activity_score || 0\n};\n\n// === 輸出 ===\nreturn [\n    ui_msg,   // 即時狀態\n    ui_msg,   // timeline\n    ui_msg,   // stats\n    ui_msg,   // alerts\n    gauge_msg // gauge\n];\n\n\n// === emoji helper ===\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case \"scratch\": return \"🐾\";\n        case \"lick\": return \"🧼\";\n        case \"walk\": return \"🚶\";\n        case \"shake\": return \"🔄\";\n        default: return \"🐱\";\n    }\n}",
+        "outputs": 5,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 540,
+        "y": 300,
+        "wires": [
+            [
+                "20e7dba83f7c6a25"
+            ],
+            [
+                "eda5a39891466e40"
+            ],
+            [
+                "4467bbd0e2a6d03f"
+            ],
+            [
+                "eb0740356105e4c3"
+            ],
+            [
+                "6e3f7ef030bbe0bd"
+            ]
+        ]
+    },
+    {
+        "id": "20e7dba83f7c6a25",
+        "type": "ui_template",
+        "z": "89dc755a187e8b2a",
+        "group": "group_status_cat",
+        "name": "即時狀態卡片",
+        "order": 1,
+        "width": "8",
+        "height": "5",
+        "format": "<style>\n    .status-card {\n        position: relative;\n        width: 100%;\n        height: 100%;\n        min-height: 220px;\n\n        border-radius: 22px;\n        overflow: hidden;\n\n        font-family: 'Microsoft JhengHei', Arial, sans-serif;\n\n        background: #111;\n\n        box-shadow:\n            0 10px 28px rgba(0, 0, 0, 0.22),\n            0 2px 10px rgba(0, 0, 0, 0.18);\n\n        transition:\n            transform 0.35s ease,\n            box-shadow 0.35s ease;\n    }\n\n    /* hover 整張卡 */\n    .status-card:hover {\n        transform: translateY(-2px);\n\n        box-shadow:\n            0 14px 34px rgba(0, 0, 0, 0.28),\n            0 4px 12px rgba(0, 0, 0, 0.22);\n    }\n\n    /* 背景圖 */\n    .bg {\n        position: absolute;\n        inset: 0;\n\n        background-size: cover;\n        background-position: center;\n\n        transform: scale(1.05);\n\n        filter:\n            brightness(0.72) saturate(1.08) contrast(1.02);\n\n        transition:\n            transform 0.6s ease,\n            filter 0.6s ease;\n    }\n\n    /* hover 背景微放大 */\n    .status-card:hover .bg {\n        transform: scale(1.08);\n\n        filter:\n            brightness(0.78) saturate(1.12) contrast(1.04);\n    }\n\n    /* 深色遮罩 */\n    .overlay {\n        position: absolute;\n        inset: 0;\n\n        background:\n            linear-gradient(135deg,\n                rgba(0, 0, 0, 0.68) 0%,\n                rgba(0, 0, 0, 0.18) 42%,\n                rgba(0, 0, 0, 0.74) 100%);\n    }\n\n    /* 主內容 */\n    .content {\n        position: relative;\n        z-index: 2;\n\n        width: 100%;\n        height: 100%;\n\n        color: white;\n    }\n\n    /* 左下狀態卡 */\n/* 左下狀態卡（改成偏正方形） */\n/* 左下狀態卡（小型正方形） */\n.top-left {\nposition: absolute;\n\nleft: 10px;\nbottom: 10px;\n\nwidth: 74px;\nheight: 74px;\n\ndisplay: flex;\nflex-direction: column;\njustify-content: center;\nalign-items: center;\n\ngap: 2px;\n\npadding: 6px;\n\nborder-radius: 18px;\n\nbackground:\nlinear-gradient(\n135deg,\nrgba(255,255,255,0.16),\nrgba(255,255,255,0.06)\n);\n\nbackdrop-filter: blur(12px);\n\nborder:\n1px solid rgba(255,255,255,0.12);\n\nbox-shadow:\n0 3px 10px rgba(0,0,0,0.18),\ninset 0 1px 1px rgba(255,255,255,0.08);\n\ntransition:\ntransform 0.25s ease,\nbackground 0.25s ease;\n}\n\n/* hover */\n.status-card:hover .top-left {\ntransform: translateY(-2px);\n}\n\n/* emoji */\n.emoji {\nfont-size: 1.2em;\n\nline-height: 1;\n\nmargin-bottom: 1px;\n\nfilter:\ndrop-shadow(0 2px 5px rgba(0,0,0,0.3));\n}\n\n/* 狀態資訊 */\n.status-info {\ndisplay: flex;\nflex-direction: column;\nalign-items: center;\n\ntext-align: center;\n}\n\n/* 小標題 */\n.label {\nfont-size: 0.5em;\n\nopacity: 0.92;\n\ncolor: rgba(255,255,255,0.95);\n\nletter-spacing: 0.5px;\n\nmargin-bottom: 1px;\n\nfont-weight: 600;\n\ntext-shadow:\n0 1px 4px rgba(0,0,0,0.35);\n}\n\n/* 行為文字 */\n.status-text {\nfont-size: 0.72em;\n\nfont-weight: 700;\n\nline-height: 1.05;\n\ntext-shadow:\n0 2px 6px rgba(0,0,0,0.35);\n}\n\n    /* 右下活動力 */\n    .right {\n        position: absolute;\n\n        right: 10px;\n        bottom: 10px;\n\n        text-align: center;\n\n        padding: 8px 12px;\n\n        border-radius: 16px;\n\n        background:\n            linear-gradient(135deg,\n                rgba(255, 255, 255, 0.13),\n                rgba(255, 255, 255, 0.06));\n\n        backdrop-filter: blur(10px);\n\n        border:\n            1px solid rgba(255, 255, 255, 0.12);\n\n        box-shadow:\n            0 4px 12px rgba(0, 0, 0, 0.18),\n            inset 0 1px 1px rgba(255, 255, 255, 0.08);\n\n        transition:\n            transform 0.25s ease,\n            background 0.25s ease;\n    }\n\n    /* hover */\n    .status-card:hover .right {\n        transform: translateY(-2px);\n\n        background:\n            linear-gradient(135deg,\n                rgba(255, 255, 255, 0.16),\n                rgba(255, 255, 255, 0.08));\n    }\n\n    /* 活動力數值 */\n    .activity-value {\n        font-size: 1.45em;\n        font-weight: 800;\n\n        line-height: 1;\n\n        color: #ffffff;\n\n        text-shadow:\n            0 2px 8px rgba(0, 0, 0, 0.35);\n    }\n\n    /* 活動力文字 */\n    .activity-label {\n        margin-top: 3px;\n\n        font-size: 0.62em;\n\n        opacity: 0.75;\n\n        letter-spacing: 1px;\n    }\n\n    /* 右上時間 */\n    .time-box {\n        position: absolute;\n\n        top: 10px;\n        right: 10px;\n\n        padding: 6px 10px;\n\n        border-radius: 12px;\n\n        background:\n            linear-gradient(135deg,\n                rgba(0, 0, 0, 0.38),\n                rgba(0, 0, 0, 0.22));\n\n        backdrop-filter: blur(6px);\n\n        border:\n            1px solid rgba(255, 255, 255, 0.08);\n\n        font-size: 0.68em;\n\n        opacity: 0.88;\n\n        letter-spacing: 0.5px;\n\n        text-shadow:\n            0 2px 6px rgba(0, 0, 0, 0.35);\n\n        box-shadow:\n            0 2px 8px rgba(0, 0, 0, 0.18);\n    }\n\n    /* 手機 */\n    @media (max-width: 768px) {\n\n        .status-card {\n            min-height: 190px;\n        }\n\n        .emoji {\n            font-size: 1.15em;\n        }\n\n        .status-text {\n            font-size: 0.82em;\n        }\n\n        .activity-value {\n            font-size: 1.2em;\n        }\n\n        .time-box {\n            font-size: 0.58em;\n        }\n    }\n</style>\n\n<div class=\"status-card\">\n\n    <!-- 背景圖 -->\n    <div class=\"bg\"\n        ng-style=\"{'background-image': 'url(' + (msg.payload.image_url || 'https://megapx-assets.dcard.tw/images/83358790-1cba-4543-89b7-7378e652b8bd/640.jpeg') + ')'}\">\n    </div>\n\n    <!-- 遮罩 -->\n    <div class=\"overlay\"></div>\n\n    <!-- 主內容 -->\n    <div class=\"content\">\n\n        <!-- 右上時間 -->\n        <div class=\"time-box\">\n            ⏰ {{msg.payload.current.timestamp}}\n        </div>\n\n        <!-- 左下狀態 -->\n        <div class=\"top-left\">\n\n            <div class=\"emoji\">\n                {{msg.payload.current.emoji}}\n            </div>\n\n            <div class=\"status-info\">\n                <div class=\"label\">\n                    目前狀態\n                </div>\n\n                <div class=\"status-text\">\n                    {{msg.payload.current.text}}\n                </div>\n            </div>\n\n        </div>\n\n        <!-- 右下活動力 -->\n        <div class=\"right\">\n\n            <div class=\"activity-value\">\n                {{msg.payload.activity_score || 0}}%\n            </div>\n\n            <div class=\"activity-label\">\n                活動力\n            </div>\n\n        </div>\n\n    </div>\n\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 780,
+        "y": 140,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "eda5a39891466e40",
+        "type": "ui_template",
+        "z": "89dc755a187e8b2a",
+        "group": "group_timeline_cat",
+        "name": "行為時間紀錄",
+        "order": 2,
+        "width": "6",
+        "height": "10",
+        "format": "<style>\n.behavior-container {\npadding: 15px;\nbackground: #fafbfc;\nborder-radius: 12px;\nfont-family: 'Microsoft JhengHei';\nmax-height: 500px;\noverflow-y: auto;\n}\n\n/* 標題 */\n.behavior-title {\ndisplay: flex;\njustify-content: space-between;\nalign-items: center;\nfont-weight: 700;\nfont-size: 1.2em;\nmargin-bottom: 15px;\nborder-bottom: 2px solid #667eea;\npadding-bottom: 8px;\n}\n\n.behavior-subtitle {\nfont-size: 0.75em;\ncolor: #888;\n}\n\n/* 無資料 */\n.no-data {\ntext-align: center;\npadding: 40px;\n}\n\n.no-data-icon {\nfont-size: 3em;\nopacity: 0.5;\n}\n\n.no-data-text {\ncolor: #666;\nmargin-top: 10px;\n}\n\n.no-data-sub {\nfont-size: 0.85em;\ncolor: #aaa;\n}\n\n/* timeline */\n.timeline {\npadding-left: 30px;\n}\n\n/* item */\n.timeline-item {\nposition: relative;\npadding: 12px 0 12px 20px;\nborder-left: 3px solid #ddd;\nmargin-bottom: 12px;\nborder-radius: 6px;\ntransition: 0.2s;\n}\n\n.timeline-item:hover {\nbackground: #f1f3f5;\n}\n\n/* dot */\n.timeline-dot {\nposition: absolute;\nleft: -7px;\ntop: 18px;\nwidth: 14px;\nheight: 14px;\nborder-radius: 50%;\nbackground: #667eea;\n}\n\n/* 行為顏色 */\n.timeline-item.scratch { border-left-color: #ff6b6b; }\n.timeline-item.lick { border-left-color: #ffa726; }\n.timeline-item.walk { border-left-color: #4caf50; }\n.timeline-item.shake { border-left-color: #42a5f5; }\n\n.timeline-item.scratch .timeline-dot { background:#ff6b6b; }\n.timeline-item.lick .timeline-dot { background:#ffa726; }\n.timeline-item.walk .timeline-dot { background:#4caf50; }\n.timeline-item.shake .timeline-dot { background:#42a5f5; }\n\n/* 時間 */\n.timeline-time {\nfont-size: 0.85em;\ncolor: #666;\nmargin-bottom: 5px;\n}\n\n/* 行為 */\n.timeline-behavior {\nfont-size: 1.05em;\nfont-weight: 600;\ndisplay: flex;\nalign-items: center;\n}\n\n.timeline-behavior .emoji {\nmargin-right: 8px;\n}\n\n/* duration */\n.timeline-duration {\nfont-size: 0.8em;\ncolor: #888;\nmargin-top: 4px;\n}\n.timeline-item.scratch .timeline-duration,\n.timeline-item.groom .timeline-duration {\n    background: #fff3cd;\n    color: #856404;\n    border: 1px solid #ffeeba;\n}\n\n.no-data {\n    text-align: center;\n    padding: 60px 20px;\n    color: #95a5a6;\n}\n\n.no-data-icon {\n    font-size: 4em;\n    margin-bottom: 15px;\n    opacity: 0.5;\n}\n\n.no-data-text {\n    font-size: 1.1em;\n    color: #7f8c8d;\n}\n\n.behavior-container::-webkit-scrollbar {\n    width: 8px;\n}\n\n.behavior-container::-webkit-scrollbar-track {\n    background: #f1f3f5;\n    border-radius: 10px;\n}\n\n.behavior-container::-webkit-scrollbar-thumb {\n    background: #667eea;\n    border-radius: 10px;\n}\n\n.behavior-container::-webkit-scrollbar-thumb:hover {\n    background: #5568d3;\n}\n</style>\n\n<div class=\"behavior-container\">\n\n    <div class=\"behavior-title\">\n        <span>📋 行為時間軸</span>\n        <span class=\"behavior-subtitle\">最近 20 筆紀錄</span>\n    </div>\n\n    <!-- 無資料 -->\n    <div ng-if=\"!msg.payload || !msg.payload.behavior_log || msg.payload.behavior_log.length === 0\" class=\"no-data\">\n        <div class=\"no-data-icon\">📭</div>\n        <p class=\"no-data-text\">暫無行為記錄</p>\n        <p class=\"no-data-sub\">等待貓咪活動...</p>\n    </div>\n\n    <!-- timeline -->\n    <div ng-if=\"msg.payload && msg.payload.behavior_log && msg.payload.behavior_log.length > 0\" class=\"timeline\">\n\n        <div ng-repeat=\"item in msg.payload.behavior_log track by $index\" class=\"timeline-item\"\n            ng-class=\"item.behavior\">\n\n            <div class=\"timeline-dot\"></div>\n\n            <!-- 時間 -->\n            <div class=\"timeline-time\">\n                🕐 {{item.time || '--:--'}}\n            </div>\n\n            <!-- 行為 -->\n            <div class=\"timeline-behavior\">\n                <span class=\"emoji\">{{item.emoji || '🐾'}}</span>\n                <span class=\"text\">\n                    {{ item.behavior === 'scratch' ? '搔抓' :\n                       item.behavior === 'lick' ? '舔舐' :\n                       item.behavior === 'walk' ? '行走' :\n                       item.behavior === 'shake' ? '甩頭' : item.behavior }}\n                </span>\n            </div>\n\n            <!-- 持續時間 -->\n            <div class=\"timeline-duration\" ng-if=\"item.duration > 0\">\n                ⏱️ {{item.duration || 0}} 秒\n            </div>\n\n        </div>\n\n    </div>\n\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 790,
+        "y": 240,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "4467bbd0e2a6d03f",
+        "type": "ui_template",
+        "z": "89dc755a187e8b2a",
+        "group": "group_stats_cat",
+        "name": "詳細統計",
+        "order": 3,
+        "width": "6",
+        "height": "10",
+        "format": "<style>\n.stats-container {\n    padding: 15px;\n    font-family: 'Microsoft JhengHei', Arial, sans-serif;\n    background: #fafbfc;\n    border-radius: 10px;\n}\n\n.stats-title {\n    font-size: 1.3em;\n    font-weight: 700;\n    margin-bottom: 18px;\n    color: #2c3e50;\n    border-bottom: 3px solid #ffa726;\n    padding-bottom: 10px;\n}\n\n.stat-card {\n    background: white;\n    border-radius: 12px;\n    padding: 15px;\n    margin-bottom: 12px;\n    box-shadow: 0 2px 8px rgba(0,0,0,0.08);\n    border-left: 5px solid #667eea;\n    transition: all 0.3s ease;\n}\n\n.stat-card:hover {\n    transform: translateY(-2px);\n    box-shadow: 0 4px 12px rgba(0,0,0,0.12);\n}\n\n.stat-card.scratch {\n    border-left-color: #ff6b6b;\n    background: linear-gradient(135deg, #ffffff 0%, #fff5f5 100%);\n}\n\n.stat-card.lick {\n    border-left-color: #ffa726;\n    background: linear-gradient(135deg, #ffffff 0%, #fff8f0 100%);\n}\n\n.stat-card.active {\n    border-left-color: #4caf50;\n    background: linear-gradient(135deg, #ffffff 0%, #f1f8f4 100%);\n}\n\n.stat-card.rest {\n    border-left-color: #9c27b0;\n    background: linear-gradient(135deg, #ffffff 0%, #f8f1f8 100%);\n}\n\n.stat-card.walk {\n    border-left-color: #4caf50;\n    background: linear-gradient(135deg, #ffffff 0%, #f1f8f4 100%);\n}\n\n.stat-card.shake {\n    border-left-color: #2196f3;\n    background: linear-gradient(135deg, #ffffff 0%, #e3f2fd 100%);\n}\n\n.stat-card.walk .progress-fill {\n    background: linear-gradient(90deg, #4caf50 0%, #45a049 100%);\n}\n\n.stat-card.shake .progress-fill {\n    background: linear-gradient(90deg, #2196f3 0%, #1e88e5 100%);\n}\n\n.stat-card.walk .time-display {\n    color: #4caf50;\n}\n\n.stat-card.shake .time-display {\n    color: #2196f3;\n}\n\n.stat-header {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    margin-bottom: 10px;\n}\n\n.stat-icon {\n    font-size: 2em;\n}\n\n.stat-label {\n    font-size: 1em;\n    font-weight: 600;\n    color: #34495e;\n    margin-left: 10px;\n}\n\n.stat-count {\n    font-size: 1.8em;\n    font-weight: 700;\n    color: #2c3e50;\n}\n\n.stat-details {\n    display: flex;\n    justify-content: space-between;\n    margin-top: 12px;\n    padding-top: 12px;\n    border-top: 1px solid #ecf0f1;\n}\n\n.stat-detail-item {\n    flex: 1;\n    text-align: center;\n}\n\n.stat-detail-label {\n    font-size: 0.75em;\n    color: #7f8c8d;\n    margin-bottom: 4px;\n    text-transform: uppercase;\n}\n\n.stat-detail-value {\n    font-size: 1.1em;\n    font-weight: 700;\n    color: #34495e;\n}\n\n.time-display {\n    font-size: 1.3em;\n    font-weight: 700;\n    color: #667eea;\n}\n\n.stat-card.scratch .time-display {\n    color: #ff6b6b;\n}\n\n.stat-card.lick .time-display {\n    color: #ffa726;\n}\n\n.stat-card.active .time-display {\n    color: #4caf50;\n}\n\n.stat-card.rest .time-display {\n    color: #9c27b0;\n}\n\n.progress-bar {\n    width: 100%;\n    height: 8px;\n    background: #ecf0f1;\n    border-radius: 10px;\n    overflow: hidden;\n    margin-top: 8px;\n}\n\n.progress-fill {\n    height: 100%;\n    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);\n    border-radius: 10px;\n    transition: width 0.5s ease;\n}\n\n.stat-card.scratch .progress-fill {\n    background: linear-gradient(90deg, #ff6b6b 0%, #ff5252 100%);\n}\n\n.stat-card.lick .progress-fill {\n    background: linear-gradient(90deg, #ffa726 0%, #ff9800 100%);\n}\n\n.stat-card.active .progress-fill {\n    background: linear-gradient(90deg, #4caf50 0%, #45a049 100%);\n}\n\n.stat-card.rest .progress-fill {\n    background: linear-gradient(90deg, #9c27b0 0%, #8e24aa 100%);\n}\n\n.summary-panel {\n    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n    color: white;\n    border-radius: 12px;\n    padding: 20px;\n    margin-bottom: 15px;\n    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);\n}\n\n.summary-title {\n    font-size: 1.1em;\n    font-weight: 700;\n    margin-bottom: 15px;\n    opacity: 0.9;\n}\n\n.summary-grid {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 15px;\n}\n\n.summary-item {\n    text-align: center;\n    padding: 10px;\n    background: rgba(255,255,255,0.15);\n    border-radius: 8px;\n}\n\n.summary-value {\n    font-size: 1.8em;\n    font-weight: 700;\n    margin-bottom: 5px;\n}\n\n.summary-label {\n    font-size: 0.85em;\n    opacity: 0.9;\n}\n</style>\n\n<div class=\"stats-container\">\n    <div class=\"stats-title\">📊 今日統計總覽</div>\n    \n    <div class=\"summary-panel\">\n        <div class=\"summary-title\">⏰ 今日時間分配</div>\n        <div class=\"summary-grid\">\n            <div class=\"summary-item\">\n                <div class=\"summary-value\">{{getTotalTime()}}秒</div>\n                <div class=\"summary-label\">總監測時間</div>\n            </div>\n            <div class=\"summary-item\">\n                <div class=\"summary-value\">{{getTotalBehaviors()}}</div>\n                <div class=\"summary-label\">行為轉換次數</div>\n            </div>\n        </div>\n    </div>\n    \n<!-- 行走 -->\n<div class=\"stat-card walk\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🚶</span>\n            <span class=\"stat-label\">行走</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.walk || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.walk_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.walk_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 舔拭 -->\n<div class=\"stat-card lick\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🧼</span>\n            <span class=\"stat-label\">舔拭</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.lick || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.lick_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.lick_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 搔抓 -->\n<div class=\"stat-card scratch\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🐾</span>\n            <span class=\"stat-label\">搔抓</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.scratch || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.scratch_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.scratch_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 甩頭 -->\n<div class=\"stat-card shake\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🔄</span>\n            <span class=\"stat-label\">甩頭</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.shake || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.shake_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.shake_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 活動時間 -->\n<div class=\"stat-card active\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">⚡</span>\n            <span class=\"stat-label\">活動時間</span>\n        </div>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.active_time || 0)}}\n    </div>\n</div>\n\n<!-- 休息時間 -->\n<div class=\"stat-card rest\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">😴</span>\n            <span class=\"stat-label\">休息時間</span>\n        </div>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.rest_time || 0)}}\n    </div>\n</div>\n\n<script>\n(function(scope) {\n    scope.formatTime = function(seconds) {\n        if (!seconds || seconds === 0) return '0秒';\n        \n        const hours = Math.floor(seconds / 3600);\n        const minutes = Math.floor((seconds % 3600) / 60);\n        const secs = Math.floor(seconds % 60);\n        \n        if (hours > 0) {\n            return hours + '小時' + minutes + '分' + secs + '秒';\n        } else if (minutes > 0) {\n            return minutes + '分' + secs + '秒';\n        } else {\n            return secs + '秒';\n        }\n    };\n    \n    scope.getTotalTime = function() {\n        if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n        const stats = scope.msg.payload.today_stats;\n        return Math.round((stats.active_time || 0) + (stats.rest_time || 0));\n    };\n    \n    scope.getTotalBehaviors = function() {\n        if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n        const stats = scope.msg.payload.today_stats;\n        return (stats.scratch || 0) + (stats.lick || 0);\n    };\n    \n    scope.getPercentage = function(time) {\n        const total = scope.getTotalTime();\n        if (total === 0) return 0;\n        return Math.round((time / total) * 100);\n    };\n    \n    scope.getAverageDuration = function(totalTime, count) {\n        if (!count || count === 0) return 0;\n        return Math.round(totalTime / count);\n    };\n})(scope);\n</script>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 780,
+        "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "eb0740356105e4c3",
+        "type": "ui_template",
+        "z": "89dc755a187e8b2a",
+        "group": "group_alerts_cat",
+        "name": "健康警示",
+        "order": 4,
+        "width": "12",
+        "height": "6",
+        "format": "<style>\n    .alert-container {\n        padding: 20px;\n        font-family: 'Microsoft JhengHei';\n        background: #f6f8fb;\n        border-radius: 16px;\n    }\n\n    /* 標題 */\n    .alert-title {\n        font-size: 1.5em;\n        font-weight: 700;\n        color: #34495e;\n        margin-bottom: 15px;\n    }\n\n    /* 健康分數 */\n    .score-box {\n        background: linear-gradient(135deg, #667eea, #764ba2);\n        color: white;\n        border-radius: 14px;\n        padding: 15px;\n        margin-bottom: 15px;\n        text-align: center;\n    }\n\n    .score-value {\n        font-size: 2.5em;\n        font-weight: 900;\n    }\n\n    /* alert 卡片 */\n    .alert-card {\n        border-radius: 12px;\n        padding: 15px;\n        margin-bottom: 10px;\n        background: white;\n        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);\n    }\n\n    .alert-high {\n        border-left: 6px solid #ff6b6b;\n    }\n\n    .alert-medium {\n        border-left: 6px solid #ffa726;\n    }\n\n    .alert-low {\n        border-left: 6px solid #42a5f5;\n    }\n.stats-item {\n    display: flex;\n    justify-content: space-between;\n    padding: 6px 0;\n    font-size: 0.95em;\n    color: #444;\n}\n    /* highlight 特效 */\n    .highlight {\n        animation: glow 1s infinite alternate;\n    }\n\n    @keyframes glow {\n        from {\n            box-shadow: 0 0 10px #ff6b6b;\n        }\n\n        to {\n            box-shadow: 0 0 20px #ff0000;\n        }\n    }\n\n    /* 無警示 */\n    .no-alert {\n        text-align: center;\n        padding: 30px;\n        color: #7f8c8d;\n    }\n    .stats-box {\n    margin-top: 20px;\n    padding: 16px;\n    background: white;\n    border-radius: 14px;\n    box-shadow: 0 4px 12px rgba(0,0,0,0.05);\n}\n\n.stats-title {\n    font-weight: 700;\n    margin-bottom: 12px;\n    color: #34495e;\n}\n\n.stats-row {\n    display: flex;\n    justify-content: space-between;\n    padding: 8px 0;\n    font-size: 0.95em;\n}\n\n.stats-row .left {\n    color: #5a6c7d;\n}\n\n.stats-row .right {\n    font-weight: 700;\n    color: #2c3e50;\n}\n\n.stats-row span {\n    color: #95a5a6;\n    font-size: 0.85em;\n    margin-left: 5px;\n}\n\n.divider {\n    height: 1px;\n    background: #eee;\n    margin: 10px 0;\n}\n.bar-row {\ndisplay: grid;\ngrid-template-columns: 70px 1fr 60px;\nalign-items: center;\nmargin-bottom: 10px;\n}\n.fill.rest {\nbackground: #9e9e9e;\n}\n.label {\nfont-size: 0.9em;\ncolor: #5a6c7d;\n}\n\n.bar {\nheight: 8px;\nbackground: #eee;\nborder-radius: 10px;\noverflow: hidden;\n}\n\n.fill {\nheight: 100%;\nborder-radius: 10px;\ntransition: width 0.4s ease;\n}\n\n.fill.walk { background:#4caf50; }\n.fill.lick { background:#ffa726; }\n.fill.scratch { background:#ff6b6b; }\n.fill.shake { background:#42a5f5; }\n\n.value {\nfont-size: 0.85em;\ntext-align: right;\ncolor: #34495e;\n}\n</style>\n\n<div class=\"alert-container\" ng-init=\"init()\">\n\n    <div class=\"alert-title\">⚠️ 健康監測</div>\n\n    <!-- 健康分數 -->\n    <div class=\"score-box\">\n        <div>Health Score</div>\n        <div class=\"score-value\">{{health_score}}</div>\n    </div>\n\n    <!-- 無警示 -->\n    <div ng-if=\"alerts.length === 0\" class=\"no-alert\">\n        ✅ 狀態正常\n    </div>\n\n    <!-- alerts -->\n    <div class=\"alert-card alert-{{alerts[0].level}}\" ng-if=\"alerts.length > 0\"\n        ng-class=\"{'highlight': alerts[0].highlight}\">\n    \n        <div><b>⚠️ {{alerts[0].title}}</b></div>\n        <div>{{alerts[0].message}}</div>\n        <div style=\"color:#888;\">{{alerts[0].suggestion}}</div>\n    \n    </div>\n</div>\n\n\n<!-- ===== 行為統計（固定顯示） ===== -->\n<div class=\"stats-box\">\n\n    <div class=\"stats-title\">📊 行為分析</div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🚶 行走</div>\n        <div class=\"bar\">\n            <div class=\"fill walk\" ng-style=\"{width:getRatio(currentStats.walk_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.walk_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🧼 舔舐</div>\n        <div class=\"bar\">\n            <div class=\"fill lick\" ng-style=\"{width:getRatio(msg.payload.today_stats.lick_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.lick_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🐾 搔抓</div>\n        <div class=\"bar\">\n            <div class=\"fill scratch\" ng-style=\"{width:getRatio(msg.payload.today_stats.scratch_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.scratch_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🔄 甩頭</div>\n        <div class=\"bar\">\n            <div class=\"fill shake\" ng-style=\"{width:getRatio(msg.payload.today_stats.shake_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.shake_time || 0}}s</div>\n    </div>\n\n<div class=\"bar-row\">\n    <div class=\"label\">⚡ 活動</div>\n    <div class=\"bar\">\n        <div class=\"fill walk\"\n            ng-style=\"{width: (msg.payload.today_stats.active_time / ((msg.payload.today_stats.active_time + msg.payload.today_stats.rest_time) || 1) * 100) + '%'}\">\n        </div>\n    </div>\n    <div class=\"value\">{{msg.payload.today_stats.active_time || 0}}s</div>\n</div>\n\n<div class=\"bar-row\">\n    <div class=\"label\">😴 休息</div>\n    <div class=\"bar\">\n        <div class=\"fill rest\"\n            ng-style=\"{width: (msg.payload.today_stats.rest_time / ((msg.payload.today_stats.active_time + msg.payload.today_stats.rest_time) || 1) * 100) + '%'}\">\n        </div>\n    </div>\n    <div class=\"value\">{{msg.payload.today_stats.rest_time || 0}}s</div>\n</div>\n\n</div>\n<script>\n    (function(scope) {\n\n    scope.lastAlerts = [];\n\n    scope.init = function() {\n        scope.alerts = [];\n        scope.health_score = 100;\n        scope.currentStats = null;   // 🔥 新增\n    };\n\n    scope.$watch('msg', function(msg) {\n        if (!msg || !msg.payload || !msg.payload.today_stats) return;\n\n        let stats = msg.payload.today_stats || {};\n        \n        // 🔥 強制補值（關鍵）\n        stats.active_time = stats.active_time || 0;\n        stats.rest_time = stats.rest_time || 0;\n        stats.walk_time = stats.walk_time || 0;\n        stats.lick_time = stats.lick_time || 0;\n        stats.scratch_time = stats.scratch_time || 0;\n        stats.shake_time = stats.shake_time || 0;\n\n        scope.currentStats = stats;   // 🔥 存起來給 getRatio 用\n\n        let total = (stats.active_time || 0) + (stats.rest_time || 0);\n        let abnormal = stats.lick_time + stats.scratch_time + stats.shake_time;\n\n        let abnormal_ratio = total > 0 ? abnormal / total : 0;\n        let rest_ratio = total > 0 ? (stats.rest_time / total) : 0;\n        if (isNaN(rest_ratio)) rest_ratio = 0;\n        let walk_ratio = total > 0 ? stats.walk_time / total : 0;\n\n        let inactivity_penalty = walk_ratio < 0.2 ? 1 : 0;\n\n        let score = 100\n            - abnormal_ratio * 60\n            - rest_ratio * 25\n            - inactivity_penalty * 15;\n\n        scope.health_score = Math.max(0, Math.round(score));\n\n        // === alert 判斷 ===\n       let alert = null;\n\nlet messages = [];\nlet suggestions = [];\n\nlet level = \"low\";\nlet highlight = false;\n\n// 搔抓\nif (stats.scratch_time > 10) {\n    messages.push(`🐾 搔抓 ${stats.scratch_time.toFixed(1)} 秒`);\n    suggestions.push(\"皮膚問題可能\");\n    level = \"high\";\n    highlight = true;\n}\n\n// 舔舐\nif (stats.lick_time > 10) {\n    messages.push(`🧼 舔舐 ${stats.lick_time.toFixed(1)} 秒`);\n    suggestions.push(\"壓力或皮膚問題\");\n    if (level !== \"high\") level = \"medium\";\n}\n\n// 甩頭\nif (stats.shake > 10) {\n    messages.push(`🔄 甩頭 ${stats.shake} 次`);\n    suggestions.push(\"耳朵問題\");\n    if (level !== \"high\") level = \"medium\";\n}\n\n// 休息\nif (rest_ratio > 0.7) {\n    messages.push(`😴 休息 ${(rest_ratio*100).toFixed(1)}%`);\n    suggestions.push(\"活動力偏低\");\n    highlight = true;\n}\n\n// 組合\nif (messages.length > 0) {\n    alert = {\n        level: level,\n        highlight: highlight,\n        title: \"健康異常\",\n        message: messages.join(\" ｜ \"),\n        suggestion: suggestions.join(\"、\")\n    };\n}\n\n// === 去抖 ===\nif (JSON.stringify(alert) !== JSON.stringify(scope.lastAlert)) {\n    scope.alerts = alert ? [alert] : [];\n    scope.lastAlert = alert;\n}\n// 🔥 強制更新 UI（關鍵）\nscope.$applyAsync();\n    });\n\n    // ✅ 修正這裡\n    scope.getRatio = function(value) {\n        if (!scope.currentStats) return 0;\n\n        let stats = scope.currentStats;\n\n        let max = Math.max(\n            stats.walk_time || 0,\n            stats.lick_time || 0,\n            stats.scratch_time || 0,\n            stats.shake_time || 0,\n            1\n        );\n\n        return (value / max) * 100;\n    };\n\n})(scope);\n</script>",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 780,
+        "y": 440,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "6e3f7ef030bbe0bd",
+        "type": "ui_gauge",
+        "z": "89dc755a187e8b2a",
+        "name": "活動力儀表",
+        "group": "group_gauge_cat",
+        "order": 5,
+        "width": "8",
+        "height": "3",
+        "gtype": "gage",
+        "title": "",
+        "label": "",
+        "format": "",
+        "min": 0,
+        "max": 100,
+        "colors": [
+            "#ff6b6b",
+            "#ffa726",
+            "#4caf50"
+        ],
+        "seg1": "30",
+        "seg2": "70",
+        "diff": false,
+        "className": "",
+        "x": 570,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "b7617b6df998defb",
+        "type": "ui_template",
+        "z": "89dc755a187e8b2a",
+        "group": "group_stream_cat",
+        "name": "影像串流",
+        "order": 6,
+        "width": "12",
+        "height": "8",
+        "format": "<style>\n.stream-wrapper {\n    position: relative;\n    width: 100%;\n    background: #1a1a2e;\n    border-radius: 12px;\n    overflow: hidden;\n    box-shadow: 0 5px 20px rgba(0,0,0,0.3);\n}\n.stream-status-bar {\n    position: absolute;\n    top: 15px;\n    left: 15px;\n    padding: 10px 20px;\n    background: rgba(0,0,0,0.75);\n    color: #00ff88;\n    border-radius: 8px;\n    font-family: 'Consolas', monospace;\n    font-size: 14px;\n    z-index: 100;\n    box-shadow: 0 3px 10px rgba(0,0,0,0.5);\n}\n.stream-image {\n    width: 100%;\n    height: auto;\n    display: block;\n}\n.stream-offline {\n    text-align: center;\n    padding: 80px 20px;\n    color: #95a5a6;\n}\n.stream-offline-icon {\n    font-size: 5em;\n    margin-bottom: 20px;\n}\n</style>\n\n<div class=\"stream-wrapper\">\n    <div class=\"stream-status-bar\" id=\"streamStatus\">🔄 連線中...</div>\n    <img class=\"stream-image\" id=\"streamImg\" \n         src=\"http://127.0.0.1:5000/stream\" \n         onerror=\"this.style.display='none'; document.getElementById('streamStatus').innerHTML='❌ 串流離線'; document.getElementById('offlineMsg').style.display='block';\"\n         onload=\"this.style.display='block'; document.getElementById('streamStatus').innerHTML='✅ 串流正常'; document.getElementById('offlineMsg').style.display='none';\">\n    <div class=\"stream-offline\" id=\"offlineMsg\" style=\"display:none;\">\n        <div class=\"stream-offline-icon\">📹</div>\n        <p>視訊串流目前離線</p>\n        <p style=\"font-size:0.9em; color:#7f8c8d;\">請確認Python程式是否運行</p>\n    </div>\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 560,
+        "y": 180,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "group_status_cat",
+        "type": "ui_group",
+        "name": "即時健康狀態",
+        "tab": "ui_tab_cat",
+        "order": 1,
+        "disp": true,
+        "width": "8",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "group_timeline_cat",
+        "type": "ui_group",
+        "name": "行為時間紀錄",
+        "tab": "ui_tab_cat",
+        "order": 2,
+        "disp": true,
+        "width": "6",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "group_stats_cat",
+        "type": "ui_group",
+        "name": "詳細統計分析",
+        "tab": "ui_tab_cat",
+        "order": 3,
+        "disp": true,
+        "width": "6",
+        "collapse": false
+    },
+    {
+        "id": "group_alerts_cat",
+        "type": "ui_group",
+        "name": "健康警示系統",
+        "tab": "ui_tab_cat",
+        "order": 4,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "group_gauge_cat",
+        "type": "ui_group",
+        "name": "活動力指標",
+        "tab": "ui_tab_cat",
+        "order": 5,
+        "disp": true,
+        "width": "8",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "group_stream_cat",
+        "type": "ui_group",
+        "name": "即時影像串流",
+        "tab": "ui_tab_cat",
+        "order": 6,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "ui_tab_cat",
+        "type": "ui_tab",
+        "name": "😺 貓咪健康監測",
+        "icon": "pets",
+        "order": 1,
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "a79d800801383a4c",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-dashboard": "3.6.6"
+        }
+    }
+]

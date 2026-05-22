@@ -47,6 +47,20 @@ def _env_bool(name, default):
     return default
 
 
+def _env_video_input(name, default):
+    """讀取影像來源：純數字 -> 攝影機 index，其餘保持字串。"""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip()
+    if not value:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
 def _is_valid_port(port):
     return isinstance(port, int) and 1 <= port <= 65535
 
@@ -61,7 +75,7 @@ class ModelPaths:
     STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv.pth")
     
     # 測試視頻
-    VIDEO_INPUT = _env_str("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\Downloads\5月5日.mp4")
+    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", 0)
     
     # 日誌和輸出目錄
     LOG_DIR = _env_str("CAT_MONITORING_LOG_DIR", "./logs")
@@ -79,13 +93,24 @@ class ModelPaths:
         required_files = {
             "YOLO": cls.YOLO_MODEL,
             "ST-GCN": cls.STGCN_MODEL,
-            "Video": cls.VIDEO_INPUT
         }
         
         missing = []
         for name, path in required_files.items():
             if not Path(path).exists():
                 missing.append(f"{name}: {path}")
+
+        video_src = cls.VIDEO_INPUT
+        if isinstance(video_src, int):
+            pass
+        elif isinstance(video_src, str):
+            lower_src = video_src.lower()
+            if lower_src.startswith(("rtsp://", "http://", "https://")):
+                pass
+            elif not Path(video_src).exists():
+                missing.append(f"Video: {video_src}")
+        else:
+            missing.append(f"Video: 不支援的來源型別 {type(video_src).__name__}")
         
         if missing:
             print("⚠ 缺少的檔案:")

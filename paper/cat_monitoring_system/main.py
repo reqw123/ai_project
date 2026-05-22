@@ -23,7 +23,7 @@ def send_ip_to_nodered(ip, node_red_url):
             response = requests.post(
                 node_red_url,
                 json={"ip": ip},
-                timeout=2
+                timeout=NodeRedConfig.TIMEOUT
             )
             if response.status_code == 200:
                 

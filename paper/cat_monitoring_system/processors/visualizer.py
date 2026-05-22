@@ -3,7 +3,70 @@
 """
 import cv2
 import numpy as np
+from pathlib import Path
 from utils.constants import *
+
+
+HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / "hip.png"
+HIP_IMAGE = cv2.imread(str(HIP_IMAGE_PATH), cv2.IMREAD_UNCHANGED) if HIP_IMAGE_PATH.exists() else None
+HIP_IMAGE_ALPHA_BOOST = 1.6
+
+
+def _overlay_image_centered(frame, image, center_xy, target_width):
+    """將圖像以中心點方式疊到 frame 上，支援透明通道與邊界裁切。"""
+    if frame is None or image is None:
+        return
+
+    try:
+        target_width = int(target_width)
+    except (TypeError, ValueError):
+        return
+
+    if target_width <= 0:
+        return
+
+    src_h, src_w = image.shape[:2]
+    if src_h <= 0 or src_w <= 0:
+        return
+
+    target_height = max(1, int(round(target_width * src_h / max(src_w, 1))))
+    resized = cv2.resize(image, (target_width, target_height), interpolation=cv2.INTER_AREA)
+
+    x_c = int(round(float(center_xy[0])))
+    y_c = int(round(float(center_xy[1])))
+    x1 = x_c - target_width // 2
+    y1 = y_c - target_height // 2
+    x2 = x1 + target_width
+    y2 = y1 + target_height
+
+    frame_h, frame_w = frame.shape[:2]
+    clip_x1 = max(0, x1)
+    clip_y1 = max(0, y1)
+    clip_x2 = min(frame_w, x2)
+    clip_y2 = min(frame_h, y2)
+    if clip_x1 >= clip_x2 or clip_y1 >= clip_y2:
+        return
+
+    src_x1 = clip_x1 - x1
+    src_y1 = clip_y1 - y1
+    src_x2 = src_x1 + (clip_x2 - clip_x1)
+    src_y2 = src_y1 + (clip_y2 - clip_y1)
+
+    roi = frame[clip_y1:clip_y2, clip_x1:clip_x2]
+    patch = resized[src_y1:src_y2, src_x1:src_x2]
+
+    if patch.ndim != 3:
+        return
+
+    if patch.shape[2] == 4:
+        alpha = patch[:, :, 3:4].astype(np.float32) / 255.0
+        alpha = np.clip(alpha * HIP_IMAGE_ALPHA_BOOST, 0.0, 1.0)
+        color = patch[:, :, :3].astype(np.float32)
+        roi_float = roi.astype(np.float32)
+        blended = roi_float * (1.0 - alpha) + color * alpha
+        frame[clip_y1:clip_y2, clip_x1:clip_x2] = np.clip(blended, 0, 255).astype(np.uint8)
+    else:
+        frame[clip_y1:clip_y2, clip_x1:clip_x2] = patch[:, :, :3]
 
 class Visualizer:
     def draw_prediction_on_frame(
@@ -117,6 +180,19 @@ class Visualizer:
             if kpt_conf[i] > KP_CONF_THRES:
                 pt = tuple(map(int, kpts[i]))
                 cv2.circle(frame, pt, 3, COLOR_KPT, -1)
+
+        # 將 hip.png 貼在 nose 關鍵點上，跟隨鼻子移動
+        if HIP_IMAGE is not None and len(kpts) > 0 and kpt_conf[0] > KP_CONF_THRES:
+            nose_pt = tuple(map(int, kpts[0]))
+            if bbox is not None:
+                x1, y1, x2, y2 = map(int, bbox)
+                bbox_w = max(1, x2 - x1)
+                bbox_h = max(1, y2 - y1)
+                target_width = int(np.clip(min(bbox_w, bbox_h) * 0.32, 52, 128))
+            else:
+                target_width = 72
+            _overlay_image_centered(frame, HIP_IMAGE, nose_pt, target_width)
+
         # 畫YOLO bbox/conf
         if bbox is not None and conf is not None:
             x1, y1, x2, y2 = map(int, bbox)

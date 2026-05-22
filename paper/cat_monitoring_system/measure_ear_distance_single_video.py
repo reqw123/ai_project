@@ -9,6 +9,7 @@
 """
 
 import csv
+import http
 import sys
 from collections import Counter, deque
 from pathlib import Path
@@ -27,13 +28,13 @@ from detectors.keypoint_detector import KeypointDetector
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick" # 主要作為資料夾來源（會遞迴掃描影片）
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk" # 主要作為資料夾來源（會遞迴掃描影片）
 VIDEO_LIST = [
     # 只放「單一影片檔案路徑」
-    #r"videos\walk_1.mp4",
-    r"C:\AI_Project\cat_pose\cat5.mp4", 
-   # r"C:\Users\homec\OneDrive\圖片\貓咪\自行拍攝\影片\1776163076042.mp4",
-   # r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\摳圖影片集\4731992_Statute_Startuture_1920x1080.mp4",
+    r"C:\Users\homec\Downloads\OneDrive_1_2026-5-21",
+    r"C:\Users\homec\Downloads\OneDrive_2_2026-5-21", 
+    r"C:\Users\homec\Downloads\OneDrive_3_2026-5-21",
+    r"C:\Users\homec\Downloads\OneDrive_4_2026-5-21",
   #  r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\2448166_Cat_Licking_1920x1080.mp4",
   #  r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\2404508_Cat_Licking_1920x1080.mp4",#不要刪
   #  r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\5878298_Fur_Baby_Cat_1920x1080.mp4",#不要刪
@@ -42,7 +43,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_70_2.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_72.pt"
 OUTPUT_CSV_PATH = r"C:\paper\output\left_right_ear_distance.csv"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
@@ -1142,9 +1143,15 @@ def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, con
         cv2.circle(frame, (cx, cy), r_inner, col, -1)
 
 
+def _is_url(path_str):
+    """檢查是否為 IP 攝影機流 URL（RTSP, HTTP, 等）"""
+    path_lower = str(path_str).lower()
+    return path_lower.startswith(('rtsp://', 'rtsps://', 'http://', 'https://', 'rtmp://'))
+
+
 def collect_video_paths(max_videos=MAX_VIDEOS):
-    """由 VIDEO_LIST 收集影片路徑（最多 max_videos 支）。
-    VIDEO_LIST 僅接受單一影片檔案路徑；資料夾請改填在 VIDEO_PATH。
+    """由 VIDEO_LIST 收集影片路徑或 IP 攝影機 URL（最多 max_videos 支）。
+    VIDEO_LIST 接受單一影片檔案路徑或 IP 攝影機 URL；資料夾請改填在 VIDEO_PATH。
     """
     videos = []
     seen = set()
@@ -1156,23 +1163,49 @@ def collect_video_paths(max_videos=MAX_VIDEOS):
             videos.append(f)
 
     for entry in VIDEO_LIST:
-        p = Path(entry)
-        if not p.exists():
-            print(f"⚠️  找不到路徑，略過: {p}")
-            continue
-        if p.is_file():
-            _add(p)
-        elif p.is_dir():
-            print(f"⚠️  VIDEO_LIST 僅接受檔案，資料夾請改填 VIDEO_PATH，已略過: {p}")
+        # 檢查是否為 URL（IP 攝影機）
+        if _is_url(entry):
+            if entry not in seen:
+                seen.add(entry)
+                videos.append(entry)  # 直接存儲 URL 字符串
+                print(f"✓ 已加入 IP 攝影機: {entry}")
+        else:
+            p = Path(entry)
+            if not p.exists():
+                print(f"⚠️  找不到路徑，略過: {p}")
+                continue
+            if p.is_file():
+                _add(p)
+            elif p.is_dir():
+                print(f"⚠️  VIDEO_LIST 僅接受檔案，資料夾請改填 VIDEO_PATH，已略過: {p}")
         if len(videos) >= max_videos:
             return videos
     return videos
 
 
 def collect_video_paths_from_folder(folder_path, max_videos=MAX_VIDEOS, existing_paths=None):
-    """由 VIDEO_PATH 指定資料夾遞迴收集影片（最多補到 max_videos 支）。"""
+    """由 VIDEO_PATH 指定資料夾遞迴收集影片，或直接使用 IP 攝影機 URL（最多補到 max_videos 支）。"""
     videos = []
     seen = set(existing_paths or [])
+
+    # 檢查是否為 IP 攝影機 URL
+    # support numeric camera index (0, 1, ...) passed as int or numeric string
+    if isinstance(folder_path, int):
+        videos.append(folder_path)
+        return videos
+    if isinstance(folder_path, str) and folder_path.strip().isdigit():
+        try:
+            videos.append(int(folder_path.strip()))
+            return videos
+        except Exception:
+            pass
+
+    if _is_url(folder_path):
+        if folder_path not in seen:
+            seen.add(folder_path)
+            videos.append(folder_path)
+            print(f"✓ 已加入 IP 攝影機: {folder_path}")
+        return videos
 
     p = Path(folder_path)
     if not p.exists():
@@ -1202,7 +1235,15 @@ def collect_video_paths_from_folder(folder_path, max_videos=MAX_VIDEOS, existing
 
 def main():
     video_paths = collect_video_paths(MAX_VIDEOS)
-    existing = {str(v.resolve()) for v in video_paths}
+    existing = set()
+    for v in video_paths:
+        try:
+            if isinstance(v, Path):
+                existing.add(str(v.resolve()))
+            else:
+                existing.add(str(v))
+        except Exception:
+            existing.add(str(v))
     remaining = max(0, MAX_VIDEOS - len(video_paths))
     if remaining > 0:
         video_paths.extend(collect_video_paths_from_folder(VIDEO_PATH, remaining, existing_paths=existing))
@@ -1434,7 +1475,19 @@ def main():
 
     while not stop_all:
         video_path = video_paths[current_video_idx]
-        cap = cv2.VideoCapture(str(video_path))
+        is_ip_stream = _is_url(str(video_path))
+
+        # if video_path is an int (camera index), pass it directly to VideoCapture
+        if isinstance(video_path, int):
+            cap = cv2.VideoCapture(video_path)
+        else:
+            cap = cv2.VideoCapture(str(video_path))
+        
+        # 為 IP 攝影機流設置優化參數（減少延遲和緩衝）
+        if is_ip_stream:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 減小緩衝大小
+            cap.set(cv2.CAP_PROP_FPS, 30)  # 設置期望的 FPS
+        
         if not cap.isOpened():
             print(f"❌ 無法開啟影片，跳過: {video_path}")
             current_video_idx = (current_video_idx + 1) % len(video_paths)
@@ -1450,6 +1503,9 @@ def main():
         model_input_fps = source_fps / frame_step
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        # IP 流通常無法獲得總幀數，這時會回傳 0 或 -1
+        if is_ip_stream and total_frames <= 0:
+            total_frames = 0  # 標記為實時流
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
 
@@ -1467,8 +1523,24 @@ def main():
         _apply_window_scale()
 
         print("-" * 60)
-        print(f"目前影片 [{current_video_idx + 1}] {video_path.name}")
-        print(f"解析度: {width}x{height}, source_fps={source_fps:.2f}, model_fps={model_input_fps:.2f}, total={total_frames}")
+        if is_ip_stream:
+            print(f"目前影片 [{current_video_idx + 1}] [IP 攝影機] {video_path}")
+        else:
+            # video_path may be a Path, a string filepath, or an int camera index
+            if isinstance(video_path, int):
+                print(f"目前影片 [{current_video_idx + 1}] [Camera {video_path}]")
+            else:
+                try:
+                    print(f"目前影片 [{current_video_idx + 1}] {video_path.name}")
+                except Exception:
+                    print(f"目前影片 [{current_video_idx + 1}] {video_path}")
+        
+        if total_frames > 0:
+            print(f"解析度: {width}x{height}, source_fps={source_fps:.2f}, model_fps={model_input_fps:.2f}, total={total_frames}")
+        else:
+            # IP 流顯示為實時流
+            stream_type = "實時流" if is_ip_stream else "未知"
+            print(f"解析度: {width}x{height}, source_fps={source_fps:.2f}, model_fps={model_input_fps:.2f}, 類型={stream_type}")
 
         switch_delta = 0
         playback_pass = 0
@@ -1965,6 +2037,17 @@ def main():
                 lick_fs, lick_th, lick_shadow, lick_color = target_status_style
                 cv2.putText(display, target_status_text, target_status_pos, cv2.FONT_HERSHEY_SIMPLEX, lick_fs, (0, 0, 0), lick_shadow, cv2.LINE_AA)
                 cv2.putText(display, target_status_text, target_status_pos, cv2.FONT_HERSHEY_SIMPLEX, lick_fs, lick_color, lick_th, cv2.LINE_AA)
+
+            # 顯示當前影片時間（MM:SS）於畫面左上
+            time_mm = int(time_sec // 60)
+            time_ss = int(time_sec % 60)
+            time_label = f"TIME {time_mm:02d}:{time_ss:02d}"
+            time_fs = 0.80 * _ov
+            time_th = max(1, int(2 * _ov))
+            time_x = int(12 * _ov)
+            time_y = int(20 * _ov)
+            cv2.putText(display, time_label, (time_x, time_y), cv2.FONT_HERSHEY_SIMPLEX, time_fs, (0, 0, 0), time_th + 1, cv2.LINE_AA)
+            cv2.putText(display, time_label, (time_x, time_y), cv2.FONT_HERSHEY_SIMPLEX, time_fs, (255, 250, 140), time_th, cv2.LINE_AA)
 
             if draw_overlay_info:
                 info_lines = [

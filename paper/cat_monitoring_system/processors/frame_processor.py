@@ -16,6 +16,7 @@ from logutils.csv_logger import CSVLogger, BehaviorSegmentLogger
 from utils.helpers import get_ip
 from utils.constants import *
 from models.stgcn_model import interpolate_missing
+from config import NodeRedConfig
 
 class FrameProcessor:
     def __init__(self, yolo_model_path, stgcn_model_path, video_path,
@@ -101,7 +102,7 @@ class FrameProcessor:
 
             # === Node-RED 資料推送 ===
             now = time.time()
-            if self.nodered and (now - self.last_send_time >= 0.5):
+            if self.nodered and (now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL):
                 data = {
                     "current": {
                         "behavior_id": int(behavior_id),

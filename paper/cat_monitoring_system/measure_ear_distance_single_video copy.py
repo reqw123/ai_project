@@ -43,7 +43,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\cat_pose\v11s_62.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_72.pt"
 OUTPUT_CSV_PATH = r"C:\paper\output\left_right_ear_distance.csv"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
