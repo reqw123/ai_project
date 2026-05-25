@@ -13,7 +13,7 @@ from processors.anomaly_detector import AnomalyDetector
 from processors.visualizer import Visualizer
 from communication.nodered_client import NodeRedClient
 from logutils.csv_logger import CSVLogger, BehaviorSegmentLogger
-from utils.helpers import get_ip
+from utils.helpers import get_ip, get_behavior_name
 from utils.constants import *
 from models.stgcn_model import interpolate_missing
 from config import NodeRedConfig
@@ -103,12 +103,17 @@ class FrameProcessor:
             # === Node-RED 資料推送 ===
             now = time.time()
             if self.nodered and (now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL):
+                # 根據顯示門檻決定呈現標籤（若 confidence 未達 BEHAVIOR_MIN_CONFIDENCE 則顯示為 LOW_CONF_TEXT）
+                is_display_normal = (behavior_id == LOW_CONF_ID) or (float(confidence) < BEHAVIOR_MIN_CONFIDENCE)
+                display_text = LOW_CONF_TEXT if is_display_normal else BEHAVIOR_TEXT_MAP.get(behavior_id, "未知")
+                display_emoji = LOW_CONF_EMOJI if is_display_normal else BEHAVIOR_EMOJI_MAP.get(behavior_id, "❓")
+
                 data = {
                     "current": {
                         "behavior_id": int(behavior_id),
-                        "text": LOW_CONF_TEXT if behavior_id == LOW_CONF_ID else BEHAVIOR_TEXT_MAP.get(behavior_id, "未知"),
-                        "behavior": LOW_CONF_TEXT if behavior_id == LOW_CONF_ID else BEHAVIOR_TEXT_MAP.get(behavior_id, "未知"),
-                        "emoji": LOW_CONF_EMOJI if behavior_id == LOW_CONF_ID else BEHAVIOR_EMOJI_MAP.get(behavior_id, "❓"),
+                        "text": display_text,
+                        "behavior": display_text,
+                        "emoji": display_emoji,
                         "timestamp": time.strftime("%H:%M:%S")
                     },
                     "activity_score": int(self.tracker.get_activity_score()),
@@ -134,10 +139,12 @@ class FrameProcessor:
                 self.last_send_time = now
 
             # === CSV 日誌 ===
-            if self.csv_logger and abnormal and behavior_id != LOW_CONF_ID:
+            # CSV 日誌只在偵測到異常且顯示為非 normal 時寫入
+            if self.csv_logger and abnormal and float(confidence) >= BEHAVIOR_MIN_CONFIDENCE and behavior_id != LOW_CONF_ID:
+                behavior_name = get_behavior_name(behavior_id, use_text=False, fallback="未知", confidence=confidence)
                 self.csv_logger.log(
                     self.frame_idx,
-                    BEHAVIOR_CLASSES[behavior_id],
+                    behavior_name,
                     confidence,
                     abnormal,
                     self.anomaly_detector.ema_motion,

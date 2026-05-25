@@ -28,7 +28,7 @@ from detectors.keypoint_detector import KeypointDetector
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\shake" # 主要作為資料夾來源（會遞迴掃描影片）
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick" # 主要作為資料夾來源（會遞迴掃描影片）
 VIDEO_LIST = [
     # 只放「單一影片檔案路徑」
     #r"videos\walk_1.mp4",

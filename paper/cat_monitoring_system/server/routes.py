@@ -31,7 +31,7 @@ from processors.frame_processor import FrameProcessor
 from communication.nodered_client import NodeRedClient
 from trackers.behavior_tracker import ImprovedBehaviorTracker
 from utils.constants import *
-from utils.helpers import get_ip
+from utils.helpers import get_ip, get_behavior_name
 
 
 frame_streamer = None
@@ -515,8 +515,8 @@ def register_routes(app):
             <div class="panel">
                 <h2>目前行為</h2>
                 <div class="behavior-now">
-                    <div class="behavior-emoji" id="behaviorEmoji">{LOW_CONF_EMOJI if lb == LOW_CONF_ID else BEHAVIOR_EMOJI_MAP.get(lb, '')}</div>
-                    <div class="behavior-label" id="behaviorLabel">{LOW_CONF_TEXT if lb == LOW_CONF_ID else BEHAVIOR_CLASSES[lb]}</div>
+                    <div class="behavior-emoji" id="behaviorEmoji">{LOW_CONF_EMOJI if lc < BEHAVIOR_MIN_CONFIDENCE else BEHAVIOR_EMOJI_MAP.get(lb, '')}</div>
+                    <div class="behavior-label" id="behaviorLabel">{get_behavior_name(lb, use_text=False, fallback='unknown', confidence=lc)}</div>
                     <div class="confidence-ring" id="confidenceRing" style="--p: {conf_pct};">
                         <div class="confidence-ring-inner"><span id="confidenceVal">{conf_pct}</span>%</div>
                     </div>
@@ -564,6 +564,7 @@ def register_routes(app):
     <script>
         const BEHAVIOR_NAMES = {str(BEHAVIOR_CLASSES).replace("'", '"')};
         const BEHAVIOR_EMOJI = {{ "-1": "😴", 0: "🐾", 1: "🐈", 2: "🧼", 3: "🐈↺" }};
+        const BEHAVIOR_MIN_CONFIDENCE = {BEHAVIOR_MIN_CONFIDENCE};
 
         function updateDashboard(data) {{
             const lb = data.latest_behavior ?? 0;
@@ -571,8 +572,8 @@ def register_routes(app):
             const probs = data.latest_probs || [0,0,0,0];
             const confPct = Math.round(lc * 100);
 
-            document.getElementById('behaviorEmoji').textContent = (lb === -1 ? '😴' : BEHAVIOR_EMOJI[lb]) || '';
-            document.getElementById('behaviorLabel').textContent = lb === -1 ? '目前正常' : (BEHAVIOR_NAMES[lb] || BEHAVIOR_NAMES[0]);
+            document.getElementById('behaviorEmoji').textContent = (lc < BEHAVIOR_MIN_CONFIDENCE ? '😴' : (BEHAVIOR_EMOJI[lb] || ''));
+            document.getElementById('behaviorLabel').textContent = lc < BEHAVIOR_MIN_CONFIDENCE ? '目前正常' : (BEHAVIOR_NAMES[lb] || BEHAVIOR_NAMES[0]);
             document.getElementById('confidenceVal').textContent = confPct;
             document.getElementById('confidenceRing').style.setProperty('--p', confPct);
 

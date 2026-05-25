@@ -64,6 +64,43 @@ def _env_video_input(name, default):
 def _is_valid_port(port):
     return isinstance(port, int) and 1 <= port <= 65535
 
+
+def _normalize_feature_mode(feature_mode):
+    mode = str(feature_mode).strip().lower()
+    if not mode:
+        return "xyv"
+    return mode
+
+
+def _get_stgcn_feature_spec(feature_mode):
+    """回傳 ST-GCN 特徵模式的通道數與特徵名稱說明。"""
+    mode = _normalize_feature_mode(feature_mode)
+    specs = {
+        "xyv": {
+            "in_channels": 4,
+            "features": ["x", "y", "vx", "vy"],
+            "description": "基礎座標 + 速度",
+        },
+        "xyv_conf": {
+            "in_channels": 5,
+            "features": ["x", "y", "conf", "vx", "vy"],
+            "description": "基礎座標 + 信心值 + 速度",
+        },
+        "xyv_bone": {
+            "in_channels": 6,
+            "features": ["x", "y", "vx", "vy", "bone_x", "bone_y"],
+            "description": "基礎座標 + 速度 + 骨架向量",
+        },
+        "xyv_conf_bone": {
+            "in_channels": 7,
+            "features": ["x", "y", "conf", "vx", "vy", "bone_x", "bone_y"],
+            "description": "基礎座標 + 信心值 + 速度 + 骨架向量",
+        },
+    }
+    if mode not in specs:
+        raise ValueError(f"Unknown ST-GCN feature mode: {feature_mode}")
+    return specs[mode]
+
 # ==================== 模型和資料路徑 ====================
 class ModelPaths:
     """模型和資料檔案路徑"""
@@ -138,11 +175,17 @@ class STGCNConfig:
     """ST-GCN 模型參數"""
     
     # 模型超參數
-    SEQUENCE_LENGTH = _env_int("CAT_MONITORING_STGCN_SEQUENCE_LENGTH", 32)          # 時間窗長度（幀數）
+    SEQUENCE_LENGTH = _env_int("CAT_MONITORING_STGCN_SEQUENCE_LENGTH", 16)          # 時間窗長度（幀數）
     NUM_CLASSES = 4               # 行為類別數
-    IN_CHANNELS = 2               # 輸入通道數 (x, y)
     NUM_JOINTS = 17               # 關鍵點數
     NUM_LAYERS = 3                # ST-GCN 層數
+
+    # 特徵模式（與 train_gcn.py / 推論腳本共用概念）
+    FEATURE_MODE = _normalize_feature_mode(_env_str("CAT_MONITORING_STGCN_FEATURE_MODE", "xyv"))
+    FEATURE_SPEC = _get_stgcn_feature_spec(FEATURE_MODE)
+    IN_CHANNELS = FEATURE_SPEC["in_channels"]
+    FEATURE_NAMES = FEATURE_SPEC["features"]
+    FEATURE_DESCRIPTION = FEATURE_SPEC["description"]
     
     # 時間步參數
     WINDOW_STRIDE = _env_int("CAT_MONITORING_STGCN_WINDOW_STRIDE", 16)            # 滑動步長
@@ -219,14 +262,26 @@ class BehaviorTrackingConfig:
     """行為統計和追蹤"""
     
     # 歷史記錄大小
-    MAX_HISTORY_SIZE = 100
-    MAX_ALERTS_SIZE = 50
+    MAX_HISTORY_SIZE = _env_int("CAT_MONITORING_MAX_HISTORY_SIZE", 100)  # 行為歷史清單最多保留筆數
+    MAX_ALERTS_SIZE = _env_int("CAT_MONITORING_MAX_ALERTS_SIZE", 50)      # 警報清單最多保留筆數
     
     # 活動力窗口
-    ACTIVITY_WINDOW_SIZE = 60
+    ACTIVITY_WINDOW_SIZE = _env_int("CAT_MONITORING_ACTIVITY_WINDOW_SIZE", 60)  # 活動力計算用的滑動窗口大小
+
+    # 行為轉換與活動分數參數
+    MIN_RECORD_DURATION_SECONDS = _env_float("CAT_MONITORING_MIN_RECORD_DURATION_SECONDS", 2.0)  # 單一行為最短記錄秒數
+    ACTIVITY_SCORE_WINDOW_SECONDS = _env_float("CAT_MONITORING_ACTIVITY_SCORE_WINDOW_SECONDS", 3.0)  # 活動分數取樣時間窗
+    DEFAULT_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_DEFAULT_ACTIVITY_WEIGHT", 0.5)  # 沒有持續時間時的預設權重
+    LOW_CONFIDENCE_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_LOW_CONFIDENCE_ACTIVITY_WEIGHT", 0.5)  # 低信心幀的活動權重
+
+    # 警報門檻
+    SCRATCH_ALERT_TIME_SECONDS = _env_float("CAT_MONITORING_SCRATCH_ALERT_TIME_SECONDS", 10.0)  # 單日搔抓累積秒數警戒值
+    SCRATCH_ALERT_COUNT_THRESHOLD = _env_int("CAT_MONITORING_SCRATCH_ALERT_COUNT_THRESHOLD", 5)  # 單日搔抓次數警戒值
+    LICK_ALERT_TIME_SECONDS = _env_float("CAT_MONITORING_LICK_ALERT_TIME_SECONDS", 10.0)  # 單日舔舐累積秒數警戒值
+    SHAKE_ALERT_COUNT_THRESHOLD = _env_int("CAT_MONITORING_SHAKE_ALERT_COUNT_THRESHOLD", 10)  # 單日甩頭次數警戒值
+    LOW_ACTIVITY_TIME_THRESHOLD_SECONDS = _env_float("CAT_MONITORING_LOW_ACTIVITY_TIME_THRESHOLD_SECONDS", 20.0)  # 活動度過低的 walk 時長門檻
     
     # 行為統計：四種行為完全獨立
-    # normal 對應 walk，scratch 只對應 scratch
     BEHAVIOR_CATEGORIES = {
         0: "walk",
         1: "lick",
@@ -333,6 +388,10 @@ def get_config_summary():
     
     🧠 ST-GCN 參數:
       - 時間窗長度: {STGCNConfig.SEQUENCE_LENGTH} 幀
+            - 特徵模式: {STGCNConfig.FEATURE_MODE}
+            - 特徵說明: {STGCNConfig.FEATURE_DESCRIPTION}
+            - 通道數: {STGCNConfig.IN_CHANNELS}
+            - 特徵列表: {STGCNConfig.FEATURE_NAMES}
       - 行為類別: {STGCNConfig.CLASS_NAMES}
       - 層數: {STGCNConfig.NUM_LAYERS}
       - 設備: {STGCNConfig.DEVICE}
@@ -378,6 +437,10 @@ def validate_all_config():
             errors.append(f"YOLO KEYPOINT_CONFIDENCE_THRESHOLD 應在 [0,1]: {YOLOConfig.KEYPOINT_CONFIDENCE_THRESHOLD}")
         if STGCNConfig.SEQUENCE_LENGTH <= 0:
             errors.append(f"ST-GCN SEQUENCE_LENGTH 必須 > 0: {STGCNConfig.SEQUENCE_LENGTH}")
+        if not STGCNConfig.FEATURE_NAMES:
+            errors.append("ST-GCN FEATURE_NAMES 不可為空")
+        if STGCNConfig.IN_CHANNELS <= 0:
+            errors.append(f"ST-GCN IN_CHANNELS 必須 > 0: {STGCNConfig.IN_CHANNELS}")
         if not (0.0 < STGCNConfig.KP_EMA_ALPHA <= 1.0):
             errors.append(f"KP_EMA_ALPHA 應在 (0,1]: {STGCNConfig.KP_EMA_ALPHA}")
         if FlaskConfig.JPEG_QUALITY < 1 or FlaskConfig.JPEG_QUALITY > 100:
@@ -431,6 +494,10 @@ def get_runtime_config_snapshot():
         },
         "stgcn": {
             "sequence_length": STGCNConfig.SEQUENCE_LENGTH,
+            "feature_mode": STGCNConfig.FEATURE_MODE,
+            "feature_description": STGCNConfig.FEATURE_DESCRIPTION,
+            "feature_names": STGCNConfig.FEATURE_NAMES,
+            "in_channels": STGCNConfig.IN_CHANNELS,
             "window_stride": STGCNConfig.WINDOW_STRIDE,
             "device": STGCNConfig.DEVICE,
             "target_model_fps": STGCNConfig.TARGET_MODEL_FPS,

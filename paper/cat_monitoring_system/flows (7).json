@@ -1,113 +1,115 @@
 [
     {
-        "id": "89dc755a187e8b2a",
+        "id": "fcada140b2239093",
         "type": "tab",
         "label": "😺 貓咪健康監測系統",
         "disabled": false,
-        "info": "完整的貓咪健康監測系統\n- 行為識別：走動(walk) / 舔舐(lick) / 搔抓(scratch) / 甩頭(shake)\n- 即時影像串流\n- 行為時間記錄\n- 詳細統計分析\n- 健康警示系統"
+        "info": "",
+        "env": []
     },
     {
-        "id": "76dd5ae52c233d0d",
+        "id": "fec1c8e68ce642dc",
         "type": "http in",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "name": "接收Python數據",
         "url": "/yolo_result",
         "method": "post",
         "upload": false,
         "skipBodyParsing": false,
         "swaggerDoc": "",
-        "x": 140,
+        "x": 380,
         "y": 300,
         "wires": [
             [
-                "c9122db2bba56bbc",
-                "9788051351772439"
+                "b696cc5ef086084c",
+                "1d9d0cbb2b61d71d"
             ]
         ]
     },
     {
-        "id": "9788051351772439",
+        "id": "1d9d0cbb2b61d71d",
         "type": "http response",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "name": "回應200",
         "statusCode": "200",
-        "x": 140,
-        "y": 360,
+        "headers": {},
+        "x": 340,
+        "y": 400,
         "wires": []
     },
     {
-        "id": "c9122db2bba56bbc",
+        "id": "b696cc5ef086084c",
         "type": "json",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "name": "解析JSON",
         "property": "payload",
         "action": "obj",
         "pretty": false,
-        "x": 340,
+        "x": 570,
         "y": 300,
         "wires": [
             [
-                "583503209c7f6b21"
+                "f209c8f328c3b15a"
             ]
         ]
     },
     {
-        "id": "583503209c7f6b21",
+        "id": "f209c8f328c3b15a",
         "type": "function",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "name": "數據分發器",
-        "func": "let data = msg.payload;\n\n// === 防呆 ===\nif (!data) return null;\n\n// === 修正 behavior_log（讓 UI 正常吃）===\nif (data.behavior_log) {\n    data.behavior_log = data.behavior_log.map(item => {\n        return {\n            behavior: item.behavior,   // 保持 lick / scratch / walk / shake\n            time: item.time,\n            duration: item.duration,\n            emoji: getEmoji(item.behavior)\n        };\n    });\n}\n\n// === 補 emoji（確保 UI 不炸）===\nif (data.current && !data.current.emoji) {\n    data.current.emoji = getEmoji(data.current.behavior);\n}\n\n// === UI 主輸出 ===\nlet ui_msg = {\n    payload: data\n};\n\n// === Gauge 專用 ===\nlet gauge_msg = {\n    payload: data.activity_score || 0\n};\n\n// === 輸出 ===\nreturn [\n    ui_msg,   // 即時狀態\n    ui_msg,   // timeline\n    ui_msg,   // stats\n    ui_msg,   // alerts\n    gauge_msg // gauge\n];\n\n\n// === emoji helper ===\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case \"scratch\": return \"🐾\";\n        case \"lick\": return \"🧼\";\n        case \"walk\": return \"🚶\";\n        case \"shake\": return \"🔄\";\n        default: return \"🐱\";\n    }\n}",
+        "func": "\nlet data = msg.payload;\n\n// =========================\n// 防呆\n// =========================\nif (!data) return null;\n\n// =========================\n// current 防呆\n// =========================\nif (!data.current) {\n    data.current = {};\n}\n\n// =========================\n// today_stats 防呆\n// =========================\nif (!data.today_stats) {\n    data.today_stats = {};\n}\n\n// =========================\n// 統一補值\n// =========================\nlet stats = data.today_stats;\n\nstats.walk = stats.walk || 0;\nstats.walk_time = stats.walk_time || 0;\n\nstats.lick = stats.lick || 0;\nstats.lick_time = stats.lick_time || 0;\n\nstats.scratch = stats.scratch || 0;\nstats.scratch_time = stats.scratch_time || 0;\n\nstats.shake = stats.shake || 0;\nstats.shake_time = stats.shake_time || 0;\n\nstats.active_time = stats.active_time || 0;\nstats.rest_time = stats.rest_time || 0;\n\n// =========================\n// behavior_log 修正\n// =========================\nif (Array.isArray(data.behavior_log)) {\n\n    data.behavior_log = data.behavior_log.map(item => {\n\n        return {\n            behavior: item.behavior || \"unknown\",\n            time: item.time || \"--:--\",\n            duration: item.duration || 0,\n            emoji: getEmoji(item.behavior)\n        };\n\n    });\n\n} else {\n\n    data.behavior_log = [];\n\n}\n\n// =========================\n// current emoji\n// =========================\nif (!data.current.emoji) {\n\n    data.current.emoji = getEmoji(data.current.behavior);\n\n}\n\n// =========================\n// timestamp 防呆\n// =========================\nif (!data.current.timestamp) {\n\n    data.current.timestamp =\n        new Date().toLocaleTimeString();\n\n}\n\n// =========================\n// 主輸出\n// =========================\nmsg.payload = data;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    msg,\n    {\n        payload: data.activity_score || 0\n    }\n];\n\n\n// =========================\n// emoji helper\n// =========================\nfunction getEmoji(behavior) {\n\n    switch (behavior) {\n\n        case \"scratch\":\n            return \"🐾\";\n\n        case \"lick\":\n            return \"🧼\";\n\n        case \"walk\":\n            return \"🚶\";\n\n        case \"shake\":\n            return \"🔄\";\n\n        default:\n            return \"🐱\";\n    }\n}",
         "outputs": 5,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 540,
+        "x": 760,
         "y": 300,
         "wires": [
             [
-                "20e7dba83f7c6a25"
+                "fe7830cf1e8203cb"
             ],
             [
-                "eda5a39891466e40"
+                "1629884a17bae2b5"
             ],
             [
-                "4467bbd0e2a6d03f"
+                "7a0492ce0ecb59ce"
             ],
             [
-                "eb0740356105e4c3"
+                "0aa52727427b24c7"
             ],
             [
-                "6e3f7ef030bbe0bd"
+                "7e2090199f86c9f4"
             ]
         ]
     },
     {
-        "id": "20e7dba83f7c6a25",
+        "id": "fe7830cf1e8203cb",
         "type": "ui_template",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "group": "group_status_cat",
         "name": "即時狀態卡片",
         "order": 1,
         "width": "8",
         "height": "5",
         "format": "<style>\n    .status-card {\n        position: relative;\n        width: 100%;\n        height: 100%;\n        min-height: 220px;\n\n        border-radius: 22px;\n        overflow: hidden;\n\n        font-family: 'Microsoft JhengHei', Arial, sans-serif;\n\n        background: #111;\n\n        box-shadow:\n            0 10px 28px rgba(0, 0, 0, 0.22),\n            0 2px 10px rgba(0, 0, 0, 0.18);\n\n        transition:\n            transform 0.35s ease,\n            box-shadow 0.35s ease;\n    }\n\n    /* hover 整張卡 */\n    .status-card:hover {\n        transform: translateY(-2px);\n\n        box-shadow:\n            0 14px 34px rgba(0, 0, 0, 0.28),\n            0 4px 12px rgba(0, 0, 0, 0.22);\n    }\n\n    /* 背景圖 */\n    .bg {\n        position: absolute;\n        inset: 0;\n\n        background-size: cover;\n        background-position: center;\n\n        transform: scale(1.05);\n\n        filter:\n            brightness(0.72) saturate(1.08) contrast(1.02);\n\n        transition:\n            transform 0.6s ease,\n            filter 0.6s ease;\n    }\n\n    /* hover 背景微放大 */\n    .status-card:hover .bg {\n        transform: scale(1.08);\n\n        filter:\n            brightness(0.78) saturate(1.12) contrast(1.04);\n    }\n\n    /* 深色遮罩 */\n    .overlay {\n        position: absolute;\n        inset: 0;\n\n        background:\n            linear-gradient(135deg,\n                rgba(0, 0, 0, 0.68) 0%,\n                rgba(0, 0, 0, 0.18) 42%,\n                rgba(0, 0, 0, 0.74) 100%);\n    }\n\n    /* 主內容 */\n    .content {\n        position: relative;\n        z-index: 2;\n\n        width: 100%;\n        height: 100%;\n\n        color: white;\n    }\n\n    /* 左下狀態卡 */\n/* 左下狀態卡（改成偏正方形） */\n/* 左下狀態卡（小型正方形） */\n.top-left {\nposition: absolute;\n\nleft: 10px;\nbottom: 10px;\n\nwidth: 74px;\nheight: 74px;\n\ndisplay: flex;\nflex-direction: column;\njustify-content: center;\nalign-items: center;\n\ngap: 2px;\n\npadding: 6px;\n\nborder-radius: 18px;\n\nbackground:\nlinear-gradient(\n135deg,\nrgba(255,255,255,0.16),\nrgba(255,255,255,0.06)\n);\n\nbackdrop-filter: blur(12px);\n\nborder:\n1px solid rgba(255,255,255,0.12);\n\nbox-shadow:\n0 3px 10px rgba(0,0,0,0.18),\ninset 0 1px 1px rgba(255,255,255,0.08);\n\ntransition:\ntransform 0.25s ease,\nbackground 0.25s ease;\n}\n\n/* hover */\n.status-card:hover .top-left {\ntransform: translateY(-2px);\n}\n\n/* emoji */\n.emoji {\nfont-size: 1.2em;\n\nline-height: 1;\n\nmargin-bottom: 1px;\n\nfilter:\ndrop-shadow(0 2px 5px rgba(0,0,0,0.3));\n}\n\n/* 狀態資訊 */\n.status-info {\ndisplay: flex;\nflex-direction: column;\nalign-items: center;\n\ntext-align: center;\n}\n\n/* 小標題 */\n.label {\nfont-size: 0.5em;\n\nopacity: 0.92;\n\ncolor: rgba(255,255,255,0.95);\n\nletter-spacing: 0.5px;\n\nmargin-bottom: 1px;\n\nfont-weight: 600;\n\ntext-shadow:\n0 1px 4px rgba(0,0,0,0.35);\n}\n\n/* 行為文字 */\n.status-text {\nfont-size: 0.72em;\n\nfont-weight: 700;\n\nline-height: 1.05;\n\ntext-shadow:\n0 2px 6px rgba(0,0,0,0.35);\n}\n\n    /* 右下活動力 */\n    .right {\n        position: absolute;\n\n        right: 10px;\n        bottom: 10px;\n\n        text-align: center;\n\n        padding: 8px 12px;\n\n        border-radius: 16px;\n\n        background:\n            linear-gradient(135deg,\n                rgba(255, 255, 255, 0.13),\n                rgba(255, 255, 255, 0.06));\n\n        backdrop-filter: blur(10px);\n\n        border:\n            1px solid rgba(255, 255, 255, 0.12);\n\n        box-shadow:\n            0 4px 12px rgba(0, 0, 0, 0.18),\n            inset 0 1px 1px rgba(255, 255, 255, 0.08);\n\n        transition:\n            transform 0.25s ease,\n            background 0.25s ease;\n    }\n\n    /* hover */\n    .status-card:hover .right {\n        transform: translateY(-2px);\n\n        background:\n            linear-gradient(135deg,\n                rgba(255, 255, 255, 0.16),\n                rgba(255, 255, 255, 0.08));\n    }\n\n    /* 活動力數值 */\n    .activity-value {\n        font-size: 1.45em;\n        font-weight: 800;\n\n        line-height: 1;\n\n        color: #ffffff;\n\n        text-shadow:\n            0 2px 8px rgba(0, 0, 0, 0.35);\n    }\n\n    /* 活動力文字 */\n    .activity-label {\n        margin-top: 3px;\n\n        font-size: 0.62em;\n\n        opacity: 0.75;\n\n        letter-spacing: 1px;\n    }\n\n    /* 右上時間 */\n    .time-box {\n        position: absolute;\n\n        top: 10px;\n        right: 10px;\n\n        padding: 6px 10px;\n\n        border-radius: 12px;\n\n        background:\n            linear-gradient(135deg,\n                rgba(0, 0, 0, 0.38),\n                rgba(0, 0, 0, 0.22));\n\n        backdrop-filter: blur(6px);\n\n        border:\n            1px solid rgba(255, 255, 255, 0.08);\n\n        font-size: 0.68em;\n\n        opacity: 0.88;\n\n        letter-spacing: 0.5px;\n\n        text-shadow:\n            0 2px 6px rgba(0, 0, 0, 0.35);\n\n        box-shadow:\n            0 2px 8px rgba(0, 0, 0, 0.18);\n    }\n\n    /* 手機 */\n    @media (max-width: 768px) {\n\n        .status-card {\n            min-height: 190px;\n        }\n\n        .emoji {\n            font-size: 1.15em;\n        }\n\n        .status-text {\n            font-size: 0.82em;\n        }\n\n        .activity-value {\n            font-size: 1.2em;\n        }\n\n        .time-box {\n            font-size: 0.58em;\n        }\n    }\n</style>\n\n<div class=\"status-card\">\n\n    <!-- 背景圖 -->\n    <div class=\"bg\"\n        ng-style=\"{'background-image': 'url(' + (msg.payload.image_url || 'https://megapx-assets.dcard.tw/images/83358790-1cba-4543-89b7-7378e652b8bd/640.jpeg') + ')'}\">\n    </div>\n\n    <!-- 遮罩 -->\n    <div class=\"overlay\"></div>\n\n    <!-- 主內容 -->\n    <div class=\"content\">\n\n        <!-- 右上時間 -->\n        <div class=\"time-box\">\n            ⏰ {{msg.payload.current.timestamp}}\n        </div>\n\n        <!-- 左下狀態 -->\n        <div class=\"top-left\">\n\n            <div class=\"emoji\">\n                {{msg.payload.current.emoji}}\n            </div>\n\n            <div class=\"status-info\">\n                <div class=\"label\">\n                    目前狀態\n                </div>\n\n                <div class=\"status-text\">\n                    {{msg.payload.current.text}}\n                </div>\n            </div>\n\n        </div>\n\n        <!-- 右下活動力 -->\n        <div class=\"right\">\n\n            <div class=\"activity-value\">\n                {{msg.payload.activity_score || 0}}%\n            </div>\n\n            <div class=\"activity-label\">\n                活動力\n            </div>\n\n        </div>\n\n    </div>\n\n</div>",
-        "storeOutMessages": false,
+        "storeOutMessages": true,
         "fwdInMessages": true,
-        "resendOnRefresh": false,
+        "resendOnRefresh": true,
         "templateScope": "local",
         "className": "",
-        "x": 780,
+        "x": 1000,
         "y": 140,
         "wires": [
             []
         ]
     },
     {
-        "id": "eda5a39891466e40",
+        "id": "1629884a17bae2b5",
         "type": "ui_template",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "group": "group_timeline_cat",
         "name": "行為時間紀錄",
         "order": 2,
@@ -119,16 +121,16 @@
         "resendOnRefresh": false,
         "templateScope": "local",
         "className": "",
-        "x": 790,
+        "x": 1010,
         "y": 240,
         "wires": [
             []
         ]
     },
     {
-        "id": "4467bbd0e2a6d03f",
+        "id": "7a0492ce0ecb59ce",
         "type": "ui_template",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "group": "group_stats_cat",
         "name": "詳細統計",
         "order": 3,
@@ -140,37 +142,37 @@
         "resendOnRefresh": false,
         "templateScope": "local",
         "className": "",
-        "x": 780,
-        "y": 340,
+        "x": 1020,
+        "y": 300,
         "wires": [
             []
         ]
     },
     {
-        "id": "eb0740356105e4c3",
+        "id": "eb0e7fea55aa8038",
         "type": "ui_template",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "group": "group_alerts_cat",
         "name": "健康警示",
         "order": 4,
         "width": "12",
         "height": "6",
-        "format": "<style>\n    .alert-container {\n        padding: 20px;\n        font-family: 'Microsoft JhengHei';\n        background: #f6f8fb;\n        border-radius: 16px;\n    }\n\n    /* 標題 */\n    .alert-title {\n        font-size: 1.5em;\n        font-weight: 700;\n        color: #34495e;\n        margin-bottom: 15px;\n    }\n\n    /* 健康分數 */\n    .score-box {\n        background: linear-gradient(135deg, #667eea, #764ba2);\n        color: white;\n        border-radius: 14px;\n        padding: 15px;\n        margin-bottom: 15px;\n        text-align: center;\n    }\n\n    .score-value {\n        font-size: 2.5em;\n        font-weight: 900;\n    }\n\n    /* alert 卡片 */\n    .alert-card {\n        border-radius: 12px;\n        padding: 15px;\n        margin-bottom: 10px;\n        background: white;\n        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);\n    }\n\n    .alert-high {\n        border-left: 6px solid #ff6b6b;\n    }\n\n    .alert-medium {\n        border-left: 6px solid #ffa726;\n    }\n\n    .alert-low {\n        border-left: 6px solid #42a5f5;\n    }\n.stats-item {\n    display: flex;\n    justify-content: space-between;\n    padding: 6px 0;\n    font-size: 0.95em;\n    color: #444;\n}\n    /* highlight 特效 */\n    .highlight {\n        animation: glow 1s infinite alternate;\n    }\n\n    @keyframes glow {\n        from {\n            box-shadow: 0 0 10px #ff6b6b;\n        }\n\n        to {\n            box-shadow: 0 0 20px #ff0000;\n        }\n    }\n\n    /* 無警示 */\n    .no-alert {\n        text-align: center;\n        padding: 30px;\n        color: #7f8c8d;\n    }\n    .stats-box {\n    margin-top: 20px;\n    padding: 16px;\n    background: white;\n    border-radius: 14px;\n    box-shadow: 0 4px 12px rgba(0,0,0,0.05);\n}\n\n.stats-title {\n    font-weight: 700;\n    margin-bottom: 12px;\n    color: #34495e;\n}\n\n.stats-row {\n    display: flex;\n    justify-content: space-between;\n    padding: 8px 0;\n    font-size: 0.95em;\n}\n\n.stats-row .left {\n    color: #5a6c7d;\n}\n\n.stats-row .right {\n    font-weight: 700;\n    color: #2c3e50;\n}\n\n.stats-row span {\n    color: #95a5a6;\n    font-size: 0.85em;\n    margin-left: 5px;\n}\n\n.divider {\n    height: 1px;\n    background: #eee;\n    margin: 10px 0;\n}\n.bar-row {\ndisplay: grid;\ngrid-template-columns: 70px 1fr 60px;\nalign-items: center;\nmargin-bottom: 10px;\n}\n.fill.rest {\nbackground: #9e9e9e;\n}\n.label {\nfont-size: 0.9em;\ncolor: #5a6c7d;\n}\n\n.bar {\nheight: 8px;\nbackground: #eee;\nborder-radius: 10px;\noverflow: hidden;\n}\n\n.fill {\nheight: 100%;\nborder-radius: 10px;\ntransition: width 0.4s ease;\n}\n\n.fill.walk { background:#4caf50; }\n.fill.lick { background:#ffa726; }\n.fill.scratch { background:#ff6b6b; }\n.fill.shake { background:#42a5f5; }\n\n.value {\nfont-size: 0.85em;\ntext-align: right;\ncolor: #34495e;\n}\n</style>\n\n<div class=\"alert-container\" ng-init=\"init()\">\n\n    <div class=\"alert-title\">⚠️ 健康監測</div>\n\n    <!-- 健康分數 -->\n    <div class=\"score-box\">\n        <div>Health Score</div>\n        <div class=\"score-value\">{{health_score}}</div>\n    </div>\n\n    <!-- 無警示 -->\n    <div ng-if=\"alerts.length === 0\" class=\"no-alert\">\n        ✅ 狀態正常\n    </div>\n\n    <!-- alerts -->\n    <div class=\"alert-card alert-{{alerts[0].level}}\" ng-if=\"alerts.length > 0\"\n        ng-class=\"{'highlight': alerts[0].highlight}\">\n    \n        <div><b>⚠️ {{alerts[0].title}}</b></div>\n        <div>{{alerts[0].message}}</div>\n        <div style=\"color:#888;\">{{alerts[0].suggestion}}</div>\n    \n    </div>\n</div>\n\n\n<!-- ===== 行為統計（固定顯示） ===== -->\n<div class=\"stats-box\">\n\n    <div class=\"stats-title\">📊 行為分析</div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🚶 行走</div>\n        <div class=\"bar\">\n            <div class=\"fill walk\" ng-style=\"{width:getRatio(currentStats.walk_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.walk_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🧼 舔舐</div>\n        <div class=\"bar\">\n            <div class=\"fill lick\" ng-style=\"{width:getRatio(msg.payload.today_stats.lick_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.lick_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🐾 搔抓</div>\n        <div class=\"bar\">\n            <div class=\"fill scratch\" ng-style=\"{width:getRatio(msg.payload.today_stats.scratch_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.scratch_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🔄 甩頭</div>\n        <div class=\"bar\">\n            <div class=\"fill shake\" ng-style=\"{width:getRatio(msg.payload.today_stats.shake_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.shake_time || 0}}s</div>\n    </div>\n\n<div class=\"bar-row\">\n    <div class=\"label\">⚡ 活動</div>\n    <div class=\"bar\">\n        <div class=\"fill walk\"\n            ng-style=\"{width: (msg.payload.today_stats.active_time / ((msg.payload.today_stats.active_time + msg.payload.today_stats.rest_time) || 1) * 100) + '%'}\">\n        </div>\n    </div>\n    <div class=\"value\">{{msg.payload.today_stats.active_time || 0}}s</div>\n</div>\n\n<div class=\"bar-row\">\n    <div class=\"label\">😴 休息</div>\n    <div class=\"bar\">\n        <div class=\"fill rest\"\n            ng-style=\"{width: (msg.payload.today_stats.rest_time / ((msg.payload.today_stats.active_time + msg.payload.today_stats.rest_time) || 1) * 100) + '%'}\">\n        </div>\n    </div>\n    <div class=\"value\">{{msg.payload.today_stats.rest_time || 0}}s</div>\n</div>\n\n</div>\n<script>\n    (function(scope) {\n\n    scope.lastAlerts = [];\n\n    scope.init = function() {\n        scope.alerts = [];\n        scope.health_score = 100;\n        scope.currentStats = null;   // 🔥 新增\n    };\n\n    scope.$watch('msg', function(msg) {\n        if (!msg || !msg.payload || !msg.payload.today_stats) return;\n\n        let stats = msg.payload.today_stats || {};\n        \n        // 🔥 強制補值（關鍵）\n        stats.active_time = stats.active_time || 0;\n        stats.rest_time = stats.rest_time || 0;\n        stats.walk_time = stats.walk_time || 0;\n        stats.lick_time = stats.lick_time || 0;\n        stats.scratch_time = stats.scratch_time || 0;\n        stats.shake_time = stats.shake_time || 0;\n\n        scope.currentStats = stats;   // 🔥 存起來給 getRatio 用\n\n        let total = (stats.active_time || 0) + (stats.rest_time || 0);\n        let abnormal = stats.lick_time + stats.scratch_time + stats.shake_time;\n\n        let abnormal_ratio = total > 0 ? abnormal / total : 0;\n        let rest_ratio = total > 0 ? (stats.rest_time / total) : 0;\n        if (isNaN(rest_ratio)) rest_ratio = 0;\n        let walk_ratio = total > 0 ? stats.walk_time / total : 0;\n\n        let inactivity_penalty = walk_ratio < 0.2 ? 1 : 0;\n\n        let score = 100\n            - abnormal_ratio * 60\n            - rest_ratio * 25\n            - inactivity_penalty * 15;\n\n        scope.health_score = Math.max(0, Math.round(score));\n\n        // === alert 判斷 ===\n       let alert = null;\n\nlet messages = [];\nlet suggestions = [];\n\nlet level = \"low\";\nlet highlight = false;\n\n// 搔抓\nif (stats.scratch_time > 10) {\n    messages.push(`🐾 搔抓 ${stats.scratch_time.toFixed(1)} 秒`);\n    suggestions.push(\"皮膚問題可能\");\n    level = \"high\";\n    highlight = true;\n}\n\n// 舔舐\nif (stats.lick_time > 10) {\n    messages.push(`🧼 舔舐 ${stats.lick_time.toFixed(1)} 秒`);\n    suggestions.push(\"壓力或皮膚問題\");\n    if (level !== \"high\") level = \"medium\";\n}\n\n// 甩頭\nif (stats.shake > 10) {\n    messages.push(`🔄 甩頭 ${stats.shake} 次`);\n    suggestions.push(\"耳朵問題\");\n    if (level !== \"high\") level = \"medium\";\n}\n\n// 休息\nif (rest_ratio > 0.7) {\n    messages.push(`😴 休息 ${(rest_ratio*100).toFixed(1)}%`);\n    suggestions.push(\"活動力偏低\");\n    highlight = true;\n}\n\n// 組合\nif (messages.length > 0) {\n    alert = {\n        level: level,\n        highlight: highlight,\n        title: \"健康異常\",\n        message: messages.join(\" ｜ \"),\n        suggestion: suggestions.join(\"、\")\n    };\n}\n\n// === 去抖 ===\nif (JSON.stringify(alert) !== JSON.stringify(scope.lastAlert)) {\n    scope.alerts = alert ? [alert] : [];\n    scope.lastAlert = alert;\n}\n// 🔥 強制更新 UI（關鍵）\nscope.$applyAsync();\n    });\n\n    // ✅ 修正這裡\n    scope.getRatio = function(value) {\n        if (!scope.currentStats) return 0;\n\n        let stats = scope.currentStats;\n\n        let max = Math.max(\n            stats.walk_time || 0,\n            stats.lick_time || 0,\n            stats.scratch_time || 0,\n            stats.shake_time || 0,\n            1\n        );\n\n        return (value / max) * 100;\n    };\n\n})(scope);\n</script>",
+        "format": "<style>\n    .alert-container {\n        padding: 20px;\n        font-family: 'Microsoft JhengHei';\n        background: #f6f8fb;\n        border-radius: 16px;\n    }\n\n    /* 標題 */\n    .alert-title {\n        font-size: 1.5em;\n        font-weight: 700;\n        color: #34495e;\n        margin-bottom: 15px;\n    }\n\n    /* 健康分數 */\n    .score-box {\n        background: linear-gradient(135deg, #667eea, #764ba2);\n        color: white;\n        border-radius: 14px;\n        padding: 15px;\n        margin-bottom: 15px;\n        text-align: center;\n    }\n\n    .score-value {\n        font-size: 2.5em;\n        font-weight: 900;\n    }\n\n    /* alert 卡片 */\n    .alert-card {\n        border-radius: 12px;\n        padding: 15px;\n        margin-bottom: 10px;\n        background: white;\n        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);\n    }\n\n    .alert-high {\n        border-left: 6px solid #ff6b6b;\n    }\n\n    .alert-medium {\n        border-left: 6px solid #ffa726;\n    }\n\n    .alert-low {\n        border-left: 6px solid #42a5f5;\n    }\n.stats-item {\n    display: flex;\n    justify-content: space-between;\n    padding: 6px 0;\n    font-size: 0.95em;\n    color: #444;\n}\n    /* highlight 特效 */\n    .highlight {\n        animation: glow 1s infinite alternate;\n    }\n\n    @keyframes glow {\n        from {\n            box-shadow: 0 0 10px #ff6b6b;\n        }\n\n        to {\n            box-shadow: 0 0 20px #ff0000;\n        }\n    }\n\n    /* 無警示 */\n    .no-alert {\n        text-align: center;\n        padding: 30px;\n        color: #7f8c8d;\n    }\n    .stats-box {\n    margin-top: 20px;\n    padding: 16px;\n    background: white;\n    border-radius: 14px;\n    box-shadow: 0 4px 12px rgba(0,0,0,0.05);\n}\n\n.stats-title {\n    font-weight: 700;\n    margin-bottom: 12px;\n    color: #34495e;\n}\n\n.stats-row {\n    display: flex;\n    justify-content: space-between;\n    padding: 8px 0;\n    font-size: 0.95em;\n}\n\n.stats-row .left {\n    color: #5a6c7d;\n}\n\n.stats-row .right {\n    font-weight: 700;\n    color: #2c3e50;\n}\n\n.stats-row span {\n    color: #95a5a6;\n    font-size: 0.85em;\n    margin-left: 5px;\n}\n\n.divider {\n    height: 1px;\n    background: #eee;\n    margin: 10px 0;\n}\n.bar-row {\ndisplay: grid;\ngrid-template-columns: 70px 1fr 60px;\nalign-items: center;\nmargin-bottom: 10px;\n}\n.fill.rest {\nbackground: #9e9e9e;\n}\n.label {\nfont-size: 0.9em;\ncolor: #5a6c7d;\n}\n\n.bar {\nheight: 8px;\nbackground: #eee;\nborder-radius: 10px;\noverflow: hidden;\n}\n\n.fill {\nheight: 100%;\nborder-radius: 10px;\ntransition: width 0.4s ease;\n}\n\n.fill.walk { background:#4caf50; }\n.fill.lick { background:#ffa726; }\n.fill.scratch { background:#ff6b6b; }\n.fill.shake { background:#42a5f5; }\n\n.value {\nfont-size: 0.85em;\ntext-align: right;\ncolor: #34495e;\n}\n</style>\n\n<div class=\"alert-container\" ng-init=\"init()\">\n\n    <div class=\"alert-title\">⚠️ 健康監測</div>\n\n    <!-- 健康分數 -->\n    <div class=\"score-box\">\n        <div>Health Score</div>\n        <div class=\"score-value\">{{health_score}}</div>\n    </div>\n\n    <!-- 無警示 -->\n    <div ng-if=\"alerts.length === 0\" class=\"no-alert\">\n        ✅ 狀態正常\n    </div>\n\n    <!-- alerts -->\n    <div class=\"alert-card alert-{{alerts[0].level}}\" ng-if=\"alerts.length > 0\"\n        ng-class=\"{'highlight': alerts[0].highlight}\">\n    \n        <div><b>⚠️ {{alerts[0].title}}</b></div>\n        <div>{{alerts[0].message}}</div>\n        <div style=\"color:#888;\">{{alerts[0].suggestion}}</div>\n    \n    </div>\n</div>\n\n\n<!-- ===== 行為統計（固定顯示） ===== -->\n<div class=\"stats-box\">\n\n    <div class=\"stats-title\">📊 行為分析</div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🚶 行走</div>\n        <div class=\"bar\">\n            <div class=\"fill walk\" ng-style=\"{width:getRatio(currentStats.walk_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.walk_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🧼 舔舐</div>\n        <div class=\"bar\">\n            <div class=\"fill lick\" ng-style=\"{width:getRatio(msg.payload.today_stats.lick_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.lick_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🐾 搔抓</div>\n        <div class=\"bar\">\n            <div class=\"fill scratch\" ng-style=\"{width:getRatio(msg.payload.today_stats.scratch_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.scratch_time || 0}}s</div>\n    </div>\n\n    <div class=\"bar-row\">\n        <div class=\"label\">🔄 甩頭</div>\n        <div class=\"bar\">\n            <div class=\"fill shake\" ng-style=\"{width:getRatio(msg.payload.today_stats.shake_time)+'%'}\"></div>\n        </div>\n        <div class=\"value\">{{msg.payload.today_stats.shake_time || 0}}s</div>\n    </div>\n\n<div class=\"bar-row\">\n    <div class=\"label\">⚡ 活動</div>\n    <div class=\"bar\">\n        <div class=\"fill walk\"\n            ng-style=\"{width: (msg.payload.today_stats.active_time / ((msg.payload.today_stats.active_time + msg.payload.today_stats.rest_time) || 1) * 100) + '%'}\">\n        </div>\n    </div>\n    <div class=\"value\">{{msg.payload.today_stats.active_time || 0}}s</div>\n</div>\n\n<div class=\"bar-row\">\n    <div class=\"label\">😴 休息</div>\n    <div class=\"bar\">\n        <div class=\"fill rest\"\n            ng-style=\"{width: (msg.payload.today_stats.rest_time / ((msg.payload.today_stats.active_time + msg.payload.today_stats.rest_time) || 1) * 100) + '%'}\">\n        </div>\n    </div>\n    <div class=\"value\">{{msg.payload.today_stats.rest_time || 0}}s</div>\n</div>\n\n</div>\n<script>\n(function(scope) {\n\n    scope.lastAlerts = [];\n\n    scope.init = function() {\n\n        scope.alerts = [];\n        scope.health_score = 100;\n        scope.currentStats = null;\n\n    };\n\n    // 🔥 加這段\n    scope.$watch('msg', function(msg) {\n\n        if (!msg || !msg.payload) return;\n\n        scope.health_score =\n            msg.payload.health_score || 100;\n\n        scope.alerts =\n            msg.payload.alerts || [];\n\n        scope.currentStats =\n            msg.payload.today_stats || {};\n\n        scope.$applyAsync();\n\n    });\n\n    scope.getRatio = function(value) {\n\n        if (!scope.currentStats) return 0;\n\n        let stats = scope.currentStats;\n\n        let max = Math.max(\n            stats.walk_time || 0,\n            stats.lick_time || 0,\n            stats.scratch_time || 0,\n            stats.shake_time || 0,\n            1\n        );\n\n        return (value / max) * 100;\n    };\n\n})(scope);\n</script>",
         "storeOutMessages": false,
         "fwdInMessages": false,
         "resendOnRefresh": false,
         "templateScope": "local",
         "className": "",
-        "x": 780,
-        "y": 440,
+        "x": 1020,
+        "y": 420,
         "wires": [
             []
         ]
     },
     {
-        "id": "6e3f7ef030bbe0bd",
+        "id": "7e2090199f86c9f4",
         "type": "ui_gauge",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "name": "活動力儀表",
         "group": "group_gauge_cat",
         "order": 5,
@@ -191,29 +193,226 @@
         "seg2": "70",
         "diff": false,
         "className": "",
-        "x": 570,
-        "y": 440,
+        "x": 1030,
+        "y": 340,
         "wires": []
     },
     {
-        "id": "b7617b6df998defb",
+        "id": "2fd1dbfc2002039c",
         "type": "ui_template",
-        "z": "89dc755a187e8b2a",
+        "z": "fcada140b2239093",
         "group": "group_stream_cat",
         "name": "影像串流",
         "order": 6,
         "width": "12",
         "height": "8",
-        "format": "<style>\n.stream-wrapper {\n    position: relative;\n    width: 100%;\n    background: #1a1a2e;\n    border-radius: 12px;\n    overflow: hidden;\n    box-shadow: 0 5px 20px rgba(0,0,0,0.3);\n}\n.stream-status-bar {\n    position: absolute;\n    top: 15px;\n    left: 15px;\n    padding: 10px 20px;\n    background: rgba(0,0,0,0.75);\n    color: #00ff88;\n    border-radius: 8px;\n    font-family: 'Consolas', monospace;\n    font-size: 14px;\n    z-index: 100;\n    box-shadow: 0 3px 10px rgba(0,0,0,0.5);\n}\n.stream-image {\n    width: 100%;\n    height: auto;\n    display: block;\n}\n.stream-offline {\n    text-align: center;\n    padding: 80px 20px;\n    color: #95a5a6;\n}\n.stream-offline-icon {\n    font-size: 5em;\n    margin-bottom: 20px;\n}\n</style>\n\n<div class=\"stream-wrapper\">\n    <div class=\"stream-status-bar\" id=\"streamStatus\">🔄 連線中...</div>\n    <img class=\"stream-image\" id=\"streamImg\" \n         src=\"http://127.0.0.1:5000/stream\" \n         onerror=\"this.style.display='none'; document.getElementById('streamStatus').innerHTML='❌ 串流離線'; document.getElementById('offlineMsg').style.display='block';\"\n         onload=\"this.style.display='block'; document.getElementById('streamStatus').innerHTML='✅ 串流正常'; document.getElementById('offlineMsg').style.display='none';\">\n    <div class=\"stream-offline\" id=\"offlineMsg\" style=\"display:none;\">\n        <div class=\"stream-offline-icon\">📹</div>\n        <p>視訊串流目前離線</p>\n        <p style=\"font-size:0.9em; color:#7f8c8d;\">請確認Python程式是否運行</p>\n    </div>\n</div>",
+        "format": "<style>\n    .stream-wrapper {\n        position: relative;\n        width: 100%;\n        background: #1a1a2e;\n        border-radius: 12px;\n        overflow: hidden;\n        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);\n    }\n\n    .stream-status-bar {\n        position: absolute;\n        top: 15px;\n        left: 15px;\n        padding: 10px 20px;\n        background: rgba(0, 0, 0, 0.75);\n        color: #00ff88;\n        border-radius: 8px;\n        font-family: 'Consolas', monospace;\n        font-size: 14px;\n        z-index: 100;\n        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);\n    }\n\n    .stream-image {\n        width: 100%;\n        height: auto;\n        display: block;\n    }\n\n    .stream-offline {\n        text-align: center;\n        padding: 80px 20px;\n        color: #95a5a6;\n    }\n\n    .stream-offline-icon {\n        font-size: 5em;\n        margin-bottom: 20px;\n    }\n</style>\n\n<div class=\"stream-wrapper\">\n    <div class=\"stream-status-bar\" id=\"streamStatus\">🔄 連線中...</div>\n    <img class=\"stream-image\" id=\"streamImg\"\n         ng-src=\"{{msg.payload.current.system.stream_url || msg.stream_url || ''}}\"\n         onerror=\"this.style.display='none'; document.getElementById('streamStatus').innerHTML='❌ 串流離線'; document.getElementById('offlineMsg').style.display='block';\"\n         onload=\"this.style.display='block'; document.getElementById('streamStatus').innerHTML='✅ 串流正常'; document.getElementById('offlineMsg').style.display='none';\">\n    <div class=\"stream-offline\" id=\"offlineMsg\" style=\"display:none;\">\n        <div class=\"stream-offline-icon\">📹</div>\n        <p>視訊串流目前離線</p>\n        <p style=\"font-size:0.9em; color:#7f8c8d;\">請確認Python程式是否運行</p>\n    </div>\n</div>",
         "storeOutMessages": false,
         "fwdInMessages": true,
         "resendOnRefresh": false,
         "templateScope": "local",
         "className": "",
-        "x": 560,
-        "y": 180,
+        "x": 1000,
+        "y": 560,
         "wires": [
             []
+        ]
+    },
+    {
+        "id": "0aa52727427b24c7",
+        "type": "function",
+        "z": "fcada140b2239093",
+        "name": "健康引擎分析",
+        "func": "\nlet data = msg.payload;\n\nif (!data || !data.today_stats) {\n    return null;\n}\n\nlet stats = data.today_stats;\n\n// =========================\n// 統計\n// =========================\nlet total =\n    stats.active_time +\n    stats.rest_time;\n\nlet abnormal =\n    stats.lick_time +\n    stats.scratch_time +\n    stats.shake_time;\n\nlet abnormal_ratio =\n    total > 0\n    ? abnormal / total\n    : 0;\n\nlet rest_ratio =\n    total > 0\n    ? stats.rest_time / total\n    : 0;\n\nlet walk_ratio =\n    total > 0\n    ? stats.walk_time / total\n    : 0;\n\n// =========================\n// inactivity\n// =========================\nlet inactivity_penalty =\n    walk_ratio < 0.2 ? 1 : 0;\n\n// =========================\n// health score\n// =========================\nlet score = 100\n    - abnormal_ratio * 60\n    - rest_ratio * 25\n    - inactivity_penalty * 15;\n\nscore = Math.max(0, Math.round(score));\n\ndata.health_score = score;\n\n// =========================\n// alerts\n// =========================\nlet alerts = [];\n\nlet level = \"low\";\n\nlet messages = [];\n\nlet suggestions = [];\n\nlet highlight = false;\n\n// =========================\n// scratch\n// =========================\nif (stats.scratch_time > 10) {\n\n    messages.push(\n        `🐾 搔抓 ${ stats.scratch_time.toFixed(1) } 秒`\n    );\n\n    suggestions.push(\n        \"可能皮膚問題\"\n    );\n\n    level = \"high\";\n\n    highlight = true;\n}\n\n// =========================\n// lick\n// =========================\nif (stats.lick_time > 10) {\n\n    messages.push(\n        `🧼 舔舐 ${ stats.lick_time.toFixed(1) } 秒`\n    );\n\n    suggestions.push(\n        \"可能壓力或皮膚問題\"\n    );\n\n    if (level !== \"high\") {\n\n        level = \"medium\";\n    }\n}\n\n// =========================\n// shake\n// =========================\nif (stats.shake > 10) {\n\n    messages.push(\n        `🔄 甩頭 ${ stats.shake_time.toFixed(1) } 次`\n    );\n\n    suggestions.push(\n        \"可能耳朵問題\"\n    );\n\n    if (level !== \"high\") {\n\n        level = \"medium\";\n    }\n}\n\n// =========================\n// 長時間休息\n// =========================\nif (rest_ratio > 0.7) {\n\n    messages.push(\n        `😴 休息比例 ${ (rest_ratio * 100).toFixed(1) }% `\n    );\n\n    suggestions.push(\n        \"活動力偏低\"\n    );\n\n    highlight = true;\n}\n\n// =========================\n// health score 過低\n// =========================\nif (score < 50) {\n\n    messages.push(\n        `⚠️ Health Score 過低(${ score })`\n    );\n\n    suggestions.push(\n        \"建議持續觀察\"\n    );\n\n    level = \"high\";\n\n    highlight = true;\n}\n\n// =========================\n// 組 alert\n// =========================\nif (messages.length > 0) {\n\n    alerts.push({\n\n        level: level,\n\n        highlight: highlight,\n\n        title: \"健康異常\",\n\n        message: messages.join(\" ｜ \"),\n\n        suggestion: suggestions.join(\"、\"),\n\n        health_score: score,\n\n        timestamp:\n            new Date().toLocaleString()\n\n    });\n}\n\n// =========================\n// payload\n// =========================\ndata.alerts = alerts;\n\nmsg.payload = data;\n\nreturn msg;\n\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 640,
+        "y": 480,
+        "wires": [
+            [
+                "eb0e7fea55aa8038",
+                "7806eed685adf05b"
+            ]
+        ]
+    },
+    {
+        "id": "7806eed685adf05b",
+        "type": "function",
+        "z": "fcada140b2239093",
+        "name": "發送提醒",
+        "func": "\n// =========================\n// Discord 健康警示\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// alerts\n// =========================\nlet alerts =\n    msg.payload?.alerts || [];\n\n// 沒警示\nif (alerts.length === 0) {\n\n    // 清空上次警示\n    flow.set(\n        \"last_discord_alert\",\n        \"\"\n    );\n\n    return null;\n}\n\n// =========================\n// 第一個 alert\n// =========================\nlet alert = alerts[0];\n\n// =========================\n// alert key\n// 去除數字避免狂刷\n// =========================\nlet clean_message =\n    (alert.message || \"\")\n    .replace(/[0-9.]+/g, \"\");\n\nlet alert_key = [\n\n    alert.level || \"\",\n\n    alert.title || \"\",\n\n    clean_message\n\n].join(\"|\");\n\n// =========================\n// 上次 alert\n// =========================\nlet last_alert =\n    flow.get(\"last_discord_alert\")\n    || \"\";\n\n// 相同警示不發\nif (last_alert === alert_key) {\n\n    return null;\n}\n\n// 更新 alert\nflow.set(\n    \"last_discord_alert\",\n    alert_key\n);\n\n// =========================\n// color\n// =========================\nlet color = 16776960;\n\nswitch (alert.level) {\n\n    case \"high\":\n        color = 16711680;\n        break;\n\n    case \"medium\":\n        color = 16753920;\n        break;\n\n    default:\n        color = 16776960;\n}\n\n// =========================\n// Discord payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                `🚨 ${ alert.title } `,\n\n            description:\n                alert.message,\n\n            color:\n                color,\n\n            fields: [\n\n                {\n                    name:\n                        \"Health Score\",\n\n                    value:\n                        String(\n                            alert.health_score || 0\n                        ),\n\n                    inline:\n                        true\n                },\n\n                {\n                    name:\n                        \"警示等級\",\n\n                    value:\n                        String(\n                            alert.level || \"unknown\"\n                        ),\n\n                    inline:\n                        true\n                },\n\n                {\n                    name:\n                        \"建議\",\n\n                    value:\n                        String(\n                            alert.suggestion || \"無\"\n                        ),\n\n                    inline:\n                        false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    alert.timestamp ||\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 820,
+        "y": 480,
+        "wires": [
+            [
+                "65506ab93e8342e2"
+            ]
+        ]
+    },
+    {
+        "id": "65506ab93e8342e2",
+        "type": "http request",
+        "z": "fcada140b2239093",
+        "name": "送到 Discord",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 1030,
+        "y": 480,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "de922c5dc316fda1",
+        "type": "http in",
+        "z": "fcada140b2239093",
+        "name": "python_online",
+        "url": "/python_online",
+        "method": "post",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 370,
+        "y": 560,
+        "wires": [
+            [
+                "24fce9685491c0b6"
+            ]
+        ]
+    },
+    {
+        "id": "24fce9685491c0b6",
+        "type": "json",
+        "z": "fcada140b2239093",
+        "name": "parse_json",
+        "property": "payload",
+        "action": "obj",
+        "pretty": false,
+        "x": 570,
+        "y": 560,
+        "wires": [
+            [
+                "b8c4ebe4e0cba7c2"
+            ]
+        ]
+    },
+    {
+        "id": "8231d46d3d16290e",
+        "type": "inject",
+        "z": "fcada140b2239093",
+        "name": "發送訊息到discord",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0,
+        "topic": "",
+        "payload": "這是一則來自 Node-RED 的測試通知！",
+        "payloadType": "str",
+        "x": 390,
+        "y": 720,
+        "wires": [
+            [
+                "e0d687c9a3cfefd6"
+            ]
+        ]
+    },
+    {
+        "id": "0f1aa27a4b9884ed",
+        "type": "http request",
+        "z": "fcada140b2239093",
+        "name": "送到 Discord",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 990,
+        "y": 720,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "e0d687c9a3cfefd6",
+        "type": "function",
+        "z": "fcada140b2239093",
+        "name": "組成 Discord Webhook 格式",
+        "func": "\n\n// Discord Python 上線通知\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// IP\n// =========================\nlet ip =\n    msg.payload?.current?.system?.ip\n    || \"未知IP\";\n\n// 保存 IP\nflow.set(\n    \"python_ip\",\n    ip\n);\n\n// =========================\n// Discord Payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                \"🟢 Python AI 已上線\",\n\n            description:\n                `偵測到 Python 推論系統啟動`,\n\n            color:\n                65280,\n\n            fields: [\n\n                {\n                    name: \"Python IP\",\n                    value: String(ip),\n                    inline: false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 720,
+        "y": 720,
+        "wires": [
+            [
+                "0f1aa27a4b9884ed"
+            ]
+        ]
+    },
+    {
+        "id": "bd92b5e2cce8da3d",
+        "type": "http response",
+        "z": "fcada140b2239093",
+        "name": "response_200",
+        "statusCode": "200",
+        "headers": {},
+        "x": 980,
+        "y": 620,
+        "wires": []
+    },
+    {
+        "id": "b8c4ebe4e0cba7c2",
+        "type": "function",
+        "z": "fcada140b2239093",
+        "name": "build_response",
+        "func": "let ip = msg.payload && msg.payload.ip ? msg.payload.ip : (flow.get(\"python_ip\") || null);\nif (ip) {\n    flow.set(\"python_ip\", ip);\n}\nconst streamUrl = ip ? `http://${ip}:5000/stream` : \"\";\nmsg.payload = {\ncurrent: {\nbehavior: -1,\ntext: \"Python online\",\nemoji: \"🐱\",\ntimestamp: new Date().toLocaleTimeString(),\nsystem: {\n    ip: ip,\n    stream_url: streamUrl\n}\n},\nactivity_score: 0,\ntoday_stats: {\nwalk:0, walk_time:0, scratch:0, scratch_time:0,\nlick:0, lick_time:0, shake:0, shake_time:0,\nactive_time:0, rest_time:0\n},\nbehavior_log: [],\nalerts: []\n};\nmsg.stream_url = streamUrl;\nnode.warn(\"python_online received IP: \" + (ip || 'null'));\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 770,
+        "y": 560,
+        "wires": [
+            [
+                "bd92b5e2cce8da3d",
+                "e0d687c9a3cfefd6",
+                "2fd1dbfc2002039c"
+            ]
         ]
     },
     {
@@ -289,7 +488,7 @@
         "hidden": false
     },
     {
-        "id": "a79d800801383a4c",
+        "id": "0ab78793498c0d42",
         "type": "global-config",
         "env": [],
         "modules": {

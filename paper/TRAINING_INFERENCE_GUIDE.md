@@ -5,7 +5,7 @@
 確保以下路徑存在並有數據：
 - 骨架數據：`C:\cat_pose\gcn_pose\skeletons\` （JSON 檔案）
 - 模型輸出目錄：`C:\cat_pose\gcn_pose\models\` （會自動建立）
-- 結果輸出目錄：`C:\paper - 複製\cat_monitoring_system\` （會自動建立）
+- 結果輸出目錄：`C:\paper - 複製\cat_monitoring_system\`（會自動建立）
 
 ---
 

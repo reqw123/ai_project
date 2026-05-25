@@ -33,6 +33,8 @@ from utils.constants import (
     BEHAVIOR_COLORS,
     LOW_CONF_ID,
 )
+from utils.constants import BEHAVIOR_MIN_CONFIDENCE
+from utils.helpers import get_behavior_name
 
 # 配置
 # VIDEO_PATHS 每個元素可為：
@@ -519,7 +521,8 @@ def draw_test2_style_overlay(
     yolo_model_path = getattr(visualizer, 'yolo_model_path', None)
     frame_number = getattr(visualizer, 'frame_idx', None)
     fps_val = getattr(visualizer, 'fps', None)
-    if behavior_id == LOW_CONF_ID:
+    is_display_normal = (behavior_id == LOW_CONF_ID) or (float(confidence) < BEHAVIOR_MIN_CONFIDENCE)
+    if is_display_normal:
         visualizer.draw_prediction_on_frame(
             frame,
             'Normal',
@@ -532,7 +535,7 @@ def draw_test2_style_overlay(
         if probs is not None and any(float(p) > 0 for p in probs):
             visualizer.draw_probability_bars(frame, probs, BEHAVIOR_CLASSES)
     elif behavior_id is not None and confidence > 0:
-        behavior_name = BEHAVIOR_CLASSES[behavior_id] if 0 <= behavior_id < len(BEHAVIOR_CLASSES) else str(behavior_id)
+        behavior_name = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
         visualizer.draw_prediction_on_frame(
             frame,
             behavior_name,
@@ -642,11 +645,11 @@ def generate_report_file(report_path, recorded_video_stats):
         total_behavior = int(np.sum(behavior_counts))
 
         expected_behavior = infer_expected_behavior(s["video_path"])
-        expected_text = BEHAVIOR_CLASSES[expected_behavior] if expected_behavior is not None else "unknown"
+        expected_text = get_behavior_name(expected_behavior, use_text=False, fallback="unknown")
 
         if total_behavior > 0:
             dominant_bid = int(np.argmax(behavior_counts))
-            dominant_behavior = BEHAVIOR_CLASSES[dominant_bid]
+            dominant_behavior = get_behavior_name(dominant_bid, use_text=False, fallback=str(dominant_bid))
             dominant_conf_list = behavior_confidences_by_class[dominant_bid]
             if dominant_conf_list:
                 dominant_conf = float(np.mean(dominant_conf_list))
@@ -1228,15 +1231,15 @@ def main():
                         confidence = float(pred_conf)
                         probs = pred_probs.copy()
 
-                    # 與主系統一致：低信心顯示「目前正常」
-                    if confidence < CONFIDENCE_THRESHOLD:
+                    # 與主系統一致：低信心顯示「目前正常」 (使用 BEHAVIOR_MIN_CONFIDENCE)
+                    if float(confidence) < BEHAVIOR_MIN_CONFIDENCE:
                         behavior_id_for_display = LOW_CONF_ID
                     else:
                         behavior_id_for_display = behavior_id
 
                     # 只統計高信心預測
                     if behavior_id_for_display != LOW_CONF_ID:
-                        behavior_text = BEHAVIOR_TEXT_MAP.get(behavior_id, BEHAVIOR_CLASSES[behavior_id])
+                        behavior_text = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
                         if is_first_pass:
                             local_predictions.append({
                                 'video_idx': current_video_idx,
@@ -1244,7 +1247,7 @@ def main():
                                 'frame': local_frames_processed,
                                 'time': frame_time_sec,
                                 'behavior_id': behavior_id,
-                                'behavior_name': BEHAVIOR_CLASSES[behavior_id],
+                                'behavior_name': get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence),
                                 'confidence': confidence,
                                 'probs': probs.copy()
                             })

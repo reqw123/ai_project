@@ -3,6 +3,7 @@ ST-GCN 模型類別
 優化自原 cat_behavior_stgcn.py
 """
 import torch
+import inspect
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -432,13 +433,22 @@ class CatBehaviorSTGCN:
         self.sequence_length = sequence_length
         self.num_classes = num_classes
         self.normalize = normalize
-        self.feature_mode = feature_mode
+        self.feature_mode = feature_mode.strip().lower()
         self.in_channels = int(in_channels) if in_channels is not None else None
 
         checkpoint = None
         state_dict = None
         if Path(model_path).exists():
-            checkpoint = torch.load(model_path, map_location=self.device)
+            # Use safe loading when available (PyTorch experimental 'weights_only' flag).
+            try:
+                sig = inspect.signature(torch.load)
+                if 'weights_only' in sig.parameters:
+                    checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
+                else:
+                    checkpoint = torch.load(model_path, map_location=self.device)
+            except Exception:
+                # Fallback to normal load if signature inspection fails
+                checkpoint = torch.load(model_path, map_location=self.device)
             if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
                 state_dict = checkpoint['model_state_dict']
             else:
@@ -448,6 +458,13 @@ class CatBehaviorSTGCN:
             self.in_channels = int(state_dict['bn_input.weight'].shape[0])
         if self.in_channels is None:
             self.in_channels = 4
+
+        expected_channels = get_in_channels_for_mode(self.feature_mode)
+        if self.in_channels != expected_channels:
+            raise ValueError(
+                f"feature_mode={self.feature_mode} 對應 {expected_channels} channels，但目前 in_channels={self.in_channels}; "
+                "請確認訓練與推論設定一致"
+            )
 
         self.model = STGCN(
             num_classes=num_classes,

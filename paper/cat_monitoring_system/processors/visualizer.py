@@ -3,13 +3,132 @@
 """
 import cv2
 import numpy as np
+import time
 from pathlib import Path
 from utils.constants import *
+from utils.helpers import get_behavior_name
+
+try:
+    from PIL import Image, ImageSequence, ImageDraw, ImageFont
+except ImportError:  # pragma: no cover - Pillow is available in the configured env, but keep a fallback.
+    Image = None
+    ImageSequence = None
+    ImageDraw = None
+    ImageFont = None
 
 
-HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / "hip.png"
-HIP_IMAGE = cv2.imread(str(HIP_IMAGE_PATH), cv2.IMREAD_UNCHANGED) if HIP_IMAGE_PATH.exists() else None
+HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / "cat_monitoring_system/maolex-blogs-cat-face-rabbit.webp"
 HIP_IMAGE_ALPHA_BOOST = 1.6
+
+
+def _load_overlay_frames(image_path):
+    """載入靜態圖或動畫圖，回傳 (frames, durations_ms)。"""
+    if not image_path.exists():
+        return [], []
+
+    if Image is not None and ImageSequence is not None:
+        try:
+            with Image.open(image_path) as im:
+                frames = []
+                durations = []
+                default_duration = int(im.info.get("duration", 100) or 100)
+
+                for frame in ImageSequence.Iterator(im):
+                    rgba = frame.convert("RGBA")
+                    arr = np.array(rgba, dtype=np.uint8)
+                    # Pillow gives RGBA; OpenCV uses BGR(A). Convert to BGRA so colors match.
+                    try:
+                        arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGRA)
+                    except Exception:
+                        # fallback: leave as-is
+                        pass
+                    frames.append(arr)
+                    duration = int(frame.info.get("duration", default_duration) or default_duration)
+                    durations.append(max(1, duration))
+
+                if frames:
+                    return frames, durations
+        except Exception:
+            pass
+
+    image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+    if image is None:
+        return [], []
+    return [image], [100]
+
+
+HIP_IMAGE_FRAMES, HIP_IMAGE_DURATIONS = _load_overlay_frames(HIP_IMAGE_PATH)
+
+# 常用中文字型候選（Windows 優先）
+_FONT_CANDIDATES = [
+    r"C:\Windows\Fonts\msjh.ttf",
+    r"C:\Windows\Fonts\msjhbd.ttf",
+    r"C:\Windows\Fonts\msjh.ttc",
+    r"C:\Windows\Fonts\SimHei.ttf",
+    r"C:\Windows\Fonts\simsun.ttc",
+    r"C:\Windows\Fonts\mingliu.ttc",
+]
+
+
+def _find_font(size):
+    if ImageFont is None:
+        return None
+    for p in _FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(p, size)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default()
+    except Exception:
+        return None
+
+
+def _draw_text_with_pil(frame, text, pos, font_size=28, color=(255, 255, 255), outline=2, bg_box=None):
+    """使用 Pillow 在 BGR numpy frame 上繪製文字（支援中文）。
+    pos: (x,y) 左上角位置
+    bg_box: (x1,y1,x2,y2) or None，若提供則先畫背景方塊
+    返回修改過的 frame（BGR numpy）
+    """
+    if Image is None or ImageDraw is None:
+        return frame
+
+    # Convert BGR -> RGB
+    try:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    except Exception:
+        rgb = frame.copy()
+
+    pil = Image.fromarray(rgb)
+    draw = ImageDraw.Draw(pil)
+    font = _find_font(font_size) or None
+
+    x, y = int(pos[0]), int(pos[1])
+    # 背景方塊
+    if bg_box is not None:
+        x1, y1, x2, y2 = map(int, bg_box)
+        draw.rectangle([x1, y1, x2, y2], fill=(20, 20, 20, 255))
+
+    # Outline: draw multiple offsets in black
+    rgb_color = tuple(int(c) for c in color)
+    outline_color = (0, 0, 0)
+    if font is None:
+        # fallback to default draw
+        draw.text((x, y), text, fill=rgb_color)
+    else:
+        for dx in range(-outline, outline + 1):
+            for dy in range(-outline, outline + 1):
+                if dx == 0 and dy == 0:
+                    continue
+                draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
+        draw.text((x, y), text, font=font, fill=rgb_color)
+
+    out = np.array(pil)
+    try:
+        bgr = cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
+    except Exception:
+        bgr = out
+    return bgr
 
 
 def _overlay_image_centered(frame, image, center_xy, target_width):
@@ -69,6 +188,30 @@ def _overlay_image_centered(frame, image, center_xy, target_width):
         frame[clip_y1:clip_y2, clip_x1:clip_x2] = patch[:, :, :3]
 
 class Visualizer:
+    def __init__(self):
+        self._overlay_anim_start = time.monotonic()
+        self._overlay_frames = HIP_IMAGE_FRAMES
+        self._overlay_frame_durations = HIP_IMAGE_DURATIONS
+        self._overlay_total_duration = sum(self._overlay_frame_durations) if self._overlay_frame_durations else 0
+
+    def _get_overlay_frame(self):
+        if not self._overlay_frames:
+            return None
+
+        if len(self._overlay_frames) == 1 or self._overlay_total_duration <= 0:
+            return self._overlay_frames[0]
+
+        elapsed_ms = int((time.monotonic() - self._overlay_anim_start) * 1000)
+        tick = elapsed_ms % self._overlay_total_duration
+
+        cumulative = 0
+        for frame, duration in zip(self._overlay_frames, self._overlay_frame_durations):
+            cumulative += duration
+            if tick < cumulative:
+                return frame
+
+        return self._overlay_frames[-1]
+
     def draw_prediction_on_frame(
         self,
         frame,
@@ -94,20 +237,45 @@ class Visualizer:
             outline_thickness = 6
             text_thickness = 3
 
-            if label_background:
+        # 若文字包含非 ASCII（例如中文），使用 Pillow 繪製以支援 CJK；否則使用 OpenCV（效能較好）
+        use_pil = any(ord(ch) > 127 for ch in text) and Image is not None and ImageDraw is not None
+
+        if use_pil:
+            # 計算字型大小與背景框（以 font_scale 為基準）
+            font_px = max(14, int(24 * font_scale))
+            # 嘗試用 PIL 取得文字尺寸
+            try:
+                font = _find_font(font_px)
+                if font is not None:
+                    text_w, text_h = ImageDraw.Draw(Image.new('RGB', (1,1))).textsize(text, font=font)
+                else:
+                    text_w, text_h = (int(len(text) * font_px * 0.6), font_px)
+            except Exception:
+                text_w, text_h = (int(len(text) * font_px * 0.6), font_px)
+
+            pad_x = 14
+            pad_y = 10
+            x1 = max(0, x - pad_x)
+            y1 = max(0, y - text_h - pad_y)
+            x2 = min(w - 1, x + text_w + pad_x)
+            y2 = min(h - 1, y + text_h + pad_y)
+            # 繪製背景與文字
+            frame = _draw_text_with_pil(frame, text, (x, y - text_h), font_size=font_px, color=(int(color[2]), int(color[1]), int(color[0])), outline=outline_thickness if outline_thickness>0 else 2, bg_box=(x1, y1, x2, y2) if label_background else None)
+        else:
+            if emphasize_label and label_background:
                 (text_w, text_h), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
                 pad_x = 14
                 pad_y = 10
                 x1 = max(0, x - pad_x)
                 y1 = max(0, y - text_h - pad_y)
                 x2 = min(w - 1, x + text_w + pad_x)
-                y2 = min(h - 1, y + baseline + pad_y)
+                y2 = min(h - 1, x + baseline + pad_y)
                 overlay = frame.copy()
                 cv2.rectangle(overlay, (x1, y1), (x2, y2), (20, 20, 20), -1)
                 cv2.addWeighted(overlay, 0.58, frame, 0.42, 0, frame)
 
-        cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, BLACK, outline_thickness, cv2.LINE_AA)
-        cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, text_thickness, cv2.LINE_AA)
+            cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, BLACK, outline_thickness, cv2.LINE_AA)
+            cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, text_thickness, cv2.LINE_AA)
 
     def draw_probability_bars(self, frame, class_probs, behavior_names):
         h, w = frame.shape[:2]
@@ -182,16 +350,18 @@ class Visualizer:
                 cv2.circle(frame, pt, 3, COLOR_KPT, -1)
 
         # 將 hip.png 貼在 nose 關鍵點上，跟隨鼻子移動
-        if HIP_IMAGE is not None and len(kpts) > 0 and kpt_conf[0] > KP_CONF_THRES:
+        overlay_frame = self._get_overlay_frame()
+        if overlay_frame is not None and len(kpts) > 0 and kpt_conf[0] > KP_CONF_THRES:
             nose_pt = tuple(map(int, kpts[0]))
             if bbox is not None:
                 x1, y1, x2, y2 = map(int, bbox)
                 bbox_w = max(1, x2 - x1)
                 bbox_h = max(1, y2 - y1)
-                target_width = int(np.clip(min(bbox_w, bbox_h) * 0.32, 52, 128))
+                base_width = int(np.clip(min(bbox_w, bbox_h) * 0.32, 52, 128))
             else:
-                target_width = 72
-            _overlay_image_centered(frame, HIP_IMAGE, nose_pt, target_width)
+                base_width = 72
+
+            _overlay_image_centered(frame, overlay_frame, nose_pt, base_width)
 
         # 畫YOLO bbox/conf
         if bbox is not None and conf is not None:
@@ -206,12 +376,16 @@ class Visualizer:
         if not show_info:
             return frame
 
-        if behavior_id == -1:  # LOW_CONF_ID — 信心不足，顯示 Normal
-            self.draw_prediction_on_frame(frame, 'Normal', 0.0, (200, 200, 200))
+        is_display_normal = (behavior_id == LOW_CONF_ID) or (float(confidence) < BEHAVIOR_MIN_CONFIDENCE)
+        if is_display_normal:
+            # 顯示層使用中文標籤（若可用字型）
+            low_text = get_behavior_name(LOW_CONF_ID, use_text=False, fallback=LOW_CONF_TEXT, confidence=confidence)
+            self.draw_prediction_on_frame(frame, low_text, 0.0, (200, 200, 200))
             if class_probs is not None and any(p > 0 for p in class_probs):
                 self.draw_probability_bars(frame, class_probs, BEHAVIOR_CLASSES)
         elif behavior_id is not None and confidence > 0:
-            behavior_name = BEHAVIOR_CLASSES[behavior_id] if 0 <= behavior_id < len(BEHAVIOR_CLASSES) else str(behavior_id)
+            # overlay 使用中文名稱
+            behavior_name = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
             self.draw_prediction_on_frame(frame, behavior_name, confidence, BEHAVIOR_COLORS.get(behavior_id, (255,255,255)))
             self.draw_probability_bars(frame, class_probs, BEHAVIOR_CLASSES)
         return frame

@@ -1,0 +1,143 @@
+[
+    {
+        "id": "fcada140b2239093",
+        "type": "tab",
+        "label": "流程1",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "0bcb077e24c607d5",
+        "type": "http in",
+        "z": "fcada140b2239093",
+        "name": "python_online",
+        "url": "/python_online",
+        "method": "post",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 510,
+        "y": 220,
+        "wires": [
+            [
+                "21ccbf32f0eedada"
+            ]
+        ]
+    },
+    {
+        "id": "21ccbf32f0eedada",
+        "type": "json",
+        "z": "fcada140b2239093",
+        "name": "parse_json",
+        "property": "payload",
+        "action": "obj",
+        "pretty": false,
+        "x": 710,
+        "y": 220,
+        "wires": [
+            [
+                "b0b28a2577af4738"
+            ]
+        ]
+    },
+    {
+        "id": "631b9a13feb2ded7",
+        "type": "inject",
+        "z": "fcada140b2239093",
+        "name": "發送訊息到discord",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0,
+        "topic": "",
+        "payload": "這是一則來自 Node-RED 的測試通知！",
+        "payloadType": "str",
+        "x": 530,
+        "y": 320,
+        "wires": [
+            [
+                "58d0ae2914d2538a"
+            ]
+        ]
+    },
+    {
+        "id": "816962993c388d9a",
+        "type": "http request",
+        "z": "fcada140b2239093",
+        "name": "送到 Discord",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 1130,
+        "y": 320,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "58d0ae2914d2538a",
+        "type": "function",
+        "z": "fcada140b2239093",
+        "name": "組成 Discord Webhook 格式",
+        "func": "\n\n// Discord Python 上線通知\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// IP\n// =========================\nlet ip =\n    msg.payload?.current?.system?.ip\n    || \"未知IP\";\n\n// 保存 IP\nflow.set(\n    \"python_ip\",\n    ip\n);\n\n// =========================\n// Discord Payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                \"🟢 Python AI 已上線\",\n\n            description:\n                `偵測到 Python 推論系統啟動`,\n\n            color:\n                65280,\n\n            fields: [\n\n                {\n                    name: \"Python IP\",\n                    value: String(ip),\n                    inline: false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 860,
+        "y": 320,
+        "wires": [
+            [
+                "816962993c388d9a"
+            ]
+        ]
+    },
+    {
+        "id": "7b6aa7f2866aa2fe",
+        "type": "http response",
+        "z": "fcada140b2239093",
+        "name": "response_200",
+        "statusCode": "200",
+        "headers": {},
+        "x": 1140,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "b0b28a2577af4738",
+        "type": "function",
+        "z": "fcada140b2239093",
+        "name": "build_response",
+        "func": "let ip = msg.payload && msg.payload.ip ? msg.payload.ip : (flow.get(\"python_ip\") || null);\nif (ip) {\n    flow.set(\"python_ip\", ip);\n}\nconst streamUrl = ip ? `http://${ip}:5000/stream` : \"\";\nmsg.payload = {\ncurrent: {\nbehavior: -1,\ntext: \"Python online\",\nemoji: \"🐱\",\ntimestamp: new Date().toLocaleTimeString(),\nsystem: {\n    ip: ip,\n    stream_url: streamUrl\n}\n},\nactivity_score: 0,\ntoday_stats: {\nwalk:0, walk_time:0, scratch:0, scratch_time:0,\nlick:0, lick_time:0, shake:0, shake_time:0,\nactive_time:0, rest_time:0\n},\nbehavior_log: [],\nalerts: []\n};\nmsg.stream_url = streamUrl;\nnode.warn(\"python_online received IP: \" + (ip || 'null'));\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 910,
+        "y": 220,
+        "wires": [
+            [
+                "7b6aa7f2866aa2fe",
+                "58d0ae2914d2538a"
+            ]
+        ]
+    }
+]

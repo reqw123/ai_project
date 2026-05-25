@@ -28,7 +28,7 @@ from detectors.keypoint_detector import KeypointDetector
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk" # 主要作為資料夾來源（會遞迴掃描影片）
+VIDEO_PATH = r"C:\Users\homec\Downloads\cat5.mp4" # 主要作為資料夾來源（會遞迴掃描影片）
 VIDEO_LIST = [
     # 只放「單一影片檔案路徑」
     r"C:\Users\homec\Downloads\OneDrive_1_2026-5-21",
@@ -43,7 +43,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_72.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_73.pt"
 OUTPUT_CSV_PATH = r"C:\paper\output\left_right_ear_distance.csv"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
@@ -59,7 +59,7 @@ PRINT_BODY_LEN = True
 BODY_LEN_LOG_PATH = None  # 若需輸出到 CSV，填入路徑，例如 r"C:\temp\body_len_log.csv"
 # ===== 關鍵點信心門檻（建議集中看這區） =====
 EAR_CONF_THRESHOLD = 0.8  # 左右耳/胸/臀「幾何與耳距有效性」門檻（>此值才視為可用）
-DRAW_KP_CONF_THRESHOLD = 0.8  # 骨架與關鍵點「顯示門檻」（>此值才畫；只影響畫面，不影響耳距有效性）
+DRAW_KP_CONF_THRESHOLD = 0.5  # 骨架與關鍵點「顯示門檻」（>此值才畫；只影響畫面，不影響耳距有效性）
 LIMB_CONF_THRESHOLD = 0.10  # 四肢區域建立門檻（膝與掌都需 > 此值）
 LOOP_PLAYBACK = True
 WRITE_LOOPED_PASSES_TO_CSV = False  # LOOP_PLAYBACK=True 時，是否把第 2 輪以後的資料也寫入 CSV
@@ -1685,7 +1685,7 @@ def main():
                         bl = float(target_geom.get("body_len", float("nan")))
                     except Exception:
                         bl = float("nan")
-                    print(f"video_idx={current_video_idx+1} frame={processed_frame_idx} body_len_px={bl:.2f}")
+                    #print(f"video_idx={current_video_idx+1} frame={processed_frame_idx} body_len_px={bl:.2f}")
                     if BODY_LEN_LOG_PATH:
                         try:
                             with open(BODY_LEN_LOG_PATH, "a", newline="") as _f:

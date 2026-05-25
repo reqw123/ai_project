@@ -7,6 +7,7 @@ import os
 import csv
 import cv2
 import numpy as np
+import time
 from pathlib import Path
 from collections import deque
 from collections import defaultdict
@@ -32,13 +33,14 @@ from utils.constants import (
     BEHAVIOR_COLORS,
     LOW_CONF_ID,
 )
+from utils.helpers import get_behavior_name
 
 # 配置
 # VIDEO_PATHS 每個元素可為：2
 # 1) 單一影片檔案路徑
 # 2) 資料夾路q徑（會遞迴搜尋常見影片副檔名）
 VIDEO_PATHS = [
- "http://192.168.4.1:81/stream", 
+ r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick", 
     #r"C:\Users\homec\Downloads\5月9日 (2).mp4",
     #r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\2752855.mp4",
     #r"C:\Users\homec\Downloads\0_Small_Kitty_Stray_1920x1080.mp4",
@@ -156,6 +158,21 @@ def _is_stream_url(path_str: str) -> bool:
     """判斷是否為 IP 串流 URL。"""
     lowered = str(path_str).lower()
     return lowered.startswith(("http://", "https://", "rtsp://", "rtsps://", "rtmp://"))
+
+
+def open_video_capture_with_retry(path, retries=5, delay=3):
+    """嘗試多次開啟串流來源，若成功回傳 cv2.VideoCapture，否則回傳 None。"""
+    for attempt in range(retries):
+        cap = cv2.VideoCapture(path)
+        if cap.isOpened():
+            return cap
+        try:
+            cap.release()
+        except Exception:
+            pass
+        print(f"⚠ 無法開啟串流或影片 {path} (嘗試 {attempt+1}/{retries})，{delay}秒後重試...")
+        time.sleep(delay)
+    return None
 
 
 def resolve_video_paths(video_sources: Iterable[str]):
@@ -395,7 +412,8 @@ def draw_test2_style_overlay(
     if not show_info:
         return frame
 
-    if behavior_id == LOW_CONF_ID:
+    is_display_normal = (behavior_id == LOW_CONF_ID) or (float(confidence) < BEHAVIOR_MIN_CONFIDENCE)
+    if is_display_normal:
         visualizer.draw_prediction_on_frame(
             frame,
             'Normal',
@@ -409,7 +427,7 @@ def draw_test2_style_overlay(
         if SHOW_PROBABILITY_BARS and probs is not None and any(float(p) > 0 for p in probs):
             visualizer.draw_probability_bars(frame, probs, BEHAVIOR_CLASSES)
     elif behavior_id is not None and confidence > 0:
-        behavior_name = BEHAVIOR_CLASSES[behavior_id] if 0 <= behavior_id < len(BEHAVIOR_CLASSES) else str(behavior_id)
+        behavior_name = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
         visualizer.draw_prediction_on_frame(
             frame,
             behavior_name,
@@ -695,16 +713,28 @@ def main():
                 current_video_idx = (current_video_idx + 1) % len(video_paths)
             continue
 
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            print(f"❌ 無法開啟影片，跳過: {video_path}")
-            if is_stats_mode:
-                current_video_idx += 1
-                if current_video_idx >= len(video_paths):
-                    break
-            else:
-                current_video_idx = (current_video_idx + 1) % len(video_paths)
-            continue
+        if is_stream_url:
+            cap = open_video_capture_with_retry(video_path, retries=5, delay=3)
+            if cap is None or not cap.isOpened():
+                print(f"❌ 無法開啟串流 {video_path}，請確認 URL 與網路連線，跳過")
+                if is_stats_mode:
+                    current_video_idx += 1
+                    if current_video_idx >= len(video_paths):
+                        break
+                else:
+                    current_video_idx = (current_video_idx + 1) % len(video_paths)
+                continue
+        else:
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                print(f"❌ 無法開啟影片，跳過: {video_path}")
+                if is_stats_mode:
+                    current_video_idx += 1
+                    if current_video_idx >= len(video_paths):
+                        break
+                else:
+                    current_video_idx = (current_video_idx + 1) % len(video_paths)
+                continue
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if is_stream_url and total_frames <= 0:
@@ -773,9 +803,13 @@ def main():
             if not ret:
                 if is_stream_url:
                     print(f"⚠ 串流讀取失敗，嘗試重新連線: {video_path}")
-                    cap.release()
-                    cap = cv2.VideoCapture(video_path)
-                    if cap.isOpened():
+                    try:
+                        cap.release()
+                    except Exception:
+                        pass
+                    cap = open_video_capture_with_retry(video_path, retries=3, delay=2)
+                    if cap is not None and cap.isOpened():
+                        print(f"✅ 串流已重連成功: {video_path}")
                         continue
                     print(f"❌ 串流無法重新開啟，跳過: {video_path}")
                     break
@@ -900,7 +934,7 @@ def main():
 
                     # 只統計高信心預測
                     if behavior_id_for_display != LOW_CONF_ID:
-                        behavior_text = BEHAVIOR_TEXT_MAP.get(behavior_id, BEHAVIOR_CLASSES[behavior_id])
+                        behavior_text = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
                         if is_first_pass:
                             local_predictions.append({
                                 'video_idx': current_video_idx,

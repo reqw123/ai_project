@@ -40,5 +40,7 @@ KP_CONF_THRES = 0.5
 # 信心门檣：所有類別機率低於此即輸出"目前正常"
 CONFIDENCE_THRESHOLD = 0.27
 LOW_CONF_ID = -1          # sentinel：信心度不足
-LOW_CONF_TEXT = "目前正常"
+LOW_CONF_TEXT = "Normal"
 LOW_CONF_EMOJI = "😴"
+# 當行為信心小於此值時，前端/顯示層級會把標籤視為 "目前正常"
+BEHAVIOR_MIN_CONFIDENCE = 0.60
