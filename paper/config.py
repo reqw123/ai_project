@@ -4,6 +4,7 @@
 """
 
 import os
+import builtins as _builtins
 from pathlib import Path
 
 
@@ -30,7 +31,7 @@ def _env_float(name, default):
     if value is None:
         return default
     try:
-        return float(value)
+        return _builtins.float(value)
     except (TypeError, ValueError):
         return default
 
@@ -68,7 +69,7 @@ def _is_valid_port(port):
 def _normalize_feature_mode(feature_mode):
     mode = str(feature_mode).strip().lower()
     if not mode:
-        return "xyv"
+        return "xy_v"
     return mode
 
 
@@ -76,29 +77,29 @@ def _get_stgcn_feature_spec(feature_mode):
     """回傳 ST-GCN 特徵模式的通道數與特徵名稱說明。"""
     mode = _normalize_feature_mode(feature_mode)
     specs = {
-        "xyv": {
+        "xy_v": {
             "in_channels": 4,
             "features": ["x", "y", "vx", "vy"],
-            "description": "基礎座標 + 速度",
+            "description": "位置 + 速度",
         },
-        "xyv_conf": {
+        "xy_conf_v": {
             "in_channels": 5,
             "features": ["x", "y", "conf", "vx", "vy"],
-            "description": "基礎座標 + 信心值 + 速度",
+            "description": "位置 + 信心值 + 速度",
         },
-        "xyv_bone": {
-            "in_channels": 6,
-            "features": ["x", "y", "vx", "vy", "bone_x", "bone_y"],
-            "description": "基礎座標 + 速度 + 骨架向量",
-        },
-        "xyv_conf_bone": {
+        "xy_conf_v_bone": {
             "in_channels": 7,
             "features": ["x", "y", "conf", "vx", "vy", "bone_x", "bone_y"],
-            "description": "基礎座標 + 信心值 + 速度 + 骨架向量",
+            "description": "位置 + 信心值 + 速度 + 骨架向量",
+        },
+        "xy_conf_v_bone_bmotion": {
+            "in_channels": 9,
+            "features": ["x", "y", "conf", "vx", "vy", "bone_x", "bone_y", "bone_mx", "bone_my"],
+            "description": "位置 + 信心值 + 速度 + 骨架向量 + 骨架位移",
         },
     }
     if mode not in specs:
-        raise ValueError(f"Unknown ST-GCN feature mode: {feature_mode}")
+        raise ValueError(f"Unknown ST-GCN feature mode: {feature_mode!r}. 支援模式: {list(specs)}")
     return specs[mode]
 
 # ==================== 模型和資料路徑 ====================
@@ -106,13 +107,13 @@ class ModelPaths:
     """模型和資料檔案路徑"""
     
     # YOLO 模型
-    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\AI_Project\cat_pose\v11s_68.pt")
+    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_90.pt")
     
     # ST-GCN 模型
-    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv.pth")
+    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_best_022_xy_v_att_on.pth")
     
     # 測試視頻
-    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", 0)
+    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\6月2日 (2).mp4")
     
     # 日誌和輸出目錄
     LOG_DIR = _env_str("CAT_MONITORING_LOG_DIR", "./logs")
@@ -176,40 +177,44 @@ class STGCNConfig:
     
     # 模型超參數
     SEQUENCE_LENGTH = _env_int("CAT_MONITORING_STGCN_SEQUENCE_LENGTH", 16)          # 時間窗長度（幀數）
-    NUM_CLASSES = 4               # 行為類別數
+    NUM_CLASSES = 5               # 行為類別數
     NUM_JOINTS = 17               # 關鍵點數
     NUM_LAYERS = 3                # ST-GCN 層數
 
     # 特徵模式（與 train_gcn.py / 推論腳本共用概念）
-    FEATURE_MODE = _normalize_feature_mode(_env_str("CAT_MONITORING_STGCN_FEATURE_MODE", "xyv"))
+    FEATURE_MODE = _normalize_feature_mode(_env_str("CAT_MONITORING_STGCN_FEATURE_MODE", "xy_v"))
     FEATURE_SPEC = _get_stgcn_feature_spec(FEATURE_MODE)
     IN_CHANNELS = FEATURE_SPEC["in_channels"]
     FEATURE_NAMES = FEATURE_SPEC["features"]
     FEATURE_DESCRIPTION = FEATURE_SPEC["description"]
     
     # 時間步參數
-    WINDOW_STRIDE = _env_int("CAT_MONITORING_STGCN_WINDOW_STRIDE", 16)            # 滑動步長
+    WINDOW_STRIDE = _env_int("CAT_MONITORING_STGCN_WINDOW_STRIDE", 2)            # 滑動步長
     
     # 硬體
     DEVICE = _env_str("CAT_MONITORING_STGCN_DEVICE", "cuda")  # 改為 "cpu" 如果無 GPU
 
-    # FPS 同步：對來源影片做降採樣，使模型輸入時基符合訓練設定
-    TARGET_MODEL_FPS = _env_float("CAT_MONITORING_TARGET_MODEL_FPS", 30.0)       # 與訓練時序一致；來源 FPS 超過此值時才做降採樣
-    ENABLE_FPS_DOWNSAMPLE = _env_bool("CAT_MONITORING_ENABLE_FPS_DOWNSAMPLE", True)  # False → 停用降採樣（直接餵所有幀）
+    # FPS 同步：對來源影片做降採樣，使模型輸入時基符合訓練設定。
+    # TARGET_MODEL_FPS: 推論與串流使用的目標 FPS，須與訓練時一致。
+    #   調低（例如 15）可降低 YOLO + ST-GCN 推論頻率，減少 CPU/GPU 負擔，但反應會變慢。
+    TARGET_MODEL_FPS = _env_float("CAT_MONITORING_TARGET_MODEL_FPS", 30.0)
+    # ENABLE_FPS_DOWNSAMPLE: True 代表來源 FPS 高於 TARGET_MODEL_FPS 時自動跳幀；False 代表每幀都處理。
+    ENABLE_FPS_DOWNSAMPLE = _env_bool("CAT_MONITORING_ENABLE_FPS_DOWNSAMPLE", True)
 
-    # 關鍵點 EMA 平滑（須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致）
+    # 關鍵點 EMA 平滑（須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致）ㄋ
     # alpha 越大 → 越貼近原始偵測值；alpha 越小 → 越平滑但延遲增加
-    KP_EMA_ALPHA = _env_float("CAT_MONITORING_KP_EMA_ALPHA", 0.5)
+    KP_EMA_ALPHA = _env_float("CAT_MONITORING_KP_EMA_ALPHA", 1.0)
 
     # 行為類別
-    CLASS_NAMES = ["walk", "lick", "scratch", "shake"]
-    
+    CLASS_NAMES = ["walk", "lick", "scratch", "shake", "stop"]
+
     # 視覺化用的顏色 (BGR)
     CLASS_COLORS = [
         (0, 255, 0),      # walk - 綠色
         (0, 255, 255),    # lick - 黃色
         (255, 0, 0),      # scratch - 藍色
-        (0, 0, 255)       # shake - 紅色
+        (0, 0, 255),      # shake - 紅色
+        (0, 165, 255),    # stop - 橙色
     ]
 
 # ==================== 異常檢測參數 ====================
@@ -219,6 +224,8 @@ class AnomalyDetectionConfig:
     # EMA 參數
     EMA_ALPHA = 1.0
     ABNORMAL_THRESHOLD = 0.2
+    MAX_MOTION = 20.0  # 將 motion_score 正規化為 activity_value 時使用的最大值
+    KP_CONF_THRES = 0.5  # 只使用高於此信心的關鍵點來估計 motion_score
     MIN_BODY_SCALE = 1e-3
     STABILITY_K = 4.0
     
@@ -235,7 +242,7 @@ class FlaskConfig:
     THREADED = _env_bool("CAT_MONITORING_FLASK_THREADED", True)
     
     # JPEG 壓縮品質 (1-100)
-    JPEG_QUALITY = _env_int("CAT_MONITORING_JPEG_QUALITY", 60)
+    JPEG_QUALITY = _env_int("CAT_MONITORING_JPEG_QUALITY", 30)
     
     # 串流 FPS
     STREAM_FPS = _env_int("CAT_MONITORING_STREAM_FPS", 30)
@@ -249,8 +256,7 @@ class NodeRedConfig:
     
     # 推送間隔（秒）
     PUSH_INTERVAL = _env_float("CAT_MONITORING_NODERED_PUSH_INTERVAL", 0.5)
-    
-    # 端點
+
     ENDPOINT_NOTIFY = _env_str("CAT_MONITORING_NODERED_ENDPOINT_NOTIFY", f"http://{HOST}:{PORT}/python_online")
     ENDPOINT_RESULT = _env_str("CAT_MONITORING_NODERED_ENDPOINT_RESULT", f"http://{HOST}:{PORT}/yolo_result")
     
@@ -273,12 +279,14 @@ class BehaviorTrackingConfig:
     ACTIVITY_SCORE_WINDOW_SECONDS = _env_float("CAT_MONITORING_ACTIVITY_SCORE_WINDOW_SECONDS", 3.0)  # 活動分數取樣時間窗
     DEFAULT_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_DEFAULT_ACTIVITY_WEIGHT", 0.5)  # 沒有持續時間時的預設權重
     LOW_CONFIDENCE_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_LOW_CONFIDENCE_ACTIVITY_WEIGHT", 0.5)  # 低信心幀的活動權重
+    STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD = _env_float("CAT_MONITORING_STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD", 0.80,)  # ST-GCN 行為標籤輸出門檻；低於此值視為 normal
 
     # 警報門檻
     SCRATCH_ALERT_TIME_SECONDS = _env_float("CAT_MONITORING_SCRATCH_ALERT_TIME_SECONDS", 10.0)  # 單日搔抓累積秒數警戒值
     SCRATCH_ALERT_COUNT_THRESHOLD = _env_int("CAT_MONITORING_SCRATCH_ALERT_COUNT_THRESHOLD", 5)  # 單日搔抓次數警戒值
     LICK_ALERT_TIME_SECONDS = _env_float("CAT_MONITORING_LICK_ALERT_TIME_SECONDS", 10.0)  # 單日舔舐累積秒數警戒值
     SHAKE_ALERT_COUNT_THRESHOLD = _env_int("CAT_MONITORING_SHAKE_ALERT_COUNT_THRESHOLD", 10)  # 單日甩頭次數警戒值
+    STOP_ALERT_TIME_SECONDS = _env_float("CAT_MONITORING_STOP_ALERT_TIME_SECONDS", 300.0)  # 單日靜止累積秒數警戒值
     LOW_ACTIVITY_TIME_THRESHOLD_SECONDS = _env_float("CAT_MONITORING_LOW_ACTIVITY_TIME_THRESHOLD_SECONDS", 20.0)  # 活動度過低的 walk 時長門檻
     
     # 行為統計：四種行為完全獨立
@@ -286,30 +294,34 @@ class BehaviorTrackingConfig:
         0: "walk",
         1: "lick",
         2: "scratch",
-        3: "shake"
+        3: "shake",
+        4: "stop",
     }
     
     DISPLAY_TEXT = {
         "walk": "一般活動",
         "scratch": "搔抓動作",
         "lick": "舔拭理毛",
-        "shake": "甩頭動作"
+        "shake": "甩頭動作",
+        "stop": "靜止不動",
     }
-    
+
     DISPLAY_EMOJI = {
         "walk": "🚶",
         "scratch": "🐾",
         "lick": "🧼",
-        "shake": "甩頭"
+        "shake": "甩頭",
+        "stop": "⏹",
     }
 
 # ==================== CSV 日誌參數 ====================
 class LoggingConfig:
     """日誌記錄設置"""
     
-    # CSV 檔案名
-    CSV_FILENAME = "cat_monitoring_log.csv"
-    
+    # CSV 絕對路徑（可由環境變數覆寫）
+    CSV_PATH = _env_str("CAT_MONITORING_CSV_PATH", r"C:\ai_project\paper\cat_monitoring_log.csv")
+    # 行為區段 CSV（BehaviorSegmentLogger）路徑 — 獨立檔案，避免與 CSV_PATH 混寫
+    SEGMENTS_CSV_PATH = _env_str("CAT_MONITORING_SEGMENTS_CSV_PATH", r"C:\ai_project\paper\behavior_segments_log.csv")
     # CSV 欄位
     CSV_COLUMNS = [
         "Frame", "Timestamp", "Behavior", "GCN_Confidence",
@@ -327,12 +339,15 @@ class VisualizationConfig:
     DRAW_OVERLAY_STREAM = True    # Node-RED 串流用
     DRAW_OVERLAY_DEBUG = False     # 本地除錯用
 
-    # 串流輸出優化
-    # STREAM_DISPLAY_SIZE: None → 維持原始解析度；(寬, 高) → 先縮放再 JPEG 編碼
+    # 串流輸出優化。
+    # STREAM_DISPLAY_SIZE: None 代表維持原始解析度；(寬, 高) 例如 (480, 480) 代表先縮小再編碼，降低頻寬但犧牲畫質。
     STREAM_DISPLAY_SIZE = None
-    # FAST_STREAM_OVERLAY: True → 在原始解析度畫完 overlay 後再縮放（縮圖速度快）
-    #                      False → 先縮放再重繪 overlay（適合需要精確文字大小時）
+
+    # FAST_STREAM_OVERLAY: True 代表先在原始解析度畫 overlay 再縮放；False 代表先縮放再畫 overlay。
     FAST_STREAM_OVERLAY = True
+
+    # CLIP_SECONDS: /video_clip 保留的 ring buffer 秒數；記憶體佔用會隨這個值線性增加，但不會因長時間運行持續暴增。
+    CLIP_SECONDS = _env_int("CAT_MONITORING_CLIP_SECONDS", 5)
     
     # 骨架顏色 (BGR)
     COLOR_HEAD = (255, 255, 0)
@@ -405,6 +420,9 @@ def get_config_summary():
       - 主機: {NodeRedConfig.HOST}:{NodeRedConfig.PORT}
       - 推送間隔: {NodeRedConfig.PUSH_INTERVAL}s
       - 超時: {NodeRedConfig.TIMEOUT}s
+
+        🏷️ 行為標籤門檻:
+            - ST-GCN 行為標籤輸出門檻: {BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD}
     
     ⚠️ 異常偵測:
       - EMA 係數: {AnomalyDetectionConfig.EMA_ALPHA}
@@ -503,6 +521,16 @@ def get_runtime_config_snapshot():
             "target_model_fps": STGCNConfig.TARGET_MODEL_FPS,
             "enable_fps_downsample": STGCNConfig.ENABLE_FPS_DOWNSAMPLE,
             "kp_ema_alpha": STGCNConfig.KP_EMA_ALPHA,
+        },
+        "behavior_tracking": {
+            "stgcn_behavior_label_confidence_threshold": BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD,
+            "max_history_size": BehaviorTrackingConfig.MAX_HISTORY_SIZE,
+            "max_alerts_size": BehaviorTrackingConfig.MAX_ALERTS_SIZE,
+            "activity_window_size": BehaviorTrackingConfig.ACTIVITY_WINDOW_SIZE,
+            "min_record_duration_seconds": BehaviorTrackingConfig.MIN_RECORD_DURATION_SECONDS,
+            "activity_score_window_seconds": BehaviorTrackingConfig.ACTIVITY_SCORE_WINDOW_SECONDS,
+            "default_activity_weight": BehaviorTrackingConfig.DEFAULT_ACTIVITY_WEIGHT,
+            "low_confidence_activity_weight": BehaviorTrackingConfig.LOW_CONFIDENCE_ACTIVITY_WEIGHT,
         },
         "flask": {
             "host": FlaskConfig.HOST,

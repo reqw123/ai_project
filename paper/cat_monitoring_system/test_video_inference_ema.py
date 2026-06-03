@@ -14,7 +14,11 @@ from collections import defaultdict
 from typing import Iterable
 
 # 加入系統路徑
+# Ensure both the package folder and repository root are on sys.path so
+# top-level modules like config.py can be imported when running this script
+# from within the cat_monitoring_system folder.
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from detectors.keypoint_detector import KeypointDetector
 from detectors.behavior_classifier import BehaviorClassifier
@@ -32,16 +36,18 @@ from utils.constants import (
     BEHAVIOR_TEXT_MAP,
     BEHAVIOR_COLORS,
     LOW_CONF_ID,
+    BLACK,
+    COLOR_HEAD,
 )
 from utils.helpers import get_behavior_name
+from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
 # 配置
 # VIDEO_PATHS 每個元素可為：2
 # 1) 單一影片檔案路徑
 # 2) 資料夾路q徑（會遞迴搜尋常見影片副檔名）
 VIDEO_PATHS = [
- r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick", 
-    #r"C:\Users\homec\Downloads\5月9日 (2).mp4",
+    r"C:\Users\homec\Downloads\5"
     #r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\2752855.mp4",
     #r"C:\Users\homec\Downloads\0_Small_Kitty_Stray_1920x1080.mp4",
    # r"C:\Users\homec\Downloads\5月9日 (1)(1).mp4",#不要刪
@@ -49,15 +55,31 @@ VIDEO_PATHS = [
    #r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\摳圖影片集\5923455_Black_Cat_Runs_1920x1080.mp4",#不要刪
   # r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試"
 ]
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_72.pt"
-STGCN_MODEL_PATH = r"C:\AI_Project\cat_pose\gcn_pose\models\stgcn_best_xyv_att_on_shake_on.pth"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_90.pt"
+STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_best_022_xy_v_att_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 YOLO_CONF_THRESHOLD = 0.5
 STGCN_NORMALIZE = True
 SEQUENCE_LENGTH = 16
-STGCN_FEATURE_MODE = os.getenv("STGCN_FEATURE_MODE", "xyv").strip().lower()  # xyv|xyv_conf|xyv_bone|xyv_conf_bone
-BEHAVIOR_MIN_CONFIDENCE = 0.60  # 類別信心值達到此門檻才認定為該行為
+_raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy_v")
+STGCN_FEATURE_MODE = str(_raw_stgcn_mode).strip().lower()
+# Normalize legacy/variant feature-mode names to canonical names used by the STGCN module
+# Canonical names: "xy_v", "xy_conf_v", "xy_conf_v_bone", "xy_conf_v_bone_bmotion"
+_FEATURE_MODE_MAP = {
+    "xyv": "xy_v",
+    "xyv_conf": "xy_conf_v",
+    "xyv_conf_bone": "xy_conf_v_bone",
+    "xyv_conf_bone_bone_motion": "xy_conf_v_bone_bmotion",
+    "xyv_conf_bone_bmotion": "xy_conf_v_bone_bmotion",
+    # Some possible compact variants
+    "xyvconf": "xy_conf_v",
+    "xyvconfbone": "xy_conf_v_bone",
+    "xyvconfbonebmotion": "xy_conf_v_bone_bmotion",
+}
+STGCN_FEATURE_MODE = _FEATURE_MODE_MAP.get(STGCN_FEATURE_MODE, STGCN_FEATURE_MODE)
+# Use centralized config for behavior label confidence threshold
+BEHAVIOR_MIN_CONFIDENCE = _BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
 TARGET_MODEL_FPS = 30.0  # 模型訓練/推論設計時基
 ENABLE_FPS_DOWNSAMPLE = True  # 只要不是 30fps，就把模型時基統一到 30fps（高於則降採樣，低於則用 30fps 時基）
 CLASSIFY_STRIDE = 2  # 每幾個處理幀做一次分類（1=每幀）
@@ -77,7 +99,6 @@ SHOW_PROBABILITY_BARS = False  # 關閉機率條可減少每幀繪圖負載
 # ===== EMA 平滑設定 =====
 # alpha 越大 → 越貼近原始偵測值（響應快、平滑少）
 # alpha 越小 → 越平滑（延遲多、噪音少）
-# 建議範圍：0.2（非常平滑）~ 0.6（輕微平滑）
 EMA_ALPHA = 1.0  # 須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致
 
 # 17 關鍵點名稱映射（根據 YOLO-Pose v11 cat skeleton）
@@ -147,7 +168,7 @@ _EDGE_COLORS = [
     (80, 200, 160), (60, 170, 130), (40, 140, 100),
 ]
 
-BEHAVIOR_PANEL_LABELS = tuple(str(name).upper() for name in BEHAVIOR_CLASSES[:4])
+BEHAVIOR_PANEL_LABELS = tuple(str(name).upper() for name in BEHAVIOR_CLASSES)
 
 SUPPORTED_VIDEO_EXTS = {
     ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".m4v", ".mpg", ".mpeg", ".webm"
@@ -368,6 +389,9 @@ def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, beha
     return frame
 
 
+
+
+
 def draw_test2_style_overlay(
     frame,
     kpts,
@@ -390,8 +414,10 @@ def draw_test2_style_overlay(
 
     if bbox is not None:
         x1, y1, x2, y2 = map(int, bbox)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 4)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
+        outer_w = 4
+        inner_w = 2
+        cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, outer_w, cv2.LINE_AA)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, inner_w, cv2.LINE_AA)
 
     for ei, (a, b) in enumerate(_SKELETON_EDGES):
         # 骨架線段：兩端關鍵點都要高於顯示門檻才畫
@@ -511,10 +537,12 @@ def generate_report_file(report_path, recorded_video_stats):
         "pred_lick",
         "pred_scratch",
         "pred_shake",
+        "pred_stop",
         "duration_walk_sec",
         "duration_lick_sec",
         "duration_scratch_sec",
         "duration_shake_sec",
+        "duration_stop_sec",
         "mean_confidence",
         "jitter_mean_px",
         "jitter_p95_px",
@@ -549,10 +577,12 @@ def generate_report_file(report_path, recorded_video_stats):
                 int(behavior_counts[1]) if len(behavior_counts) > 1 else 0,
                 int(behavior_counts[2]) if len(behavior_counts) > 2 else 0,
                 int(behavior_counts[3]) if len(behavior_counts) > 3 else 0,
+                int(behavior_counts[4]) if len(behavior_counts) > 4 else 0,
                 float(behavior_duration_sec[0]) if len(behavior_duration_sec) > 0 else 0.0,
                 float(behavior_duration_sec[1]) if len(behavior_duration_sec) > 1 else 0.0,
                 float(behavior_duration_sec[2]) if len(behavior_duration_sec) > 2 else 0.0,
                 float(behavior_duration_sec[3]) if len(behavior_duration_sec) > 3 else 0.0,
+                float(behavior_duration_sec[4]) if len(behavior_duration_sec) > 4 else 0.0,
                 float(np.mean(confidences)) if confidences else 0.0,
                 float(np.mean(all_jitter)) if all_jitter else 0.0,
                 float(np.percentile(all_jitter, 95)) if all_jitter else 0.0,
@@ -579,6 +609,9 @@ def main():
     is_stats_mode = (run_mode == 1)
     is_test_mode = (run_mode == 2)
 
+    # use a local mutable copy to avoid modifying module-level constant
+    feature_mode = STGCN_FEATURE_MODE
+
     video_paths = resolve_video_paths(VIDEO_PATHS)
     if not video_paths:
         print("❌ 找不到可用影片，請確認 VIDEO_PATHS 內的檔案/資料夾路徑")
@@ -601,9 +634,40 @@ def main():
 
     # 初始化偵測器
     print("\n初始化模型...")
-    print(f"特徵模式: {STGCN_FEATURE_MODE}")
-    
-    in_channels = get_in_channels_for_mode(STGCN_FEATURE_MODE)
+    print(f"特徵模式: {feature_mode}")
+    # 嘗試讀取 checkpoint 的 bn_input 通道數，若與目前 feature mode 不符，
+    # 盡量自動將 feature mode 換成與 checkpoint 通道數相對應的 canonical 模式。
+    in_channels = None
+    try:
+        ck_channel_map = {4: 'xy_v', 5: 'xy_conf_v', 7: 'xy_conf_v_bone', 9: 'xy_conf_v_bone_bmotion'}
+        import torch
+        if os.path.exists(STGCN_MODEL_PATH):
+            try:
+                ck = torch.load(STGCN_MODEL_PATH, map_location='cpu')
+                state_dict = ck.get('model_state_dict', ck) if isinstance(ck, dict) else ck
+                if isinstance(state_dict, dict) and 'bn_input.weight' in state_dict:
+                    ck_in_ch = int(state_dict['bn_input.weight'].shape[0])
+                    try:
+                        expected_ch = get_in_channels_for_mode(feature_mode)
+                    except Exception:
+                        expected_ch = None
+                    if expected_ch is not None and ck_in_ch != expected_ch:
+                        if ck_in_ch in ck_channel_map:
+                            new_mode = ck_channel_map[ck_in_ch]
+                            print(f"⚠ 模型檔案 {STGCN_MODEL_PATH} 的 bn_input channels={ck_in_ch}，與目前 feature_mode={feature_mode} 不符。")
+                            print(f"  → 自動將 feature_mode 調整為 {new_mode} 以匹配 checkpoint。")
+                            feature_mode = new_mode
+                        else:
+                            print(f"⚠ 模型檔案 {STGCN_MODEL_PATH} 的 bn_input channels={ck_in_ch}，無對應 canonical feature mode，將以該 channel 數為主。")
+                    in_channels = ck_in_ch
+            except Exception as e:
+                print(f"⚠ 無法載入 checkpoint 以推斷通道數: {e}")
+    except Exception:
+        # torch 或其他步驟失敗時，退回到使用 get_in_channels_for_mode
+        pass
+
+    if in_channels is None:
+        in_channels = get_in_channels_for_mode(feature_mode)
     
     keypoint_detector = KeypointDetector(
         YOLO_MODEL_PATH,
@@ -616,7 +680,7 @@ def main():
         device=INFERENCE_DEVICE,
         sequence_length=SEQUENCE_LENGTH,
         normalize=STGCN_NORMALIZE,
-        feature_mode=STGCN_FEATURE_MODE,
+        feature_mode=feature_mode,
         in_channels=in_channels,
     )
     visualizer = Visualizer()
@@ -633,7 +697,7 @@ def main():
     global_jitter_norm = [[] for _ in range(17)]
     global_valid_counts = np.zeros(17, dtype=np.int64)
     global_pair_counts = np.zeros(17, dtype=np.int64)
-    global_behavior_duration_sec = np.zeros(4, dtype=np.float64)
+    global_behavior_duration_sec = np.zeros(5, dtype=np.float64)
 
     # 每影片抖動統計
     per_video_stats = defaultdict(
@@ -657,13 +721,13 @@ def main():
     # 即時顯示狀態
     behavior_id = LOW_CONF_ID
     confidence = 0.0
-    probs = np.zeros(4, dtype=np.float32)
+    probs = np.zeros(5, dtype=np.float32)
 
     def reset_behavior_display_state():
         nonlocal behavior_id, confidence, probs
         behavior_id = LOW_CONF_ID
         confidence = 0.0
-        probs = np.zeros(4, dtype=np.float32)
+        probs = np.zeros(5, dtype=np.float32)
 
     def reset_video_runtime_state():
         nonlocal prev_kpts, prev_kpt_conf, ema_kpts
@@ -689,8 +753,8 @@ def main():
         local_jitter_norm = [[] for _ in range(17)]
         local_valid_counts = np.zeros(17, dtype=np.int64)
         local_pair_counts = np.zeros(17, dtype=np.int64)
-        local_behavior_duration_sec = np.zeros(4, dtype=np.float64)
-        local_behavior_current_confidences = np.zeros(4, dtype=np.float32)
+        local_behavior_duration_sec = np.zeros(5, dtype=np.float64)
+        local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
         reset_behavior_display_state()
 
     if display_window:
@@ -795,8 +859,8 @@ def main():
         local_jitter_norm = [[] for _ in range(17)]
         local_valid_counts = np.zeros(17, dtype=np.int64)
         local_pair_counts = np.zeros(17, dtype=np.int64)
-        local_behavior_duration_sec = np.zeros(4, dtype=np.float64)
-        local_behavior_current_confidences = np.zeros(4, dtype=np.float32)
+        local_behavior_duration_sec = np.zeros(5, dtype=np.float64)
+        local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
 
         while True:
             ret, frame = cap.read()
@@ -838,6 +902,7 @@ def main():
 
             # YOLO-Pose 偵測
             kpts, kpt_conf, bbox, _ = keypoint_detector.detect(frame)
+            # velocity_overlay removed
 
             if kpts is not None:
                 # ===== EMA 平滑：對 YOLO 偵測的原始座標做指數移動平均 =====
@@ -890,6 +955,8 @@ def main():
                 # 加入緩衝區
                 keypoints_buffer.append((kpts, kpt_conf))
 
+                # velocity overlay removed (erroneous edit)
+
                 # 有足夠序列時做行為分類
                 if len(keypoints_buffer) >= SEQUENCE_LENGTH and (local_sampled_frames % CLASSIFY_STRIDE == 0):
                     # 解包緩衝區
@@ -898,29 +965,17 @@ def main():
 
                     # 插值補全
                     seq_array = interpolate_missing(kpts_arr, conf_arr, threshold=0.1)
-
-                    # 若特徵模式非 xyv，需預計算特徵（正規化 + 多通道組合）
-                    if STGCN_FEATURE_MODE.lower() != "xyv":
-                        # 正規化流程：flip → orientation → normalize_coords
-                        seq_norm = flip_normalize(seq_array)
-                        seq_norm = orientation_normalize(seq_norm)
-                        seq_norm = normalize_skeleton_coords(seq_norm)
-                        
-                        # 構建多通道特徵 (T, V, C)
-                        seq_features = build_feature_tensor(seq_norm, conf_arr, STGCN_FEATURE_MODE)
-                        
-                        # ST-GCN 推論（使用預計算特徵）
-                        pred_id, pred_conf, pred_probs = behavior_classifier.classify(
-                            seq_features, precomputed=True
-                        )
-                    else:
-                        # xyv 模式：直接傳遞關鍵點座標（內部會做正規化）
-                        pred_id, pred_conf, pred_probs = behavior_classifier.classify(seq_array)
+                    if STGCN_NORMALIZE:
+                        seq_array = flip_normalize(seq_array)
+                        seq_array = orientation_normalize(seq_array)
+                        seq_array = normalize_skeleton_coords(seq_array)
+                    seq_features = build_feature_tensor(seq_array, conf_arr, feature_mode)
+                    pred_id, pred_conf, pred_probs = behavior_classifier.classify(seq_features, precomputed=True)
                     
                     if pred_id is None:
                         behavior_id = LOW_CONF_ID
                         confidence = 0.0
-                        probs = np.zeros(4, dtype=np.float32)
+                        probs = np.zeros(5, dtype=np.float32)
                     else:
                         behavior_id = int(pred_id)
                         confidence = float(pred_conf)
@@ -949,13 +1004,17 @@ def main():
                         if local_last_behavior != behavior_id:
                             if local_last_behavior is not None and is_first_pass:
                                 local_behavior_change_count += 1
-                                print(f"影片[{current_video_idx}] 幀 {local_frames_processed:6d}: {behavior_text:6s} {confidence*100:5.1f}% " +
-                                    f"[walk:{probs[0]*100:4.1f}% lick:{probs[1]*100:4.1f}% scratch:{probs[2]*100:4.1f}% shake:{probs[3]*100:4.1f}%]")
+                                probs_str = " ".join(
+                                    f"{cls}:{probs[i]*100:4.1f}%"
+                                    for i, cls in enumerate(BEHAVIOR_CLASSES)
+                                    if i < len(probs)
+                                )
+                                print(f"影片[{current_video_idx}] 幀 {local_frames_processed:6d}: {behavior_text:6s} {confidence*100:5.1f}% [{probs_str}]")
                             local_last_behavior = behavior_id
                     else:
                         behavior_id = LOW_CONF_ID
 
-                if is_first_pass and behavior_id != LOW_CONF_ID and 0 <= int(behavior_id) < 4 and float(confidence) >= BEHAVIOR_MIN_CONFIDENCE:
+                if is_first_pass and behavior_id != LOW_CONF_ID and 0 <= int(behavior_id) < 5 and float(confidence) >= BEHAVIOR_MIN_CONFIDENCE:
                     local_behavior_duration_sec[int(behavior_id)] += frame_dt
                     local_behavior_current_confidences[int(behavior_id)] = float(confidence)
             else:
@@ -983,7 +1042,7 @@ def main():
                             scaled_bbox,
                             behavior_id,
                             confidence,
-                            probs if len(probs) == 4 else np.zeros(4, dtype=np.float32),
+                            probs if len(probs) == 5 else np.zeros(5, dtype=np.float32),
                             visualizer,
                             show_info=show_overlay_info,
                         )
@@ -1001,7 +1060,7 @@ def main():
                             bbox,
                             behavior_id,
                             confidence,
-                            probs if len(probs) == 4 else np.zeros(4, dtype=np.float32),
+                            probs if len(probs) == 5 else np.zeros(5, dtype=np.float32),
                             visualizer,
                             show_info=show_overlay_info,
                         )
@@ -1101,7 +1160,7 @@ def main():
 
         # 只有完整播放第一輪且非中途切換，才提交本影片統計
         if first_pass_completed and not switched_before_first_pass_complete:
-            behavior_counts = np.zeros(4, dtype=np.int64)
+            behavior_counts = np.zeros(5, dtype=np.int64)
             behavior_confidences = []
             for p in local_predictions:
                 behavior_counts[p['behavior_id']] += 1
@@ -1223,13 +1282,13 @@ def main():
         from collections import Counter
         behavior_counts = Counter([p['behavior_id'] for p in predictions])
         print("\n各行為出現次數:")
-        for bid in range(4):
+        for bid in range(5):
             count = behavior_counts.get(bid, 0)
             pct = count / len(predictions) * 100 if predictions else 0
             print(f"  {BEHAVIOR_TEXT_MAP[bid]:6s} ({BEHAVIOR_CLASSES[bid]:8s}): {count:4d} 次 ({pct:5.1f}%)")
 
         print("\n各行為持續時間（秒）:")
-        for bid in range(4):
+        for bid in range(5):
             print(f"  {BEHAVIOR_TEXT_MAP[bid]:6s} ({BEHAVIOR_CLASSES[bid]:8s}): {float(global_behavior_duration_sec[bid]):7.2f} s")
 
         avg_probs = np.mean([p['probs'] for p in predictions], axis=0)

@@ -25,10 +25,15 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 from detectors.keypoint_detector import KeypointDetector
+from utils.constants import (
+    EAR_DISTANCE_EDGE_COLORS as _EDGE_COLORS,
+    EAR_DISTANCE_KP_COLORS as _KP_COLORS,
+    EAR_DISTANCE_SKELETON_EDGES as _SKELETON_EDGES,
+)
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\Downloads\cat5.mp4" # 主要作為資料夾來源（會遞迴掃描影片）
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch" # 主要作為資料夾來源（會遞迴掃描影片）
 VIDEO_LIST = [
     # 只放「單一影片檔案路徑」
     r"C:\Users\homec\Downloads\OneDrive_1_2026-5-21",
@@ -43,8 +48,10 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_73.pt"
-OUTPUT_CSV_PATH = r"C:\paper\output\left_right_ear_distance.csv"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_88.pt"
+
+# 輸出 CSV 路徑（可直接在此處修改）
+OUTPUT_CSV_PATH = r"C:\Users\homec\left_right_ear_distance.csv"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 YOLO_CONF_THRESHOLD = 0.8
@@ -58,7 +65,7 @@ DISPLAY_SIZE = (1080, 720)
 PRINT_BODY_LEN = True
 BODY_LEN_LOG_PATH = None  # 若需輸出到 CSV，填入路徑，例如 r"C:\temp\body_len_log.csv"
 # ===== 關鍵點信心門檻（建議集中看這區） =====
-EAR_CONF_THRESHOLD = 0.8  # 左右耳/胸/臀「幾何與耳距有效性」門檻（>此值才視為可用）
+EAR_CONF_THRESHOLD = 0.95  # 左右耳/胸/臀「幾何與耳距有效性」門檻（>此值才視為可用）
 DRAW_KP_CONF_THRESHOLD = 0.5  # 骨架與關鍵點「顯示門檻」（>此值才畫；只影響畫面，不影響耳距有效性）
 LIMB_CONF_THRESHOLD = 0.10  # 四肢區域建立門檻（膝與掌都需 > 此值）
 LOOP_PLAYBACK = True
@@ -78,31 +85,6 @@ KP_HIND_LEFT_KNEE = 10
 KP_HIND_LEFT_PAW = 11
 KP_HIND_RIGHT_KNEE = 12
 KP_HIND_RIGHT_PAW = 13
-
-# ===== 參考 test2.py 的骨架視覺樣式 =====
-_SKELETON_EDGES = [
-    (0, 1), (0, 2), (1, 2),
-    (0, 3), (3, 4), (4, 5),
-    (3, 6), (6, 7), (3, 8), (8, 9),
-    (5, 10), (10, 11), (5, 12), (12, 13),
-    (5, 14), (14, 15), (15, 16),
-]
-
-_KP_COLORS = [
-    (255, 80, 80), (255, 160, 40), (255, 160, 40),
-    (255, 255, 60), (200, 255, 60), (100, 255, 100),
-    (60, 200, 255), (60, 120, 255), (60, 200, 255), (60, 120, 255),
-    (180, 80, 255), (120, 40, 255), (180, 80, 255), (120, 40, 255),
-    (80, 220, 180), (60, 180, 140), (40, 140, 100),
-]
-
-_EDGE_COLORS = [
-    (255, 120, 60), (255, 120, 60), (255, 120, 60),
-    (220, 220, 60), (200, 220, 60), (160, 220, 60),
-    (102, 85, 255), (102, 85, 255), (255, 68, 204), (255, 68, 204),
-    (255, 170, 34), (255, 170, 34), (0, 153, 255), (0, 153, 255),
-    (80, 200, 160), (60, 170, 130), (40, 140, 100),
-]
 
 # ===== 面相偵測參數（可依資料再微調） =====
 NOSE_CONF_THRESHOLD = 0.3  # 鼻子可用門檻（同時用於本體幾何與背向規則）

@@ -1,0 +1,335 @@
+{
+  "generated_at": "2026-05-29 08:37:33",
+  "rank_rule": "global_jitter -> unstable_rate -> detection_rate -> mean_confidence",
+  "old_model": "v11s_76",
+  "new_model": "v11s_80",
+  "best_model": "v11s_76",
+  "worst_model": "v11s_80",
+  "headline_message": "新模型比舊模型關鍵點抖動幅度變差 0.49%",
+  "winner_message": "結果判定: 舊模型較好（v11s_76）",
+  "formula_message": "抖動幅度定義: 以逐幀關鍵點位移歸一化後的平均值 global_jitter 表示；數值越小代表越穩定。",
+  "results": [
+    {
+      "model_name": "v11s_76",
+      "model_path": "C:\\ai_project\\cat_pose\\v11s_76.pt",
+      "video_name": "walk1.mp4",
+      "video_path": "C:\\Users\\homec\\OneDrive\\圖片\\貓咪圖像資料集\\貓咪姿勢影片分類\\暫存\\walk\\walk1.mp4",
+      "device": "cuda:0",
+      "source_fps": 50.0,
+      "frame_step": 2,
+      "sampled_frames": 491,
+      "detected_frames": 491,
+      "compared_frames": 490,
+      "missed_frames": 0,
+      "detection_rate": 1.0,
+      "global_jitter": 0.02475337006569821,
+      "jitter_std": 0.007257277299865968,
+      "jitter_p95": 0.036246876232326024,
+      "unstable_rate": 0.0,
+      "mean_active_kpts": 17.0,
+      "mean_confidence": 0.9786443786877022,
+      "worst_keypoint_index": 11,
+      "worst_keypoint_name": "left_hind_lower",
+      "worst_keypoint_jitter": 0.05140742339806783,
+      "per_keypoint_mean_jitter": [
+        0.010866648854203142,
+        0.012504260462580477,
+        0.01533577506981638,
+        0.011725216463079904,
+        0.01063316275748158,
+        0.013997718552483853,
+        0.024034683116621394,
+        0.05122928651268309,
+        0.025503105059627214,
+        0.05094202572707923,
+        0.022889471792245323,
+        0.05140742339806783,
+        0.024564204370717005,
+        0.04958783394362473,
+        0.01276163293751983,
+        0.012864941782175506,
+        0.01995989886868023
+      ]
+    },
+    {
+      "model_name": "v11s_80",
+      "model_path": "C:\\ai_project\\cat_pose\\v11s_80.pt",
+      "video_name": "walk1.mp4",
+      "video_path": "C:\\Users\\homec\\OneDrive\\圖片\\貓咪圖像資料集\\貓咪姿勢影片分類\\暫存\\walk\\walk1.mp4",
+      "device": "cuda:0",
+      "source_fps": 50.0,
+      "frame_step": 2,
+      "sampled_frames": 491,
+      "detected_frames": 491,
+      "compared_frames": 490,
+      "missed_frames": 0,
+      "detection_rate": 1.0,
+      "global_jitter": 0.024874378233311737,
+      "jitter_std": 0.0069970223588814145,
+      "jitter_p95": 0.036342229135334476,
+      "unstable_rate": 0.0,
+      "mean_active_kpts": 17.0,
+      "mean_confidence": 0.9794208494163322,
+      "worst_keypoint_index": 7,
+      "worst_keypoint_name": "left_front_lower",
+      "worst_keypoint_jitter": 0.051806143911707465,
+      "per_keypoint_mean_jitter": [
+        0.01172220561824435,
+        0.013376900212653932,
+        0.015224351033173995,
+        0.012474449443493076,
+        0.011713469206303244,
+        0.013956151260847073,
+        0.024494804233569197,
+        0.051806143911707465,
+        0.026302684054054244,
+        0.0516423921091292,
+        0.022090900699341935,
+        0.04894847817818767,
+        0.02482311332940447,
+        0.04857099021509366,
+        0.01362804852079182,
+        0.013543410059088386,
+        0.018545937339290598
+      ]
+    }
+  ],
+  "old_vs_new_analysis": {
+    "old_model": "v11s_76",
+    "new_model": "v11s_80",
+    "overall_metrics": [
+      {
+        "metric": "global_jitter",
+        "old": 0.02475337006569821,
+        "new": 0.024874378233311737,
+        "difference": 0.00012100816761352606,
+        "percent_change": 0.48885532471884374,
+        "better_direction": "lower_better",
+        "verdict": "regressed"
+      },
+      {
+        "metric": "jitter_std",
+        "old": 0.007257277299865968,
+        "new": 0.0069970223588814145,
+        "difference": -0.00026025494098455386,
+        "percent_change": -3.586123696683884,
+        "better_direction": "lower_better",
+        "verdict": "improved"
+      },
+      {
+        "metric": "jitter_p95",
+        "old": 0.036246876232326024,
+        "new": 0.036342229135334476,
+        "difference": 9.535290300845267e-05,
+        "percent_change": 0.26306516014589465,
+        "better_direction": "lower_better",
+        "verdict": "regressed"
+      },
+      {
+        "metric": "unstable_rate",
+        "old": 0.0,
+        "new": 0.0,
+        "difference": 0.0,
+        "percent_change": null,
+        "better_direction": "lower_better",
+        "verdict": "same"
+      },
+      {
+        "metric": "detection_rate",
+        "old": 1.0,
+        "new": 1.0,
+        "difference": 0.0,
+        "percent_change": 0.0,
+        "better_direction": "higher_better",
+        "verdict": "same"
+      },
+      {
+        "metric": "mean_confidence",
+        "old": 0.9786443786877022,
+        "new": 0.9794208494163322,
+        "difference": 0.0007764707286300743,
+        "percent_change": 0.07934145901612091,
+        "better_direction": "higher_better",
+        "verdict": "improved"
+      }
+    ],
+    "per_keypoint": [
+      {
+        "index": 0,
+        "name": "nose",
+        "old_jitter": 0.010866648854203142,
+        "new_jitter": 0.01172220561824435,
+        "difference": 0.0008555567640412074,
+        "percent_change": 7.87323466065883,
+        "verdict": "regressed"
+      },
+      {
+        "index": 1,
+        "name": "left_ear",
+        "old_jitter": 0.012504260462580477,
+        "new_jitter": 0.013376900212653932,
+        "difference": 0.0008726397500734544,
+        "percent_change": 6.978739387945936,
+        "verdict": "regressed"
+      },
+      {
+        "index": 2,
+        "name": "right_ear",
+        "old_jitter": 0.01533577506981638,
+        "new_jitter": 0.015224351033173995,
+        "difference": -0.00011142403664238416,
+        "percent_change": -0.7265627993050519,
+        "verdict": "improved"
+      },
+      {
+        "index": 3,
+        "name": "chest",
+        "old_jitter": 0.011725216463079904,
+        "new_jitter": 0.012474449443493076,
+        "difference": 0.0007492329804131715,
+        "percent_change": 6.389928772507862,
+        "verdict": "regressed"
+      },
+      {
+        "index": 4,
+        "name": "mid_back",
+        "old_jitter": 0.01063316275748158,
+        "new_jitter": 0.011713469206303244,
+        "difference": 0.0010803064488216635,
+        "percent_change": 10.159784755119553,
+        "verdict": "regressed"
+      },
+      {
+        "index": 5,
+        "name": "hip",
+        "old_jitter": 0.013997718552483853,
+        "new_jitter": 0.013956151260847073,
+        "difference": -4.1567291636779996e-05,
+        "percent_change": -0.2969576183499132,
+        "verdict": "improved"
+      },
+      {
+        "index": 6,
+        "name": "left_front_upper",
+        "old_jitter": 0.024034683116621394,
+        "new_jitter": 0.024494804233569197,
+        "difference": 0.00046012111694780297,
+        "percent_change": 1.9144047571386626,
+        "verdict": "regressed"
+      },
+      {
+        "index": 7,
+        "name": "left_front_lower",
+        "old_jitter": 0.05122928651268309,
+        "new_jitter": 0.051806143911707465,
+        "difference": 0.0005768573990243761,
+        "percent_change": 1.126030515536383,
+        "verdict": "regressed"
+      },
+      {
+        "index": 8,
+        "name": "right_front_upper",
+        "old_jitter": 0.025503105059627214,
+        "new_jitter": 0.026302684054054244,
+        "difference": 0.000799578994427029,
+        "percent_change": 3.1352221329817818,
+        "verdict": "regressed"
+      },
+      {
+        "index": 9,
+        "name": "right_front_lower",
+        "old_jitter": 0.05094202572707923,
+        "new_jitter": 0.0516423921091292,
+        "difference": 0.0007003663820499689,
+        "percent_change": 1.374830254694162,
+        "verdict": "regressed"
+      },
+      {
+        "index": 10,
+        "name": "left_hind_upper",
+        "old_jitter": 0.022889471792245323,
+        "new_jitter": 0.022090900699341935,
+        "difference": -0.0007985710929033878,
+        "percent_change": -3.4888139846631763,
+        "verdict": "improved"
+      },
+      {
+        "index": 11,
+        "name": "left_hind_lower",
+        "old_jitter": 0.05140742339806783,
+        "new_jitter": 0.04894847817818767,
+        "difference": -0.00245894521988016,
+        "percent_change": -4.783249300085676,
+        "verdict": "improved"
+      },
+      {
+        "index": 12,
+        "name": "right_hind_upper",
+        "old_jitter": 0.024564204370717005,
+        "new_jitter": 0.02482311332940447,
+        "difference": 0.0002589089586874649,
+        "percent_change": 1.054009137768412,
+        "verdict": "regressed"
+      },
+      {
+        "index": 13,
+        "name": "right_hind_lower",
+        "old_jitter": 0.04958783394362473,
+        "new_jitter": 0.04857099021509366,
+        "difference": -0.0010168437285310722,
+        "percent_change": -2.050591138316504,
+        "verdict": "improved"
+      },
+      {
+        "index": 14,
+        "name": "tail_base",
+        "old_jitter": 0.01276163293751983,
+        "new_jitter": 0.01362804852079182,
+        "difference": 0.0008664155832719903,
+        "percent_change": 6.789221939809018,
+        "verdict": "regressed"
+      },
+      {
+        "index": 15,
+        "name": "tail_mid",
+        "old_jitter": 0.012864941782175506,
+        "new_jitter": 0.013543410059088386,
+        "difference": 0.0006784682769128796,
+        "percent_change": 5.273776503620899,
+        "verdict": "regressed"
+      },
+      {
+        "index": 16,
+        "name": "tail_tip",
+        "old_jitter": 0.01995989886868023,
+        "new_jitter": 0.018545937339290598,
+        "difference": -0.0014139615293896311,
+        "percent_change": -7.084011490701124,
+        "verdict": "improved"
+      }
+    ],
+    "summary": {
+      "regressed_keypoints": 11,
+      "improved_keypoints": 6,
+      "unchanged_keypoints": 0,
+      "max_regression_keypoint": {
+        "index": 4,
+        "name": "mid_back",
+        "old_jitter": 0.01063316275748158,
+        "new_jitter": 0.011713469206303244,
+        "difference": 0.0010803064488216635,
+        "percent_change": 10.159784755119553,
+        "verdict": "regressed"
+      },
+      "max_improvement_keypoint": {
+        "index": 11,
+        "name": "left_hind_lower",
+        "old_jitter": 0.05140742339806783,
+        "new_jitter": 0.04894847817818767,
+        "difference": -0.00245894521988016,
+        "percent_change": -4.783249300085676,
+        "verdict": "improved"
+      }
+    }
+  }
+}

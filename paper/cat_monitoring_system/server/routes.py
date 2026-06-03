@@ -2,19 +2,26 @@
 Flask 路由
 """
 from flask import Response, jsonify, request
+import ipaddress
+import json
 import time
 import sys
 import os
+import datetime
+import cv2
 import numpy as np
 from pathlib import Path
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+_project_root = str(Path(__file__).parent.parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 from config import ModelPaths as _ModelPaths
 from config import YOLOConfig as _YOLOConfig
 from config import STGCNConfig as _STGCNConfig
 from config import NodeRedConfig as _NodeRedConfig
+from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 from config import FlaskConfig as _FlaskConfig
 
 _KP_EMA_ALPHA = _STGCNConfig.KP_EMA_ALPHA
@@ -28,7 +35,6 @@ _SEQUENCE_LENGTH = _STGCNConfig.SEQUENCE_LENGTH
 _PORT = _FlaskConfig.PORT
 from server.streaming import SharedFrameStreamer
 from processors.frame_processor import FrameProcessor
-from communication.nodered_client import NodeRedClient
 from trackers.behavior_tracker import ImprovedBehaviorTracker
 from utils.constants import *
 from utils.helpers import get_ip, get_behavior_name
@@ -36,8 +42,9 @@ from utils.helpers import get_ip, get_behavior_name
 
 frame_streamer = None
 frame_processor = None
+_init_lock = __import__('threading').Lock()
 tracker = ImprovedBehaviorTracker()
-LOCAL_IP = get_ip()
+LOCAL_IP = get_ip() or "127.0.0.1"
 
 
 def _resolve_runtime_device(preferred='cuda'):
@@ -56,8 +63,6 @@ def _build_frame_processor():
         yolo_model_path=_YOLO_MODEL_PATH,
         stgcn_model_path=_STGCN_MODEL_PATH,
         video_path=_VIDEO_PATH,
-        csv_path='cat_monitoring_log.csv',
-        segments_csv_path='behavior_segments.csv',
         nodered_url=_NODERED_RESULT_URL,
         device=runtime_device,
         imgsz=_IMAGE_SIZE,
@@ -74,7 +79,7 @@ def _build_frame_processor():
 def _get_latest_behavior():
     """從 frame_processor 取得最新行為推論，供首頁與 status API 使用。回傳皆為 JSON 可序列化的原生型別。"""
     latest_behavior, latest_confidence = 0, 0.0
-    latest_probs = [0.0, 0.0, 0.0, 0.0]
+    latest_probs = [0.0, 0.0, 0.0, 0.0, 0.0]
     if frame_processor and hasattr(frame_processor, 'behavior_classifier'):
         try:
             if hasattr(frame_processor, 'keypoints_buffer') and len(frame_processor.keypoints_buffer) >= frame_processor.sequence_length:
@@ -82,48 +87,130 @@ def _get_latest_behavior():
                 kpts_arr = np.array([item[0] for item in frame_processor.keypoints_buffer])  # (T, 17, 2)
                 conf_arr = np.array([item[1] for item in frame_processor.keypoints_buffer])  # (T, 17)
                 seq_array = interpolate_missing(kpts_arr, conf_arr)
-                b, c, probs = frame_processor.behavior_classifier.classify(seq_array)
+                # Build feature tensor when model expects >4 channels
+                model_obj = getattr(frame_processor.behavior_classifier, 'model', None)
+                if model_obj is not None and getattr(model_obj, 'in_channels', 4) != 4:
+                    try:
+                        from models.stgcn_model import flip_normalize, orientation_normalize, normalize_skeleton_coords, build_feature_tensor
+                        if getattr(model_obj, 'normalize', True):
+                            seq_array = flip_normalize(seq_array)
+                            seq_array = orientation_normalize(seq_array)
+                            seq_array = normalize_skeleton_coords(seq_array)
+                        seq_features = build_feature_tensor(seq_array, conf_arr, model_obj.feature_mode)
+                        b, c, probs = frame_processor.behavior_classifier.classify(seq_features, precomputed=True)
+                    except Exception:
+                        b, c, probs = frame_processor.behavior_classifier.classify(seq_array)
+                else:
+                    b, c, probs = frame_processor.behavior_classifier.classify(seq_array)
                 if b is not None:
                     latest_confidence = float(c)
                     latest_probs = [float(p) for p in (probs if probs is not None else latest_probs)]
-                    latest_behavior = LOW_CONF_ID if latest_confidence < CONFIDENCE_THRESHOLD else int(b)
+                    latest_behavior = LOW_CONF_ID if latest_confidence < _BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD else int(b)
         except Exception:
             pass
     return latest_behavior, latest_confidence, latest_probs
 
 
 def _ensure_processor_started():
-    """在首次請求首頁或 /status 時啟動處理管線，讓網頁能即時取得行為資料（與 Node-RED 一致）。"""
+    """在首次請求時啟動處理管線（double-checked locking，避免多執行緒重複建立）。"""
     global frame_streamer, frame_processor
     if frame_processor is not None and frame_streamer is not None:
         return
-    frame_processor = _build_frame_processor()
-    frame_streamer = SharedFrameStreamer(frame_processor)
+    with _init_lock:
+        if frame_processor is None:
+            frame_processor = _build_frame_processor()
+        if frame_streamer is None:
+            frame_streamer = SharedFrameStreamer(frame_processor)
 
 
 def register_routes(app):
     @app.route('/python_online', methods=['POST'])
     def python_online():
-        data = request.get_json(force=True)
-        ip = data.get('ip')
+        data = request.get_json(force=True) or {}
+        ip = data.get('ip', '')
+        try:
+            ipaddress.ip_address(str(ip))
+        except ValueError:
+            ip = ''
         print(f"[Node-RED] Python 上線通知，收到 IP: {ip}")
         return jsonify({'ip': ip})
 
     @app.route('/stream')
     def stream():
-        global frame_streamer, frame_processor
-        if frame_processor is None:
-            frame_processor = _build_frame_processor()
-        if frame_streamer is None:
-            frame_streamer = SharedFrameStreamer(frame_processor)
+        _ensure_processor_started()
         def mjpeg_stream():
-            while True:
-                jpeg = frame_streamer.get_jpeg()
-                if jpeg is not None:
-                    yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
-                else:
-                    time.sleep(0.01)
+            try:
+                while True:
+                    jpeg = frame_streamer.get_jpeg()
+                    if jpeg is not None:
+                        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
+                    else:
+                        time.sleep(0.01)
+            except GeneratorExit:
+                pass  # 客戶端正常斷線，允許 generator 終止
         return Response(mjpeg_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    @app.route('/snapshot')
+    def snapshot():
+        _ensure_processor_started()
+        jpeg = frame_streamer.get_jpeg() if frame_streamer else None
+        if jpeg is None:
+            return Response(b'', status=503, mimetype='image/jpeg')
+        return Response(jpeg, mimetype='image/jpeg')
+
+    @app.route('/video_clip')
+    def video_clip():
+        _ensure_processor_started()
+        frames = frame_streamer.get_clip_frames() if frame_streamer else []
+        if not frames:
+            return jsonify({'error': 'no frames available'}), 503
+
+        ts_obj = datetime.datetime.now()
+        ts_file = ts_obj.strftime('%Y%m%d_%H%M%S')
+        ts_display = ts_obj.strftime('%Y/%m/%d %H:%M:%S')
+
+        save_dir = Path('C:/a')
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        h, w = frames[0].shape[:2]
+        fps = float(_STGCNConfig.TARGET_MODEL_FPS)
+
+        # mp4v 在 Windows 無額外 codec 時 isOpened() 會為 False，fallback 到 MJPG+avi
+        codecs = [
+            (str(save_dir / f'clip_{ts_file}.mp4'), cv2.VideoWriter_fourcc(*'mp4v')),
+            (str(save_dir / f'clip_{ts_file}.avi'), cv2.VideoWriter_fourcc(*'MJPG')),
+        ]
+        writer = None
+        save_path = ''
+        for path, fourcc in codecs:
+            w_ = cv2.VideoWriter(path, fourcc, fps, (w, h))
+            if w_.isOpened():
+                writer = w_
+                save_path = path
+                break
+            w_.release()
+
+        if writer is None:
+            return jsonify({'error': 'no usable video codec on this machine'}), 500
+
+        for f in frames:
+            writer.write(f)
+        writer.release()
+
+        # 最後一幀轉 base64 供 Dashboard 顯示縮圖
+        import base64
+        last_frame = frames[-1]
+        _, buf = cv2.imencode('.jpg', last_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        thumbnail = 'data:image/jpeg;base64,' + base64.b64encode(buf.tobytes()).decode()
+
+        duration = round(len(frames) / fps, 1)
+        return jsonify({
+            'path': save_path,
+            'frames': len(frames),
+            'duration': duration,
+            'ts': ts_display,
+            'thumbnail': thumbnail,
+        })
+
     @app.route('/status')
     def status():
         _ensure_processor_started()
@@ -150,7 +237,7 @@ def register_routes(app):
         """回傳各行為區段與持續時間，供行為趨勢分析使用。支援 ?limit=200。"""
         _ensure_processor_started()
         try:
-            limit = min(int(request.args.get('limit', 200)), 1000)
+            limit = max(1, min(int(request.args.get('limit', 200)), 1000))
         except (TypeError, ValueError):
             limit = 200
         t = frame_processor.tracker if frame_processor else tracker
@@ -173,9 +260,11 @@ def register_routes(app):
     def index():
         _ensure_processor_started()
         lb, lc, lprobs = _get_latest_behavior()
-        # 供 JS 輪詢的初始值與文案
         conf_pct = int(round(lc * 100))
-        probs_json = str(lprobs).replace("'", '"')
+        # 使用 json.dumps 確保資料安全嵌入 JS，避免 XSS
+        behavior_names_js = json.dumps(BEHAVIOR_CLASSES)
+        probs_json = json.dumps([round(float(p), 4) for p in lprobs])
+        min_conf_js = json.dumps(float(_BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD))
         html = f"""<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -515,7 +604,7 @@ def register_routes(app):
             <div class="panel">
                 <h2>目前行為</h2>
                 <div class="behavior-now">
-                    <div class="behavior-emoji" id="behaviorEmoji">{LOW_CONF_EMOJI if lc < BEHAVIOR_MIN_CONFIDENCE else BEHAVIOR_EMOJI_MAP.get(lb, '')}</div>
+                    <div class="behavior-emoji" id="behaviorEmoji">{LOW_CONF_EMOJI if lc < _BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD else BEHAVIOR_EMOJI_MAP.get(lb, '')}</div>
                     <div class="behavior-label" id="behaviorLabel">{get_behavior_name(lb, use_text=False, fallback='unknown', confidence=lc)}</div>
                     <div class="confidence-ring" id="confidenceRing" style="--p: {conf_pct};">
                         <div class="confidence-ring-inner"><span id="confidenceVal">{conf_pct}</span>%</div>
@@ -523,7 +612,7 @@ def register_routes(app):
                     <div class="behavior-conf">辨識信心</div>
                 </div>
                 <div class="probs" id="probsList">
-                    {''.join([f'<div class="prob-row"><span>{BEHAVIOR_CLASSES[i]}</span><span>{int(round(lprobs[i]*100))}%</span></div><div class="prob-bar"><div class="prob-fill" style="width:{int(round(lprobs[i]*100))}%"></div></div>' for i in range(4)])}
+                    {''.join([f'<div class="prob-row"><span>{BEHAVIOR_CLASSES[i]}</span><span>{int(round(lprobs[i]*100))}%</span></div><div class="prob-bar"><div class="prob-fill" style="width:{int(round(lprobs[i]*100))}%"></div></div>' for i in range(5)])}
                 </div>
             </div>
 
@@ -544,6 +633,8 @@ def register_routes(app):
                     <div class="stat-item"><strong>搔抓</strong><br><span id="statScratch">0</span> 次</div>
                     <div class="stat-item"><strong>舔舐</strong><br><span id="statLick">0</span> 次</div>
                     <div class="stat-item"><strong>甩頭</strong><br><span id="statShake">0</span> 次</div>
+                    <div class="stat-item"><strong>靜止</strong><br><span id="statStop">0</span> 次</div>
+                    <div class="stat-item"><strong>未偵測到</strong><br><span id="statNotDetected">0</span> 秒</div>
                     <div class="stat-item"><strong>總時長</strong><br><span id="statTime">0</span> 分</div>
                 </div>
                 <div class="alerts" id="alertsBox">
@@ -562,14 +653,14 @@ def register_routes(app):
     </div>
 
     <script>
-        const BEHAVIOR_NAMES = {str(BEHAVIOR_CLASSES).replace("'", '"')};
-        const BEHAVIOR_EMOJI = {{ "-1": "😴", 0: "🐾", 1: "🐈", 2: "🧼", 3: "🐈↺" }};
-        const BEHAVIOR_MIN_CONFIDENCE = {BEHAVIOR_MIN_CONFIDENCE};
+        const BEHAVIOR_NAMES = {behavior_names_js};
+        const BEHAVIOR_EMOJI = {{ "-1": "😴", 0: "🐾", 1: "🐈", 2: "🧼", 3: "🐈↺", 4: "⏹" }};
+        const BEHAVIOR_MIN_CONFIDENCE = {min_conf_js};
 
         function updateDashboard(data) {{
             const lb = data.latest_behavior ?? 0;
             const lc = data.latest_confidence ?? 0;
-            const probs = data.latest_probs || [0,0,0,0];
+            const probs = data.latest_probs || [0,0,0,0,0];
             const confPct = Math.round(lc * 100);
 
             document.getElementById('behaviorEmoji').textContent = (lc < BEHAVIOR_MIN_CONFIDENCE ? '😴' : (BEHAVIOR_EMOJI[lb] || ''));
@@ -592,6 +683,8 @@ def register_routes(app):
             document.getElementById('statScratch').textContent = stats.scratch ?? 0;
             document.getElementById('statLick').textContent = stats.lick ?? 0;
             document.getElementById('statShake').textContent = stats.shake ?? 0;
+            document.getElementById('statStop').textContent = stats.stop ?? 0;
+            document.getElementById('statNotDetected').textContent = stats.not_detected_time ?? 0;
             const totalMin = (stats.active_time ?? 0) / 60;
             document.getElementById('statTime').textContent = totalMin.toFixed(1);
 

@@ -35,7 +35,7 @@ HEIGHT = 480
 
 JPEG_QUALITY = 45
 
-TARGET_FPS = 20
+TARGET_FPS = 30
 
 # =====================================================
 # 全域最新 frame
@@ -44,6 +44,7 @@ TARGET_FPS = 20
 latest_frame = None
 
 frame_lock = threading.Lock()
+cap_lock = threading.Lock()  # 保護 cap 的 grab/retrieve 存取
 
 # =====================================================
 # OpenCV Camera
@@ -77,11 +78,9 @@ def camera_reader():
 
     while True:
 
-        # 丟棄舊 frame
-
-        cap.grab()
-
-        success, frame = cap.retrieve()
+        with cap_lock:
+            cap.grab()
+            success, frame = cap.retrieve()
 
         if not success:
 

@@ -21,7 +21,7 @@ except Exception:
 
 
 # ==================== 基本設定 ====================
-IMGSZ = 640
+IMGSZ = 640str
 CONF_THRES = 0.50
 KP_CONF_THRES = 0.0
 DEVIATION_THRES = 0.60
@@ -29,9 +29,9 @@ TOTAL_KPTS = 17
 TARGET_MODEL_FPS = 30.0
 
 # 直接填入兩個絕對路徑模型與一個絕對路徑影片
-DEFAULT_MODEL_1 = r"C:\ai_project\cat_pose\v11s_72.pt"
-DEFAULT_MODEL_2 = r"C:\ai_project\cat_pose\naug.pt"
-DEFAULT_VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\2752855.mp4"
+DEFAULT_MODEL_1 = r"C:\ai_project\cat_pose\v11s_88.pt"
+DEFAULT_MODEL_2 = r"C:\ai_project\cat_pose\v11s_90.pt"
+DEFAULT_VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\walk1.mp4"
 
 KEYPOINT_NAMES = [
     "nose", "left_ear", "right_ear",

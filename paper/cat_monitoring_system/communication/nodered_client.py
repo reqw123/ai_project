@@ -1,6 +1,7 @@
 """
 Node-RED 通訊
 """
+import logging
 import requests
 from datetime import datetime
 from config import NodeRedConfig
@@ -13,13 +14,12 @@ class NodeRedClient:
 
     def send_data(self, data):
         try:
-            # 先發送 python_online 狀態（如有設置）
             if self.url_notify and self.local_ip:
                 now = datetime.now()
-                timestamp = now.strftime("%H:%M:%S")
-                notify_data = {"status": "online", "ip": self.local_ip, "timestamp": timestamp}
+                notify_data = {"status": "online", "ip": self.local_ip, "timestamp": now.strftime("%H:%M:%S")}
                 requests.post(self.url_notify, json=notify_data, timeout=NodeRedConfig.TIMEOUT)
-            # 再發送 yolo_result 行為資料
             requests.post(self.url_result, json=data, timeout=NodeRedConfig.TIMEOUT)
-        except Exception:
-            pass
+            return True
+        except Exception as e:
+            logging.warning("NodeRedClient.send_data failed: %s", e)
+            return False

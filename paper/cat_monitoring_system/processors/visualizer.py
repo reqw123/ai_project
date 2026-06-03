@@ -6,6 +6,8 @@ import numpy as np
 import time
 from pathlib import Path
 from utils.constants import *
+from config import AnomalyDetectionConfig as _AnomalyDetectionConfig
+from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 from utils.helpers import get_behavior_name
 
 try:
@@ -15,6 +17,8 @@ except ImportError:  # pragma: no cover - Pillow is available in the configured 
     ImageSequence = None
     ImageDraw = None
     ImageFont = None
+
+import bisect
 
 
 HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / "cat_monitoring_system/maolex-blogs-cat-face-rabbit.webp"
@@ -69,19 +73,43 @@ _FONT_CANDIDATES = [
     r"C:\Windows\Fonts\mingliu.ttc",
 ]
 
+# 字型快取：_find_font 第一次成功後就不再重複開檔
+_font_cache: dict = {}
 
 def _find_font(size):
+    if size in _font_cache:
+        return _font_cache[size]
     if ImageFont is None:
+        _font_cache[size] = None
         return None
     for p in _FONT_CANDIDATES:
         try:
-            return ImageFont.truetype(p, size)
+            font = ImageFont.truetype(p, size)
+            _font_cache[size] = font
+            return font
         except Exception:
             continue
     try:
-        return ImageFont.load_default()
+        font = ImageFont.load_default()
+        _font_cache[size] = font
+        return font
     except Exception:
+        _font_cache[size] = None
         return None
+
+# PIL 文字量測用單例：避免每幀重複建立 Image.new + ImageDraw.Draw
+_tmp_pil_img = None
+_tmp_pil_draw = None
+
+def _get_tmp_draw():
+    global _tmp_pil_img, _tmp_pil_draw
+    if _tmp_pil_draw is None and Image is not None and ImageDraw is not None:
+        _tmp_pil_img  = Image.new('RGB', (1, 1))
+        _tmp_pil_draw = ImageDraw.Draw(_tmp_pil_img)
+    return _tmp_pil_draw
+
+# overlay resize 快取：對齊最近 4px 後快取，減少相同尺寸的重複 resize
+_overlay_resize_cache: dict = {}
 
 
 def _draw_text_with_pil(frame, text, pos, font_size=28, color=(255, 255, 255), outline=2, bg_box=None):
@@ -148,8 +176,19 @@ def _overlay_image_centered(frame, image, center_xy, target_width):
     if src_h <= 0 or src_w <= 0:
         return
 
-    target_height = max(1, int(round(target_width * src_h / max(src_w, 1))))
-    resized = cv2.resize(image, (target_width, target_height), interpolation=cv2.INTER_AREA)
+    # 對齊最近 4px 讓相同大小的貓共用快取，減少重複 resize
+    tw = (int(target_width) // 4) * 4
+    cache_key = (id(image), tw)
+    if cache_key in _overlay_resize_cache:
+        resized = _overlay_resize_cache[cache_key]
+    else:
+        th = max(1, int(round(tw * src_h / max(src_w, 1))))
+        resized = cv2.resize(image, (tw, th), interpolation=cv2.INTER_AREA)
+        if len(_overlay_resize_cache) < 64:  # 防止記憶體無限增長
+            _overlay_resize_cache[cache_key] = resized
+    # 不論快取命中或新計算，都從 resized 取得最終尺寸
+    target_width  = tw
+    target_height = resized.shape[0]
 
     x_c = int(round(float(center_xy[0])))
     y_c = int(round(float(center_xy[1])))
@@ -193,24 +232,22 @@ class Visualizer:
         self._overlay_frames = HIP_IMAGE_FRAMES
         self._overlay_frame_durations = HIP_IMAGE_DURATIONS
         self._overlay_total_duration = sum(self._overlay_frame_durations) if self._overlay_frame_durations else 0
+        # 預計算累積時間戳，供 bisect O(log N) 查找當前動畫幀（取代線性掃描）
+        cumsum = 0
+        self._overlay_cumulative: list = []
+        for d in self._overlay_frame_durations:
+            cumsum += d
+            self._overlay_cumulative.append(cumsum)
 
     def _get_overlay_frame(self):
         if not self._overlay_frames:
             return None
-
         if len(self._overlay_frames) == 1 or self._overlay_total_duration <= 0:
             return self._overlay_frames[0]
-
         elapsed_ms = int((time.monotonic() - self._overlay_anim_start) * 1000)
         tick = elapsed_ms % self._overlay_total_duration
-
-        cumulative = 0
-        for frame, duration in zip(self._overlay_frames, self._overlay_frame_durations):
-            cumulative += duration
-            if tick < cumulative:
-                return frame
-
-        return self._overlay_frames[-1]
+        idx = bisect.bisect_right(self._overlay_cumulative, tick)
+        return self._overlay_frames[min(idx, len(self._overlay_frames) - 1)]
 
     def draw_prediction_on_frame(
         self,
@@ -243,11 +280,16 @@ class Visualizer:
         if use_pil:
             # 計算字型大小與背景框（以 font_scale 為基準）
             font_px = max(14, int(24 * font_scale))
-            # 嘗試用 PIL 取得文字尺寸
+            # 嘗試用 PIL 取得文字尺寸（使用模組層級單例，不每幀重新建立）
             try:
                 font = _find_font(font_px)
                 if font is not None:
-                    text_w, text_h = ImageDraw.Draw(Image.new('RGB', (1,1))).textsize(text, font=font)
+                    draw_tmp = _get_tmp_draw()
+                    if draw_tmp is not None:
+                        bbox_tmp = draw_tmp.textbbox((0, 0), text, font=font)
+                        text_w, text_h = bbox_tmp[2] - bbox_tmp[0], bbox_tmp[3] - bbox_tmp[1]
+                    else:
+                        text_w, text_h = (int(len(text) * font_px * 0.6), font_px)
                 else:
                     text_w, text_h = (int(len(text) * font_px * 0.6), font_px)
             except Exception:
@@ -269,10 +311,10 @@ class Visualizer:
                 x1 = max(0, x - pad_x)
                 y1 = max(0, y - text_h - pad_y)
                 x2 = min(w - 1, x + text_w + pad_x)
-                y2 = min(h - 1, x + baseline + pad_y)
-                overlay = frame.copy()
-                cv2.rectangle(overlay, (x1, y1), (x2, y2), (20, 20, 20), -1)
-                cv2.addWeighted(overlay, 0.58, frame, 0.42, 0, frame)
+                y2 = min(h - 1, y + baseline + pad_y)
+                # ROI 局部混合：避免全幀 frame.copy() + addWeighted 只為畫一個小背景框
+                roi = frame[y1:y2, x1:x2]
+                frame[y1:y2, x1:x2] = (roi.astype(np.float32) * 0.42 + 11.6).astype(np.uint8)
 
             cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, BLACK, outline_thickness, cv2.LINE_AA)
             cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, text_thickness, cv2.LINE_AA)
@@ -285,10 +327,10 @@ class Visualizer:
         start_y = 18
         spacing = 20
         bar_colors = [
-            (0, 255, 0),      # walk - Green
-            (255, 0, 0),      # scratch - Blue
-            (0, 255, 255),    # lick - Yellow
-            (0, 0, 255)       # shake - Red
+            BEHAVIOR_COLORS.get(0, (0, 255, 0)),    # walk
+            BEHAVIOR_COLORS.get(1, (0, 255, 255)),   # lick
+            BEHAVIOR_COLORS.get(2, (255, 165, 0)),   # scratch
+            BEHAVIOR_COLORS.get(3, (0, 0, 255)),     # shake
         ]
         for i, (prob, class_name) in enumerate(zip(class_probs, behavior_names)):
             y = start_y + i * (bar_height + spacing)
@@ -305,53 +347,25 @@ class Visualizer:
             cv2.putText(frame, label, (start_x + 12, y + bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.86, BLACK, 2, cv2.LINE_AA)
             cv2.putText(frame, label, (start_x + 12, y + bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.86, WHITE, 1, cv2.LINE_AA)
     def draw(self, frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs, show_info=True):
-        # 頭部
-        for i, j in HEAD_LINKS:
-            if kpt_conf[i] > KP_CONF_THRES and kpt_conf[j] > KP_CONF_THRES:
+        # 骨架視覺：採用與耳距腳本一致的邊線/關鍵點配色與連線順序
+        for edge_idx, (i, j) in enumerate(EAR_DISTANCE_SKELETON_EDGES):
+            if i >= len(kpts) or j >= len(kpts):
+                continue
+            if kpt_conf[i] > _AnomalyDetectionConfig.KP_CONF_THRES and kpt_conf[j] > _AnomalyDetectionConfig.KP_CONF_THRES:
                 pt1 = tuple(map(int, kpts[i]))
                 pt2 = tuple(map(int, kpts[j]))
-                cv2.line(frame, pt1, pt2, COLOR_HEAD, 2)
-        # 身體
-        for i, j in BODY_LINKS:
-            if kpt_conf[i] > KP_CONF_THRES and kpt_conf[j] > KP_CONF_THRES:
-                pt1 = tuple(map(int, kpts[i]))
-                pt2 = tuple(map(int, kpts[j]))
-                cv2.line(frame, pt1, pt2, COLOR_BODY, 2)
-        # 前肢
-        for idx, (i, j) in enumerate(FRONT_LIMBS):
-            if kpt_conf[i] > KP_CONF_THRES and kpt_conf[j] > KP_CONF_THRES:
-                pt1 = tuple(map(int, kpts[i]))
-                pt2 = tuple(map(int, kpts[j]))
-                color = COLOR_LEFT_FRONT if idx < 2 else COLOR_RIGHT_FRONT
+                color = EAR_DISTANCE_EDGE_COLORS[edge_idx] if edge_idx < len(EAR_DISTANCE_EDGE_COLORS) else (180, 180, 180)
                 cv2.line(frame, pt1, pt2, color, 2)
-        # 後肢
-        for idx, (i, j) in enumerate(HIND_LIMBS):
-            if kpt_conf[i] > KP_CONF_THRES and kpt_conf[j] > KP_CONF_THRES:
-                pt1 = tuple(map(int, kpts[i]))
-                pt2 = tuple(map(int, kpts[j]))
-                color = COLOR_LEFT_HIND if idx < 2 else COLOR_RIGHT_HIND
-                cv2.line(frame, pt1, pt2, color, 2)
-        # Hip → Tail_Root（橘黃色，與尾巴段區隔）
-        for i, j in HIP_TAIL_LINK:
-            if kpt_conf[i] > KP_CONF_THRES and kpt_conf[j] > KP_CONF_THRES:
-                pt1 = tuple(map(int, kpts[i]))
-                pt2 = tuple(map(int, kpts[j]))
-                cv2.line(frame, pt1, pt2, COLOR_HIP_TAIL, 2)
-        # 尾巴（Tail_Root → Tail_Mid → Tail_Tip，洋紅色）
-        for i, j in TAIL_LINKS:
-            if kpt_conf[i] > KP_CONF_THRES and kpt_conf[j] > KP_CONF_THRES:
-                pt1 = tuple(map(int, kpts[i]))
-                pt2 = tuple(map(int, kpts[j]))
-                cv2.line(frame, pt1, pt2, COLOR_TAIL, 2)
-        # 關鍵點
+
         for i in range(len(kpts)):
-            if kpt_conf[i] > KP_CONF_THRES:
+            if kpt_conf[i] > _AnomalyDetectionConfig.KP_CONF_THRES:
                 pt = tuple(map(int, kpts[i]))
-                cv2.circle(frame, pt, 3, COLOR_KPT, -1)
+                color = EAR_DISTANCE_KP_COLORS[i] if i < len(EAR_DISTANCE_KP_COLORS) else COLOR_KPT
+                cv2.circle(frame, pt, 3, color, -1)
 
         # 將 hip.png 貼在 nose 關鍵點上，跟隨鼻子移動
         overlay_frame = self._get_overlay_frame()
-        if overlay_frame is not None and len(kpts) > 0 and kpt_conf[0] > KP_CONF_THRES:
+        if overlay_frame is not None and len(kpts) > 0 and kpt_conf[0] > _AnomalyDetectionConfig.KP_CONF_THRES:
             nose_pt = tuple(map(int, kpts[0]))
             if bbox is not None:
                 x1, y1, x2, y2 = map(int, bbox)
@@ -366,9 +380,10 @@ class Visualizer:
         # 畫YOLO bbox/conf
         if bbox is not None and conf is not None:
             x1, y1, x2, y2 = map(int, bbox)
-            # 先畫白色粗框，再畫黑色細框
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 255), 4)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 2)
+            outer_w = 4
+            inner_w = 2
+            cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, outer_w, cv2.LINE_AA)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, inner_w, cv2.LINE_AA)
             label = f"conf: {conf:.2f}"
             # 只畫黑字標籤
             cv2.putText(frame, label, (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2, cv2.LINE_AA)
@@ -376,7 +391,9 @@ class Visualizer:
         if not show_info:
             return frame
 
-        is_display_normal = (behavior_id == LOW_CONF_ID) or (float(confidence) < BEHAVIOR_MIN_CONFIDENCE)
+        if confidence is None:
+            confidence = 0.0
+        is_display_normal = (behavior_id == LOW_CONF_ID) or (float(confidence) < _BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD)
         if is_display_normal:
             # 顯示層使用中文標籤（若可用字型）
             low_text = get_behavior_name(LOW_CONF_ID, use_text=False, fallback=LOW_CONF_TEXT, confidence=confidence)

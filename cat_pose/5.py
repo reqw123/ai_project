@@ -13,7 +13,7 @@ from datetime import datetime
 NODE_RED_URL = "http://localhost:1880/camera/frame"
 CAMERA_INDEX = 0
 TARGET_FPS = 15
-JPEG_QUALITY = 75
+JPEG_QUALITY = 60
 RESIZE_WIDTH = 640
 SHOW_PREVIEW = False
 REQUEST_TIMEOUT = 0.5
