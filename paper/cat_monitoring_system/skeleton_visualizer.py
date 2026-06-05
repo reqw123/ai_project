@@ -34,6 +34,17 @@ from models.stgcn_model import (
 SEQUENCE_LENGTH = 16
 VELOCITY_CONF_THRESHOLD = 0.1
 VELOCITY_PANEL_TOP_K = 3
+# Stride for velocity finite-difference: velocity[t] = (pos[t] - pos[t-stride]) / stride.
+# stride=1 is adjacent-frame diff (sensitive to YOLO jitter).
+# stride=2~3 suppresses 1-frame jitter while still capturing real sustained movement correctly
+# (larger stride = more jitter suppression, but also more lag for real fast events).
+VELOCITY_FRAME_STRIDE = 2
+# Speeds below this threshold (in normalized skeleton coords) are treated as zero (YOLO jitter dead zone).
+# Raise if the velocity panel flickers during static poses; lower if slow movements aren't detected.
+VELOCITY_DEAD_ZONE = 0.015
+# EMA alpha for smoothing the displayed bar values across frames (lower = smoother / slower response).
+# 0.10-0.15 gives stable bars; raise toward 0.3 if you want faster visual response.
+VELOCITY_DISPLAY_EMA_ALPHA = 0.12
 
 # 17 關鍵點名稱（YOLO-Pose v11 cat skeleton）
 KEYPOINT_NAMES = [
@@ -67,6 +78,7 @@ def _velocity_heat_color(speed, max_speed):
     return _blend_color(mid, fast, (ratio - 0.5) / 0.5)
 
 
+
 def compute_velocity_overlay(seq_array, conf_arr, conf_threshold=VELOCITY_CONF_THRESHOLD):
     """Compute velocity overlay summary from sequence arrays.
     seq_array: (T, J, 2)  conf_arr: (T, J)
@@ -80,9 +92,12 @@ def compute_velocity_overlay(seq_array, conf_arr, conf_threshold=VELOCITY_CONF_T
     seq = orientation_normalize(seq)
     seq = normalize_skeleton_coords(seq)
 
+    stride = max(1, min(VELOCITY_FRAME_STRIDE, seq.shape[0] - 1))
     velocity = np.zeros_like(seq)
-    velocity[1:] = seq[1:] - seq[:-1]
+    velocity[stride:] = (seq[stride:] - seq[:-stride]) / stride
+    velocity[:stride] = velocity[stride : stride + 1]  # fill leading frames with nearest valid
     speed_map = np.linalg.norm(velocity, axis=-1)  # T x J
+    speed_map = np.where(speed_map < VELOCITY_DEAD_ZONE, 0.0, speed_map)
 
     valid_mask = conf_arr > conf_threshold
     joint_scores = np.zeros(speed_map.shape[1], dtype=np.float32)
@@ -267,7 +282,7 @@ SKELETON_EDGE_COLORS = [
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch"
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\shake"
 VIDEO_LIST = [
     r"C:\Users\homec\Downloads\OneDrive_1_2026-5-21",
     r"C:\Users\homec\Downloads\OneDrive_2_2026-5-21",
@@ -277,7 +292,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_86.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_90.pt"
 
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
@@ -540,6 +555,8 @@ def main():
     stop_all = False
     switch_delta = 0
     is_paused = False
+    _vel_smooth_scores = None  # EMA state for displayed bar values
+    _vel_smooth_peak = None    # EMA state for bar scale reference
 
     def _ui_scale():
         return max(0.6, base_win_h / 720.0)
@@ -552,10 +569,10 @@ def main():
         cv2.resizeWindow(WINDOW_NAME, width, height)
 
     def _handle_key(key, cap_obj=None, in_pause_loop=False):
-        nonlocal window_scale, switch_delta, stop_all, is_paused, raw_frame_idx, ema_kpts, keypoints_buffer
+        nonlocal window_scale, switch_delta, stop_all, is_paused, raw_frame_idx, ema_kpts, keypoints_buffer, _vel_smooth_scores, _vel_smooth_peak
 
         def _seek_display_frame(direction):
-            nonlocal raw_frame_idx, ema_kpts, keypoints_buffer, is_paused
+            nonlocal raw_frame_idx, ema_kpts, keypoints_buffer, is_paused, _vel_smooth_scores, _vel_smooth_peak
             if cap_obj is None:
                 return "noop"
             current_pos = int(cap_obj.get(cv2.CAP_PROP_POS_FRAMES) or 0)
@@ -564,6 +581,8 @@ def main():
             raw_frame_idx = max(0, target_pos - 1)
             ema_kpts = None
             keypoints_buffer.clear()
+            _vel_smooth_scores = None
+            _vel_smooth_peak = None
             is_paused = True
             return "seek"
 
@@ -585,10 +604,18 @@ def main():
         if key == ord("d") and is_paused:
             return _seek_display_frame(1)
         if key == ord("2"):
+            keypoints_buffer.clear()
+            ema_kpts = None
+            _vel_smooth_scores = None
+            _vel_smooth_peak = None
             switch_delta = 1
             is_paused = False
             return "break"
         if key == ord("1"):
+            keypoints_buffer.clear()
+            ema_kpts = None
+            _vel_smooth_scores = None
+            _vel_smooth_peak = None
             switch_delta = -1
             is_paused = False
             return "break"
@@ -671,6 +698,8 @@ def main():
         raw_frame_idx = 0
         ema_kpts = None
         keypoints_buffer = deque(maxlen=SEQUENCE_LENGTH)
+        _vel_smooth_scores = None
+        _vel_smooth_peak = None
 
         while True:
             ret, frame = cap.read()
@@ -723,6 +752,21 @@ def main():
                     kpts_arr = np.array([item[0] for item in keypoints_buffer])  # T x J x 2
                     conf_arr = np.array([item[1] for item in keypoints_buffer])  # T x J
                     velocity_ovl = compute_velocity_overlay(kpts_arr, conf_arr, conf_threshold=VELOCITY_CONF_THRESHOLD)
+
+                    # smooth displayed bar values with EMA to prevent flickering
+                    if velocity_ovl is not None:
+                        raw_scores = velocity_ovl['joint_scores']
+                        raw_peak = velocity_ovl['peak_speed']
+                        if _vel_smooth_scores is None or len(_vel_smooth_scores) != len(raw_scores):
+                            _vel_smooth_scores = raw_scores.copy()
+                            _vel_smooth_peak = float(raw_peak)
+                        else:
+                            a = VELOCITY_DISPLAY_EMA_ALPHA
+                            _vel_smooth_scores = a * raw_scores + (1.0 - a) * _vel_smooth_scores
+                            _vel_smooth_peak = a * float(raw_peak) + (1.0 - a) * _vel_smooth_peak
+                        velocity_ovl = dict(velocity_ovl)
+                        velocity_ovl['joint_scores'] = _vel_smooth_scores
+                        velocity_ovl['peak_speed'] = max(float(_vel_smooth_peak), 1e-6)
 
                 # draw per-joint velocity heat rings on top of skeleton
                 if velocity_ovl is not None:

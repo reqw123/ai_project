@@ -33,13 +33,13 @@ from utils.constants import (
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch" # 主要作為資料夾來源（會遞迴掃描影片）
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick" # 主要作為資料夾來源（會遞迴掃描影片）
 VIDEO_LIST = [
     # 只放「單一影片檔案路徑」
-    r"C:\Users\homec\Downloads\OneDrive_1_2026-5-21",
-    r"C:\Users\homec\Downloads\OneDrive_2_2026-5-21", 
-    r"C:\Users\homec\Downloads\OneDrive_3_2026-5-21",
-    r"C:\Users\homec\Downloads\OneDrive_4_2026-5-21",
+    r"c:\Users\homec\Downloads\6月4日.mp4",
+    #r"C:\Users\homec\Downloads\OneDrive_2_2026-5-21", 
+    #r"C:\Users\homec\Downloads\OneDrive_3_2026-5-21",
+    #r"C:\Users\homec\Downloads\OneDrive_4_2026-5-21",
   #  r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\2448166_Cat_Licking_1920x1080.mp4",
   #  r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\2404508_Cat_Licking_1920x1080.mp4",#不要刪
   #  r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\5878298_Fur_Baby_Cat_1920x1080.mp4",#不要刪
@@ -48,7 +48,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_88.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_91.pt"
 
 # 輸出 CSV 路徑（可直接在此處修改）
 OUTPUT_CSV_PATH = r"C:\Users\homec\left_right_ear_distance.csv"

@@ -62,6 +62,31 @@ def _env_video_input(name, default):
         return value
 
 
+def _env_size(name, default):
+    """讀取尺寸設定：支援 640x480、640,480、640 480；無效時回傳預設值。"""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip().lower()
+    if not value or value in {"none", "null", "off", "false"}:
+        return default
+
+    parts = [part for part in value.replace("x", ",").replace(" ", ",").split(",") if part]
+    if len(parts) != 2:
+        return default
+
+    try:
+        width = int(parts[0])
+        height = int(parts[1])
+    except (TypeError, ValueError):
+        return default
+
+    if width <= 0 or height <= 0:
+        return default
+
+    return (width, height)
+
+
 def _is_valid_port(port):
     return isinstance(port, int) and 1 <= port <= 65535
 
@@ -341,7 +366,7 @@ class VisualizationConfig:
 
     # 串流輸出優化。
     # STREAM_DISPLAY_SIZE: None 代表維持原始解析度；(寬, 高) 例如 (480, 480) 代表先縮小再編碼，降低頻寬但犧牲畫質。
-    STREAM_DISPLAY_SIZE = None
+    STREAM_DISPLAY_SIZE = _env_size("CAT_MONITORING_STREAM_DISPLAY_SIZE", None)
 
     # FAST_STREAM_OVERLAY: True 代表先在原始解析度畫 overlay 再縮放；False 代表先縮放再畫 overlay。
     FAST_STREAM_OVERLAY = True
@@ -409,12 +434,18 @@ def get_config_summary():
             - 特徵列表: {STGCNConfig.FEATURE_NAMES}
       - 行為類別: {STGCNConfig.CLASS_NAMES}
       - 層數: {STGCNConfig.NUM_LAYERS}
+        - 目標模型 FPS: {STGCNConfig.TARGET_MODEL_FPS}
       - 設備: {STGCNConfig.DEVICE}
     
     🌐 Flask 服務:
       - 主機: {FlaskConfig.HOST}
       - 埠號: {FlaskConfig.PORT}
+            - JPEG 品質: {FlaskConfig.JPEG_QUALITY}
       - 串流 FPS: {FlaskConfig.STREAM_FPS}
+
+        🎞️ 串流視覺化:
+            - 串流縮放尺寸: {VisualizationConfig.STREAM_DISPLAY_SIZE}
+            - 串流疊圖模式: {VisualizationConfig.FAST_STREAM_OVERLAY}
     
     🔗 Node-RED 連線:
       - 主機: {NodeRedConfig.HOST}:{NodeRedConfig.PORT}
@@ -455,12 +486,23 @@ def validate_all_config():
             errors.append(f"YOLO KEYPOINT_CONFIDENCE_THRESHOLD 應在 [0,1]: {YOLOConfig.KEYPOINT_CONFIDENCE_THRESHOLD}")
         if STGCNConfig.SEQUENCE_LENGTH <= 0:
             errors.append(f"ST-GCN SEQUENCE_LENGTH 必須 > 0: {STGCNConfig.SEQUENCE_LENGTH}")
+        if STGCNConfig.TARGET_MODEL_FPS <= 0:
+            errors.append(f"ST-GCN TARGET_MODEL_FPS 必須 > 0: {STGCNConfig.TARGET_MODEL_FPS}")
         if not STGCNConfig.FEATURE_NAMES:
             errors.append("ST-GCN FEATURE_NAMES 不可為空")
         if STGCNConfig.IN_CHANNELS <= 0:
             errors.append(f"ST-GCN IN_CHANNELS 必須 > 0: {STGCNConfig.IN_CHANNELS}")
         if not (0.0 < STGCNConfig.KP_EMA_ALPHA <= 1.0):
             errors.append(f"KP_EMA_ALPHA 應在 (0,1]: {STGCNConfig.KP_EMA_ALPHA}")
+        if VisualizationConfig.STREAM_DISPLAY_SIZE is not None:
+            stream_size = VisualizationConfig.STREAM_DISPLAY_SIZE
+            valid_stream_size = (
+                isinstance(stream_size, tuple)
+                and len(stream_size) == 2
+                and all(isinstance(value, int) and value > 0 for value in stream_size)
+            )
+            if not valid_stream_size:
+                errors.append(f"STREAM_DISPLAY_SIZE 必須是 (寬, 高) 且都 > 0: {VisualizationConfig.STREAM_DISPLAY_SIZE}")
         if FlaskConfig.JPEG_QUALITY < 1 or FlaskConfig.JPEG_QUALITY > 100:
             errors.append(f"JPEG_QUALITY 應在 [1,100]: {FlaskConfig.JPEG_QUALITY}")
         if NodeRedConfig.TIMEOUT <= 0:
@@ -521,6 +563,11 @@ def get_runtime_config_snapshot():
             "target_model_fps": STGCNConfig.TARGET_MODEL_FPS,
             "enable_fps_downsample": STGCNConfig.ENABLE_FPS_DOWNSAMPLE,
             "kp_ema_alpha": STGCNConfig.KP_EMA_ALPHA,
+        },
+        "visualization": {
+            "stream_display_size": VisualizationConfig.STREAM_DISPLAY_SIZE,
+            "fast_stream_overlay": VisualizationConfig.FAST_STREAM_OVERLAY,
+            "clip_seconds": VisualizationConfig.CLIP_SECONDS,
         },
         "behavior_tracking": {
             "stgcn_behavior_label_confidence_threshold": BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD,

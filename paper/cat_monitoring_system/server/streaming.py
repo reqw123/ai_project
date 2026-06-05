@@ -5,7 +5,7 @@ import threading
 import cv2
 import time
 from collections import deque
-from config import STGCNConfig, VisualizationConfig
+from config import FlaskConfig, STGCNConfig, VisualizationConfig
 
 _TARGET_MODEL_FPS = STGCNConfig.TARGET_MODEL_FPS
 _ENABLE_FPS_DOWNSAMPLE = STGCNConfig.ENABLE_FPS_DOWNSAMPLE
@@ -78,11 +78,7 @@ class SharedFrameStreamer:
                 return None
             frame_copy = self.latest_frame.copy()
 
-        try:
-            from config import FlaskConfig
-            q = int(getattr(FlaskConfig, 'JPEG_QUALITY', 60))
-        except Exception:
-            q = 60
+        q = int(FlaskConfig.JPEG_QUALITY)
         q = max(1, min(q, 100))
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), q]
         _, buffer = cv2.imencode('.jpg', frame_copy, encode_param)
