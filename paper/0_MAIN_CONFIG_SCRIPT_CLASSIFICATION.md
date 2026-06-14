@@ -8,7 +8,7 @@
 
 **綁定（Runtime / 被 main.py / Flask app 直接或間接使用）**
 - `cat_monitoring_system/server/flask_app.py` : Flask app 工廠，啟動與註冊路由（必載）。
-- `cat_monitoring_system/server/routes.py` : 定義 `/stream`、`/status`、`/` 等路由（被 app 載入）。
+- `cat_monitoring_system/server/routes.py` : 定義 `/stream`、`/` 等路由（被 app 載入）。
 - `cat_monitoring_system/server/streaming.py` : SharedFrameStreamer 與背景串流管理（被 routes / app 啟動使用）。
 - `cat_monitoring_system/processors/frame_processor.py` : 幀級處理核心（YOLO→GCN→overlay→輸出），runtime pipeline 核心。
 - `cat_monitoring_system/processors/anomaly_detector.py` : 異常檢測模組（frame_processor 使用）。
@@ -16,7 +16,7 @@
 - `cat_monitoring_system/detectors/keypoint_detector.py` : YOLO-Pose 偵測封裝（frame_processor 與其他模組共用）。
 - `cat_monitoring_system/detectors/behavior_classifier.py` : ST-GCN 分類器封裝（frame_processor 使用）。
 - `cat_monitoring_system/models/stgcn_model.py` : ST-GCN 模型實作（行為分類 runtime 需要）。
-- `cat_monitoring_system/trackers/behavior_tracker.py` : 行為追蹤與統計（/status 與 Node-RED 輸出來源）。
+- `cat_monitoring_system/trackers/behavior_tracker.py` : 行為追蹤與統計（Node-RED 輸出來源）。
 - `cat_monitoring_system/logutils/csv_logger.py` : CSV 日誌寫入（runtime logging）。
 - `cat_monitoring_system/communication/nodered_client.py` : Node-RED 通訊封裝（main.py 與 pipeline 可呼叫）。
 - `cat_monitoring_system/utils/constants.py` : 共用顏色、骨架連線、行為名稱與低信心 sentinel 常量（visualizer / frame_processor / helpers 會用到）。
@@ -56,7 +56,7 @@
 	- 被呼叫者：由 `cat_monitoring_system/main.py` 在啟動時呼叫。
 
 - `cat_monitoring_system/server/routes.py`
-	- 主要符號：`register_routes(app)`、路由處理函式如 `/stream`, `/status`, `/api/behavior_history`, `/`, `/python_online`。
+	- 主要符號：`register_routes(app)`、路由處理函式如 `/stream`, `/api/behavior_history`, `/`, `/python_online`。
 	- 呼叫關係：由 `create_app()` 透過 `register_routes()` 註冊。路由內會建立或使用 `SharedFrameStreamer`、`FrameProcessor` 與 `ImprovedBehaviorTracker`。
 	- 其他依賴：`config.py`（讀取 ModelPaths / FlaskConfig / NodeRedConfig）、`server/streaming.py`、`processors/frame_processor.py`、`communication/nodered_client.py`、`models.stgcn_model.interpolate_missing()`、`utils.helpers.get_ip()`。
 

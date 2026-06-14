@@ -1,6 +1,24 @@
-
+# ============================================================
+#  骨架資料集收集與手動標注工具
+# ============================================================
+#  frame label 三種狀態：
+#
+#  狀態  說明                                    frame label        需處理
+#  ────  ──────────────────────────────────────  ─────────────────  ──────
+#  1     批次提取（process_all_videos），          全段 = 資料夾名稱   否
+#        從未開啟標注模式                          (walk/lick/…)
+#
+#  2     開啟標注模式，有標記至少一個區間           區間內 = 行為標籤   否
+#                                                其餘幀 = unannotated
+#                                                （訓練時自動過濾）
+#
+#  3     開啟標注模式，未標任何區間直接儲存         保留原有 label      否
+#        （保護機制：action_intervals 為空時       不覆寫              ）
+#        不覆寫 frame label）
+# ============================================================
 
 import os
+import re
 import json
 import time
 import cv2
@@ -8,7 +26,15 @@ import numpy as np
 import shutil
 from pathlib import Path
 from ultralytics import YOLO
-from tqdm import tqdm   
+from tqdm import tqdm
+
+_BEHAVIOR_RE    = re.compile(r"(walk|lick|scratch|shake|stop)", re.IGNORECASE)
+_BEHAVIOR_ORDER = ['walk', 'lick', 'scratch', 'shake', 'stop']
+
+def _parse_behavior(name: str):
+    """從檔名抽取行為關鍵字，找不到回傳 None。"""
+    m = _BEHAVIOR_RE.search(name)
+    return m.group(1).lower() if m else None
 
 # ==================== Configuration ====================
 # ==================== Configuration ====================
@@ -20,7 +46,7 @@ VIDEO_FOLDERS = [
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\stop",
 ]
 OUTPUT_FOLDER = r"C:\AI_Project\paper\skeletons/"
-MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_90.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
+MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_94.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
 TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5
@@ -28,62 +54,86 @@ KP_CONF_THRESHOLD = 0.3
 # ==================== Main Processing Function ====================
 
 # 恢復批次推論多資料夾影片功能
-def process_all_videos(overwrite=False):
+def process_all_videos():
     """
-    Main function to process all videos in the input folders (VIDEO_FOLDERS).
-
-    Args:
-        overwrite: 若為 True 才清空輸出資料夾；預設 False（增量模式，跳過已存在的 JSON）。
+    批次提取骨架（增量模式）。
+    每次執行前先比對 OUTPUT_FOLDER 內現有 JSON，已存在的影片直接跳過，
+    不清空資料夾。顯示各類別現有資料量後等待確認才載入模型。
     """
     print("="*60)
     print("Skeleton Extraction Pipeline (Batch)")
     print("="*60)
     setup_directories()
-    if overwrite:
-        print("[INFO] --overwrite 模式：清空輸出資料夾")
-        clear_output_folder()
-    else:
-        print("[INFO] 增量模式：已存在的 JSON 不覆蓋")
 
     video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv']
+
+    # ── 步驟 1：收集所有影片，與 OUTPUT_FOLDER 現有 JSON 比對檔名 ─────────────
+    existing_stems = {p.stem for p in Path(OUTPUT_FOLDER).glob("*.json")}
+
+    video_files = []
     for folder in VIDEO_FOLDERS:
         video_folder = Path(folder)
         if not video_folder.exists():
             print(f"[Warning] Video folder not found: {folder}")
             continue
         found = [f for f in video_folder.iterdir() if f.suffix.lower() in video_extensions]
-        print(f"{folder} 影片數量: {len(found)}")
+        video_files.extend(found)
 
+    if not video_files:
+        print(f"✗ No video files found in any of the specified folders.")
+        print(f"  Supported formats: {', '.join(video_extensions)}")
+        return
+
+    skip_list = [v for v in video_files if v.stem in existing_stems]
+    todo_list = [v for v in video_files if v.stem not in existing_stems]
+
+    print(f"\n影片總數：{len(video_files)}   已存在（跳過）：{len(skip_list)}   待提取：{len(todo_list)}")
+    if skip_list:
+        print("  [Skip]", "  ".join(v.name for v in skip_list))
+    if todo_list:
+        print("  [Todo]")
+        for v in todo_list:
+            print(f"    {v.name}")
+
+    # ── 步驟 2：統計現有 skeleton 資料夾各類別數量 ────────────────────────────
+    from collections import Counter
+    existing_jsons = list(Path(OUTPUT_FOLDER).glob("*.json"))
+    class_counts: Counter = Counter()
+    for jp in existing_jsons:
+        behavior = _parse_behavior(jp.stem) or 'unknown'
+        class_counts[behavior] += 1
+
+    print(f"\n現有 skeleton 各類別（共 {len(existing_jsons)} 筆）：")
+    sep = "─" * 40
+    print(sep)
+    for cls in _BEHAVIOR_ORDER + ['unknown']:
+        if cls in class_counts:
+            bar = '█' * class_counts[cls]
+            print(f"  {cls:<10} {class_counts[cls]:>4} 筆  {bar}")
+    print(sep)
+
+    if not todo_list:
+        print("\n✓ 所有影片皆已提取，無需重新處理。")
+        return
+
+    # ── 步驟 3：確認後才載入模型 ─────────────────────────────────────────────
+    confirm = input('\n確認後輸入 "ok" 開始提取（其他任意鍵取消）：').strip().lower()
+    if confirm != "ok":
+        print("✗ 已取消。")
+        return
+
+    print()
     pose_extractor = PoseExtractor(
         model_path=MODEL_PATH,
         imgsz=IMGSZ,
         conf_threshold=CONF_THRESHOLD
     )
 
-    video_files = []
-    for folder in VIDEO_FOLDERS:
-        video_folder = Path(folder)
-        if not video_folder.exists():
-            continue
-        found = [f for f in video_folder.iterdir() if f.suffix.lower() in video_extensions]
-        video_files.extend(found)
-
-    if len(video_files) == 0:
-        print(f"✗ No video files found in any of the specified folders.")
-        print(f"  Supported formats: {', '.join(video_extensions)}")
-        return
-
-    print(f"\nFound {len(video_files)} video(s) to process from all folders\n")
     results_summary = []
-    for idx, video_path in enumerate(video_files, 1):
-        print(f"[{idx}/{len(video_files)}] Processing: {video_path.name}")
-        video_id = video_path.stem
+    for idx, video_path in enumerate(todo_list, 1):
+        print(f"[{idx}/{len(todo_list)}] Processing: {video_path.name}")
+        video_id    = video_path.stem
         output_path = Path(OUTPUT_FOLDER) / f"{video_id}.json"
-
-        # 增量模式：確實跳過已存在的 JSON
-        if not overwrite and output_path.exists():
-            print(f"  [Skip] {output_path.name} already exists")
-            continue
 
         # 從資料夾名稱取得行為標籤（walk/lick/scratch/shake/stop）
         label = video_path.parent.name.lower()
@@ -490,8 +540,8 @@ _ANNOT_EDGE_COLORS = [
 
 def _list_json_files_menu(folder: str, last_annotated: str = None):
     """
-    在終端列出 folder 內所有 skeleton JSON，顯示標注進度，
-    讓使用者輸入數字選擇，取代難以操作的 filedialog 小視窗。
+    在終端列出 folder 內所有 skeleton JSON，依行為關鍵字分組顯示標注進度。
+    比對失敗的檔案歸入「未分類」群組（不捨棄）。
     回傳選中的路徑字串；q 或無可選時回傳 None。
     """
     p = Path(folder)
@@ -519,53 +569,88 @@ def _list_json_files_menu(folder: str, last_annotated: str = None):
             info['video']  = Path(meta.get('video_filename', '')).name
         except Exception:
             pass
+        # 從檔名抽取行為關鍵字，比對失敗的放入 'unknown'（不捨棄）
+        info['behavior'] = _parse_behavior(jf.stem) or 'unknown'
         file_infos.append(info)
+
+    # 依行為分組（保留順序：walk/lick/scratch/shake/stop/unknown）
+    groups = {b: [] for b in _BEHAVIOR_ORDER}
+    groups['unknown'] = []
+    for fi in file_infos:
+        groups[fi['behavior']].append(fi)
 
     total  = len(file_infos)
     n_done = sum(1 for fi in file_infos if fi['n_intervals'] > 0)
-    sep    = '─' * 70
+    sep    = '─' * 72
 
-    # 計算上次標注的索引（顯示用）
+    # 計算上次標注的全域索引
     last_idx = None
-    if last_annotated:
-        last_name = Path(last_annotated).name
-        last_idx = next((i + 1 for i, fi in enumerate(file_infos)
-                         if fi['path'].name == last_name), None)
+    last_name = Path(last_annotated).name if last_annotated else None
 
-    print(f"\n{'='*70}")
+    print(f"\n{'='*72}")
     print(f"  Annotation file list   {folder}")
-    print(f"  Progress: {n_done}/{total} done  ({total - n_done} remaining)")
-    print(sep)
+    print(f"  總進度: {n_done}/{total} 已完成  ({total - n_done} 待標注)")
 
-    for i, fi in enumerate(file_infos, 1):
-        status   = '✓' if fi['n_intervals'] > 0 else '✗'
-        lbl_tag  = f"[{fi['label'].upper():<8}]" if fi['label'] else ' ' * 11
-        detail   = (f"{fi['n_intervals']} 區間" if fi['n_intervals'] > 0
-                    else f"{fi['total_frames']} 幀  未標注")
-        vid_hint = f"  ← {fi['video']}" if fi['video'] else ''
-        print(f"  [{i:3d}] {status} {fi['path'].name:<38} {lbl_tag}  {detail}{vid_hint}")
+    # 全域流水號（1-based），讓使用者直接輸入
+    global_idx = 0
+    ordered_flat = []   # [(global_1based, fi), ...]
+
+    for behavior in list(_BEHAVIOR_ORDER) + ['unknown']:
+        grp = groups[behavior]
+        if not grp:
+            continue
+
+        g_done  = sum(1 for fi in grp if fi['n_intervals'] > 0)
+        g_total = len(grp)
+
+        print(sep)
+        if behavior == 'unknown':
+            print(f"  ⚠  未分類（檔名無法比對行為關鍵字）  {g_done}/{g_total} 已完成")
+        else:
+            bar = '█' * g_done + '░' * (g_total - g_done)
+            print(f"  [{behavior.upper():<8}]  {g_done}/{g_total} 已完成  {bar}")
+
+        for fi in grp:
+            global_idx += 1
+            ordered_flat.append(fi)
+            status   = '✓' if fi['n_intervals'] > 0 else '·'
+            detail   = (f"{fi['n_intervals']} 區間"
+                        if fi['n_intervals'] > 0
+                        else f"{fi['total_frames']} 幀  未標注")
+            vid_hint = f"  ← {fi['video']}" if fi['video'] else ''
+            # 標記「上次標注」的那一行
+            last_mark = '  ← 上次' if (last_name and
+                                        fi['path'].name == last_name) else ''
+            if last_mark and last_idx is None:
+                last_idx = global_idx
+            print(f"    [{global_idx:3d}] {status}  {fi['path'].name:<38}  {detail}{vid_hint}{last_mark}")
 
     print(sep)
-    print("  輸入編號選擇  |  直接 Enter = 自動選下一個未標注  |  q = 離開")
-    if last_idx is not None:
-        print(f"  上次標注: [{last_idx}] {Path(last_annotated).name}")
+    if last_idx is not None and last_name:
+        print(f"  上次標注: [{last_idx}]  {last_name}")
+    print("  輸入編號選擇  |  直接 Enter = 自動跳下一個未標注  |  q = 離開")
 
     while True:
         choice = input("  > ").strip()
         if choice.lower() == 'q':
             return None
         if choice == '':
-            for fi in file_infos:
-                if fi['n_intervals'] == 0:
-                    print(f"  → 自動選擇: {fi['path'].name}")
-                    return str(fi['path'])
+            # 優先從上次標注的位置往後找，找不到就從頭
+            start = (last_idx or 0)          # last_idx 是 1-based
+            candidates = (list(range(start, len(ordered_flat))) +
+                          list(range(0, start)))
+            for i in candidates:
+                if ordered_flat[i]['n_intervals'] == 0:
+                    chosen = ordered_flat[i]
+                    print(f"  → 自動選擇: [{i+1}] {chosen['path'].name}  [{chosen['behavior'].upper()}]")
+                    return str(chosen['path'])
             print("  所有檔案都已標注完成。")
             return None
         try:
             idx = int(choice) - 1
-            if 0 <= idx < total:
-                return str(file_infos[idx]['path'])
-            print(f"  請輸入 1~{total} 之間的數字")
+            if 0 <= idx < len(ordered_flat):
+                return str(ordered_flat[idx]['path'])
+            print(f"  請輸入 1～{len(ordered_flat)} 之間的數字")
         except ValueError:
             print("  請輸入數字或 q")
 
@@ -616,7 +701,11 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
         'stop':        (0,  165, 255),
         'unannotated': (40,  40,  40),
     }
-    current_action = 'walk'
+    # 從檔名關鍵字預設行為；比對失敗則 fallback 為 walk
+    _default_action = _parse_behavior(Path(json_path).stem)
+    current_action = _default_action if _default_action in VALID_ACTIONS else 'walk'
+    if _default_action:
+        print(f"  [檔名預設行為]  {current_action.upper()}  （可按 1-5 手動切換）")
 
     print("\n操作說明：")
     print("  1/2/3/4 切換行為  |  s 標記起點/終點  |  u 撤銷上一個區間")
@@ -944,14 +1033,18 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
             render_needed = True
         elif key == ord('t'):
             try:
-                sec = float(input("跳轉到秒數: ").strip())
-                closest_idx = min(range(total_frames),
+                raw = input("跳轉（幀號整數 或 秒數如 3.5 / 3.5s）: ").strip()
+                if '.' in raw or raw.endswith('s'):
+                    sec = np.float64(raw.rstrip('s'))
+                    cur_idx = min(range(total_frames),
                                   key=lambda i: abs(frames[i].get('timestamp', 0) - sec))
-                cur_idx    = closest_idx
+                else:
+                    # 1-based 幀號輸入
+                    cur_idx = max(0, min(total_frames - 1, int(raw) - 1))
                 needs_seek = True
                 playing    = False
                 render_needed = True
-                print(f"  跳轉到第 {cur_idx+1} 幀 ({frames[cur_idx].get('timestamp',0):.2f}s)")
+                print(f"  跳轉到第 {cur_idx+1} 幀 ({frames[cur_idx].get('timestamp', 0):.2f}s)")
             except Exception as e:
                 print(f"  ✗ 跳轉失敗: {e}")
         elif playing and key == 0xFF:
@@ -969,6 +1062,15 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
         cv2.waitKey(1)
     if cap:
         cap.release()
+
+    # ── frame label 三種狀態 ────────────────────────────────────────────────────
+    # 狀態 1：批次提取（process_all_videos）、從未開啟標注模式
+    #         → 每幀 label = 資料夾名稱（walk/lick/…），全段有效，無需處理
+    # 狀態 2：開啟標注模式並標記了至少一個區間後儲存
+    #         → 區間內 = 行為標籤，其餘幀 = 'unannotated'（訓練時自動過濾）
+    # 狀態 3：開啟標注模式但未標記任何區間直接儲存（保護機制）
+    #         → 偵測到 action_intervals 為空，保留原有 frame label 不覆寫
+    # ────────────────────────────────────────────────────────────────────────────
 
     # 依行為類別分組並合併各自重疊區段
     from collections import defaultdict
@@ -992,19 +1094,21 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
             action_intervals.append({"action": act, "start": int(s), "end": int(e)})
     action_intervals.sort(key=lambda x: x['start'])
 
-    # 產生 frame-level label（預設為 unannotated，只有明確標記的區段才有標籤）
-    frame_labels = ['unannotated'] * total_frames
-    for iv in action_intervals:
-        for i in range(iv['start'], iv['end'] + 1):
-            if 0 <= i < total_frames:
-                frame_labels[i] = iv['action']
-
-    # 空白區間維持 unannotated，訓練時用 label != 'unannotated' 過濾，不自動填 normal
+    # 產生 frame-level label
+    # 保護：若本次未標記任何區間，保留幀的原有標籤（批次提取的資料整段皆有效）
+    # 只有在有區間標記時才覆寫，避免開啟後直接 q 存檔把批次標籤全清成 unannotated
     all_intervals = sorted(action_intervals, key=lambda x: x['start'])
 
-    # 寫回每一幀
-    for i, frame in enumerate(frames):
-        frame['label'] = frame_labels[i]
+    if not action_intervals:
+        print("  [保護] 未標記任何區間，保留原有 frame label（不覆寫）")
+    else:
+        frame_labels = ['unannotated'] * total_frames
+        for iv in action_intervals:
+            for i in range(iv['start'], iv['end'] + 1):
+                if 0 <= i < total_frames:
+                    frame_labels[i] = iv['action']
+        for i, frame in enumerate(frames):
+            frame['label'] = frame_labels[i]
 
     out_json = data.copy()
     out_json['action_intervals'] = all_intervals
@@ -1072,12 +1176,6 @@ def manual_action_labeling():
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--overwrite', action='store_true',
-                        help='清空輸出資料夾後重新提取（預設：增量模式）')
-    args, _ = parser.parse_known_args()
-
     print("\n==== Cat Skeleton 批次推論/手動標註 ====")
     print("1. 批次推論五個資料夾影片 (YOLO-Pose)")
     print("   → 影片依資料夾名稱 (walk/lick/scratch/shake/stop) 自動標記，可直接訓練")
@@ -1085,7 +1183,7 @@ if __name__ == "__main__":
     print("   → 適用影片含多種行為、需精確逐段標記的情況")
     mode = input("請選擇模式 (1/2): ").strip()
     if mode == '1':
-        process_all_videos(overwrite=args.overwrite)
+        process_all_videos()
     elif mode == '2':
         manual_action_labeling()
     else:

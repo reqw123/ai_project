@@ -153,7 +153,7 @@ flowchart LR
 
 - 資料流層：Frame 擷取、YOLO-Pose、EMA 平滑、時間序列 buffer、補點與正規化前處理。
 - 模型流層：ST-GCN 行為分類、異常分析、信心門檻判定。
-- 服務流層：Flask /stream、/status、Node-RED 推送、CSV 記錄、overlay 顯示。
+- 服務流層：Flask /stream、Node-RED 推送、CSV 記錄、overlay 顯示。
 
 ### 3.2 實際資料順序
 
@@ -210,7 +210,7 @@ flowchart LR
   - Flask app factory。
 
 - [cat_monitoring_system/server/routes.py](cat_monitoring_system/server/routes.py)
-  - Flask routes：`/`, `/stream`, `/status`, `/python_online`。
+  - Flask routes：`/`, `/stream`, `/python_online`。
   - 會建立 `FrameProcessor` 與 `SharedFrameStreamer`。
 
 - [cat_monitoring_system/server/streaming.py](cat_monitoring_system/server/streaming.py)

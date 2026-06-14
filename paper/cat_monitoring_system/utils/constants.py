@@ -62,7 +62,6 @@ EAR_DISTANCE_EDGE_COLORS = [
 	(80, 200, 160), (60, 170, 130), (40, 140, 100),
 ]
 
-# 其餘常量保留
 BEHAVIOR_CLASSES = ['walk', 'lick', 'scratch', 'shake', 'stop']
 BEHAVIOR_COLORS = {0: (0, 255, 0), 1: (0, 255, 255), 2: (255, 165, 0), 3: (0, 0, 255), 4: (0, 165, 255)}
 BEHAVIOR_TEXT_MAP = {0: "走動", 1: "舔舐", 2: "搔抓", 3: "甩頭", 4: "靜止"}

@@ -512,7 +512,10 @@ use_attention = any(k.startswith('joint_attention.') for k in state_dict.keys())
 | 訓練 | 梯度裁剪 | `clip_grad_norm_(max_norm=1.0)` | Gradient clipping |
 | 訓練 | ReduceLROnPlateau | LR ×0.5 on plateau | Adaptive learning rate |
 | 訓練 | 早停 | patience=10 | Early stopping |
-| 訓練 | 影片級資料切分 | video-level train/val split | Video-level data split |
+| 訓練 | 影片級資料切分 | video-level train/val split，重疊視窗只在同一 split 內部產生，不跨 split | Video-level data split (prevents sliding-window leakage) |
+| 訓練 | 滑動視窗步長（訓練） | `WINDOW_STRIDE=8`（50% 重疊），定義於 `stgcn_config.yaml`，與推論步長（=16）各自獨立 | Training window stride (50% overlap) |
+| 訓練 | bbox 缺失過濾 | `MAX_NO_DETECT_FRAMES=2`；視窗內 YOLO 未偵測到貓的幀數超過此值則丟棄，定義於 `stgcn_config.yaml` | Bbox-based detection quality filter |
+| ~~訓練~~ | ~~LABEL_PURITY_THRESHOLD~~ | ~~已移除~~：標注方式以 unannotated 作為行為間緩衝，視窗若通過 unannotated 過濾則純度必為 100%，此門檻永遠不觸發 | ~~Removed (dead code)~~ |
 | 增強 | 時間偏移 / 幀丟棄 / 抖動 | `temporal_augment()` | Temporal augmentation |
 | 增強 | 旋轉 / 縮放 / 平移 / 遮蔽 | `spatial_augment()` | Spatial augmentation |
 | 推論 | 信心門檻回退（0.80） | `LOW_CONF_ID` | Confidence threshold fallback |

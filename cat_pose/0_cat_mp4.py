@@ -41,16 +41,16 @@ KEY_RIGHT = 2555904
 
 # ==================== 模型清單（3個） ====================
 MODEL_LIST = [
-    r"C:\ai_project\cat_pose\v11s_75.pt",
-    r"C:\ai_project\cat_pose\v11s_75.pt",
-    r"C:\ai_project\cat_pose\v11s_75.pt"
+    r"C:\cat_pose\tiktok.pt",
+    r"C:\cat_pose\v11s_66.pt",
+    r"C:\cat_pose\worker4.pt"
 ]
 
 # ==================== 影片清單（可放「影片檔」或「資料夾」） ====================
 # - 放影片檔：直接加入播放清單
 # - 放資料夾：自動掃描資料夾內所有影片
 VIDEO_SOURCES = [
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch\scratch8954125567.mp4"  ,  # 6
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick",  # 6
     r"C:\Users\homec\OneDrive\圖片\貓咪\2月18日.mp4",  # 7
     r"C:\Users\homec\OneDrive\圖片\貓咪\2月18日(1).mp4",  # 8
     r"C:\Users\homec\OneDrive\圖片\貓咪\VID20251128115657.mp4",  # 9

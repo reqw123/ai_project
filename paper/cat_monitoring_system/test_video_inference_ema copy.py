@@ -43,8 +43,8 @@ from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
 # ── 五個行為資料夾（按 z/x/c/v/b 切換）────────────────────────────────
-_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存"
-FOLDER_WALK    = rf"{_BASE}\walk"
+_BASE = r"C:\Users\homec\Downloads"
+FOLDER_WALK    = rf"{_BASE}\50"
 FOLDER_LICK    = rf"{_BASE}\lick"
 FOLDER_SCRATCH = rf"{_BASE}\scratch"
 FOLDER_SHAKE   = rf"{_BASE}\shake"
@@ -62,7 +62,7 @@ DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_90.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_92.pt"
 STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_best_022_xy_v_att_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致

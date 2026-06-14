@@ -8,6 +8,7 @@ from pathlib import Path
 from utils.constants import *
 from config import AnomalyDetectionConfig as _AnomalyDetectionConfig
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
+from config import VisualizationConfig as _VisualizationConfig
 from utils.helpers import get_behavior_name
 
 try:
@@ -347,23 +348,23 @@ class Visualizer:
             cv2.putText(frame, label, (start_x + 12, y + bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.86, BLACK, 2, cv2.LINE_AA)
             cv2.putText(frame, label, (start_x + 12, y + bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.86, WHITE, 1, cv2.LINE_AA)
     def draw(self, frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs, show_info=True):
-        # 骨架視覺：採用與耳距腳本一致的邊線/關鍵點配色與連線順序
-        for edge_idx, (i, j) in enumerate(EAR_DISTANCE_SKELETON_EDGES):
-            if i >= len(kpts) or j >= len(kpts):
-                continue
-            if kpt_conf[i] > _AnomalyDetectionConfig.KP_CONF_THRES and kpt_conf[j] > _AnomalyDetectionConfig.KP_CONF_THRES:
-                pt1 = tuple(map(int, kpts[i]))
-                pt2 = tuple(map(int, kpts[j]))
-                color = EAR_DISTANCE_EDGE_COLORS[edge_idx] if edge_idx < len(EAR_DISTANCE_EDGE_COLORS) else (180, 180, 180)
-                cv2.line(frame, pt1, pt2, color, 2)
+        if _VisualizationConfig.SHOW_SKELETON:
+            for edge_idx, (i, j) in enumerate(EAR_DISTANCE_SKELETON_EDGES):
+                if i >= len(kpts) or j >= len(kpts):
+                    continue
+                if kpt_conf[i] > _AnomalyDetectionConfig.KP_CONF_THRES and kpt_conf[j] > _AnomalyDetectionConfig.KP_CONF_THRES:
+                    pt1 = tuple(map(int, kpts[i]))
+                    pt2 = tuple(map(int, kpts[j]))
+                    color = EAR_DISTANCE_EDGE_COLORS[edge_idx] if edge_idx < len(EAR_DISTANCE_EDGE_COLORS) else (180, 180, 180)
+                    cv2.line(frame, pt1, pt2, color, 2)
 
-        for i in range(len(kpts)):
-            if kpt_conf[i] > _AnomalyDetectionConfig.KP_CONF_THRES:
-                pt = tuple(map(int, kpts[i]))
-                color = EAR_DISTANCE_KP_COLORS[i] if i < len(EAR_DISTANCE_KP_COLORS) else COLOR_KPT
-                cv2.circle(frame, pt, 3, color, -1)
+            for i in range(len(kpts)):
+                if kpt_conf[i] > _AnomalyDetectionConfig.KP_CONF_THRES:
+                    pt = tuple(map(int, kpts[i]))
+                    color = EAR_DISTANCE_KP_COLORS[i] if i < len(EAR_DISTANCE_KP_COLORS) else COLOR_KPT
+                    cv2.circle(frame, pt, 3, color, -1)
 
-        # 將 hip.png 貼在 nose 關鍵點上，跟隨鼻子移動
+        # 將貓臉疊層圖像貼在 nose 關鍵點(0)上，跟隨鼻子移動
         overlay_frame = self._get_overlay_frame()
         if overlay_frame is not None and len(kpts) > 0 and kpt_conf[0] > _AnomalyDetectionConfig.KP_CONF_THRES:
             nose_pt = tuple(map(int, kpts[0]))

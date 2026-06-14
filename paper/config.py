@@ -132,10 +132,10 @@ class ModelPaths:
     """模型和資料檔案路徑"""
     
     # YOLO 模型
-    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_90.pt")
+    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_96.pt")
     
     # ST-GCN 模型
-    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_best_022_xy_v_att_on.pth")
+    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_best_033_xy_v_att_on.pth")
     
     # 測試視頻
     VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\6月2日 (2).mp4")
@@ -213,8 +213,9 @@ class STGCNConfig:
     FEATURE_NAMES = FEATURE_SPEC["features"]
     FEATURE_DESCRIPTION = FEATURE_SPEC["description"]
     
-    # 時間步參數
-    WINDOW_STRIDE = _env_int("CAT_MONITORING_STGCN_WINDOW_STRIDE", 2)            # 滑動步長
+    # 推論用滑動步長（每幾幀執行一次 ST-GCN，對應 CLASSIFY_STRIDE）
+    # 訓練用的步長由 stgcn_config.yaml 的 WINDOW_STRIDE 管理，與此無關
+    WINDOW_STRIDE = _env_int("CAT_MONITORING_STGCN_WINDOW_STRIDE", 2)
     
     # 硬體
     DEVICE = _env_str("CAT_MONITORING_STGCN_DEVICE", "cuda")  # 改為 "cpu" 如果無 GPU
@@ -226,7 +227,7 @@ class STGCNConfig:
     # ENABLE_FPS_DOWNSAMPLE: True 代表來源 FPS 高於 TARGET_MODEL_FPS 時自動跳幀；False 代表每幀都處理。
     ENABLE_FPS_DOWNSAMPLE = _env_bool("CAT_MONITORING_ENABLE_FPS_DOWNSAMPLE", True)
 
-    # 關鍵點 EMA 平滑（須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致）ㄋ
+    # 關鍵點 EMA 平滑（須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致）
     # alpha 越大 → 越貼近原始偵測值；alpha 越小 → 越平滑但延遲增加
     KP_EMA_ALPHA = _env_float("CAT_MONITORING_KP_EMA_ALPHA", 1.0)
 
@@ -244,18 +245,17 @@ class STGCNConfig:
 
 # ==================== 異常檢測參數 ====================
 class AnomalyDetectionConfig:
-    """異常檢測和運動分析"""
-    
-    # EMA 參數
-    EMA_ALPHA = 1.0
-    ABNORMAL_THRESHOLD = 0.2
-    MAX_MOTION = 20.0  # 將 motion_score 正規化為 activity_value 時使用的最大值
-    KP_CONF_THRES = 0.5  # 只使用高於此信心的關鍵點來估計 motion_score
-    MIN_BODY_SCALE = 1e-3
-    STABILITY_K = 4.0
-    
-    # 動作檢測敏感度 (0-1，越小越敏感)
-    MOTION_SENSITIVITY = 0.5
+    """靜止偵測與運動分析
+
+    v2 起 motion_score 單位為 body_fraction × 100（每幀位移 / 胸→髖距離 × 100），
+    與訓練管線 normalize_skeleton_coords 一致，消除拍攝距離影響。
+    閾值參考值：靜止呼吸 < 2；舔毛/抓撓 5-15；走路 > 10
+    """
+
+    MAX_MOTION = 20.0            # motion_score 正規化分母（body_fraction×100）；走路約 10-20
+    KP_CONF_THRES = 0.5          # 只使用高於此信心的關鍵點計算 motion_score
+    ROLLING_WINDOW_SIZE = 30     # 滾動均值視窗大小（幀數，30fps ≈ 1 秒）
+    STILL_MOTION_THRESHOLD = 3.0    # 滾動均值低於此值（body_fraction×100）判為靜止；呼吸抖動約 < 2
 
 # ==================== Flask 服務參數 ====================
 class FlaskConfig:
@@ -297,11 +297,11 @@ class BehaviorTrackingConfig:
     MAX_ALERTS_SIZE = _env_int("CAT_MONITORING_MAX_ALERTS_SIZE", 50)      # 警報清單最多保留筆數
     
     # 活動力窗口
-    ACTIVITY_WINDOW_SIZE = _env_int("CAT_MONITORING_ACTIVITY_WINDOW_SIZE", 60)  # 活動力計算用的滑動窗口大小
+    ACTIVITY_WINDOW_SIZE = _env_int("CAT_MONITORING_ACTIVITY_WINDOW_SIZE", 54)   # 30fps × 1.8s = 54；須 ≥ TARGET_MODEL_FPS × ACTIVITY_SCORE_WINDOW_SECONDS
 
     # 行為轉換與活動分數參數
     MIN_RECORD_DURATION_SECONDS = _env_float("CAT_MONITORING_MIN_RECORD_DURATION_SECONDS", 2.0)  # 單一行為最短記錄秒數
-    ACTIVITY_SCORE_WINDOW_SECONDS = _env_float("CAT_MONITORING_ACTIVITY_SCORE_WINDOW_SECONDS", 3.0)  # 活動分數取樣時間窗
+    ACTIVITY_SCORE_WINDOW_SECONDS = _env_float("CAT_MONITORING_ACTIVITY_SCORE_WINDOW_SECONDS", 1.2)  # 活動分數取樣時間窗（秒）；越短反應越快
     DEFAULT_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_DEFAULT_ACTIVITY_WEIGHT", 0.5)  # 沒有持續時間時的預設權重
     LOW_CONFIDENCE_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_LOW_CONFIDENCE_ACTIVITY_WEIGHT", 0.5)  # 低信心幀的活動權重
     STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD = _env_float("CAT_MONITORING_STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD", 0.80,)  # ST-GCN 行為標籤輸出門檻；低於此值視為 normal
@@ -350,7 +350,7 @@ class LoggingConfig:
     # CSV 欄位
     CSV_COLUMNS = [
         "Frame", "Timestamp", "Behavior", "GCN_Confidence",
-        "Abnormal", "Motion_Score", "Stability"
+        "Is_Still", "Motion_Score", "Stability"
     ]
     
     # 日誌等級
@@ -360,6 +360,9 @@ class LoggingConfig:
 class VisualizationConfig:
     """顯示和繪圖參數"""
     
+    # 骨架 UI：True = 畫骨架邊線與關鍵點圓圈；False = 不畫，偵測與推論照常運行
+    SHOW_SKELETON = False
+
     # 覆蓋層顯示設置
     DRAW_OVERLAY_STREAM = True    # Node-RED 串流用
     DRAW_OVERLAY_DEBUG = False     # 本地除錯用
@@ -412,60 +415,94 @@ def get_config_summary():
     """取得配置摘要"""
     summary = f"""
     ╔════════════════════════════════════════════════════════╗
-    ║     貓咪監測系統配置摘要                              ║
+    ║          貓咪監測系統配置摘要                         ║
     ╚════════════════════════════════════════════════════════╝
-    
-    📋 系統信息:
-      - 名稱: {SystemInfo.SYSTEM_NAME}
-      - 版本: {SystemInfo.VERSION}
-      - 模型: {SystemInfo.MODEL_TYPE}
-    
-    📷 YOLO 參數:
-      - 圖像尺寸: {YOLOConfig.IMAGE_SIZE}
-      - 信心閾值: {YOLOConfig.CONFIDENCE_THRESHOLD}
-      - 關鍵點閾值: {YOLOConfig.KEYPOINT_CONFIDENCE_THRESHOLD}
-      - 設備: {YOLOConfig.DEVICE}
-    
-    🧠 ST-GCN 參數:
-      - 時間窗長度: {STGCNConfig.SEQUENCE_LENGTH} 幀
-            - 特徵模式: {STGCNConfig.FEATURE_MODE}
-            - 特徵說明: {STGCNConfig.FEATURE_DESCRIPTION}
-            - 通道數: {STGCNConfig.IN_CHANNELS}
-            - 特徵列表: {STGCNConfig.FEATURE_NAMES}
-      - 行為類別: {STGCNConfig.CLASS_NAMES}
-      - 層數: {STGCNConfig.NUM_LAYERS}
-        - 目標模型 FPS: {STGCNConfig.TARGET_MODEL_FPS}
-      - 設備: {STGCNConfig.DEVICE}
-    
-    🌐 Flask 服務:
-      - 主機: {FlaskConfig.HOST}
-      - 埠號: {FlaskConfig.PORT}
-            - JPEG 品質: {FlaskConfig.JPEG_QUALITY}
-      - 串流 FPS: {FlaskConfig.STREAM_FPS}
 
-        🎞️ 串流視覺化:
-            - 串流縮放尺寸: {VisualizationConfig.STREAM_DISPLAY_SIZE}
-            - 串流疊圖模式: {VisualizationConfig.FAST_STREAM_OVERLAY}
-    
-    🔗 Node-RED 連線:
-      - 主機: {NodeRedConfig.HOST}:{NodeRedConfig.PORT}
-      - 推送間隔: {NodeRedConfig.PUSH_INTERVAL}s
-      - 超時: {NodeRedConfig.TIMEOUT}s
+    📋 系統資訊  (硬編碼: L405 SYSTEM_NAME, L406 VERSION, L407 MODEL_TYPE, L410-411 OUTPUT_SIZE)
+      - 名稱    : {SystemInfo.SYSTEM_NAME}
+      - 版本    : {SystemInfo.VERSION}
+      - 模型    : {SystemInfo.MODEL_TYPE}
+      - 輸出尺寸: {SystemInfo.OUTPUT_WIDTH} × {SystemInfo.OUTPUT_HEIGHT}
 
-        🏷️ 行為標籤門檻:
-            - ST-GCN 行為標籤輸出門檻: {BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD}
-    
-    ⚠️ 異常偵測:
-      - EMA 係數: {AnomalyDetectionConfig.EMA_ALPHA}
-      - 異常閾值: {AnomalyDetectionConfig.ABNORMAL_THRESHOLD}
-    
-    📁 路徑配置:
-      - YOLO 模型: {ModelPaths.YOLO_MODEL}
-      - ST-GCN 模型: {ModelPaths.STGCN_MODEL}
-      - 輸入視頻: {ModelPaths.VIDEO_INPUT}
-      - 日誌目錄: {ModelPaths.LOG_DIR}
-      - 輸出目錄: {ModelPaths.OUTPUT_DIR}
-    
+    📷 YOLO 參數  (硬編碼: L194 TOTAL_KEYPOINTS=17)
+      - 圖像尺寸          : {YOLOConfig.IMAGE_SIZE}
+      - 偵測信心閾值      : {YOLOConfig.CONFIDENCE_THRESHOLD}
+      - 關鍵點信心閾值    : {YOLOConfig.KEYPOINT_CONFIDENCE_THRESHOLD}
+      - 關鍵點總數        : {YOLOConfig.TOTAL_KEYPOINTS}  ← 硬編碼 L194
+      - 設備              : {YOLOConfig.DEVICE}
+
+    🧠 ST-GCN 參數  (硬編碼: L205 NUM_CLASSES=5, L206 NUM_JOINTS=17, L207 NUM_LAYERS=3, L238 CLASS_NAMES)
+      - 時間窗長度 (T)    : {STGCNConfig.SEQUENCE_LENGTH} 幀
+      - 行為類別數        : {STGCNConfig.NUM_CLASSES}  ← 硬編碼 L205
+      - 關節點數          : {STGCNConfig.NUM_JOINTS}  ← 硬編碼 L206
+      - ST-GCN 層數       : {STGCNConfig.NUM_LAYERS}  ← 硬編碼 L207
+      - 特徵模式          : {STGCNConfig.FEATURE_MODE}  ({STGCNConfig.FEATURE_DESCRIPTION})
+      - 輸入通道數        : {STGCNConfig.IN_CHANNELS}
+      - 特徵列表          : {STGCNConfig.FEATURE_NAMES}
+      - 行為類別          : {STGCNConfig.CLASS_NAMES}  ← 硬編碼 L238
+      - 推論滑動步長      : {STGCNConfig.WINDOW_STRIDE} 幀/次  (CLASSIFY_STRIDE，訓練步長由 stgcn_config.yaml 管理)
+      - 目標模型 FPS      : {STGCNConfig.TARGET_MODEL_FPS}
+      - FPS 降採樣        : {STGCNConfig.ENABLE_FPS_DOWNSAMPLE}
+      - 關鍵點 EMA α      : {STGCNConfig.KP_EMA_ALPHA}  (1.0=不平滑)
+      - 設備              : {STGCNConfig.DEVICE}
+
+    🛑 靜止偵測（滾動均值閾值，純 CSV 記錄；單位 body_fraction×100）
+      - 最大動作值        : {AnomalyDetectionConfig.MAX_MOTION}  （body_fraction×100；走路約 10-20）
+      - 關鍵點信心門檻    : {AnomalyDetectionConfig.KP_CONF_THRES}
+      - 滾動視窗大小      : {AnomalyDetectionConfig.ROLLING_WINDOW_SIZE} 幀
+      - 靜止動作門檻      : {AnomalyDetectionConfig.STILL_MOTION_THRESHOLD}  （body_fraction×100；呼吸抖動約 < 2）
+
+    🏷️ 行為追蹤門檻
+      - ST-GCN 行為標籤門檻  : {BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD}
+      - 最短記錄時長         : {BehaviorTrackingConfig.MIN_RECORD_DURATION_SECONDS} s
+      - 活動分數時間窗        : {BehaviorTrackingConfig.ACTIVITY_SCORE_WINDOW_SECONDS} s
+      - 活動力窗口大小        : {BehaviorTrackingConfig.ACTIVITY_WINDOW_SIZE} 幀
+      - 搔抓警報秒數          : {BehaviorTrackingConfig.SCRATCH_ALERT_TIME_SECONDS} s
+      - 搔抓警報次數          : {BehaviorTrackingConfig.SCRATCH_ALERT_COUNT_THRESHOLD} 次
+      - 舔舐警報秒數          : {BehaviorTrackingConfig.LICK_ALERT_TIME_SECONDS} s
+      - 甩頭警報次數          : {BehaviorTrackingConfig.SHAKE_ALERT_COUNT_THRESHOLD} 次
+      - 靜止警報秒數          : {BehaviorTrackingConfig.STOP_ALERT_TIME_SECONDS} s
+      - 低活動 walk 門檻      : {BehaviorTrackingConfig.LOW_ACTIVITY_TIME_THRESHOLD_SECONDS} s
+
+    🌐 Flask 服務
+      - 主機        : {FlaskConfig.HOST}:{FlaskConfig.PORT}
+      - JPEG 品質   : {FlaskConfig.JPEG_QUALITY}
+      - 串流 FPS    : {FlaskConfig.STREAM_FPS}
+      - Debug 模式  : {FlaskConfig.DEBUG}
+
+    🎞️ 串流視覺化  (硬編碼: L367 DRAW_OVERLAY_STREAM, L368 DRAW_OVERLAY_DEBUG,
+                            L375 FAST_STREAM_OVERLAY, L392 FONT_PATH, L393 FONT_SCALE,
+                            L394 FONT_THICKNESS, L397-399 LINE_WIDTH/POINT_RADIUS)
+      - Node-RED 串流疊圖 : {VisualizationConfig.DRAW_OVERLAY_STREAM}  ← 硬編碼 L367
+      - 除錯疊圖          : {VisualizationConfig.DRAW_OVERLAY_DEBUG}  ← 硬編碼 L368
+      - 串流縮放尺寸      : {VisualizationConfig.STREAM_DISPLAY_SIZE}
+      - 快速串流疊圖      : {VisualizationConfig.FAST_STREAM_OVERLAY}  ← 硬編碼 L375
+      - Ring Buffer 秒數  : {VisualizationConfig.CLIP_SECONDS} s
+      - 字型路徑          : {VisualizationConfig.FONT_PATH}  ← 硬編碼 L392
+      - 字型縮放 / 粗細   : {VisualizationConfig.FONT_SCALE} / {VisualizationConfig.FONT_THICKNESS}  ← 硬編碼 L393-394
+      - 骨架線寬 / 框線寬 : {VisualizationConfig.LINE_WIDTH_SKELETON} / {VisualizationConfig.LINE_WIDTH_BOX}  ← 硬編碼 L397-398
+      - 關鍵點半徑        : {VisualizationConfig.POINT_RADIUS}  ← 硬編碼 L399
+
+    🔗 Node-RED 連線
+      - 主機        : {NodeRedConfig.HOST}:{NodeRedConfig.PORT}
+      - 推送間隔    : {NodeRedConfig.PUSH_INTERVAL} s
+      - 超時        : {NodeRedConfig.TIMEOUT} s
+      - Notify 端點 : {NodeRedConfig.ENDPOINT_NOTIFY}
+      - Result 端點 : {NodeRedConfig.ENDPOINT_RESULT}
+
+    📄 日誌設定  (硬編碼: L354-357 CSV_COLUMNS, L360 LOG_LEVEL)
+      - 主要 CSV        : {LoggingConfig.CSV_PATH}
+      - 行為區段 CSV    : {LoggingConfig.SEGMENTS_CSV_PATH}
+      - 日誌等級        : {LoggingConfig.LOG_LEVEL}  ← 硬編碼 L360
+      - CSV 欄位        : {LoggingConfig.CSV_COLUMNS}  ← 硬編碼 L354
+
+    📁 路徑配置
+      - YOLO 模型   : {ModelPaths.YOLO_MODEL}
+      - ST-GCN 模型 : {ModelPaths.STGCN_MODEL}
+      - 輸入視訊    : {ModelPaths.VIDEO_INPUT}
+      - 日誌目錄    : {ModelPaths.LOG_DIR}
+      - 輸出目錄    : {ModelPaths.OUTPUT_DIR}
+
     ╔════════════════════════════════════════════════════════╗
     """
     return summary
@@ -601,18 +638,6 @@ def get_runtime_config_snapshot():
             "model_type": SystemInfo.MODEL_TYPE,
         },
     }
-
-# ==================== 骨架連結定義 ====================
-class SkeletonLinks:
-    """骨架連接定義（COCO 17 點格式）"""
-    
-    HEAD_LINKS = [(0,1), (0,2), (1,2)]
-    BODY_LINKS = [(0,3), (3,4), (4,5)]
-    FRONT_LIMBS = [(3,6), (6,7), (3,8), (8,9)]
-    HIND_LIMBS = [(5,10), (10,11), (5,12), (12,13)]
-    TAIL_LINKS = [(5,14), (14,15), (15,16)]
-    
-    ALL_LINKS = HEAD_LINKS + BODY_LINKS + FRONT_LIMBS + HIND_LIMBS + TAIL_LINKS
 
 # ==================== 主測試 ====================
 if __name__ == "__main__":

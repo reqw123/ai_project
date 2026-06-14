@@ -2,9 +2,11 @@
 Compare two ST-GCN models on up to five labeled videos (walk, lick, scratch, shake, stop).
 
 Metrics (per model, per class):
-  1. Discrete accuracy     — argmax(probs) == true_label  (硬指標)
-  2. Avg true-class prob   — mean(probs[:, true_class])   (軟指標：信心度)
-  3. Macro F1 & confusion matrix                           (分類輪廓)
+  1. Discrete accuracy     — argmax(probs) == true_label       (硬指標)
+  2. Avg true-class prob   — mean(probs[:, true_class])        (軟指標：平均信心)
+  3. Max true-class prob   — max(probs[:, true_class])         (峰值信號：事件偵測能力)
+  4. Event detected        — n_correct >= EVENT_MIN_WINDOWS    (影片層級偵測，對含靜止段影片最公平)
+  5. Macro F1 & confusion matrix                                (分類輪廓)
 
 Output directory: <output>/comparison_NNN_<nameA>_vs_<nameB>/
   NNN = next sequential number, consistent with 0_train_gcn.py convention
@@ -49,22 +51,23 @@ CH_TO_FEATURE = {
 }
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
-DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_90.pt"
+DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_94.pt"
 DEFAULT_IMGSZ   = 640
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16
 DEFAULT_STRIDE  = 2
+EVENT_MIN_WINDOWS = 3   # 事件偵測門檻：一部影片中 ≥ N 個 window 預測正確即視為偵測到該行為
 DEFAULT_DEVICE  = 'cuda'
 
-HARD_MODEL_A    = r"C:\Users\homec\Downloads\stgcn_best_020_xy_v_att_on.pth"
-HARD_MODEL_B    = r"C:\Users\homec\Downloads\stgcn_best_021_xy_v_att_on.pth"
+HARD_MODEL_A    = r"C:\Users\homec\Downloads\stgcn_best_033_xy_v_att_on.pth"
+HARD_MODEL_B    = r"C:\Users\homec\Downloads\stgcn_best_032_xy_v_att_on.pth"
 HARD_NAME_A     = None   # None → auto-derived from filename
 HARD_NAME_B     = None
-HARD_VIDEO_WALK    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\walk_5.mp4"
-HARD_VIDEO_LICK    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\lick9.mp4"
-HARD_VIDEO_SCRATCH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch\scratch_ok (2).mp4"
+HARD_VIDEO_WALK    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\walk1.mp4"
+HARD_VIDEO_LICK    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\lick_9.mp4"
+HARD_VIDEO_SCRATCH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch\scratch_33.mp4"
 HARD_VIDEO_SHAKE   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\shake\shake_15.mp4"
-HARD_VIDEO_STOP    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\stop\6月2日(1).mp4"   # 留空表示跳過 stop 類別評估
+HARD_VIDEO_STOP    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\stop\stop_35.mp4"   # 留空表示跳過 stop 類別評估
 HARD_OUTPUT_DIR    = r"C:\ai_project\paper\cat_monitoring_system\eval_results"
 
 # ── Visual style ──────────────────────────────────────────────────────────
@@ -177,40 +180,47 @@ def evaluate_video(video_path, kp_detector, classifier, feature_mode,
 # ═══════════════════════════════════════════════════════════════════════════
 # Metrics
 # ═══════════════════════════════════════════════════════════════════════════
-def compute_metrics(preds_by_class: dict) -> dict:
+def compute_metrics(preds_by_class: dict,
+                    event_min_windows: int = EVENT_MIN_WINDOWS) -> dict:
     """
     preds_by_class: {class_idx: [pred_dict, ...]}
 
     Per-class metrics:
-      accuracy      — discrete accuracy (argmax == true label)
-      avg_true_prob — mean predicted probability for the true class
-      n_windows     — total inference windows used
+      accuracy        — discrete accuracy (argmax == true label)
+      avg_true_prob   — mean predicted probability for the true class
+      max_true_prob   — peak predicted probability for the true class
+      event_detected  — True if n_correct >= event_min_windows
+      n_correct       — number of windows correctly predicted
+      n_windows       — total inference windows used
 
     Overall metrics:
-      accuracy, macro_f1, confusion_matrix
+      accuracy, macro_f1, event_detection_rate, confusion_matrix
     """
     n_cls = len(BEHAVIOR_CLASSES)
     all_true, all_pred = [], []
-    # 預先為所有類別初始化，避免未提供影片的類別造成 KeyError
-    per_class = {i: {'accuracy': 0.0, 'avg_true_prob': 0.0, 'n_windows': 0}
+    per_class = {i: {'accuracy': 0.0, 'avg_true_prob': 0.0, 'max_true_prob': 0.0,
+                     'event_detected': False, 'n_correct': 0, 'n_windows': 0}
                  for i in range(n_cls)}
 
     for cls_idx, preds in preds_by_class.items():
         if not preds:
             continue
 
-        probs      = np.array([p['probs'] for p in preds])   # (N, C_actual)
-        actual_cls = probs.shape[1]   # 模型實際輸出類別數，可能 < n_cls
+        probs      = np.array([p['probs'] for p in preds])
+        actual_cls = probs.shape[1]
         pred_ids   = np.clip(np.array([p['pred'] for p in preds], dtype=int),
                              0, actual_cls - 1)
 
-        # 若 cls_idx 超出模型輸出範圍（舊模型缺少新類別），avg_true_prob 設 0
-        avg_tp = float(probs[:, cls_idx].mean()) if cls_idx < actual_cls else 0.0
+        probs_cls = probs[:, cls_idx] if cls_idx < actual_cls else np.zeros(len(preds))
+        n_correct = int((pred_ids == cls_idx).sum())
 
         per_class[cls_idx] = {
-            'accuracy':      float((pred_ids == cls_idx).mean()),
-            'avg_true_prob': avg_tp,
-            'n_windows':     len(preds),
+            'accuracy':       float(n_correct / len(preds)),
+            'avg_true_prob':  float(probs_cls.mean()),
+            'max_true_prob':  float(probs_cls.max()),
+            'event_detected': n_correct >= event_min_windows,
+            'n_correct':      n_correct,
+            'n_windows':      len(preds),
         }
         all_true.extend([cls_idx] * len(preds))
         all_pred.extend(pred_ids.tolist())
@@ -218,13 +228,19 @@ def compute_metrics(preds_by_class: dict) -> dict:
     y_true = np.array(all_true)
     y_pred = np.array(all_pred)
 
+    evaluated = [i for i in range(n_cls) if per_class[i]['n_windows'] > 0]
+    event_rate = float(np.mean([per_class[i]['event_detected'] for i in evaluated])) \
+                 if evaluated else 0.0
+
     return {
         'per_class': per_class,
         'overall': {
-            'accuracy': float(accuracy_score(y_true, y_pred)),
-            'macro_f1': float(f1_score(y_true, y_pred, average='macro', zero_division=0)),
+            'accuracy':             float(accuracy_score(y_true, y_pred)),
+            'macro_f1':             float(f1_score(y_true, y_pred, average='macro', zero_division=0)),
+            'event_detection_rate': event_rate,
         },
-        'confusion_matrix': confusion_matrix(y_true, y_pred, labels=list(range(n_cls))),
+        'confusion_matrix':  confusion_matrix(y_true, y_pred, labels=list(range(n_cls))),
+        'event_min_windows': event_min_windows,
     }
 
 
@@ -233,86 +249,105 @@ def compute_metrics(preds_by_class: dict) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 def plot_accuracy_comparison(metrics_a, metrics_b, name_a, name_b, classes, out_path):
     """
-    雙列 grouped bar chart：
-      Row 0 — Discrete Accuracy   (硬指標：argmax 是否正確)
-      Row 1 — Avg True-Class Prob (軟指標：模型對正確類別的平均信心)
-
-    每個 group 右側標示贏家（★）。
+    三列 grouped bar chart：
+      Row 0 — Discrete Accuracy         (硬指標：argmax 是否正確) + ✓/✗ 事件偵測標記
+      Row 1 — Avg True-Class Prob       (軟指標：平均信心)
+      Row 2 — Max True-Class Prob       (峰值信號：整部影片最高信心，反映事件偵測能力)
     """
-    n_cls = len(classes)
+    n_cls  = len(classes)
     x_labels = classes + ['Overall']
-    x = np.arange(len(x_labels))
-    w = 0.33
+    x      = np.arange(len(x_labels))
+    w      = 0.33
+    ev_min = metrics_a.get('event_min_windows', EVENT_MIN_WINDOWS)
 
     def _vals(metrics, key):
-        pc = metrics['per_class']
-        out = [pc[i][key] for i in range(n_cls)]
-        # Overall column
+        pc  = metrics['per_class']
+        out = [pc[i].get(key, 0.0) for i in range(n_cls)]
         if key == 'accuracy':
             out.append(metrics['overall']['accuracy'])
         else:
-            out.append(float(np.mean([pc[i]['avg_true_prob'] for i in range(n_cls)])))
+            out.append(float(np.mean([pc[i].get(key, 0.0) for i in range(n_cls)])))
+        return out
+
+    def _evt(metrics):
+        pc  = metrics['per_class']
+        out = [pc[i].get('event_detected', False) for i in range(n_cls)]
+        # Overall ✓ = 所有已評估類別都偵測到
+        out.append(all(pc[i].get('event_detected', False)
+                       for i in range(n_cls) if pc[i].get('n_windows', 0) > 0))
         return out
 
     acc_a  = _vals(metrics_a, 'accuracy')
     acc_b  = _vals(metrics_b, 'accuracy')
     prob_a = _vals(metrics_a, 'avg_true_prob')
     prob_b = _vals(metrics_b, 'avg_true_prob')
+    max_a  = _vals(metrics_a, 'max_true_prob')
+    max_b  = _vals(metrics_b, 'max_true_prob')
+    evt_a  = _evt(metrics_a)
+    evt_b  = _evt(metrics_b)
 
-    fig, axes = plt.subplots(2, 1, figsize=(11, 9), constrained_layout=True)
+    fig, axes = plt.subplots(3, 1, figsize=(11, 13), constrained_layout=True)
     fig.suptitle(
         f'ST-GCN Model Comparison\n'
         f'A: {name_a}   |   B: {name_b}',
         fontsize=12, fontweight='bold'
     )
 
-    def _draw(ax, vals_a, vals_b, title, ylabel):
+    def _draw(ax, vals_a, vals_b, title, ylabel, evt_a_=None, evt_b_=None):
         bars_a = ax.bar(x - w / 2, vals_a, w, label=f'A: {name_a}', color=_COL_A, alpha=0.88)
         bars_b = ax.bar(x + w / 2, vals_b, w, label=f'B: {name_b}', color=_COL_B, alpha=0.88)
         ax.set_ylabel(ylabel, fontsize=10)
         ax.set_title(title, fontsize=11, fontweight='bold')
         ax.set_xticks(x)
         ax.set_xticklabels(x_labels, fontsize=10)
-        ax.set_ylim(0, 1.18)
+        ax.set_ylim(0, 1.28)
         ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1.0))
         ax.legend(fontsize=9, loc='upper right')
         ax.grid(axis='y', alpha=0.25, linestyle='--')
 
-        # Value labels on bars
         for bar in list(bars_a) + list(bars_b):
             h = bar.get_height()
             if h > 0.01:
                 ax.text(bar.get_x() + bar.get_width() / 2, h + 0.012,
                         f'{h:.1%}', ha='center', va='bottom', fontsize=8)
 
-        # Winner star above each group
         for i in range(len(x_labels)):
             va, vb = vals_a[i], vals_b[i]
-            if abs(va - vb) < 0.005:
-                continue
-            winner_x = x[i] - w / 2 if va > vb else x[i] + w / 2
-            winner_h = max(va, vb)
-            col = _COL_A if va > vb else _COL_B
-            ax.text(winner_x, winner_h + 0.055, '★',
-                    ha='center', va='bottom', fontsize=11, color=col)
+            if abs(va - vb) >= 0.005:
+                winner_x = x[i] - w / 2 if va > vb else x[i] + w / 2
+                col      = _COL_A if va > vb else _COL_B
+                ax.text(winner_x, max(va, vb) + 0.055, '★',
+                        ha='center', va='bottom', fontsize=11, color=col)
 
-        # Δ delta labels between bars
         for i in range(len(x_labels)):
             va, vb = vals_a[i], vals_b[i]
-            diff = abs(va - vb)
-            if diff < 0.005:
-                label = '='
-            else:
-                label = f'Δ{diff:.1%}'
-            ax.text(x[i], 1.09, label, ha='center', va='bottom',
+            diff  = abs(va - vb)
+            label = '=' if diff < 0.005 else f'Δ{diff:.1%}'
+            ax.text(x[i], 1.10, label, ha='center', va='bottom',
                     fontsize=8, color='#555')
 
-    _draw(axes[0], acc_a,  acc_b,
-          'Discrete Accuracy  (argmax == true label)',
-          'Accuracy')
+        # 事件偵測標記 ✓/✗
+        if evt_a_ is not None:
+            for i, det in enumerate(evt_a_):
+                sym, col = ('✓', _COL_A) if det else ('✗', '#bbb')
+                ax.text(x[i] - w / 2, 1.18, sym, ha='center', va='bottom',
+                        fontsize=10, color=col, fontweight='bold')
+        if evt_b_ is not None:
+            for i, det in enumerate(evt_b_):
+                sym, col = ('✓', _COL_B) if det else ('✗', '#bbb')
+                ax.text(x[i] + w / 2, 1.18, sym, ha='center', va='bottom',
+                        fontsize=10, color=col, fontweight='bold')
+
+    _draw(axes[0], acc_a, acc_b,
+          f'Discrete Accuracy  (argmax == true label)\n'
+          f'✓/✗ = event detected (≥{ev_min} correct windows per clip)',
+          'Accuracy', evt_a_=evt_a, evt_b_=evt_b)
     _draw(axes[1], prob_a, prob_b,
           'Avg True-Class Probability  (model conviction)',
           'Avg Prob')
+    _draw(axes[2], max_a, max_b,
+          'Max True-Class Probability  (peak event signal)',
+          'Max Prob')
 
     plt.savefig(out_path, dpi=180, bbox_inches='tight')
     plt.close()
@@ -375,16 +410,20 @@ def save_summary_csv(metrics_a, metrics_b, name_a, name_b, classes, out_path):
         winner = '=' if delta < 0.001 else (name_a if va >= vb else name_b)
         rows.append([label, f'{va:.4f}', f'{vb:.4f}', winner, f'{delta:.4f}'])
 
-    _row('overall_accuracy', metrics_a['overall']['accuracy'], metrics_b['overall']['accuracy'])
-    _row('overall_macro_f1', metrics_a['overall']['macro_f1'], metrics_b['overall']['macro_f1'])
+    _row('overall_accuracy',             metrics_a['overall']['accuracy'],             metrics_b['overall']['accuracy'])
+    _row('overall_macro_f1',             metrics_a['overall']['macro_f1'],             metrics_b['overall']['macro_f1'])
+    _row('overall_event_detection_rate', metrics_a['overall']['event_detection_rate'], metrics_b['overall']['event_detection_rate'])
     rows.append([])   # blank separator
 
     for i, cls in enumerate(classes):
         pa = metrics_a['per_class'][i]
         pb = metrics_b['per_class'][i]
-        _row(f'{cls}_accuracy',      pa['accuracy'],      pb['accuracy'])
-        _row(f'{cls}_avg_true_prob', pa['avg_true_prob'], pb['avg_true_prob'])
-        rows.append([f'{cls}_n_windows', pa['n_windows'], pb['n_windows'], '-', '-'])
+        _row(f'{cls}_accuracy',       pa['accuracy'],      pb['accuracy'])
+        _row(f'{cls}_avg_true_prob',  pa['avg_true_prob'], pb['avg_true_prob'])
+        _row(f'{cls}_max_true_prob',  pa['max_true_prob'], pb['max_true_prob'])
+        rows.append([f'{cls}_event_detected', str(pa['event_detected']), str(pb['event_detected']), '-', '-'])
+        rows.append([f'{cls}_n_correct',  pa['n_correct'],  pb['n_correct'],  '-', '-'])
+        rows.append([f'{cls}_n_windows',  pa['n_windows'],  pb['n_windows'],  '-', '-'])
         rows.append([])
 
     with open(out_path, 'w', newline='', encoding='utf-8') as f:
@@ -406,6 +445,124 @@ def save_preds_csv(preds_by_class: dict, model_name: str, classes, out_dir: Path
                             classes[p['pred']] if 0 <= p['pred'] < len(classes) else 'none',
                             f"{p['conf']:.4f}"] +
                            [f"{x:.4f}" for x in p['probs']])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Composite scoring
+# ═══════════════════════════════════════════════════════════════════════════
+def _score_comparison(metrics_a, metrics_b, name_a, name_b) -> tuple:
+    """
+    多指標加權 Borda 計分，衡量兩個模型的綜合強弱。
+
+    每個指標勝者得 W 分，差距 < 0.2% 視為平手（各得 W/2 分）。
+    加權設計依據文獻慣例：
+      Macro F1 / Min-class acc 各 W=2（最重要，行為辨識首選 + 木桶原則）
+      其餘各 W=1（輔助判斷）
+
+    參考：
+      Macro F1 作為行為辨識主指標 —— NTU RGB+D, Kinetics benchmark 慣例
+      Min-class accuracy (木桶原則) —— 部署可靠性評估
+      Avg true-class prob            —— 對應 ECE 概念, Guo et al. ICML 2017
+      Borda count 多指標排名          —— Kittler et al. 1998
+
+    Returns:
+        (score_a, score_b, breakdown_list)
+    """
+    n_cls     = len(BEHAVIOR_CLASSES)
+    per_a     = metrics_a['per_class']
+    per_b     = metrics_b['per_class']
+    evaluated = [i for i in range(n_cls) if per_a[i]['n_windows'] > 0]
+    ev_min    = metrics_a.get('event_min_windows', EVENT_MIN_WINDOWS)
+
+    candidate_metrics = []
+
+    # ── 1. Overall Accuracy  (W=1) ─────────────────────────────────────────
+    # 最直觀的硬指標，argmax 是否正確；對類別不平衡不敏感。
+    candidate_metrics.append(dict(
+        label='Overall Accuracy', weight=1, higher_better=True,
+        note='argmax 正確率，直觀但不考慮類別平衡',
+        va=metrics_a['overall']['accuracy'],
+        vb=metrics_b['overall']['accuracy'],
+    ))
+
+    # ── 2. Macro F1  (W=2) ─────────────────────────────────────────────────
+    # 行為辨識論文的首選主指標（NTU RGB+D、Kinetics 慣例）。
+    # 分別計算每類 F1 再平均，對少數類別（shake、scratch）更公平。
+    candidate_metrics.append(dict(
+        label='Macro F1', weight=2, higher_better=True,
+        note='類別平均 F1，行為辨識首選指標，兼顧 Precision + Recall',
+        va=metrics_a['overall']['macro_f1'],
+        vb=metrics_b['overall']['macro_f1'],
+    ))
+
+    # ── 3. Avg True-Class Probability  (W=1) ───────────────────────────────
+    # 軟指標：即使 argmax 相同，信心越高的模型部署時越穩定可靠。
+    # 概念上對應 ECE（Expected Calibration Error）中的信心對齊程度。
+    if evaluated:
+        candidate_metrics.append(dict(
+            label='Avg True-Class Prob', weight=1, higher_better=True,
+            note='對正確類別的平均預測機率，反映校準度與部署穩定性（對應 ECE）',
+            va=float(np.mean([per_a[i]['avg_true_prob'] for i in evaluated])),
+            vb=float(np.mean([per_b[i]['avg_true_prob'] for i in evaluated])),
+        ))
+
+    # ── 4. Min Per-Class Accuracy  (W=2) ───────────────────────────────────
+    # 「木桶原則」：最弱的類別決定系統下限。
+    # 部署後若某類完全失效，其他類別再高也無意義。
+    if evaluated:
+        candidate_metrics.append(dict(
+            label='Min Class Accuracy', weight=2, higher_better=True,
+            note='最差類別準確率，衡量部署穩健性（木桶原則，最脆弱的一環）',
+            va=float(min(per_a[i]['accuracy'] for i in evaluated)),
+            vb=float(min(per_b[i]['accuracy'] for i in evaluated)),
+        ))
+
+    # ── 5. Std Per-Class Accuracy  (W=1, lower is better) ──────────────────
+    # 均衡性：各類表現差距小，代表模型對所有行為都一致有效。
+    if len(evaluated) > 1:
+        candidate_metrics.append(dict(
+            label='Std Class Accuracy', weight=1, higher_better=False,
+            note='各類準確率標準差，越小代表各類表現越均衡（↓ lower is better）',
+            va=float(np.std([per_a[i]['accuracy'] for i in evaluated])),
+            vb=float(np.std([per_b[i]['accuracy'] for i in evaluated])),
+        ))
+
+    # ── 6. Event Detection Rate  (W=2) ─────────────────────────────────────
+    # 影片層級偵測率：部署場景最實用的指標。
+    # 一部影片中只要出現 ≥ ev_min 個正確 window，即視為成功偵測到該行為事件。
+    # 對「甩頭影片大部分是靜止」這類場景特別公平，不因靜止段拉低整體 accuracy。
+    candidate_metrics.append(dict(
+        label='Event Detection Rate', weight=2, higher_better=True,
+        note=f'影片層級偵測率，≥{ev_min} windows 正確即算偵測成功（對含靜止段的影片最公平）',
+        va=metrics_a['overall']['event_detection_rate'],
+        vb=metrics_b['overall']['event_detection_rate'],
+    ))
+
+    # ── Borda 加權計分 ─────────────────────────────────────────────────────
+    TIE_THRESHOLD = 0.002   # 差距 < 0.2% 視為平手
+    score_a = score_b = 0.0
+    breakdown = []
+
+    for m in candidate_metrics:
+        va, vb, w = m['va'], m['vb'], m['weight']
+        diff   = abs(va - vb)
+        wins_a = (va > vb) if m['higher_better'] else (va < vb)
+
+        if diff < TIE_THRESHOLD:
+            pts_a = pts_b = w / 2
+            result = '='
+        elif wins_a:
+            pts_a, pts_b = float(w), 0.0
+            result = f'→ {name_a}'
+        else:
+            pts_a, pts_b = 0.0, float(w)
+            result = f'→ {name_b}'
+
+        score_a += pts_a
+        score_b += pts_b
+        breakdown.append({**m, 'pts_a': pts_a, 'pts_b': pts_b, 'result': result})
+
+    return score_a, score_b, breakdown
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -448,17 +605,39 @@ def print_final_summary(metrics_a, metrics_b, name_a, name_b):
         NL,
     ]
 
-    # Overall winner verdict
-    a_pts = (1 if oa > ob else 0) + (1 if fa > fb else 0)
-    b_pts = (1 if ob > oa else 0) + (1 if fb > fa else 0)
-    if a_pts > b_pts:
-        verdict = f'★ {name_a} wins both overall metrics.'
-    elif b_pts > a_pts:
-        verdict = f'★ {name_b} wins both overall metrics.'
+    # 加權 Borda 綜合計分
+    score_a, score_b, score_breakdown = _score_comparison(metrics_a, metrics_b, name_a, name_b)
+    max_score = sum(m['weight'] for m in score_breakdown)
+    if score_a > score_b:
+        verdict = f'★ {name_a} leads on composite score  ({score_a:.1f} / {max_score:.0f} pts)'
+    elif score_b > score_a:
+        verdict = f'★ {name_b} leads on composite score  ({score_b:.1f} / {max_score:.0f} pts)'
     else:
-        verdict = f'★ Split: {name_a} leads Accuracy, {name_b} leads Macro-F1.' \
-                  if oa > ob else f'★ Split: {name_b} leads Accuracy, {name_a} leads Macro-F1.'
+        verdict = f'★ Tie  ({score_a:.1f} / {max_score:.0f} pts each)'
     lines += [f'  {verdict}', NL]
+
+    # Event detection summary
+    ev_min = metrics_a.get('event_min_windows', EVENT_MIN_WINDOWS)
+    edr_a  = metrics_a['overall']['event_detection_rate']
+    edr_b  = metrics_b['overall']['event_detection_rate']
+    lines += [
+        f'● Event Detection  (≥{ev_min} correct windows per clip = detected)',
+        f'  {SEP}',
+    ]
+    for i, cls in enumerate(classes):
+        pa, pb = per_a[i], per_b[i]
+        if pa['n_windows'] == 0 and pb['n_windows'] == 0:
+            continue
+        da = '✓' if pa.get('event_detected', False) else '✗'
+        db = '✓' if pb.get('event_detected', False) else '✗'
+        nc_a, nc_b = pa.get('n_correct', 0), pb.get('n_correct', 0)
+        lines.append(
+            f'  {cls:<10}  A={da} ({nc_a:3d}/{pa["n_windows"]:3d})  '
+            f'B={db} ({nc_b:3d}/{pb["n_windows"]:3d})'
+        )
+    lines.append(f'  Detection rate → A={edr_a:.0%}  B={edr_b:.0%}  '
+                 f'{_winner_str(edr_a, edr_b, name_a, name_b)}')
+    lines.append(NL)
 
     # Per-class accuracy breakdown
     lines += ['● Per-Class Accuracy  (argmax == true label)', f'  {SEP}']
@@ -515,12 +694,28 @@ def print_final_summary(metrics_a, metrics_b, name_a, name_b):
         NL,
     ]
 
+    # 加權 Borda 計分明細
+    lines += ['● Composite Score  (Weighted Borda Count)', f'  {SEP}']
+    lines.append(f'  {"Metric":<26}  W  {"A":>7}  {"B":>7}  {"A pts":>6}  {"B pts":>6}  Result')
+    for m in score_breakdown:
+        dir_hint = '↑' if m['higher_better'] else '↓'
+        lines.append(
+            f'  {m["label"]:<26}  {m["weight"]}  '
+            f'{m["va"]:>7.3f}  {m["vb"]:>7.3f}  '
+            f'{m["pts_a"]:>6.1f}  {m["pts_b"]:>6.1f}  '
+            f'{dir_hint} {m["result"]}'
+        )
+        lines.append(f'    └ {m["note"]}')
+    lines += [f'  {SEP}',
+              f'  {"TOTAL":<26}     {"":>7}  {"":>7}  {score_a:>6.1f}  {score_b:>6.1f}',
+              NL]
+
     # Recommendation
     lines.append('● Recommendation')
-    if a_pts > b_pts:
-        lines.append(f'  {name_a} is the stronger model overall.')
-    elif b_pts > a_pts:
-        lines.append(f'  {name_b} is the stronger model overall.')
+    if score_a > score_b:
+        lines.append(f'  {name_a} is the stronger model  ({score_a:.1f} vs {score_b:.1f} / {max_score:.0f} pts).')
+    elif score_b > score_a:
+        lines.append(f'  {name_b} is the stronger model  ({score_b:.1f} vs {score_a:.1f} / {max_score:.0f} pts).')
     else:
         lines.append(f'  Both models are comparable overall; see per-class breakdown for use-case selection.')
     if biggest_gap >= 0.10:

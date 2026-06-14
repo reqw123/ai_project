@@ -9,12 +9,12 @@ import shutil
 # =====================================================
 MODELS = {
     "640.1": {
-        "path": r"C:\ai_project\cat_pose\v11s_90.pt",
+        "path": r"C:\cat_pose\v11s_50.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     },
     "640.2": {
-        "path": r"C:\ai_project\cat_pose\v11s_90.pt",
+        "path": r"C:\cat_pose\v11s_50.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     }
@@ -24,10 +24,10 @@ MODELS = {
 for cfg in MODELS.values():
     cfg["label"] = Path(cfg["path"]).name
 
-INPUT_DIR = r"C:\Users\homec\Downloads\1"
+INPUT_DIR = r"C:\Users\homec\Downloads\11.yolov8\train\images"
 
-CONF_THRES = 0.5
-KP_CONF_THRES = 0.5       # 關鍵點信心門檻：低於此值的點不列入偏移比較
+CONF_THRES = 0.9
+KP_CONF_THRES = 0.8       # 關鍵點信心門檻：低於此值的點不列入偏移比較
 DIFF_THRES_PERCENT = 2.0  # 偏移閾值：圖片對角線的百分比
 TOTAL_KPTS = 17
 
@@ -41,7 +41,7 @@ MAX_OUTPUT_WIDTH = 3840
 # =====================================================
 # ⭐ cat_Compare 主資料夾
 # =====================================================
-BASE_DIR = Path(r"C:\ai_project\cat_pose")
+BASE_DIR = Path(r"C:\cat_pose\cat_Compare")
 COMPARE_DIR = BASE_DIR / "compare_output"
 OFFSET_DIR = BASE_DIR / "offset_dataset"
 
@@ -95,45 +95,6 @@ for ext in IMAGE_EXT:
 if not image_paths:
     print("⚠ 找不到任何圖片")
     exit()
-
-# =====================================================
-# 貓咪骨架定義（17 關節，COCO 格式重新映射至貓體）
-# =====================================================
-SKELETON_EDGES = [
-    (0, 1), (0, 2), (1, 2),                         # 頭部
-    (0, 3), (3, 4), (4, 5),                         # 身體中軸
-    (3, 6), (6, 7), (3, 8), (8, 9),                # 前肢
-    (5, 10), (10, 11), (5, 12), (12, 13),           # 後肢
-    (5, 14), (14, 15), (15, 16),                     # 尾巴
-]
-
-EDGE_COLORS = [
-    (255, 120,  60), (255, 120,  60), (255, 120,  60),                   # 頭部 — 橙
-    (220, 220,  60), (200, 220,  60), (160, 220,  60),                   # 身體 — 黃
-    (102,  85, 255), (102,  85, 255), (255,  68, 204), (255,  68, 204),  # 前肢 — 紫/粉
-    (255, 170,  34), (255, 170,  34), (  0, 153, 255), (  0, 153, 255),  # 後肢 — 橙/藍
-    ( 80, 200, 160), ( 60, 170, 130), ( 40, 140, 100),                   # 尾巴 — 綠
-]
-
-KEYPOINT_NAMES = [
-    "nose",              # 0
-    "left_ear_tip",      # 1
-    "right_ear_tip",     # 2
-    "chest",             # 3
-    "mid_back",          # 4
-    "hip",               # 5
-    "left_front_elbow",  # 6
-    "left_front_paw",    # 7
-    "right_front_elbow", # 8
-    "right_front_paw",   # 9
-    "left_hind_knee",    # 10
-    "left_hind_paw",     # 11
-    "right_hind_knee",   # 12
-    "right_hind_paw",    # 13
-    "tail_base",         # 14
-    "tail_mid",          # 15
-    "tail_tip",          # 16
-]
 
 # =====================================================
 # 工具函式
@@ -199,33 +160,6 @@ def compute_keypoint_diff(k_ref, k_cmp, diagonal, conf_ref=None, conf_cmp=None):
 
     max_idx = int(np.argmax(diffs_percent))
     return diffs_percent, diffs_px, max_idx
-
-
-def draw_yolo_frame(frame, keypoints, kpt_conf, bbox=None, scale=1.0):
-    """
-    以正確的貓咪骨架連線繪製 frame，取代 results.plot()：
-      - 使用 SKELETON_EDGES（貓體定義），不使用 YOLO 預設 COCO 人體連線
-      - 繪製 bounding box（若有）
-    關鍵點圓點由 mark_offset_points_ultra_clear 疊加，此處不重複繪製。
-    """
-    out = frame.copy()
-    lw = max(1, int(2.5 * max(scale, 0.3)))
-
-    if bbox is not None:
-        x1, y1, x2, y2 = bbox.astype(int)
-        cv2.rectangle(out, (x1, y1), (x2, y2), (255, 255, 0), max(1, lw - 1), cv2.LINE_AA)
-
-    for ei, (a, b) in enumerate(SKELETON_EDGES):
-        if a >= len(keypoints) or b >= len(keypoints):
-            continue
-        if kpt_conf[a] < KP_CONF_THRES or kpt_conf[b] < KP_CONF_THRES:
-            continue
-        pa = (int(keypoints[a][0]), int(keypoints[a][1]))
-        pb = (int(keypoints[b][0]), int(keypoints[b][1]))
-        col = EDGE_COLORS[ei] if ei < len(EDGE_COLORS) else (180, 180, 180)
-        cv2.line(out, pa, pb, col, lw, cv2.LINE_AA)
-
-    return out
 
 
 def mark_offset_points_ultra_clear(img, keypoints, diffs_percent, threshold_percent, scale=1.0, kpt_conf=None):
@@ -318,9 +252,28 @@ def create_side_by_side_comparison(img_ref, img_cmp, k_ref, k_cmp, diffs_percent
     """
     創建並排對比圖 - 無連線，只有清晰標記，所有文字/圖形依解析度縮放
     """
-    # 以參考圖短邊計算全局比例因子（KEYPOINT_NAMES 已移至模組層級）
+    # 以參考圖短邊計算全局比例因子
     s = get_scale(img_ref.shape)
-
+    KEYPOINT_NAMES = [
+        "nose",               # 0
+        "left_ear_tip",       # 1
+        "right_ear_tip",      # 2
+        "chest",              # 3
+        "mid_back",           # 4
+        "hip",                # 5
+        "left_front_elbow",   # 6
+        "left_front_paw",     # 7
+        "right_front_elbow",  # 8
+        "right_front_paw",    # 9
+        "left_hind_knee",     # 10
+        "left_hind_paw",      # 11
+        "right_hind_knee",    # 12
+        "right_hind_paw",     # 13
+        "tail_base",          # 14
+        "tail_mid",           # 15
+        "tail_tip"            # 16
+    ]
+    
     # 在兩張圖上標記
     img_ref_marked = mark_offset_points_ultra_clear(img_ref, k_ref, diffs_percent, threshold_percent, scale=s, kpt_conf=conf_ref)
     img_cmp_marked = mark_offset_points_ultra_clear(img_cmp, k_cmp, diffs_percent, threshold_percent, scale=s, kpt_conf=conf_cmp)
@@ -447,11 +400,9 @@ for idx, img_path in enumerate(image_paths, start=1):
 
     # ---------- 決定推論輸入（依旗標決定是否預先 resize） ----------
     if RESIZE_INPUT_TO_640:
-        infer_img  = resize_to_fit(original_img, max_side=640)
-        base_frame = infer_img           # 關鍵點座標對應縮放後的幀
+        infer_img = resize_to_fit(original_img, max_side=640)
     else:
-        infer_img  = str(img_path)       # 傳路徑，YOLO 內部自動 letterbox
-        base_frame = original_img        # 關鍵點座標對應原始解析度
+        infer_img = str(img_path)  # 傳路徑，YOLO 內部自動 letterbox
 
     # 對角線以實際推論圖尺寸為準，確保偏移百分比一致
     ref_shape = infer_img.shape if RESIZE_INPUT_TO_640 else original_img.shape
@@ -479,12 +430,6 @@ for idx, img_path in enumerate(image_paths, start=1):
         k_cmp = results[cmp_name].keypoints.xy[0].cpu().numpy()
         conf_ref = results[ref_name].keypoints.conf[0].cpu().numpy()
         conf_cmp = results[cmp_name].keypoints.conf[0].cpu().numpy()
-        bbox_ref = (results[ref_name].boxes.xyxy[0].cpu().numpy()
-                    if results[ref_name].boxes is not None and len(results[ref_name].boxes) > 0
-                    else None)
-        bbox_cmp = (results[cmp_name].boxes.xyxy[0].cpu().numpy()
-                    if results[cmp_name].boxes is not None and len(results[cmp_name].boxes) > 0
-                    else None)
         diffs_percent, diffs_px, max_idx = compute_keypoint_diff(k_ref, k_cmp, diagonal, conf_ref, conf_cmp)
         offset_count = int((diffs_percent > DIFF_THRES_PERCENT).sum())
         
@@ -502,8 +447,8 @@ for idx, img_path in enumerate(image_paths, start=1):
 
     # 存單張標記圖
     if len(results[ref_name].keypoints) > 0 and len(results[cmp_name].keypoints) > 0:
-        _s = get_scale(base_frame.shape)
-        yolo_img = draw_yolo_frame(base_frame, k_ref, conf_ref, bbox_ref, scale=_s)
+        yolo_img = results[ref_name].plot()
+        _s = get_scale(yolo_img.shape)
         yolo_img_marked = mark_offset_points_ultra_clear(yolo_img, k_ref, diffs_percent, DIFF_THRES_PERCENT, scale=_s, kpt_conf=conf_ref)
         yolo_img_marked = draw_label(yolo_img_marked, MODELS[ref_name]["label"], scale=_s)
         
@@ -512,9 +457,8 @@ for idx, img_path in enumerate(image_paths, start=1):
 
     # 創建並排對比圖
     if len(results[ref_name].keypoints) > 0 and len(results[cmp_name].keypoints) > 0:
-        _s_cmp = get_scale(base_frame.shape)
-        img_ref = draw_yolo_frame(base_frame, k_ref, conf_ref, bbox_ref, scale=_s_cmp)
-        img_cmp = draw_yolo_frame(base_frame, k_cmp, conf_cmp, bbox_cmp, scale=_s_cmp)
+        img_ref = results[ref_name].plot()
+        img_cmp = results[cmp_name].plot()
         
         comparison = create_side_by_side_comparison(
             img_ref, img_cmp, k_ref, k_cmp,

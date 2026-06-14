@@ -1,0 +1,16 @@
+frame_idx,motion_px,rolling_mean_px,is_still,detected,behavior_label
+1,0.0000,0.0000,0,1,scratch
+2,0.1942,0.0000,0,1,scratch
+3,0.2828,0.2385,1,1,scratch
+4,0.2563,0.2444,1,1,scratch
+5,0.1519,0.2213,1,1,scratch
+6,0.1518,0.2074,1,1,scratch
+7,0.1117,0.1915,1,1,scratch
+8,0.2460,0.1992,1,1,scratch
+9,0.3066,0.2127,1,1,scratch
+10,0.2257,0.2141,1,1,scratch
+11,0.2841,0.2211,1,1,scratch
+12,0.3384,0.2318,1,1,scratch
+13,0.3041,0.2378,1,1,scratch
+14,0.2476,0.2385,1,1,scratch
+15,0.2206,0.2373,1,1,scratch

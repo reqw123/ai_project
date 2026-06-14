@@ -116,7 +116,6 @@
 │  ┌───────────────────────────▼──────────────────────────────────┐  │
 │  │  SharedFrameStreamer + Flask                                  │  │
 │  │    /stream  → MJPEG @ 30fps  (JPEG quality=30)               │  │
-│  │    /status  → JSON (behavior, confidence, stats)             │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -161,7 +160,10 @@ FC 輸出         (N=1, 4)            walk / lick / scratch / shake
 | 項目 | 值 | 說明 |
 |---|---|---|
 | `SEQUENCE_LENGTH` | 16 | 時間窗幀數；16幀 × 30fps ≈ 0.53s |
-| `WINDOW_STRIDE` | 16 | 每隔 16 幀執行一次 ST-GCN 推論 |
+| `WINDOW_STRIDE`（推論） | 16 | 每隔 16 幀觸發一次 ST-GCN 推論（`config.py / frame_processor.py`） |
+| `WINDOW_STRIDE`（訓練） | 8 | 訓練資料滑動視窗步長，50% 重疊（`stgcn_config.yaml`） |
+| `MAX_NO_DETECT_FRAMES` | 2 | 訓練時視窗內允許 YOLO bbox 缺失的最大幀數；超過則丟棄（`stgcn_config.yaml`） |
+| `STRICT_WINDOW_FILTER` | false | 訓練時是否丟棄含 unannotated 幀的視窗（`stgcn_config.yaml`） |
 | `TARGET_MODEL_FPS` | 30 | 來源 FPS > 30 時做降採樣 |
 | `NUM_JOINTS` | 17 | COCO 17 關鍵點（重映射至貓體） |
 | `FEATURE_MODE` | xy_v | 預設 4 通道；可改為 xy_conf_v / xy_conf_v_bone / xy_conf_v_bone_bmotion |

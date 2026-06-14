@@ -51,7 +51,7 @@ class ImprovedBehaviorTracker:
             # 信心不足時（behavior_id == -1）：YOLO 有偵測到但 ST-GCN 信心未達門檻，累積到 rest_time
             if behavior_id == -1:
                 self.rest_time += dt
-                self.activity_window.append({"time": now, "activity": activity_value, "weight": BehaviorTrackingConfig.LOW_CONFIDENCE_ACTIVITY_WEIGHT})
+                self.activity_window.append({"time": now, "activity": activity_value, "weight": 1.0})
                 return
 
             # 有效行為（0~4）：累積到對應 behavior_time
@@ -82,20 +82,18 @@ class ImprovedBehaviorTracker:
                 self.current_behavior = behavior
                 self.current_gcn_id = behavior_id
                 self.behavior_start_time = now
-            # 只有觸發 record_this 的幀才有有意義的 duration；否則用預設 weight 避免微小值污染加權平均
-            weight = duration if (record_this and duration > 0) else BehaviorTrackingConfig.DEFAULT_ACTIVITY_WEIGHT
-            self.activity_window.append({"time": now, "activity": activity_value, "weight": weight})
+            # 均勻權重：每幀貢獻相等，使 get_activity_score() 為純粹的時間視窗平均
+            self.activity_window.append({"time": now, "activity": activity_value, "weight": 1.0})
     def get_activity_score(self):
         with self._lock:
             if len(self.activity_window) == 0:
-                return 50
+                return 0
             now = time.time()
             recent = [r for r in self.activity_window if (now - r["time"]) < BehaviorTrackingConfig.ACTIVITY_SCORE_WINDOW_SECONDS]
             if len(recent) == 0:
-                return 50
-            total_weight = sum(r["weight"] for r in recent)
-            weighted_sum = sum(r["activity"] * r["weight"] for r in recent)
-            score = round(weighted_sum / total_weight) if total_weight > 0 else 50
+                return 0  # 視窗內無資料 = 貓不在畫面或無運動
+            n = len(recent)
+            score = round(sum(r["activity"] for r in recent) / n)
             return max(0, min(100, score))
     def get_today_stats(self):
         with self._lock:
@@ -148,5 +146,5 @@ class ImprovedBehaviorTracker:
             alerts.append({"level": "medium", "icon": "⏹", "title": "長時間靜止不動", "message": f"今日累積靜止 {stop_time:.1f} 秒（{stop_count}次）", "suggestion": "貓咪長時間靜止，可能有身體不適", "action": "觀察精神與食慾"})
         total_time = lick_time + scratch_time + walk_time + shake_time + stop_time
         if total_time > 0 and walk_time < BehaviorTrackingConfig.LOW_ACTIVITY_TIME_THRESHOLD_SECONDS:
-            alerts.append({"level": "medium", "icon": "😴", "title": "活動度過低", "message": f"今日活動時間 {(total_time - walk_time):.1f} 秒，靜止 {walk_time:.1f} 秒", "suggestion": "貓咪活動不足，可能有身體不適", "action": "嘗試互動或遊玩"})
+            alerts.append({"level": "medium", "icon": "😴", "title": "活動度過低", "message": f"今日走動時間僅 {walk_time:.1f} 秒（低於門檻 {BehaviorTrackingConfig.LOW_ACTIVITY_TIME_THRESHOLD_SECONDS:.0f} 秒）", "suggestion": "貓咪活動不足，可能有身體不適", "action": "嘗試互動或遊玩"})
         return alerts

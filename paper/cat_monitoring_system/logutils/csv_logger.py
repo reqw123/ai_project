@@ -16,7 +16,7 @@ class CSVLogger:
         self.csv_file = open(csv_path, 'w', newline='', buffering=1)  # line-buffered
         try:
             self.csv_writer = csv.writer(self.csv_file)
-            self.csv_writer.writerow(["Frame", "Timestamp", "Behavior", "GCN_Confidence", "Abnormal", "Motion_Score"])
+            self.csv_writer.writerow(["Frame", "Timestamp", "Behavior", "GCN_Confidence", "Is_Still", "Motion_Score"])
             self.csv_file.flush()
         except Exception:
             self.csv_file.close()
@@ -29,14 +29,14 @@ class CSVLogger:
     def __exit__(self, *args):
         self.close()
 
-    def log(self, frame_idx, behavior, confidence, abnormal, motion_score):
+    def log(self, frame_idx, behavior, confidence, is_still, motion_score):
         with self._lock:
             self.csv_writer.writerow([
                 frame_idx,
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 behavior,
                 f"{confidence:.4f}",
-                "YES" if abnormal else "NO",
+                "YES" if is_still else "NO",
                 f"{motion_score:.6f}",
             ])
             self.csv_file.flush()

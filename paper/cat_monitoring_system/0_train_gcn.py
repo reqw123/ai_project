@@ -25,7 +25,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 from models.stgcn_model import (
@@ -96,8 +96,8 @@ class ModelEMA:
 # external config file is loaded and assigned to CONFIG below.
 CONFIG = {
     # Window filtering / labeling
-    'LABEL_PURITY_THRESHOLD': float(os.getenv('STGCN_LABEL_PURITY_THRESHOLD', '0.8')),
     'STRICT_WINDOW_FILTER': os.getenv('STGCN_STRICT_WINDOW_FILTER', '0').strip().lower() in {'1','true','yes','y','on'},
+    'MAX_NO_DETECT_FRAMES': int(os.getenv('STGCN_MAX_NO_DETECT_FRAMES', '2')),
 
     # Keypoint EMA smoothing (None to disable)
     'KP_EMA_ALPHA': None if os.getenv('STGCN_KP_EMA_ALPHA', '1.0').strip().lower() in {'none',''} else float(os.getenv('STGCN_KP_EMA_ALPHA', '1.0')),
@@ -110,6 +110,9 @@ CONFIG = {
     'NUM_JOINTS': int(os.getenv('STGCN_NUM_JOINTS', '17')),
     'IN_CHANNELS': int(os.getenv('STGCN_IN_CHANNELS', '4')),
     'SEQUENCE_LENGTH': int(os.getenv('STGCN_SEQUENCE_LENGTH', '16')),
+    # 訓練滑動窗口步長：0 = 自動（SEQUENCE_LENGTH // 2，即 50% 重疊）
+    # 常見慣例：stride=T/2（50% overlap）兼顧資料量與樣本多樣性
+    'WINDOW_STRIDE': int(os.getenv('STGCN_WINDOW_STRIDE', '0')),
     'SPATIAL_KERNEL_SIZE': int(os.getenv('STGCN_SPATIAL_KERNEL_SIZE', '3')),
     'TEMPORAL_KERNEL_SIZE': int(os.getenv('STGCN_TEMPORAL_KERNEL_SIZE', '9')),
     'NUM_STGCN_LAYERS': int(os.getenv('STGCN_NUM_STGCN_LAYERS', '3')),
@@ -198,8 +201,8 @@ CONFIG = _external
 # Validate required top-level keys are present
 required_keys = [
     'SKELETON_DATA_FOLDER', 'MODEL_SAVE_PATH', 'RESULTS_FOLDER',
-    'LABEL_PURITY_THRESHOLD', 'STRICT_WINDOW_FILTER', 'KP_EMA_ALPHA',
-    'NUM_CLASSES', 'BEHAVIOR_PREFIXES', 'NUM_JOINTS', 'IN_CHANNELS', 'SEQUENCE_LENGTH',
+    'STRICT_WINDOW_FILTER', 'KP_EMA_ALPHA',
+    'NUM_CLASSES', 'BEHAVIOR_PREFIXES', 'NUM_JOINTS', 'IN_CHANNELS', 'SEQUENCE_LENGTH', 'WINDOW_STRIDE',
     'SPATIAL_KERNEL_SIZE', 'TEMPORAL_KERNEL_SIZE', 'NUM_STGCN_LAYERS',
     'INPUT_DROPOUT', 'BLOCK_DROPOUT', 'FINAL_DROPOUT',
     'FEATURE_MODE', 'RUN_ABLATION_STUDY', 'ABLATION_MODES',
@@ -216,14 +219,15 @@ if missing:
 SKELETON_DATA_FOLDER = CONFIG['SKELETON_DATA_FOLDER']
 MODEL_SAVE_PATH = CONFIG['MODEL_SAVE_PATH']
 RESULTS_FOLDER = CONFIG['RESULTS_FOLDER']
-LABEL_PURITY_THRESHOLD = CONFIG['LABEL_PURITY_THRESHOLD']
 STRICT_WINDOW_FILTER = CONFIG['STRICT_WINDOW_FILTER']
+MAX_NO_DETECT_FRAMES = int(CONFIG.get('MAX_NO_DETECT_FRAMES', 2))
 KP_EMA_ALPHA = CONFIG['KP_EMA_ALPHA']
 NUM_CLASSES = CONFIG['NUM_CLASSES']
 BEHAVIOR_PREFIXES = CONFIG['BEHAVIOR_PREFIXES']
 NUM_JOINTS = CONFIG['NUM_JOINTS']
 IN_CHANNELS = CONFIG['IN_CHANNELS']
 SEQUENCE_LENGTH = CONFIG['SEQUENCE_LENGTH']
+WINDOW_STRIDE   = CONFIG['WINDOW_STRIDE']
 SPATIAL_KERNEL_SIZE = CONFIG['SPATIAL_KERNEL_SIZE']
 TEMPORAL_KERNEL_SIZE = CONFIG['TEMPORAL_KERNEL_SIZE']
 NUM_STGCN_LAYERS = CONFIG['NUM_STGCN_LAYERS']
@@ -276,6 +280,18 @@ def _next_run_number(results_folder: str) -> int:
             if m:
                 max_num = max(max_num, int(m.group(1)))
     return max_num + 1
+
+
+def _format_duration(seconds: float) -> str:
+    """將秒數轉為易讀的時分秒字串，例如 1h 23m 45s。"""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    if h > 0:
+        return f"{h}h {m}m {s}s"
+    if m > 0:
+        return f"{m}m {s}s"
+    return f"{s}s"
 
 
 # ==================== Dataset Class ====================
@@ -382,13 +398,15 @@ class CatSkeletonDataset(Dataset):
     """
     
     def __init__(self, skeleton_folder, sequence_length=32,
-                 in_channels=2, num_joints=17, augment=False, feature_mode="xyv"):
+                 in_channels=2, num_joints=17, augment=False, feature_mode="xyv",
+                 window_stride=0):
         self.skeleton_folder = Path(skeleton_folder)
         self.sequence_length = sequence_length
         self.in_channels = in_channels
         self.num_joints = num_joints
         self.augment = augment
         self.feature_mode = feature_mode
+        self.window_stride = window_stride
         # idx_to_label: map numeric label -> behaviour name (derived from CONFIG)
         self.idx_to_label = {v: k for k, v in BEHAVIOR_PREFIXES.items()}
         
@@ -419,6 +437,7 @@ class CatSkeletonDataset(Dataset):
 
             keypoint_frames   = []
             frame_labels_list = []
+            frame_detected    = []   # True = 該幀有 bbox（YOLO 偵測到貓）
             for frame in frames:
                 kpts_list = frame.get('keypoints', [])
                 if len(kpts_list) == self.num_joints:
@@ -429,6 +448,7 @@ class CatSkeletonDataset(Dataset):
                     conf   = np.zeros((self.num_joints,),  dtype=np.float32)
                 keypoint_frames.append(coords)
                 frame_labels_list.append(frame.get('label', 'unannotated'))
+                frame_detected.append(frame.get('bbox') is not None)
 
             keypoint_frames = np.array(keypoint_frames)
             confs = np.array([
@@ -451,26 +471,27 @@ class CatSkeletonDataset(Dataset):
             if len(keypoint_frames) < self.sequence_length:
                 continue
 
-            stride = self.sequence_length // 2
+            stride = self.window_stride
             for start_idx in range(0, len(keypoint_frames) - self.sequence_length + 1, stride):
-                sequence      = keypoint_frames[start_idx:start_idx + self.sequence_length]
-                window_labels = frame_labels_list[start_idx:start_idx + self.sequence_length]
+                sequence        = keypoint_frames[start_idx:start_idx + self.sequence_length]
+                window_labels   = frame_labels_list[start_idx:start_idx + self.sequence_length]
+                window_detected = frame_detected[start_idx:start_idx + self.sequence_length]
 
                 if STRICT_WINDOW_FILTER:
-                    # Old behavior: drop mixed windows with any unannotated frame.
                     if 'unannotated' in window_labels:
                         continue
                     label_counts = Counter(window_labels)
                     best_label, best_count = label_counts.most_common(1)[0]
-                    if best_count / self.sequence_length < LABEL_PURITY_THRESHOLD:
-                        continue  # 行為轉換邊界，跳過
                 else:
-                    # Relaxed behavior: keep any window with at least one annotated frame.
                     annotated_labels = [lbl for lbl in window_labels if lbl != 'unannotated']
                     if not annotated_labels:
                         continue
                     label_counts = Counter(annotated_labels)
                     best_label, _ = label_counts.most_common(1)[0]
+
+                # bbox 缺失過濾：與 STRICT_WINDOW_FILTER 無關，永遠套用
+                if window_detected.count(False) > MAX_NO_DETECT_FRAMES:
+                    continue
 
                 label_idx = name_to_idx.get(best_label)
                 if label_idx is None:
@@ -680,6 +701,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
         num_joints=NUM_JOINTS,
         augment=False,
         feature_mode=feature_mode,
+        window_stride=WINDOW_STRIDE,
     )
 
     if len(full_dataset) == 0:
@@ -690,7 +712,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
     run_log_path = os.path.join(run_results_dir, 'run_log.json')
     # Write initial run metadata (config snapshot + class distributions)
     initial_meta = {
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'feature_mode': feature_mode,
         'in_channels': in_channels,
         'num_classes': NUM_CLASSES,
@@ -975,6 +997,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
     print("Starting Training")
     print("="*70)
 
+    training_start_time = datetime.now(timezone.utc)
     best_val_acc = 0.0
     best_val_loss = float('inf')
     best_state_dict = None       # 記憶體暫存最佳權重，訓練結束後一次寫檔
@@ -1016,7 +1039,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
 
         # Append epoch metrics to run log
         epoch_record = {
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'epoch': epoch + 1,
             'train_loss': float(train_loss),
             'train_acc': float(train_acc),
@@ -1059,6 +1082,63 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
         print(f"\n✓ Best model saved to: {run_model_path}")
         print(f"  Best val acc={best_val_acc:.4f}, val macro_f1={best_val_macro_f1:.4f}, val loss={best_val_loss:.4f}")
         plot_confusion_matrix(best_val_labels, best_val_preds, run_results_dir)
+
+    # 計算訓練總時長
+    training_end_time = datetime.now(timezone.utc)
+    training_duration_sec = (training_end_time - training_start_time).total_seconds()
+    total_epochs_run = epoch + 1
+    print(f"✓ Training duration: {_format_duration(training_duration_sec)}  ({total_epochs_run} epochs)")
+
+    # run_log 補齊最終結果與時長後寫盤
+    run_log_data['meta']['training_duration_seconds'] = round(training_duration_sec, 1)
+    run_log_data['meta']['training_duration_human'] = _format_duration(training_duration_sec)
+    run_log_data['meta']['total_epochs_run'] = total_epochs_run
+    run_log_data['meta']['final_result'] = {
+        'best_val_acc': float(best_val_acc),
+        'best_val_macro_f1': float(best_val_macro_f1),
+        'best_val_loss': float(best_val_loss),
+        'model_path': run_model_path,
+    }
+    try:
+        with open(run_log_path, 'w', encoding='utf-8') as lf:
+            json.dump(run_log_data, lf, ensure_ascii=False, indent=2)
+        print(f"✓ Run log finalised: {run_log_path}")
+    except Exception as e:
+        print(f"⚠ Failed to finalise run log: {e}")
+
+    # 全域訓練歷程（JSONL 追加，不覆蓋）
+    history_path = Path(RESULTS_FOLDER) / 'training_history.jsonl'
+    history_entry = {
+        'timestamp': training_end_time.isoformat(),
+        'run_suffix': run_suffix,
+        'feature_mode': feature_mode,
+        'in_channels': in_channels,
+        'sequence_length': SEQUENCE_LENGTH,
+        'window_stride': WINDOW_STRIDE,
+        'use_attention': use_attention,
+        'batch_size': BATCH_SIZE,
+        'learning_rate': LEARNING_RATE,
+        'optimizer': OPTIMIZER,
+        'label_smoothing': float(CONFIG.get('LABEL_SMOOTHING', 0.0)),
+        'train_videos': len(train_vids),
+        'val_videos': len(val_vids),
+        'train_sequences': len(train_indices),
+        'val_sequences': len(val_indices),
+        'total_epochs_run': total_epochs_run,
+        'best_val_acc': float(best_val_acc),
+        'best_val_macro_f1': float(best_val_macro_f1),
+        'best_val_loss': float(best_val_loss),
+        'training_duration_seconds': round(training_duration_sec, 1),
+        'training_duration_human': _format_duration(training_duration_sec),
+        'model_path': run_model_path,
+        'results_dir': run_results_dir,
+    }
+    try:
+        with open(history_path, 'a', encoding='utf-8') as hf:
+            hf.write(json.dumps(history_entry, ensure_ascii=False) + '\n')
+        print(f"✓ Training history appended: {history_path}")
+    except Exception as e:
+        print(f"⚠ Failed to append training history: {e}")
 
     # Plot training curves
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))

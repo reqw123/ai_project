@@ -55,7 +55,6 @@ if __name__ == "__main__":
         ip = "127.0.0.1"
     print(f"\n📺 Web 服務器啟動於 http://{ip}:{FlaskConfig.PORT}")
     print(f"📊 串流網址: http://{ip}:{FlaskConfig.PORT}/stream")
-    print(f"📈 狀態 API: http://{ip}:{FlaskConfig.PORT}/status")
 
     node_red_url = NodeRedConfig.ENDPOINT_NOTIFY
     if ip and ip != "127.0.0.1":

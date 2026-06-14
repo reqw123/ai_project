@@ -464,7 +464,7 @@ class CatBehaviorSTGCN:
             print(f"⚠ 警告：模型檔案未找到 {model_path}")
         self.model.eval()
     def normalize_keypoints(self, keypoints_sequence):
-        # flip 必須在 orientation 之前：原始座標下 walk 貓的 nose_x 與 tail_x 差距大，翻轉決策穩定
+        # flip 必須在 orientation 之前：原始座標下使用 mid_back(4) 與 hip(5) 的 x 差距做多數決，翻轉決策穩定
         seq = flip_normalize(keypoints_sequence)
         seq = orientation_normalize(seq)
         seq = normalize_skeleton_coords(seq)

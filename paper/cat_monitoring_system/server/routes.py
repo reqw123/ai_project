@@ -8,7 +8,6 @@ import sys
 import os
 import datetime
 import cv2
-import numpy as np
 from pathlib import Path
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -20,8 +19,8 @@ from config import ModelPaths as _ModelPaths
 from config import YOLOConfig as _YOLOConfig
 from config import STGCNConfig as _STGCNConfig
 from config import NodeRedConfig as _NodeRedConfig
-from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 from config import FlaskConfig as _FlaskConfig
+from config import SystemInfo as _SystemInfo
 
 _KP_EMA_ALPHA = _STGCNConfig.KP_EMA_ALPHA
 _YOLO_MODEL_PATH = _ModelPaths.YOLO_MODEL
@@ -75,39 +74,6 @@ def _build_frame_processor():
     )
 
 
-def _get_latest_behavior():
-    """從 frame_processor 取得最新行為推論，供首頁與 status API 使用。回傳皆為 JSON 可序列化的原生型別。"""
-    latest_behavior, latest_confidence = 0, 0.0
-    latest_probs = [0.0, 0.0, 0.0, 0.0, 0.0]
-    if frame_processor and hasattr(frame_processor, 'behavior_classifier'):
-        try:
-            if hasattr(frame_processor, 'keypoints_buffer') and len(frame_processor.keypoints_buffer) >= frame_processor.sequence_length:
-                from models.stgcn_model import interpolate_missing
-                kpts_arr = np.array([item[0] for item in frame_processor.keypoints_buffer])  # (T, 17, 2)
-                conf_arr = np.array([item[1] for item in frame_processor.keypoints_buffer])  # (T, 17)
-                seq_array = interpolate_missing(kpts_arr, conf_arr)
-                # Build feature tensor when model expects >4 channels
-                model_obj = getattr(frame_processor.behavior_classifier, 'model', None)
-                if model_obj is not None and getattr(model_obj, 'in_channels', 4) != 4:
-                    try:
-                        from models.stgcn_model import flip_normalize, orientation_normalize, normalize_skeleton_coords, build_feature_tensor
-                        if getattr(model_obj, 'normalize', True):
-                            seq_array = flip_normalize(seq_array)
-                            seq_array = orientation_normalize(seq_array)
-                            seq_array = normalize_skeleton_coords(seq_array)
-                        seq_features = build_feature_tensor(seq_array, conf_arr, model_obj.feature_mode)
-                        b, c, probs = frame_processor.behavior_classifier.classify(seq_features, precomputed=True)
-                    except Exception:
-                        b, c, probs = frame_processor.behavior_classifier.classify(seq_array)
-                else:
-                    b, c, probs = frame_processor.behavior_classifier.classify(seq_array)
-                if b is not None:
-                    latest_confidence = float(c)
-                    latest_probs = [float(p) for p in (probs if probs is not None else latest_probs)]
-                    latest_behavior = LOW_CONF_ID if latest_confidence < _BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD else int(b)
-        except Exception:
-            pass
-    return latest_behavior, latest_confidence, latest_probs
 
 
 def _ensure_processor_started():
@@ -167,7 +133,7 @@ def register_routes(app):
         ts_file = ts_obj.strftime('%Y%m%d_%H%M%S')
         ts_display = ts_obj.strftime('%Y/%m/%d %H:%M:%S')
 
-        save_dir = Path('C:/a')
+        save_dir = Path(_ModelPaths.OUTPUT_DIR)
         save_dir.mkdir(parents=True, exist_ok=True)
 
         h, w = frames[0].shape[:2]
@@ -211,27 +177,6 @@ def register_routes(app):
             'thumbnail': thumbnail,
         })
 
-    @app.route('/status')
-    def status():
-        _ensure_processor_started()
-        # 使用與 Node-RED 相同的 tracker（frame_processor.tracker），行為資料才會一致
-        t = frame_processor.tracker if frame_processor else tracker
-        stats = t.get_today_stats()
-        lb, lc, lprobs = _get_latest_behavior()
-        return jsonify({
-            "status": "running",
-            "port": _PORT,
-            "ip": LOCAL_IP,
-            "activity_score": t.get_activity_score(),
-            "today_stats": stats,
-            "alerts": t.get_alerts(),
-            "alerts_count": len(t.get_alerts()),
-            "version": "v4.0-stgcn",
-            "latest_behavior": lb,
-            "latest_confidence": lc,
-            "latest_probs": lprobs,
-        })
-
     @app.route('/api/behavior_history')
     def api_behavior_history():
         """回傳各行為區段與持續時間，供行為趨勢分析使用。支援 ?limit=200。"""
@@ -260,9 +205,8 @@ def register_routes(app):
     def index():
         _ensure_processor_started()
         return Response(
-            f"<html><body><p>Cat Monitoring System v4.0-stgcn &mdash; {LOCAL_IP}:5000</p>"
+            f"<html><body><p>{_SystemInfo.SYSTEM_NAME} {_SystemInfo.VERSION} &mdash; {LOCAL_IP}:{_PORT}</p>"
             f"<ul><li><a href='/stream'>stream</a></li>"
-            f"<li><a href='/status'>status API</a></li>"
             f"<li><a href='/api/behavior_history?limit=500'>behavior history</a></li></ul>"
             f"</body></html>",
             mimetype='text/html'

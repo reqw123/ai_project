@@ -1,0 +1,9 @@
+frame_idx,motion_norm,rolling_mean_norm,is_still,detected,behavior_label
+1,0.0000,0.0000,0,1,walk
+2,1.1528,0.0000,0,1,walk
+3,1.8544,1.5036,0,1,walk
+4,2.4221,1.8098,0,1,walk
+5,1.2853,1.6787,0,1,walk
+6,1.8845,1.7198,0,1,walk
+7,3.8007,2.0667,0,1,walk
+8,1.0730,1.9247,0,1,walk

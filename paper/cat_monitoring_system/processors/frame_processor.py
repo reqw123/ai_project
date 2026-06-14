@@ -23,12 +23,12 @@ from models.stgcn_model import (
     build_feature_tensor,
     get_in_channels_for_mode,
 )
-from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig
+from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig, SystemInfo
 
 class FrameProcessor:
     def __init__(self, yolo_model_path, stgcn_model_path, video_path,
-                 nodered_url=None, nodered_notify_url=None, device='cuda', imgsz=640, conf_thres=0.5, sequence_length=32,
-                 overlay=True, width=None, height=None, normalize=True, kp_ema_alpha=0.5,
+                 nodered_url=None, device='cuda', imgsz=640, conf_thres=0.5, sequence_length=STGCNConfig.SEQUENCE_LENGTH,
+                 overlay=True, width=None, height=None, normalize=True, kp_ema_alpha=STGCNConfig.KP_EMA_ALPHA,
                  feature_mode=None, window_stride=None):
         self.local_ip = get_ip()
         self.cap = cv2.VideoCapture(video_path)
@@ -52,14 +52,14 @@ class FrameProcessor:
         self.keypoints_buffer = deque(maxlen=sequence_length)
         self.sequence_length = sequence_length
         self.window_stride = window_stride if window_stride is not None else STGCNConfig.WINDOW_STRIDE
-        self._infer_frame_count = 0  # 上次推論後累積的幀數
+        self._infer_frame_count = 0  # 累積有效幀計數器，以 window_stride 取模決定推論時機（不重置）
         self.overlay = overlay
         self.fps_display = 0.0
         self.prev_time = time.time()
         self.last_send_time = time.time()
         self.nodered = None
         if nodered_url:
-            self.nodered = NodeRedClient(nodered_url, url_notify=nodered_notify_url, local_ip=self.local_ip)
+            self.nodered = NodeRedClient(nodered_url, local_ip=self.local_ip)
         self.csv_logger = CSVLogger()
         self.segment_logger = BehaviorSegmentLogger()
         self.frame_idx = 0
@@ -90,20 +90,21 @@ class FrameProcessor:
         behavior_id = self._last_behavior_id
         confidence = self._last_confidence
         class_probs = self._last_class_probs
-        abnormal, activity_value = False, 0.0
+        is_still, activity_value = False, 0.0
 
         if kpts is not None:
             raw_kpts = kpts.copy()
 
-            # === EMA 平滑：僅用於 overlay 顯示與異常偵測，不進 ST-GCN buffer ===
+            # === Frame-level EMA：僅用於 overlay 顯示與異常偵測，原始 raw_kpts 進 ST-GCN buffer ===
+            # 注意：此 EMA 不影響 STGCN 推論路徑；ST-GCN 輸入的唯一平滑來源是下方 window-level EMA
             if self._ema_kpts is None:
                 self._ema_kpts = raw_kpts.copy()
             else:
                 self._ema_kpts = self.kp_ema_alpha * raw_kpts + (1.0 - self.kp_ema_alpha) * self._ema_kpts
             display_kpts = self._ema_kpts.copy()
 
-            # === 異常檢測（使用 EMA 平滑後的關鍵點） ===
-            abnormal, activity_value = self.anomaly_detector.detect(display_kpts, kpt_conf)
+            # === 靜止偵測（使用 EMA 平滑後的關鍵點） ===
+            is_still, activity_value = self.anomaly_detector.detect(display_kpts, kpt_conf)
 
             # === ST-GCN 行為推論（buffer 儲存 raw kpts，與訓練前處理順序一致） ===
             self.keypoints_buffer.append((raw_kpts, kpt_conf))
@@ -116,7 +117,8 @@ class FrameProcessor:
                 kpts_arr = np.array([item[0] for item in self.keypoints_buffer])   # (T, 17, 2)
                 conf_arr = np.array([item[1] for item in self.keypoints_buffer])   # (T, 17)
                 seq_array = interpolate_missing(kpts_arr, conf_arr)
-                # Window-level EMA（與訓練：interpolate_missing 後再做 EMA）
+                # Window-level EMA：STGCN 輸入的唯一平滑步驟，須與訓練時使用的 KP_EMA_ALPHA 一致
+                # alpha=1.0（預設）表示不平滑；調低時須確認訓練也用相同數值，切勿在此之外另加平滑
                 if self.kp_ema_alpha < 1.0:
                     for t in range(1, seq_array.shape[0]):
                         seq_array[t] = (self.kp_ema_alpha * seq_array[t]
@@ -197,7 +199,7 @@ class FrameProcessor:
                     "system": {
                         "ip": self.local_ip,
                         "model": "YOLO-Pose + ST-GCN",
-                        "version": "v4.0-stgcn",
+                        "version": SystemInfo.VERSION,
                         "gcn_confidence": round(float(confidence), 3)
                     }
                 }
@@ -205,15 +207,15 @@ class FrameProcessor:
                 self.last_send_time = now
 
             # === CSV 日誌 ===
-            # CSV 日誌只在偵測到異常且顯示為非 normal 時寫入
-            if self.csv_logger and abnormal and float(confidence) >= BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD and behavior_id != LOW_CONF_ID:
+            # CSV 日誌只在貓咪活動中（非靜止）且行為信心足夠時寫入
+            if self.csv_logger and not is_still and float(confidence) >= BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD and behavior_id != LOW_CONF_ID:
                 behavior_name = get_behavior_name(behavior_id, use_text=False, fallback="未知", confidence=confidence)
                 self.csv_logger.log(
                     self.frame_idx,
                     behavior_name,
                     confidence,
-                    abnormal,
-                    self.anomaly_detector.ema_motion,
+                    is_still,
+                    self.anomaly_detector.last_motion_score,
                 )
 
             # === Overlay 畫圖 ===
@@ -221,8 +223,12 @@ class FrameProcessor:
                 frame = self.visualizer.draw(frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs)
 
         else:
-            # 貓咪消失時重置 EMA 與上次推論結果，並通知 tracker 以更新 last_update_time
+            # 貓咪消失時重置 EMA、推論計數器、keypoints buffer 與上次推論結果
+            # _infer_frame_count 重置確保貓重新出現後推論時機從 0 對齊，不受之前計數影響
+            # keypoints_buffer 清除確保舊幀不污染下次推論窗口
             self._ema_kpts = None
+            self._infer_frame_count = 0
+            self.keypoints_buffer.clear()
             self._last_behavior_id = LOW_CONF_ID
             self._last_confidence = 0.0
             self._last_class_probs = [0.0] * 5
@@ -255,14 +261,14 @@ class FrameProcessor:
                     "system": {
                         "ip": self.local_ip,
                         "model": "YOLO-Pose + ST-GCN",
-                        "version": "v4.0-stgcn",
+                        "version": SystemInfo.VERSION,
                         "gcn_confidence": 0.0
                     }
                 }
                 self.nodered.send_data(data)
                 self.last_send_time = now
 
-        return frame, behavior_id, confidence, class_probs, abnormal, activity_value
+        return frame, behavior_id, confidence, class_probs, is_still, activity_value
 
     def reset_ema(self):
         """重置 EMA 狀態（影片重播或貓咪重新出現時由外部呼叫）。"""

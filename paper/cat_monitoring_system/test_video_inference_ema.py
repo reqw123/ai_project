@@ -8,6 +8,7 @@ import csv
 import cv2
 import numpy as np
 import time
+from functools import lru_cache
 from pathlib import Path
 from collections import deque
 from collections import defaultdict
@@ -60,10 +61,16 @@ FOLDER_MAP = {
 }
 DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 
+# 測試資料夾模式
+# 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
+# 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
+FOLDER_TEST_MODE = 'single'
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\lick_ai"  # 'single' 模式使用的扁平資料夾
+
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_91.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_best_022_xy_v_att_on.pth"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_96.pt"
+STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_best_033_xy_v_att_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 YOLO_CONF_THRESHOLD = 0.5
@@ -71,7 +78,7 @@ STGCN_NORMALIZE = True
 SEQUENCE_LENGTH = 16
 _raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy_v")
 STGCN_FEATURE_MODE = str(_raw_stgcn_mode).strip().lower()
-# Normalize legacy/variant feature-mode names to canonical nmes used by the STGCN module
+# Normalize legacy/variant feature-mode names to canonical names used by the STGCN module
 # Canonical names: "xy_v", "xy_conf_v", "xy_conf_v_bone", "xy_conf_v_bone_bmotion"
 _FEATURE_MODE_MAP = {
     "xyv": "xy_v",
@@ -229,12 +236,16 @@ def resolve_video_paths(video_sources: Iterable[str]):
             continue
 
         if p.is_dir():
-            matched = sorted(
-                [
-                    f for f in p.rglob("*")
-                    if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS
-                ]
-            )
+            try:
+                matched = sorted(
+                    [
+                        f for f in p.rglob("*")
+                        if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS
+                    ]
+                )
+            except Exception as e:
+                print(f"⚠ 掃描資料夾出錯，已略過: {p} ({e})")
+                matched = []
             if not matched:
                 print(f"⚠ 資料夾內未找到影片，略過: {p}")
             for f in matched:
@@ -249,6 +260,7 @@ def resolve_video_paths(video_sources: Iterable[str]):
     return resolved
 
 
+@lru_cache(maxsize=16)
 def compute_ui_scale(width, height, base_width=1920.0, base_height=1080.0):
     """依影像對角線估算 UI 縮放，讓不同解析度下 overlay 視覺一致。"""
     diag = float(np.hypot(max(1.0, float(width)), max(1.0, float(height))))
@@ -312,86 +324,112 @@ def draw_no_cat_overlay(frame, text="No cat detected"):
     return frame
 
 
+_PANEL_LAYOUT_CACHE: dict = {}
+
+
 def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, behavior_current_confidences=None):
     """高對比行為信心值面板：顯示四類行為的當下信心值百分比。"""
     h, w = frame.shape[:2]
-    ui_scale = compute_ui_scale(w, h) * 1.10
+    cache_key = (w, h)
+    layout = _PANEL_LAYOUT_CACHE.get(cache_key)
+    if layout is None:
+        ui_scale = compute_ui_scale(w, h) * 1.10
+        left = scale_px(8, ui_scale, min_px=4)
+        right = scale_px(8, ui_scale, min_px=4)
+        bottom = scale_px(6, ui_scale, min_px=3)
+        title_fs = 0.60 * ui_scale
+        meta_fs = 0.56 * ui_scale
+        row_fs = 0.52 * ui_scale
+        pct_fs = 0.46 * ui_scale
+        text_th = scale_px(2, ui_scale, min_px=1)
+        shadow_th = scale_px(2, ui_scale, min_px=2)
+        row_h = scale_px(28, ui_scale, min_px=18)
+        base_header_h = scale_px(42, ui_scale, min_px=26)
+        header_extra_pad = scale_px(18, ui_scale, min_px=12)
+        header_h = base_header_h + header_extra_pad
+        row_count = len(BEHAVIOR_PANEL_LABELS)
+        panel_h = header_h + row_h * row_count
+        panel_top = max(scale_px(2, ui_scale, min_px=1), h - panel_h - bottom)
+        tx = left
+        ty = panel_top + scale_px(16, ui_scale, min_px=12)
+        timer_y = ty + scale_px(16, ui_scale, min_px=10)
+        label_w = 0
+        for lbl in BEHAVIOR_PANEL_LABELS:
+            tw, _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0]
+            label_w = max(label_w, tw)
+        conf_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0][0]
+        pct_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, pct_fs, text_th)[0][0]
+        col_gap = scale_px(8, ui_scale, min_px=4)
+        conf_x = tx + label_w + col_gap
+        bar_x = conf_x + conf_w + col_gap
+        bar_h = scale_px(12, ui_scale, min_px=8)
+        available_space = max(0, w - right - pct_w - col_gap - bar_x)
+        max_bar_w = scale_px(220, ui_scale, min_px=120)
+        min_bar_w = scale_px(60, ui_scale, min_px=48)
+        bar_w = max(min_bar_w, min(available_space, max_bar_w))
+        row_y0 = panel_top + header_h
+        baseline_off = scale_px(14, ui_scale, min_px=9)
+        bar_top_off = scale_px(1, ui_scale, min_px=0)
+        pct_x = bar_x + bar_w + col_gap
+        bar_border_th = scale_px(1, ui_scale, min_px=1)
+        layout = dict(
+            title_fs=title_fs, meta_fs=meta_fs, row_fs=row_fs, pct_fs=pct_fs,
+            text_th=text_th, shadow_th=shadow_th, row_h=row_h, bar_h=bar_h,
+            bar_w=bar_w, bar_border_th=bar_border_th, tx=tx, ty=ty, timer_y=timer_y,
+            conf_x=conf_x, bar_x=bar_x, pct_x=pct_x, row_y0=row_y0,
+            baseline_off=baseline_off, bar_top_off=bar_top_off,
+        )
+        _PANEL_LAYOUT_CACHE[cache_key] = layout
 
-    left = scale_px(8, ui_scale, min_px=4)
-    right = scale_px(8, ui_scale, min_px=4)
-    bottom = scale_px(6, ui_scale, min_px=3)
+    title_fs     = layout['title_fs']
+    meta_fs      = layout['meta_fs']
+    row_fs       = layout['row_fs']
+    pct_fs       = layout['pct_fs']
+    text_th      = layout['text_th']
+    shadow_th    = layout['shadow_th']
+    row_h        = layout['row_h']
+    bar_h        = layout['bar_h']
+    bar_w        = layout['bar_w']
+    bar_border_th = layout['bar_border_th']
+    tx           = layout['tx']
+    ty           = layout['ty']
+    timer_y      = layout['timer_y']
+    conf_x       = layout['conf_x']
+    bar_x        = layout['bar_x']
+    pct_x        = layout['pct_x']
+    row_y0       = layout['row_y0']
+    baseline_off = layout['baseline_off']
+    bar_top_off  = layout['bar_top_off']
 
     title = "ST-GCN Behavior Confidence"
-    timer = f"TIMER {float(elapsed_sec):7.2f}s"
-    title_fs = 0.60 * ui_scale
-    meta_fs = 0.56 * ui_scale
-    row_fs = 0.52 * ui_scale
-    pct_fs = 0.46 * ui_scale
-    text_th = scale_px(2, ui_scale, min_px=1)
-    shadow_th = scale_px(2, ui_scale, min_px=2)
-
-    row_h = scale_px(28, ui_scale, min_px=18)
-    header_h = scale_px(42, ui_scale, min_px=26)
-    row_count = len(BEHAVIOR_PANEL_LABELS)
-    panel_h = header_h + row_h * row_count
-    panel_top = max(scale_px(2, ui_scale, min_px=1), h - panel_h - bottom)
-
-    tx = left
-    ty = panel_top + scale_px(16, ui_scale, min_px=12)
     cv2.putText(frame, title, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, title_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
     cv2.putText(frame, title, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, title_fs, (255, 245, 180), text_th, cv2.LINE_AA)
 
-    timer_y = ty + scale_px(16, ui_scale, min_px=10)
+    timer = f"TIMER {float(elapsed_sec):7.2f}s"
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (170, 250, 255), text_th, cv2.LINE_AA)
 
-    label_w = 0
-    for label in BEHAVIOR_PANEL_LABELS:
-        tw, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0]
-        label_w = max(label_w, tw)
-
-    conf_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0][0]
-    pct_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, pct_fs, text_th)[0][0]
-
-    col_gap = scale_px(8, ui_scale, min_px=4)
-    conf_x = tx + label_w + col_gap
-    bar_x = conf_x + conf_w + col_gap
-    bar_h = scale_px(12, ui_scale, min_px=8)
-    bar_w = max(scale_px(60, ui_scale, min_px=48), w - right - pct_w - col_gap - bar_x)
-
-    row_y0 = panel_top + header_h
-
     for bid, label in enumerate(BEHAVIOR_PANEL_LABELS):
-        # 取得當下信心值
         if behavior_current_confidences is not None and bid < len(behavior_current_confidences):
-            pct = float(np.clip(behavior_current_confidences[bid], 0.0, 1.0))  # 已是 0-1 範圍
+            pct = float(np.clip(behavior_current_confidences[bid], 0.0, 1.0))
         else:
             pct = 0.0
-        
         color = BEHAVIOR_COLORS.get(bid, (130, 230, 255))
-
         line_top = row_y0 + bid * row_h
-        baseline_y = line_top + scale_px(14, ui_scale, min_px=9)
-
+        baseline_y = line_top + baseline_off
         cv2.putText(frame, label, (tx, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
         cv2.putText(frame, label, (tx, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, color, text_th, cv2.LINE_AA)
-
         conf_text = f"{pct * 100.0:5.1f}%"
         cv2.putText(frame, conf_text, (conf_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
         cv2.putText(frame, conf_text, (conf_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (235, 235, 235), text_th, cv2.LINE_AA)
-
-        bar_top = line_top + scale_px(1, ui_scale, min_px=0)
+        bar_top = line_top + bar_top_off
         cv2.rectangle(frame, (bar_x, bar_top), (bar_x + bar_w, bar_top + bar_h), (78, 78, 78), -1)
-        fill_w = int(round(bar_w * float(np.clip(pct, 0.0, 1.0))))
+        fill_w = int(round(bar_w * pct))
         if fill_w > 0:
             cv2.rectangle(frame, (bar_x, bar_top), (bar_x + fill_w, bar_top + bar_h), color, -1)
-        cv2.rectangle(frame, (bar_x, bar_top), (bar_x + bar_w, bar_top + bar_h), (120, 120, 120), scale_px(1, ui_scale, min_px=1))
-
-        pct_text = f"{pct * 100.0:5.1f}%"
-        pct_x = bar_x + bar_w + col_gap
-        pct_y = baseline_y
-        cv2.putText(frame, pct_text, (pct_x, pct_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
-        cv2.putText(frame, pct_text, (pct_x, pct_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (220, 220, 220), text_th, cv2.LINE_AA)
+        cv2.rectangle(frame, (bar_x, bar_top), (bar_x + bar_w, bar_top + bar_h), (120, 120, 120), bar_border_th)
+        cv2.putText(frame, conf_text, (pct_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
+        cv2.putText(frame, conf_text, (pct_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (220, 220, 220), text_th, cv2.LINE_AA)
 
     return frame
 
@@ -638,13 +676,22 @@ def main():
         folder_videos[fkey] = vids
         print(f"  [{fkey}] {fname}: {len(vids)} 部影片  ({fpath})")
 
-    # 若指定了 VIDEO_PATHS 就用那個；否則從 DEFAULT_FOLDER_KEY 資料夾開始
+    # 若指定了 VIDEO_PATHS 就用那個；否則依 FOLDER_TEST_MODE 決定播放清單
     if VIDEO_PATHS:
         video_paths = resolve_video_paths(VIDEO_PATHS)
         current_folder_key = DEFAULT_FOLDER_KEY
-    else:
+    elif FOLDER_TEST_MODE == 'all':
+        # 所有行為子資料夾依 FOLDER_MAP 順序合併
+        video_paths = []
+        for fkey in FOLDER_MAP:
+            video_paths.extend(folder_videos[fkey])
         current_folder_key = DEFAULT_FOLDER_KEY
-        video_paths = folder_videos[current_folder_key]
+        print(f"[FOLDER_TEST_MODE=all] 已合併全部 {len(video_paths)} 部影片")
+    else:
+        # 'single'：掃描 SINGLE_FOLDER_PATH 扁平資料夾，影片直接放在該目錄
+        video_paths = resolve_video_paths([SINGLE_FOLDER_PATH])
+        current_folder_key = DEFAULT_FOLDER_KEY
+        print(f"[FOLDER_TEST_MODE=single] {SINGLE_FOLDER_PATH}  共 {len(video_paths)} 部影片")
 
     if not video_paths:
         print("❌ 找不到可用影片，請確認 FOLDER_MAP / VIDEO_PATHS 的路徑")
@@ -706,20 +753,29 @@ def main():
     if in_channels is None:
         in_channels = get_in_channels_for_mode(feature_mode)
     
-    keypoint_detector = KeypointDetector(
-        YOLO_MODEL_PATH,
-        device=INFERENCE_DEVICE,
-        imgsz=YOLO_IMGSZ,
-        conf_thres=YOLO_CONF_THRESHOLD,
-    )
-    behavior_classifier = BehaviorClassifier(
-        STGCN_MODEL_PATH,
-        device=INFERENCE_DEVICE,
-        sequence_length=SEQUENCE_LENGTH,
-        normalize=STGCN_NORMALIZE,
-        feature_mode=feature_mode,
-        in_channels=in_channels,
-    )
+    try:
+        keypoint_detector = KeypointDetector(
+            YOLO_MODEL_PATH,
+            device=INFERENCE_DEVICE,
+            imgsz=YOLO_IMGSZ,
+            conf_thres=YOLO_CONF_THRESHOLD,
+        )
+    except Exception as e:
+        print(f"❌ 無法載入 YOLO 模型（{YOLO_MODEL_PATH}）：{e}")
+        return
+
+    try:
+        behavior_classifier = BehaviorClassifier(
+            STGCN_MODEL_PATH,
+            device=INFERENCE_DEVICE,
+            sequence_length=SEQUENCE_LENGTH,
+            normalize=STGCN_NORMALIZE,
+            feature_mode=feature_mode,
+            in_channels=in_channels,
+        )
+    except Exception as e:
+        print(f"❌ 無法載入 ST-GCN 模型（{STGCN_MODEL_PATH}）：{e}")
+        return
     visualizer = Visualizer()
 
     # 統計累計（僅計入完整播放完成的影片）
@@ -959,35 +1015,31 @@ def main():
                 if is_first_pass:
                     local_frames_with_cat += 1
 
-                # 統計有效關鍵點幀數
-                valid_mask = (kpt_conf > JITTER_CONF_THRESHOLD)
-                if is_first_pass:
-                    local_valid_counts += valid_mask.astype(np.int64)
+                # 統計有效關鍵點幀數與抖動（僅統計模式需要，視覺模式跳過）
+                if is_stats_mode:
+                    valid_mask = (kpt_conf > JITTER_CONF_THRESHOLD)
+                    if is_first_pass:
+                        local_valid_counts += valid_mask.astype(np.int64)
 
-                # 計算 bbox 對角線供正規化抖動使用
-                bbox_diag = None
-                if bbox is not None:
-                    x1, y1, x2, y2 = bbox
-                    w_box = max(1.0, float(x2 - x1))
-                    h_box = max(1.0, float(y2 - y1))
-                    bbox_diag = float(np.sqrt(w_box * w_box + h_box * h_box))
-
-                # 計算逐點抖動（EMA 平滑後的座標，反映模型實際接收到的穩定度）
-                if prev_kpts is not None and prev_kpt_conf is not None:
-                    pair_mask = (kpt_conf > JITTER_CONF_THRESHOLD) & (prev_kpt_conf > JITTER_CONF_THRESHOLD)
-                    for kp_idx in range(17):
-                        if not pair_mask[kp_idx]:
-                            continue
-
-                        jitter_px = float(np.linalg.norm(kpts[kp_idx] - prev_kpts[kp_idx]))
-                        if is_first_pass:
-                            local_jitter_px[kp_idx].append(jitter_px)
-                            local_pair_counts[kp_idx] += 1
-
-                        if bbox_diag is not None and bbox_diag > 0:
-                            jitter_norm = jitter_px / bbox_diag
+                    if prev_kpts is not None and prev_kpt_conf is not None:
+                        bbox_diag = None
+                        if bbox is not None:
+                            x1, y1, x2, y2 = bbox
+                            w_box = max(1.0, float(x2 - x1))
+                            h_box = max(1.0, float(y2 - y1))
+                            bbox_diag = float(np.sqrt(w_box * w_box + h_box * h_box))
+                        pair_mask = (kpt_conf > JITTER_CONF_THRESHOLD) & (prev_kpt_conf > JITTER_CONF_THRESHOLD)
+                        for kp_idx in range(17):
+                            if not pair_mask[kp_idx]:
+                                continue
+                            jitter_px = float(np.linalg.norm(kpts[kp_idx] - prev_kpts[kp_idx]))
                             if is_first_pass:
-                                local_jitter_norm[kp_idx].append(jitter_norm)
+                                local_jitter_px[kp_idx].append(jitter_px)
+                                local_pair_counts[kp_idx] += 1
+                            if bbox_diag is not None and bbox_diag > 0:
+                                jitter_norm = jitter_px / bbox_diag
+                                if is_first_pass:
+                                    local_jitter_norm[kp_idx].append(jitter_norm)
 
                 prev_kpts = kpts.copy()
                 prev_kpt_conf = kpt_conf.copy()
@@ -1021,6 +1073,11 @@ def main():
                         confidence = float(pred_conf)
                         probs = pred_probs.copy()
 
+                    # Update the per-class current confidences for the bottom panel
+                    # so the UI shows the latest probabilities for all classes.
+                    # Always update (not just first pass) so bars refresh on replay.
+                    local_behavior_current_confidences = probs.copy()
+
                     # 與主系統一致：低信心顯示「目前正常」
                     if confidence < BEHAVIOR_MIN_CONFIDENCE:
                         behavior_id_for_display = LOW_CONF_ID
@@ -1030,7 +1087,7 @@ def main():
                     # 只統計高信心預測
                     if behavior_id_for_display != LOW_CONF_ID:
                         behavior_text = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
-                        if is_first_pass:
+                        if is_stats_mode and is_first_pass:
                             local_predictions.append({
                                 'video_idx': current_video_idx,
                                 'video_path': video_path,
@@ -1054,8 +1111,9 @@ def main():
                     else:
                         behavior_id = LOW_CONF_ID
 
-                if is_first_pass and behavior_id != LOW_CONF_ID and 0 <= int(behavior_id) < 5 and float(confidence) >= BEHAVIOR_MIN_CONFIDENCE:
-                    local_behavior_duration_sec[int(behavior_id)] += frame_dt
+                if behavior_id != LOW_CONF_ID and 0 <= int(behavior_id) < 5 and float(confidence) >= BEHAVIOR_MIN_CONFIDENCE:
+                    if is_first_pass:
+                        local_behavior_duration_sec[int(behavior_id)] += frame_dt
                     local_behavior_current_confidences[int(behavior_id)] = float(confidence)
             else:
                 if is_first_pass:
@@ -1120,10 +1178,13 @@ def main():
                 # Compute text size to ensure background rectangle fully covers label
                 txt_size = cv2.getTextSize(_nav, cv2.FONT_HERSHEY_SIMPLEX, _fs, _th)[0]
                 rect_h = max(int(txt_size[1] * 1.6), int(22 * _ui))
-                # Draw a taller background rect so the label is never clipped
-                cv2.rectangle(show_frame, (0, 0), (_w, rect_h), (10, 16, 30), -1)
-                text_y = int(rect_h * 0.7)
-                cv2.putText(show_frame, _nav, (6, text_y),
+                # Place the nav panel at the top-right without a background to avoid
+                # overlapping the prediction label at the top-left.
+                text_w = txt_size[0]
+                right_margin = scale_px(8, _ui, min_px=6)
+                x_pos = max(6, _w - right_margin - text_w)
+                text_y = int(max(rect_h * 0.7, scale_px(20, _ui, min_px=14)))
+                cv2.putText(show_frame, _nav, (x_pos, text_y),
                             cv2.FONT_HERSHEY_SIMPLEX, _fs, (160, 210, 255), _th, cv2.LINE_AA)
                 cv2.imshow(WINDOW_NAME, show_frame)
 
@@ -1353,8 +1414,11 @@ def main():
         )
 
     # 產出文檔報告
-    report_path = generate_report_file(REPORT_OUTPUT_PATH, recorded_video_stats)
-    print(f"\n✓ 分析報告已輸出: {report_path}")
+    try:
+        report_path = generate_report_file(REPORT_OUTPUT_PATH, recorded_video_stats)
+        print(f"\n✓ 分析報告已輸出: {report_path}")
+    except Exception as e:
+        print(f"⚠ 無法輸出報告（{REPORT_OUTPUT_PATH}）：{e}")
 
     # 統計分析
     if predictions:
