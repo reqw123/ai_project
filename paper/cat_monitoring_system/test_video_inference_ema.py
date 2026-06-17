@@ -65,11 +65,11 @@ DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
 FOLDER_TEST_MODE = 'single'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\lick_ai"  # 'single' 模式使用的扁平資料夾
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\lick_標記區"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_96.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_98.pt"
 STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_best_033_xy_v_att_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
@@ -327,8 +327,8 @@ def draw_no_cat_overlay(frame, text="No cat detected"):
 _PANEL_LAYOUT_CACHE: dict = {}
 
 
-def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, behavior_current_confidences=None):
-    """高對比行為信心值面板：顯示四類行為的當下信心值百分比。"""
+def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, behavior_current_confidences=None, behavior_occurrence_counts=None):
+    """行為面板：每列顯示行為名稱、信心長條（一個）、累積持續秒數、發生次數。"""
     h, w = frame.shape[:2]
     cache_key = (w, h)
     layout = _PANEL_LAYOUT_CACHE.get(cache_key)
@@ -358,48 +358,52 @@ def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, beha
             tw, _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0]
             label_w = max(label_w, tw)
         conf_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0][0]
-        pct_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, pct_fs, text_th)[0][0]
         col_gap = scale_px(8, ui_scale, min_px=4)
         conf_x = tx + label_w + col_gap
         bar_x = conf_x + conf_w + col_gap
         bar_h = scale_px(12, ui_scale, min_px=8)
-        available_space = max(0, w - right - pct_w - col_gap - bar_x)
-        max_bar_w = scale_px(220, ui_scale, min_px=120)
-        min_bar_w = scale_px(60, ui_scale, min_px=48)
+        # 長條後顯示持續秒數（e.g. "999.9s"）和次數（e.g. "99次"），各保留一個欄位
+        dur_w = cv2.getTextSize("999.9s", cv2.FONT_HERSHEY_SIMPLEX, pct_fs, text_th)[0][0]
+        cnt_w = cv2.getTextSize("x99", cv2.FONT_HERSHEY_SIMPLEX, pct_fs, text_th)[0][0]
+        available_space = max(0, w - right - dur_w - col_gap - cnt_w - col_gap - bar_x)
+        max_bar_w = scale_px(180, ui_scale, min_px=80)
+        min_bar_w = scale_px(50, ui_scale, min_px=40)
         bar_w = max(min_bar_w, min(available_space, max_bar_w))
         row_y0 = panel_top + header_h
         baseline_off = scale_px(14, ui_scale, min_px=9)
         bar_top_off = scale_px(1, ui_scale, min_px=0)
-        pct_x = bar_x + bar_w + col_gap
+        dur_x = bar_x + bar_w + col_gap
+        cnt_x = dur_x + dur_w + col_gap
         bar_border_th = scale_px(1, ui_scale, min_px=1)
         layout = dict(
             title_fs=title_fs, meta_fs=meta_fs, row_fs=row_fs, pct_fs=pct_fs,
             text_th=text_th, shadow_th=shadow_th, row_h=row_h, bar_h=bar_h,
             bar_w=bar_w, bar_border_th=bar_border_th, tx=tx, ty=ty, timer_y=timer_y,
-            conf_x=conf_x, bar_x=bar_x, pct_x=pct_x, row_y0=row_y0,
+            conf_x=conf_x, bar_x=bar_x, dur_x=dur_x, cnt_x=cnt_x, row_y0=row_y0,
             baseline_off=baseline_off, bar_top_off=bar_top_off,
         )
         _PANEL_LAYOUT_CACHE[cache_key] = layout
 
-    title_fs     = layout['title_fs']
-    meta_fs      = layout['meta_fs']
-    row_fs       = layout['row_fs']
-    pct_fs       = layout['pct_fs']
-    text_th      = layout['text_th']
-    shadow_th    = layout['shadow_th']
-    row_h        = layout['row_h']
-    bar_h        = layout['bar_h']
-    bar_w        = layout['bar_w']
+    title_fs      = layout['title_fs']
+    meta_fs       = layout['meta_fs']
+    row_fs        = layout['row_fs']
+    pct_fs        = layout['pct_fs']
+    text_th       = layout['text_th']
+    shadow_th     = layout['shadow_th']
+    row_h         = layout['row_h']
+    bar_h         = layout['bar_h']
+    bar_w         = layout['bar_w']
     bar_border_th = layout['bar_border_th']
-    tx           = layout['tx']
-    ty           = layout['ty']
-    timer_y      = layout['timer_y']
-    conf_x       = layout['conf_x']
-    bar_x        = layout['bar_x']
-    pct_x        = layout['pct_x']
-    row_y0       = layout['row_y0']
-    baseline_off = layout['baseline_off']
-    bar_top_off  = layout['bar_top_off']
+    tx            = layout['tx']
+    ty            = layout['ty']
+    timer_y       = layout['timer_y']
+    conf_x        = layout['conf_x']
+    bar_x         = layout['bar_x']
+    dur_x         = layout['dur_x']
+    cnt_x         = layout['cnt_x']
+    row_y0        = layout['row_y0']
+    baseline_off  = layout['baseline_off']
+    bar_top_off   = layout['bar_top_off']
 
     title = "ST-GCN Behavior Confidence"
     cv2.putText(frame, title, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, title_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
@@ -410,26 +414,41 @@ def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, beha
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (170, 250, 255), text_th, cv2.LINE_AA)
 
     for bid, label in enumerate(BEHAVIOR_PANEL_LABELS):
-        if behavior_current_confidences is not None and bid < len(behavior_current_confidences):
-            pct = float(np.clip(behavior_current_confidences[bid], 0.0, 1.0))
-        else:
-            pct = 0.0
+        pct = float(np.clip(behavior_current_confidences[bid], 0.0, 1.0)) \
+            if behavior_current_confidences is not None and bid < len(behavior_current_confidences) else 0.0
         color = BEHAVIOR_COLORS.get(bid, (130, 230, 255))
         line_top = row_y0 + bid * row_h
         baseline_y = line_top + baseline_off
+
+        # 行為標籤
         cv2.putText(frame, label, (tx, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
         cv2.putText(frame, label, (tx, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, color, text_th, cv2.LINE_AA)
+
+        # 信心百分比（只顯示一次，在長條左側）
         conf_text = f"{pct * 100.0:5.1f}%"
         cv2.putText(frame, conf_text, (conf_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
         cv2.putText(frame, conf_text, (conf_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (235, 235, 235), text_th, cv2.LINE_AA)
+
+        # 信心長條
         bar_top = line_top + bar_top_off
         cv2.rectangle(frame, (bar_x, bar_top), (bar_x + bar_w, bar_top + bar_h), (78, 78, 78), -1)
         fill_w = int(round(bar_w * pct))
         if fill_w > 0:
             cv2.rectangle(frame, (bar_x, bar_top), (bar_x + fill_w, bar_top + bar_h), color, -1)
         cv2.rectangle(frame, (bar_x, bar_top), (bar_x + bar_w, bar_top + bar_h), (120, 120, 120), bar_border_th)
-        cv2.putText(frame, conf_text, (pct_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
-        cv2.putText(frame, conf_text, (pct_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (220, 220, 220), text_th, cv2.LINE_AA)
+
+        # 持續秒數
+        dur_val = behavior_duration_sec[bid] if behavior_duration_sec is not None and bid < len(behavior_duration_sec) else 0.0
+        dur_text = f"{dur_val:.1f}s"
+        cv2.putText(frame, dur_text, (dur_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
+        cv2.putText(frame, dur_text, (dur_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (180, 255, 180), text_th, cv2.LINE_AA)
+
+        # 發生次數
+        occ_val = int(behavior_occurrence_counts[bid]) \
+            if behavior_occurrence_counts is not None and bid < len(behavior_occurrence_counts) else 0
+        cnt_text = f"x{occ_val}"
+        cv2.putText(frame, cnt_text, (cnt_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
+        cv2.putText(frame, cnt_text, (cnt_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (255, 240, 160), text_th, cv2.LINE_AA)
 
     return frame
 
@@ -595,6 +614,11 @@ def generate_report_file(report_path, recorded_video_stats):
         "jitter_mean_px",
         "jitter_p95_px",
         "jitter_max_px",
+        "occ_walk",
+        "occ_lick",
+        "occ_scratch",
+        "occ_shake",
+        "occ_stop",
     ]
 
     with out_path.open("w", newline="", encoding="utf-8-sig") as f:
@@ -603,8 +627,9 @@ def generate_report_file(report_path, recorded_video_stats):
 
         for vid_idx in sorted(recorded_video_stats.keys()):
             s = recorded_video_stats[vid_idx]
-            behavior_counts = np.asarray(s.get("behavior_counts", np.zeros(4, dtype=np.int64)), dtype=np.int64)
-            behavior_duration_sec = np.asarray(s.get("behavior_duration_sec", np.zeros(4, dtype=np.float64)), dtype=np.float64)
+            behavior_counts = np.asarray(s.get("behavior_counts", np.zeros(5, dtype=np.int64)), dtype=np.int64)
+            behavior_duration_sec = np.asarray(s.get("behavior_duration_sec", np.zeros(5, dtype=np.float64)), dtype=np.float64)
+            behavior_occurrence_counts = np.asarray(s.get("behavior_occurrence_counts", np.zeros(5, dtype=np.int64)), dtype=np.int64)
             confidences = s.get("behavior_confidences", [])
             jp = s.get("jitter_px", [[] for _ in range(17)])
             all_jitter = [v for arr in jp for v in arr]
@@ -635,6 +660,11 @@ def generate_report_file(report_path, recorded_video_stats):
                 float(np.mean(all_jitter)) if all_jitter else 0.0,
                 float(np.percentile(all_jitter, 95)) if all_jitter else 0.0,
                 float(np.max(all_jitter)) if all_jitter else 0.0,
+                int(behavior_occurrence_counts[0]) if len(behavior_occurrence_counts) > 0 else 0,
+                int(behavior_occurrence_counts[1]) if len(behavior_occurrence_counts) > 1 else 0,
+                int(behavior_occurrence_counts[2]) if len(behavior_occurrence_counts) > 2 else 0,
+                int(behavior_occurrence_counts[3]) if len(behavior_occurrence_counts) > 3 else 0,
+                int(behavior_occurrence_counts[4]) if len(behavior_occurrence_counts) > 4 else 0,
             ])
 
     return out_path
@@ -829,6 +859,7 @@ def main():
         nonlocal local_frames_with_cat, local_frames_without_cat
         nonlocal local_jitter_px, local_jitter_norm, local_valid_counts, local_pair_counts
         nonlocal local_behavior_duration_sec, local_behavior_current_confidences
+        nonlocal local_behavior_occurrence_counts, local_last_behavior_for_occurrence
 
         keypoints_buffer.clear()
         prev_kpts = None
@@ -848,6 +879,8 @@ def main():
         local_pair_counts = np.zeros(17, dtype=np.int64)
         local_behavior_duration_sec = np.zeros(5, dtype=np.float64)
         local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
+        local_behavior_occurrence_counts = np.zeros(5, dtype=np.int64)
+        local_last_behavior_for_occurrence = LOW_CONF_ID
         reset_behavior_display_state()
 
     if display_window:
@@ -957,6 +990,8 @@ def main():
         local_pair_counts = np.zeros(17, dtype=np.int64)
         local_behavior_duration_sec = np.zeros(5, dtype=np.float64)
         local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
+        local_behavior_occurrence_counts = np.zeros(5, dtype=np.int64)
+        local_last_behavior_for_occurrence = LOW_CONF_ID
 
         while True:
             ret, frame = cap.read()
@@ -1056,14 +1091,29 @@ def main():
                     conf_arr = np.array([item[1] for item in keypoints_buffer])  # (32, 17)
 
                     # 插值補全
-                    seq_array = interpolate_missing(kpts_arr, conf_arr, threshold=0.1)
+                    # threshold=0.0：只要 YOLO 偵測到座標（conf>0）就保留，避免低信心時整骨架歸零
+                    # 若用 0.1，貓咪關節信心偏低時全部被清零 → 模型輸入全 0 → softmax 均等
+                    seq_array = interpolate_missing(kpts_arr, conf_arr, threshold=0.0)
                     if STGCN_NORMALIZE:
                         seq_array = flip_normalize(seq_array)
                         seq_array = orientation_normalize(seq_array)
                         seq_array = normalize_skeleton_coords(seq_array)
                     seq_features = build_feature_tensor(seq_array, conf_arr, feature_mode)
                     pred_id, pred_conf, pred_probs = behavior_classifier.classify(seq_features, precomputed=True)
-                    
+
+                    # ── 診斷：每 60 幀列印一次，確認輸入信心與模型輸出是否正常 ──
+                    _dbg_every = 60
+                    if local_sampled_frames % _dbg_every < CLASSIFY_STRIDE:
+                        _cmean = float(conf_arr.mean())
+                        _czero = int((conf_arr < 0.05).sum())
+                        _ctot  = int(conf_arr.size)
+                        _pstr  = ' '.join(f'{p*100:.1f}' for p in (pred_probs or []))
+                        print(f"[STGCN DBG] frame={local_frames_processed:5d} "
+                              f"kpt_conf mean={_cmean:.3f} zeros<0.05={_czero}/{_ctot} "
+                              f"num_classes={len(pred_probs) if pred_probs else '?'} "
+                              f"probs=[{_pstr}]%")
+                    # ─────────────────────────────────────────────────────────
+
                     if pred_id is None:
                         behavior_id = LOW_CONF_ID
                         confidence = 0.0
@@ -1076,13 +1126,26 @@ def main():
                     # Update the per-class current confidences for the bottom panel
                     # so the UI shows the latest probabilities for all classes.
                     # Always update (not just first pass) so bars refresh on replay.
-                    local_behavior_current_confidences = probs.copy()
+                    # 若模型為 4-class，把 probs 補齊到 5 元素，避免 STOP bar 永遠為 0
+                    _probs_padded = list(probs) if probs is not None else [0.0]
+                    while len(_probs_padded) < len(BEHAVIOR_PANEL_LABELS):
+                        _probs_padded.append(0.0)
+                    local_behavior_current_confidences = _probs_padded
 
                     # 與主系統一致：低信心顯示「目前正常」
                     if confidence < BEHAVIOR_MIN_CONFIDENCE:
                         behavior_id_for_display = LOW_CONF_ID
                     else:
                         behavior_id_for_display = behavior_id
+
+                    # 計算行為發生次數：切換到「不同的有效行為」時計為一次新發生
+                    # 貓消失或低信心 (LOW_CONF_ID) 期間會重置 local_last_behavior_for_occurrence，
+                    # 所以中斷後再次出現同一行為也會被計為新的一次。
+                    if is_first_pass:
+                        if (behavior_id_for_display != LOW_CONF_ID
+                                and behavior_id_for_display != local_last_behavior_for_occurrence):
+                            local_behavior_occurrence_counts[int(behavior_id_for_display)] += 1
+                        local_last_behavior_for_occurrence = behavior_id_for_display
 
                     # 只統計高信心預測
                     if behavior_id_for_display != LOW_CONF_ID:
@@ -1121,6 +1184,8 @@ def main():
                 prev_kpts = None
                 prev_kpt_conf = None
                 ema_kpts = None  # 貓消失時重置 EMA，避免下次出現時使用過時的平均值
+                if is_first_pass:
+                    local_last_behavior_for_occurrence = LOW_CONF_ID
 
             if display_window:
                 if DISPLAY_SIZE is not None:
@@ -1140,14 +1205,14 @@ def main():
                             scaled_bbox,
                             behavior_id,
                             confidence,
-                            probs if len(probs) == 5 else np.zeros(5, dtype=np.float32),
+                            np.array((list(probs) + [0.0] * 5)[:5], dtype=np.float32),
                             visualizer,
                             show_info=show_overlay_info,
                         )
                     else:
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
-                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences)
+                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts)
                 else:
                     show_frame = frame.copy()
                     if kpts is not None:
@@ -1158,14 +1223,14 @@ def main():
                             bbox,
                             behavior_id,
                             confidence,
-                            probs if len(probs) == 5 else np.zeros(5, dtype=np.float32),
+                            np.array((list(probs) + [0.0] * 5)[:5], dtype=np.float32),
                             visualizer,
                             show_info=show_overlay_info,
                         )
                     else:
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
-                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences)
+                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts)
                 # 資料夾名稱 + 影片進度條（左上角）
                 _fn  = FOLDER_MAP.get(current_folder_key, ("", "?"))[1]
                 _nav = (f"[{current_folder_key.upper()}]{_fn}  "
@@ -1315,6 +1380,7 @@ def main():
                 "behavior_counts": behavior_counts,
                 "behavior_confidences": behavior_confidences,
                 "behavior_duration_sec": local_behavior_duration_sec.copy(),
+                "behavior_occurrence_counts": local_behavior_occurrence_counts.copy(),
                 "jitter_px": local_jitter_px,
                 "jitter_norm": local_jitter_norm,
                 "valid_counts": local_valid_counts,
@@ -1342,6 +1408,15 @@ def main():
                 "pair_counts": local_pair_counts,
             }
             print(f"✓ 影片[{current_video_idx}] 已完整播放，統計已記錄")
+            print(f"  ┌─{'─'*10}─┬─{'─'*6}─┬─{'─'*9}─┐")
+            print(f"  │ {'行為':<10} │ {'次數':>6} │ {'持續(秒)':>9} │")
+            print(f"  ├─{'─'*10}─┼─{'─'*6}─┼─{'─'*9}─┤")
+            for _bid in range(5):
+                _bname = BEHAVIOR_CLASSES[_bid] if _bid < len(BEHAVIOR_CLASSES) else str(_bid)
+                _occ = int(local_behavior_occurrence_counts[_bid])
+                _dur = local_behavior_duration_sec[_bid]
+                print(f"  │ {_bname:<10} │ {_occ:>6} │ {_dur:>9.2f} │")
+            print(f"  └─{'─'*10}─┴─{'─'*6}─┴─{'─'*9}─┘")
         else:
             if switched_before_first_pass_complete:
                 print(f"⚠ 影片[{current_video_idx}] 中途切換，該影片統計不記錄")

@@ -1,0 +1,10 @@
+﻿python :   File "C:\ai_project\paper\_read_p4_sm.py", line 15
+At line:1 char:25
++ cd c:\ai_project\paper; python _read_p4_sm.py 2>&1 | Out-File -Encodi ...
++                         ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (  File "C:\ai_p...sm.py", line 15:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    sys.stdout.buffer.write(b'\n\n=== �ϥΪ̳]�w�޲z�� ===\n')
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: bytes can only contain ASCII literal characters

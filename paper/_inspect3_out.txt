@@ -1,0 +1,282 @@
+﻿=== 4b0c232763de1461 ===
+let cfg     = global.get('v2_user_settings','file') || {};
+let LICK_THR    = cfg.lick_pct    != null ? +cfg.lick_pct    : 20;
+let SCRATCH_THR = cfg.scratch_pct != null ? +cfg.scratch_pct : 15;
+let SHAKE_THR   = cfg.shake_pct   != null ? +cfg.shake_pct   : 10;
+let STOP_THR    = cfg.stop_pct    != null ? +cfg.stop_pct    : 55;
+let LSC_THR     = cfg.lsc_count   != null ? +cfg.lsc_count   : 10;
+let data  = msg.payload;
+let dev   = data.deviation;
+let dist  = data.distribution || flow.get('v2_distribution') || {};
+let rhythm= data.rhythm       || flow.get('v2_rhythm')       || {};
+let mx    = data.v2_matrix    || global.get('v2_transition_matrix') || {};
+let td    = data.v2_today     || {};
+
+// ?? 1. ?????? dScore (0-100)???????????????????????? ??
+let dScore = 0;
+let lPct = parseFloat(dist.lick    ||0); // ?????????????
+let scPct= parseFloat(dist.scratch ||0); // ????
+let shPct= parseFloat(dist.shake   ||0); // ????
+let stPct= parseFloat(dist.stop    ||0); // ????
+let wPct = parseFloat(dist.walk    ||0); // ????
+if (lPct  >LICK_THR)    dScore += Math.min(30,(lPct -LICK_THR)*1.5);
+if (scPct >SCRATCH_THR) dScore += Math.min(35,(scPct-SCRATCH_THR)*2.0);
+if (shPct >SHAKE_THR)   dScore += Math.min(35,(shPct-SHAKE_THR)*2.5);
+if (stPct >STOP_THR)    dScore += Math.min(20,(stPct-STOP_THR)*1.0);
+if (wPct  <10 && td.active_time>300) dScore += 15;      // ?? <10% ?????????? 5 ????????
+dScore = Math.min(100,dScore);
+
+// ?? 2. ?????? fScore (0-100)?????????????????????? fScore=0 ??
+let fScore = 0;
+if (dev) { // dev ??????????? mean ??????
+    let ld=dev.lick_time||0, sd=dev.scratch_time||0, shd=dev.shake_count||0, std2=dev.stop_time||0;
+    // ??????????????????????????
+    if (ld >150) fScore+=30; else if(ld>100) fScore+=20; else if(ld>50) fScore+=10; // ???????? 50/100/150%
+    if (sd >200) fScore+=35; else if(sd>150) fScore+=25; else if(sd>80)  fScore+=15; // ???????? 80/150/200%
+    if (shd>100) fScore+=35; else if(shd>50) fScore+=20; else if(shd>30) fScore+=10; // ???????? 30/50/100%
+    if (std2>80) fScore+=20; else if(std2>50) fScore+=10;                             // ???????? 50/80%
+}
+fScore = Math.min(100,fScore);
+
+// ?? 3. ?????? rScore (0-100)????????????????? ??
+let rScore = 0;
+let night  = rhythm['00-06'] || {}; // ??????? 0~6 ??
+if (night.dominant==='scratch'||night.dominant==='lick')   rScore += 30; // ?????????/??????????
+if (night.dominant==='shake')                               rScore += 25; // ?????????????????
+if (night.pct && night.pct.scratch > 20)                    rScore += 20; // ?????? >20%???????????
+let day06  = rhythm['06-12'] || {}; // ????
+let day12  = rhythm['12-18'] || {}; // ????
+if (day06.pct && day12.pct && (day06.pct.walk||0)<15 && (day12.pct.walk||0)<15 && wPct<20) rScore += 20; // ?????? <15% ????? <20%?????????
+rScore = Math.min(100,rScore);
+
+// ?? 4. ?????? tScore (0-100)???????????? ??
+let tScore = 0;
+let lsc  = (mx['lick->scratch']||0) + (mx['scratch->lick']||0); // lick?scratch ????????????????
+let shch = (mx['shake->shake'] ||0);                              // ????? ????????????
+let stst = (mx['stop->stop']   ||0);                              // ????? ???????????
+if (lsc>LSC_THR*2) tScore+=40; else if(lsc>LSC_THR) tScore+=20; else if(lsc>Math.max(2,Math.round(LSC_THR/2))) tScore+=10;
+if (shch >15) tScore+=30; else if(shch>8)  tScore+=15;
+if (stst >50) tScore+=20; else if(stst>30) tScore+=10;
+tScore = Math.min(100,tScore);
+
+// ?? ????? riskScore????????????? = 1.0 ??
+let riskScore = Math.round(
+    dScore*0.30 + // ?????? 30%
+    fScore*0.35 + // ???? 35%?????????
+    rScore*0.20 + // ???? 20%
+    tScore*0.15   // ???? 15%
+);
+
+// ???????0~19=???20~44=???45~69=???70~100=???
+let level,color,emoji;
+if (riskScore<20)      {level='Normal';    color='#4caf50';emoji='?';}
+else if (riskScore<45) {level='Attention'; color='#ffa726';emoji='??';}
+else if (riskScore<70) {level='Warning';   color='#ff7043';emoji='??';}
+else                   {level='High Risk'; color='#f44336';emoji='??';}
+
+let alerts = [];
+if (lPct  >LICK_THR)    alerts.push({type:'lick',    msg:'???? '+lPct+'%??????? '+LICK_THR+'%'});
+if (scPct >SCRATCH_THR) alerts.push({type:'scratch', msg:'???? '+scPct+'%??????? '+SCRATCH_THR+'%'});
+if (shPct >SHAKE_THR)   alerts.push({type:'shake',   msg:'???? '+shPct+'%??????? '+SHAKE_THR+'%'});
+if (dev) {
+    if ((dev.lick_time   ||0)>100) alerts.push({type:'dev', msg:'?????? '+dev.lick_time+'%?vs?????'});
+    if ((dev.scratch_time||0)>150) alerts.push({type:'dev', msg:'?????? '+dev.scratch_time+'%?vs?????'});
+    if ((dev.shake_count ||0)>100) alerts.push({type:'dev', msg:'?????? '+dev.shake_count+'%?vs?????'});
+}
+if (stPct>STOP_THR) alerts.push({type:'inactivity', msg:'???? '+stPct+'%????????'});
+if (lsc>LSC_THR) {
+    let ls=mx['lick->scratch']||0, sl=mx['scratch->lick']||0;
+    let half=Math.max(2,Math.round(LSC_THR/2));
+    let transMsg = (ls>half&&sl>half) ? 'lick?scratch ?? '+lsc+' ????????'
+                 : sl>ls              ? 'scratch?lick '+sl+' ??????????????'
+                                      : 'lick?scratch '+ls+' ??????????????';
+    alerts.push({type:'transition', msg:transMsg});
+}
+
+let risk = {
+    score: riskScore,
+    level,color,emoji,
+    components: {
+        distribution: Math.round(dScore),
+        frequency:    Math.round(fScore),
+        rhythm:       Math.round(rScore),
+        transition:   Math.round(tScore)
+    },
+    alerts,
+    computed_at: new Date().toISOString()
+};
+global.set('v2_risk', risk);
+msg.payload.risk = risk;
+msg.payload.user_settings  = cfg;
+msg.payload.v2_event_tags  = (global.get('v2_event_tags','file')||[]).slice(-14);
+
+let NOTIFY_LEVEL = cfg.notify_level != null ? +cfg.notify_level : 2;
+let shouldNotify = NOTIFY_LEVEL===1 ? level==='High Risk'
+                 : NOTIFY_LEVEL===3 ? level!=='Normal'
+                 : (level==='Warning'||level==='High Risk');
+return [msg, shouldNotify ? msg : null];
+
+=== c5ce881398ee6376 ===
+let today  = global.get('v2_today', 'file') || {};
+let hourly = global.get('v2_hourly') || {};
+let date   = today.date || new Date().toLocaleDateString('zh-TW');
+
+// ?????????????
+const PERIOD_HOURS = {
+    '00-06': ['00','01','02','03','04','05'],
+    '06-12': ['06','07','08','09','10','11'],
+    '12-18': ['12','13','14','15','16','17'],
+    '18-24': ['18','19','20','21','22','23']
+};
+let periods = {};
+for (let [name, hrs] of Object.entries(PERIOD_HOURS)) {
+    let d = {walk:0,lick:0,scratch:0,shake:0,stop:0,monitoring_sec:0};
+    for (let h of hrs) {
+        let hd = hourly[h] || {};
+        for (let b of ['walk','lick','scratch','shake','stop']) d[b] += (hd[b]||0);
+        d.monitoring_sec += (hd.monitoring_sec || 0);
+    }
+    d.total = d.walk+d.lick+d.scratch+d.shake+d.stop;
+    periods[name] = d;
+}
+
+let rec = {
+    date,
+    lick_count:    today.lick    ? today.lick.count    : 0,
+    lick_time:     today.lick    ? today.lick.time     : 0,
+    scratch_count: today.scratch ? today.scratch.count : 0,
+    scratch_time:  today.scratch ? today.scratch.time  : 0,
+    shake_count:   today.shake   ? today.shake.count   : 0,
+    shake_time:    today.shake   ? today.shake.time    : 0,
+    walk_count:    today.walk    ? today.walk.count    : 0,
+    walk_time:     today.walk    ? today.walk.time     : 0,
+    stop_count:    today.stop    ? today.stop.count    : 0,
+    stop_time:     today.stop    ? today.stop.time     : 0,
+    active_time:        today.active_time       || 0,
+    rest_time:          today.rest_time         || 0,
+    monitoring_seconds: today.monitoring_seconds || 0,
+    monitoring_hours:   parseFloat(((today.monitoring_seconds || 0) / 3600).toFixed(2)),
+    stop_ratio:    today.active_time > 0
+        ? parseFloat(((today.stop ? today.stop.time : 0) / today.active_time).toFixed(3))
+        : 0,
+    periods
+};
+
+let newDay = {
+    date: new Date().toLocaleDateString('zh-TW'),
+    walk:    {count:0,time:0}, lick:    {count:0,time:0},
+    scratch: {count:0,time:0}, shake:   {count:0,time:0},
+    stop:    {count:0,time:0},
+    active_time:0, rest_time:0, not_detected_time:0, monitoring_seconds:0
+};
+global.set('v2_today',  newDay,  'file');
+global.set('v2_hourly', {});
+global.set('v2_transition_matrix', {});
+
+const MIN_RECORD_SEC = 1800; // ?????? 30 ???1800 ?????????????????????????
+if ((rec.monitoring_seconds || 0) < MIN_RECORD_SEC) {
+    node.warn('?????????' + rec.monitoring_seconds + ' ?????????');
+    return null;
+}
+
+let history = global.get('v2_daily_history', 'file') || [];
+history.push(rec);
+if (history.length > 90) history = history.slice(-90);
+global.set('v2_daily_history', history, 'file');
+node.warn('???????' + date + '??? ' + history.length + ' ?');
+
+msg.payload = rec;
+return msg;
+
+=== 66a22e0ec663d07d ===
+// ????????????????????????????????????????????????????????????????
+//  ??????????????????
+// ????????????????????????????????????????????????????????????????
+//
+//  MIN_BASELINE_DAYS????????????????
+//    ?????????????????????????????
+//    ? ????????????????
+const _blCfg = global.get('v2_user_settings','file') || {};
+const MIN_BASELINE_DAYS = _blCfg.baseline_days != null ? +_blCfg.baseline_days : 7;
+//
+//  MIN_DAILY_SEC??????????????????????????
+//    3600 = 1 ????????????????? 600
+const MIN_DAILY_SEC = 3600;
+//
+//  REQUIRED_PERIODS???????????????????
+//    []                              ? ????????? MIN_DAILY_SEC ????
+//    ['06-12','12-18']               ? ????????????????
+//    ['00-06','06-12','12-18','18-24'] ? ????????
+//    ???????????? > 300 ??5 ??????????
+const REQUIRED_PERIODS = [];
+// ????????????????????????????????????????????????????????????????
+
+let history = global.get('v2_daily_history', 'file') || [];
+
+if (history.length < MIN_BASELINE_DAYS) {
+    node.warn('???????' + history.length + ' ???? ' + MIN_BASELINE_DAYS + ' ??');
+    msg.payload = { error: '??????', current_days: history.length, required_days: MIN_BASELINE_DAYS };
+    return msg;
+}
+
+let validDays = history.filter(d => {
+    if ((d.monitoring_seconds || 0) < MIN_DAILY_SEC) return false;
+    if (!d.periods) return true;  // ???? periods ???????
+    return REQUIRED_PERIODS.every(p => d.periods[p] && d.periods[p].monitoring_sec > 300); // ?????? >300 ??5???????
+});
+if (validDays.length < MIN_BASELINE_DAYS) {
+    node.warn('??????????? ' + MIN_BASELINE_DAYS + ' ??' + validDays.length + ' ???????????');
+    validDays = history;
+}
+let days = validDays.slice(-30); // ????? 30 ???????????????
+
+// ????????????????????????????????
+let periodCoverage = {};
+for (let p of ['00-06','06-12','12-18','18-24']) {
+    let covered = days.filter(d => d.periods && d.periods[p] && d.periods[p].monitoring_sec > 300).length; // >5 ????????????
+    periodCoverage[p] = { covered, total: days.length };
+}
+
+function calcStats(vals) {
+    let arr = [...vals].filter(v=>v!==null&&v!==undefined).map(Number);
+    if (arr.length===0) return {mean:0,std:0,median:0};
+    arr.sort((a,b)=>a-b);
+    let mean   = arr.reduce((a,b)=>a+b,0)/arr.length;
+    let vari   = arr.reduce((a,b)=>a+Math.pow(b-mean,2),0)/arr.length;
+    let std    = Math.sqrt(vari);
+    let median = arr.length%2===0?(arr[arr.length/2-1]+arr[arr.length/2])/2:arr[Math.floor(arr.length/2)];
+    return {mean:parseFloat(mean.toFixed(2)),std:parseFloat(std.toFixed(2)),median:parseFloat(median.toFixed(2))};
+}
+
+let metrics = {
+    lick_count:    calcStats(days.map(d=>d.lick_count    ||0)),
+    lick_time:     calcStats(days.map(d=>d.lick_time     ||0)),
+    scratch_count: calcStats(days.map(d=>d.scratch_count ||0)),
+    scratch_time:  calcStats(days.map(d=>d.scratch_time  ||0)),
+    shake_count:   calcStats(days.map(d=>d.shake_count   ||0)),
+    shake_time:    calcStats(days.map(d=>d.shake_time    ||0)),
+    walk_count:    calcStats(days.map(d=>d.walk_count    ||0)),
+    walk_time:     calcStats(days.map(d=>d.walk_time     ||0)),
+    stop_time:     calcStats(days.map(d=>d.stop_time     ||0)),
+    stop_count:    calcStats(days.map(d=>d.stop_count    ||0))
+};
+
+let baseline = {
+    computed_at:      new Date().toISOString(),
+    days_count:       days.length,
+    required_days:    MIN_BASELINE_DAYS, // ????????????
+    required_periods: REQUIRED_PERIODS,
+    period_coverage:  periodCoverage,
+    metrics
+};
+
+try {
+    global.set('v2_baseline', baseline, 'file');
+} catch(e) {
+    global.set('v2_baseline', baseline);
+}
+
+node.warn('???????' + days.length + ' ???');
+msg.payload = baseline;
+return msg;
+

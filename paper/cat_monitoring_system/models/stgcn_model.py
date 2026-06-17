@@ -58,6 +58,7 @@ def _normalize_temporal_kernel_sizes(temporal_kernel_size):
 
 # ==================== 骨架前處理函數（訓練與推論共用） ====================
 def interpolate_missing(sequence, conf, threshold=0.1):
+    # threshold=0.1 保留弱訊號供時間插值；動作分數過濾使用更嚴格的 AnomalyDetectionConfig.KP_CONF_THRES=0.5
     """sequence: (T, V, 2), conf: (T, V) — 時間軸插尼補全低信心關節點"""
     seq = sequence.copy()
     for v in range(seq.shape[1]):

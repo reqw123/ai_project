@@ -41,7 +41,6 @@ from utils.helpers import get_ip
 frame_streamer = None
 frame_processor = None
 _init_lock = __import__('threading').Lock()
-tracker = ImprovedBehaviorTracker()
 LOCAL_IP = get_ip() or "127.0.0.1"
 
 
@@ -185,7 +184,7 @@ def register_routes(app):
             limit = max(1, min(int(request.args.get('limit', 200)), 1000))
         except (TypeError, ValueError):
             limit = 200
-        t = frame_processor.tracker if frame_processor else tracker
+        t = frame_processor.tracker
         history = list(t.behavior_history)[-limit:]
         segments = []
         for rec in reversed(history):

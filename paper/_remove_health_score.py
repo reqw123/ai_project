@@ -1,0 +1,310 @@
+# -*- coding: utf-8 -*-
+"""移除 health_score，只保留 Risk Score (dScore/fScore) 作為唯一健康指標"""
+import json, sys, re
+
+JSON_PATH  = r'c:\ai_project\paper\貓咪主控.json'
+ENGINE_ID  = '257d6083ac06afed'   # 健康引擎分析
+UI_ID      = 'd349c9a9a2509e65'   # 健康警示
+DISCORD_ID = 'f5dbb3d51fabb63d'   # 發送提醒
+DISTRIB_ID = '89b182d351391d5f'   # 數據分發器
+CSV_ID     = 'a8843440996e7bcf'   # 建立CSV
+
+# ═══════════════════════════════════════════════════════════════
+# 1. 健康引擎分析 ── 移除 health_score，只保留 risk object
+# ═══════════════════════════════════════════════════════════════
+NEW_ENGINE_FUNC = (
+    "let data    = msg.payload;\n"
+    "let stats   = (data && data.today_stats) ? data.today_stats : {};\n"
+    "\n"
+    "let walk_t    = Number(stats.walk_time    || 0);\n"
+    "let lick_t    = Number(stats.lick_time    || 0);\n"
+    "let scratch_t = Number(stats.scratch_time || 0);\n"
+    "let shake_t   = Number(stats.shake_time   || 0);\n"
+    "let stop_t    = Number(stats.stop_time    || 0);\n"
+    "let td_active = Number(stats.active_time  || 0);\n"
+    "\n"
+    "// ── 行為佔比 ──────────────────────────────────────────────────\n"
+    "let totalBeh = walk_t + lick_t + scratch_t + shake_t + stop_t;\n"
+    "let dist = totalBeh > 0 ? {\n"
+    "    walk:    walk_t    / totalBeh * 100,\n"
+    "    lick:    lick_t    / totalBeh * 100,\n"
+    "    scratch: scratch_t / totalBeh * 100,\n"
+    "    shake:   shake_t   / totalBeh * 100,\n"
+    "    stop:    stop_t    / totalBeh * 100\n"
+    "} : {walk:0, lick:0, scratch:0, shake:0, stop:0};\n"
+    "data.distribution = dist;\n"
+    "\n"
+    "// ── dScore：行為占比偏離 (0-100) — 不需基線 ──────────────────\n"
+    "let LICK_THR = 20, SCRATCH_THR = 15, SHAKE_THR = 10, STOP_THR = 55;\n"
+    "let dScore = 0;\n"
+    "if (dist.lick    > LICK_THR)    dScore += Math.min(30, (dist.lick    - LICK_THR)    * 1.5);\n"
+    "if (dist.scratch > SCRATCH_THR) dScore += Math.min(35, (dist.scratch - SCRATCH_THR) * 2.0);\n"
+    "if (dist.shake   > SHAKE_THR)   dScore += Math.min(35, (dist.shake   - SHAKE_THR)   * 2.5);\n"
+    "if (dist.stop    > STOP_THR)    dScore += Math.min(20, (dist.stop    - STOP_THR)    * 1.0);\n"
+    "if (dist.walk    < 10 && td_active > 300) dScore += 15;\n"
+    "dScore = Math.min(100, Math.round(dScore));\n"
+    "\n"
+    "// ── fScore：頻率偏離（讀取 v2_baseline；無基線時 = 0）─────────\n"
+    "let fScore = 0, hasBaseline = false;\n"
+    "try {\n"
+    "    let bl = global.get('v2_baseline', 'file') || global.get('v2_baseline');\n"
+    "    if (bl && bl.metrics) {\n"
+    "        hasBaseline = true;\n"
+    "        let m = bl.metrics;\n"
+    "        let pctDev = function(cur, key) {\n"
+    "            let b = m[key]; if (!b || b.mean === 0) return 0;\n"
+    "            return (cur - b.mean) / b.mean * 100;\n"
+    "        };\n"
+    "        let ld  = pctDev(lick_t,    'lick_time');\n"
+    "        let sd  = pctDev(scratch_t, 'scratch_time');\n"
+    "        let shd = pctDev(Number(stats.shake_count || 0), 'shake_count');\n"
+    "        let std = pctDev(stop_t,    'stop_time');\n"
+    "        if (ld  > 150) fScore += 30; else if (ld  > 100) fScore += 20; else if (ld  >  50) fScore += 10;\n"
+    "        if (sd  > 200) fScore += 35; else if (sd  > 150) fScore += 25; else if (sd  >  80) fScore += 15;\n"
+    "        if (shd > 100) fScore += 35; else if (shd >  50) fScore += 20; else if (shd >  30) fScore += 10;\n"
+    "        if (std >  80) fScore += 20; else if (std >  50) fScore += 10;\n"
+    "        fScore = Math.min(100, Math.round(fScore));\n"
+    "    }\n"
+    "} catch(e) {}\n"
+    "\n"
+    "// ── 綜合風險分（有基線：dScore×45%+fScore×55%；無基線：純用 dScore）\n"
+    "let riskScore = hasBaseline\n"
+    "    ? Math.round(dScore * 0.45 + fScore * 0.55)\n"
+    "    : dScore;\n"
+    "riskScore = Math.max(0, Math.min(100, riskScore));\n"
+    "\n"
+    "// ── 風險等級（<20=Normal, 20-44=Attention, 45-69=Warning, ≥70=High Risk）\n"
+    "let level, color, emoji;\n"
+    "if      (riskScore < 20) { level = 'Normal';    color = '#4caf50'; emoji = '✅'; }\n"
+    "else if (riskScore < 45) { level = 'Attention'; color = '#ffa726'; emoji = '⚠️'; }\n"
+    "else if (riskScore < 70) { level = 'Warning';   color = '#ff7043'; emoji = '🚨'; }\n"
+    "else                      { level = 'High Risk'; color = '#f44336'; emoji = '🆘'; }\n"
+    "\n"
+    "// ── 異常警示列表 ──────────────────────────────────────────────\n"
+    "let alerts = [];\n"
+    "if (dist.lick    > LICK_THR)    alerts.push({type:'lick',       msg:'舔舐佔比 ' + dist.lick.toFixed(1)    + '%，超過閾值 ' + LICK_THR    + '%'});\n"
+    "if (dist.scratch > SCRATCH_THR) alerts.push({type:'scratch',    msg:'搔抓佔比 ' + dist.scratch.toFixed(1) + '%，超過閾值 ' + SCRATCH_THR + '%'});\n"
+    "if (dist.shake   > SHAKE_THR)   alerts.push({type:'shake',      msg:'甩頭佔比 ' + dist.shake.toFixed(1)   + '%，超過閾值 ' + SHAKE_THR   + '%'});\n"
+    "if (dist.stop    > STOP_THR)    alerts.push({type:'inactivity', msg:'靜止佔比 ' + dist.stop.toFixed(1)    + '%，活動力偏低'});\n"
+    "if (hasBaseline && fScore >= 20) alerts.push({type:'dev', msg:'行為頻率與個體基線偏離（fScore: ' + fScore + '）'});\n"
+    "\n"
+    "data.risk = {\n"
+    "    score:  riskScore,\n"
+    "    level:  level,\n"
+    "    color:  color,\n"
+    "    emoji:  emoji,\n"
+    "    components: {\n"
+    "        distribution: dScore,\n"
+    "        frequency:    fScore,\n"
+    "        rhythm:       0,\n"
+    "        transition:   0\n"
+    "    },\n"
+    "    alerts:      alerts,\n"
+    "    computed_at: new Date().toISOString()\n"
+    "};\n"
+    "data.alerts = alerts;\n"
+    "return msg;"
+)
+
+# ═══════════════════════════════════════════════════════════════
+# 2. 健康警示 ── 移除 health score 方塊
+# ═══════════════════════════════════════════════════════════════
+NEW_UI_FORMAT = (
+    "<style>\n"
+    ".hw{font-family:'Microsoft JhengHei',sans-serif;padding:14px;background:#0d1117;border-radius:14px}\n"
+    ".hw-score-card{border-radius:16px;padding:24px;text-align:center;margin-bottom:16px}\n"
+    ".hw-score-emoji{font-size:44px;line-height:1;margin-bottom:10px}\n"
+    ".hw-score-num{font-size:60px;font-weight:900;line-height:1;margin-bottom:4px}\n"
+    ".hw-score-level{font-size:18px;font-weight:700;letter-spacing:1px}\n"
+    ".hw-score-sub{font-size:10px;color:rgba(255,255,255,.4);margin-top:8px}\n"
+    ".hw-comps{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}\n"
+    ".hw-comp-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}\n"
+    ".hw-comp-title{font-size:10px;color:rgba(255,255,255,.45);margin-bottom:6px;font-weight:600}\n"
+    ".hw-comp-score{font-size:24px;font-weight:800;margin-bottom:6px}\n"
+    ".hw-comp-bar{height:5px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden}\n"
+    ".hw-comp-fill{height:100%;border-radius:99px;transition:width .6s ease}\n"
+    ".comp-dist{color:#85B7EB}.comp-freq{color:#F09595}.comp-na{color:rgba(255,255,255,.2)}\n"
+    ".fill-dist{background:linear-gradient(90deg,#1e88e5,#64b5f6)}\n"
+    ".fill-freq{background:linear-gradient(90deg,#e53935,#ef9a9a)}\n"
+    ".fill-na{background:rgba(255,255,255,.12)}\n"
+    ".hw-alerts-title{font-size:12px;font-weight:700;color:rgba(255,255,255,.55);margin-bottom:10px}\n"
+    ".hw-alert-item{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;margin-bottom:6px}\n"
+    ".hw-alert-ico{font-size:15px;flex-shrink:0}\n"
+    ".hw-alert-txt{font-size:12px;color:rgba(255,255,255,.75);line-height:1.5}\n"
+    ".hw-no-alerts{text-align:center;padding:14px;color:rgba(255,255,255,.3);font-size:12px}\n"
+    "</style>\n"
+    "<div class=\"hw\" ng-init=\"init()\">\n"
+    "  <div class=\"hw-score-card\" ng-style=\"{border:'1px solid '+riskColor(),background:'rgba('+hexRgb(riskColor())+',0.08)'}\">\n"
+    "    <div class=\"hw-score-emoji\">{{risk().emoji||'⏳'}}</div>\n"
+    "    <div class=\"hw-score-num\" ng-style=\"{color:riskColor()}\">{{risk().score||0}}</div>\n"
+    "    <div class=\"hw-score-level\" ng-style=\"{color:riskColor()}\">{{risk().level||'計算中...'}}</div>\n"
+    "    <div class=\"hw-score-sub\">Behavior Risk Score（0=最佳 · 100=最高風險）</div>\n"
+    "  </div>\n"
+    "  <div class=\"hw-comps\">\n"
+    "    <div class=\"hw-comp-card\">\n"
+    "      <div class=\"hw-comp-title\">📊 行為占比偏離</div>\n"
+    "      <div class=\"hw-comp-score comp-dist\">{{comp('distribution')}}</div>\n"
+    "      <div class=\"hw-comp-bar\"><div class=\"hw-comp-fill fill-dist\" ng-style=\"{width:comp('distribution')+'%'}\"></div></div>\n"
+    "    </div>\n"
+    "    <div class=\"hw-comp-card\">\n"
+    "      <div class=\"hw-comp-title\">📉 頻率偏離{{comp('frequency')>0?'':'(需基線)'}}</div>\n"
+    "      <div class=\"hw-comp-score comp-freq\">{{comp('frequency')}}</div>\n"
+    "      <div class=\"hw-comp-bar\"><div class=\"hw-comp-fill\" ng-class=\"comp('frequency')>0?'fill-freq':'fill-na'\" ng-style=\"{width:comp('frequency')+'%'}\"></div></div>\n"
+    "    </div>\n"
+    "    <div class=\"hw-comp-card\" style=\"opacity:.32\">\n"
+    "      <div class=\"hw-comp-title\">🌙 節律偏離（需每小時資料）</div>\n"
+    "      <div class=\"hw-comp-score comp-na\">0</div>\n"
+    "      <div class=\"hw-comp-bar\"><div class=\"hw-comp-fill fill-na\" style=\"width:0%\"></div></div>\n"
+    "    </div>\n"
+    "    <div class=\"hw-comp-card\" style=\"opacity:.32\">\n"
+    "      <div class=\"hw-comp-title\">🔀 轉移偏離（需轉移矩陣）</div>\n"
+    "      <div class=\"hw-comp-score comp-na\">0</div>\n"
+    "      <div class=\"hw-comp-bar\"><div class=\"hw-comp-fill fill-na\" style=\"width:0%\"></div></div>\n"
+    "    </div>\n"
+    "  </div>\n"
+    "  <div class=\"hw-alerts-title\">⚠️ 異常警示列表</div>\n"
+    "  <div ng-if=\"risk().alerts&&risk().alerts.length>0\">\n"
+    "    <div class=\"hw-alert-item\" ng-repeat=\"a in risk().alerts\">\n"
+    "      <div class=\"hw-alert-ico\">{{alertIco(a.type)}}</div>\n"
+    "      <div class=\"hw-alert-txt\">{{a.msg}}</div>\n"
+    "    </div>\n"
+    "  </div>\n"
+    "  <div class=\"hw-no-alerts\" ng-if=\"!risk().alerts||risk().alerts.length===0\">✅ 目前無異常警示</div>\n"
+    "</div>\n"
+    "<script>\n"
+    "(function(scope){\n"
+    "  scope.init = function(){};\n"
+    "  scope.risk = function(){ return scope.msg&&scope.msg.payload&&scope.msg.payload.risk||{}; };\n"
+    "  scope.comp = function(k){ var c=scope.risk().components; return c?c[k]||0:0; };\n"
+    "  scope.riskColor = function(){ return scope.risk().color||'#888888'; };\n"
+    "  scope.hexRgb = function(hex){ if(!hex||hex.length<7)return '136,136,136'; return parseInt(hex.slice(1,3),16)+','+parseInt(hex.slice(3,5),16)+','+parseInt(hex.slice(5,7),16); };\n"
+    "  scope.alertIco = function(t){ return {lick:'😸',scratch:'🐾',shake:'🔄',dev:'📊',transition:'🔀',inactivity:'😴'}[t]||'⚠️'; };\n"
+    "})(scope);\n"
+    "</script>"
+)
+
+# ═══════════════════════════════════════════════════════════════
+# 3. 發送提醒 ── 移除 Health Score 欄位
+# ═══════════════════════════════════════════════════════════════
+NEW_DISCORD_FUNC = (
+    "let risk   = msg.payload.risk   || {};\n"
+    "let alerts = msg.payload.alerts || [];\n"
+    "\n"
+    "if (!risk.level || risk.level === 'Normal') {\n"
+    "    flow.set(\"last_discord_alert\", \"\");\n"
+    "    return null;\n"
+    "}\n"
+    "\n"
+    "let dedup_key = risk.level + '|' + alerts.map(function(a){ return a.type||''; }).join(',');\n"
+    "let last_key  = flow.get(\"last_discord_alert\") || \"\";\n"
+    "if (last_key === dedup_key) return null;\n"
+    "flow.set(\"last_discord_alert\", dedup_key);\n"
+    "\n"
+    "let colorMap = { Attention: 16753920, Warning: 16729344, 'High Risk': 16711680 };\n"
+    "let embed_color = colorMap[risk.level] || 16711680;\n"
+    "\n"
+    "let fields = [\n"
+    "    { name: '🎯 Risk Score', value: String(risk.score) + '/100', inline: true },\n"
+    "    { name: '📊 風險等級',   value: (risk.emoji||'') + ' ' + risk.level, inline: true }\n"
+    "];\n"
+    "if (risk.components) {\n"
+    "    fields.push({ name: '📊 占比偏離', value: String(risk.components.distribution||0), inline: true });\n"
+    "    if ((risk.components.frequency||0) > 0) {\n"
+    "        fields.push({ name: '📉 頻率偏離', value: String(risk.components.frequency||0), inline: true });\n"
+    "    }\n"
+    "}\n"
+    "if (alerts.length > 0) {\n"
+    "    fields.push({ name: '⚠️ 異常項目', value: alerts.map(function(a){ return a.msg; }).join('\\n'), inline: false });\n"
+    "}\n"
+    "\n"
+    "msg.headers = { 'Content-Type': 'application/json' };\n"
+    "msg.payload = {\n"
+    "    username: 'Cat Health Monitor',\n"
+    "    embeds: [{\n"
+    "        title:       (risk.emoji||'🚨') + ' 健康預警：' + risk.level,\n"
+    "        description: '貓咪行為風險分析結果',\n"
+    "        color:       embed_color,\n"
+    "        fields:      fields,\n"
+    "        footer:      { text: new Date().toLocaleString('zh-TW') }\n"
+    "    }]\n"
+    "};\n"
+    "return msg;"
+)
+
+# ═══════════════════════════════════════════════════════════════
+# 4. 數據分發器 ── 移除 health_score 計算與 csvPayload 欄位
+# ═══════════════════════════════════════════════════════════════
+def patch_distributor(func_str):
+    """移除 health score 計算區塊與 csvPayload 中的 health_score 欄位"""
+    # 移除整個 health score 計算區塊（從 "// health score" 到 ";"）
+    func_str = re.sub(
+        r'\n// =+\n// health score [^\n]*\n// =+\n.*?health_score\n',
+        '\n',
+        func_str,
+        flags=re.DOTALL
+    )
+    # 移除 csvPayload 中的 health_score 欄位（含前面的逗號/空白）
+    func_str = re.sub(
+        r',?\s*\n\s*health_score:\s*\n?\s*health_score\n?',
+        '\n',
+        func_str
+    )
+    # 移除 activity_score 後面的 health_score（針對 inline 格式）
+    func_str = re.sub(
+        r',\s*\n\s*health_score:\s*health_score',
+        '',
+        func_str
+    )
+    return func_str
+
+# ═══════════════════════════════════════════════════════════════
+# Load → patch → save
+# ═══════════════════════════════════════════════════════════════
+with open(JSON_PATH, 'r', encoding='utf-8') as f:
+    nodes = json.load(f)
+
+found = {ENGINE_ID: False, UI_ID: False, DISCORD_ID: False,
+         DISTRIB_ID: False, CSV_ID: False}
+
+for node in nodes:
+    nid = node.get('id', '')
+    if nid == ENGINE_ID:
+        node['func'] = NEW_ENGINE_FUNC
+        found[ENGINE_ID] = True
+        print('Updated: 健康引擎分析 (removed health_score)')
+    elif nid == UI_ID:
+        node['format'] = NEW_UI_FORMAT
+        found[UI_ID] = True
+        print('Updated: 健康警示 (removed health_score box)')
+    elif nid == DISCORD_ID:
+        node['func'] = NEW_DISCORD_FUNC
+        found[DISCORD_ID] = True
+        print('Updated: 發送提醒 (removed health_score field)')
+    elif nid == DISTRIB_ID:
+        original = node.get('func', '')
+        patched  = patch_distributor(original)
+        if patched != original:
+            node['func'] = patched
+            print('Updated: 數據分發器 (removed health_score calc)')
+        else:
+            print('WARNING: 數據分發器 patch did not match — check manually')
+        found[DISTRIB_ID] = True
+    elif nid == CSV_ID:
+        # 移除 CSV header 中的 health_score 欄
+        temp = node.get('temp', '')
+        new_temp = re.sub(r',?health_score', '', temp)
+        if new_temp != temp:
+            node['temp'] = new_temp
+            print('Updated: 建立CSV (removed health_score column)')
+        else:
+            print('WARNING: 建立CSV health_score column not found')
+        found[CSV_ID] = True
+
+for nid, ok in found.items():
+    if not ok:
+        print('WARNING: node not found: ' + nid, file=sys.stderr)
+
+with open(JSON_PATH, 'w', encoding='utf-8') as f:
+    json.dump(nodes, f, ensure_ascii=False, indent=4)
+
+print('Done.')

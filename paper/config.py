@@ -254,6 +254,8 @@ class AnomalyDetectionConfig:
 
     MAX_MOTION = 20.0            # motion_score 正規化分母（body_fraction×100）；走路約 10-20
     KP_CONF_THRES = 0.5          # 只使用高於此信心的關鍵點計算 motion_score
+    # 插值用信心門檻（低於 KP_CONF_THRES）：時間插值需保留弱訊號避免骨架斷幀，故門檻較寬鬆
+    INTERPOLATE_KP_CONF_THRESHOLD = 0.1  # 與 stgcn_model.interpolate_missing 預設值同步
     ROLLING_WINDOW_SIZE = 30     # 滾動均值視窗大小（幀數，30fps ≈ 1 秒）
     STILL_MOTION_THRESHOLD = 3.0    # 滾動均值低於此值（body_fraction×100）判為靜止；呼吸抖動約 < 2
 
@@ -284,6 +286,7 @@ class NodeRedConfig:
 
     ENDPOINT_NOTIFY = _env_str("CAT_MONITORING_NODERED_ENDPOINT_NOTIFY", f"http://{HOST}:{PORT}/python_online")
     ENDPOINT_RESULT = _env_str("CAT_MONITORING_NODERED_ENDPOINT_RESULT", f"http://{HOST}:{PORT}/yolo_result")
+    ENDPOINT_RESULT_V2 = _env_str("CAT_MONITORING_NODERED_ENDPOINT_RESULT_V2", f"http://{HOST}:{PORT}/yolo_result_v2")
     
     # 超時時間（秒）
     TIMEOUT = _env_float("CAT_MONITORING_NODERED_TIMEOUT", 2)
@@ -343,6 +346,9 @@ class BehaviorTrackingConfig:
 class LoggingConfig:
     """日誌記錄設置"""
     
+    # Tracker 狀態持久化路徑（重啟後恢復當日累積資料）
+    TRACKER_STATE_PATH = _env_str("CAT_MONITORING_TRACKER_STATE_PATH", r"C:\a\tracker_state.json")
+
     # CSV 絕對路徑（可由環境變數覆寫）
     CSV_PATH = _env_str("CAT_MONITORING_CSV_PATH", r"C:\ai_project\paper\cat_monitoring_log.csv")
     # 行為區段 CSV（BehaviorSegmentLogger）路徑 — 獨立檔案，避免與 CSV_PATH 混寫

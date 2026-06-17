@@ -1,0 +1,101 @@
+﻿// ════════════════════════════════════════════════════════════════
+//  基線篩選設定（可依實際監控狀況調整）
+// ════════════════════════════════════════════════════════════════
+//
+//  MIN_BASELINE_DAYS：啟動基線計算所需的最少有效天數
+//    改小→更快有基線但統計代表性較弱；改大→等更久但基線更穩定
+//    ★ 現已從飼主設定讀取，無需手動同步
+const _blCfg = global.get('v2_user_settings','file') || {};
+const MIN_BASELINE_DAYS = _blCfg.baseline_days != null ? +_blCfg.baseline_days : 7;
+//
+//  MIN_DAILY_SEC：一天「總監控秒數」最低門檻，低於此值的天不納入基線
+//    3600 = 1 小時；系統每天只開幾十分鐘可調低到 600
+const MIN_DAILY_SEC = 3600;
+//
+//  REQUIRED_PERIODS：納入基線的天必須哪些時段都有監控資料
+//    []                              → 不限時段（只要通過 MIN_DAILY_SEC 就納入）
+//    ['06-12','12-18']               → 只要求白天兩段（系統固定白天開）
+//    ['00-06','06-12','12-18','18-24'] → 要求全天四段都有
+//    判斷標準：該時段監控秒數 > 300 秒（5 分鐘）才算「有資料」
+const REQUIRED_PERIODS = [];
+// ════════════════════════════════════════════════════════════════
+
+let history = global.get('v2_daily_history', 'file') || [];
+
+if (history.length < MIN_BASELINE_DAYS) {
+    node.warn('基線資料不足：' + history.length + ' 天（需要 ' + MIN_BASELINE_DAYS + ' 天）');
+    msg.payload = { error: '基線資料不足', current_days: history.length, required_days: MIN_BASELINE_DAYS };
+    return msg;
+}
+
+let validDays = history.filter(d => {
+    if ((d.monitoring_seconds || 0) < MIN_DAILY_SEC) return false;
+    if (!d.periods) return true;  // 舊資料無 periods 欄位，直接通過
+    return REQUIRED_PERIODS.every(p => d.periods[p] && d.periods[p].monitoring_sec > 300); // 各指定時段需 >300 秒（5分鐘）才算有效
+});
+if (validDays.length < MIN_BASELINE_DAYS) {
+    node.warn('依篩選條件後有效天不足 ' + MIN_BASELINE_DAYS + ' 天（' + validDays.length + ' 天），改用所有已記錄天');
+    validDays = history;
+}
+// ── 排除飼主手動標記的日期 ─────────────────────────────────────
+let v2Excluded = global.get('v2_excluded_dates', 'file') || [];
+if (v2Excluded.length > 0) {
+    let noExcl = validDays.filter(d => !v2Excluded.includes(d.date));
+    if (noExcl.length >= MIN_BASELINE_DAYS) {
+        validDays = noExcl;
+        node.warn('排除 ' + v2Excluded.length + ' 天後基線有效天數：' + validDays.length);
+    } else {
+        node.warn('排除後有效天不足（' + noExcl.length + ' 天），維持原有天數');
+    }
+}
+let days = validDays.slice(-30); // 最多取最近 30 天計算，避免太舊的資料影響基線
+
+// 各時段覆蓋統計（固定顯示四個時段，讓使用者知道哪個時段資料充足）
+let periodCoverage = {};
+for (let p of ['00-06','06-12','12-18','18-24']) {
+    let covered = days.filter(d => d.periods && d.periods[p] && d.periods[p].monitoring_sec > 300).length; // >5 分鐘才算該天有覆蓋此時段
+    periodCoverage[p] = { covered, total: days.length };
+}
+
+function calcStats(vals) {
+    let arr = [...vals].filter(v=>v!==null&&v!==undefined).map(Number);
+    if (arr.length===0) return {mean:0,std:0,median:0};
+    arr.sort((a,b)=>a-b);
+    let mean   = arr.reduce((a,b)=>a+b,0)/arr.length;
+    let vari   = arr.reduce((a,b)=>a+Math.pow(b-mean,2),0)/arr.length;
+    let std    = Math.sqrt(vari);
+    let median = arr.length%2===0?(arr[arr.length/2-1]+arr[arr.length/2])/2:arr[Math.floor(arr.length/2)];
+    return {mean:parseFloat(mean.toFixed(2)),std:parseFloat(std.toFixed(2)),median:parseFloat(median.toFixed(2))};
+}
+
+let metrics = {
+    lick_count:    calcStats(days.map(d=>d.lick_count    ||0)),
+    lick_time:     calcStats(days.map(d=>d.lick_time     ||0)),
+    scratch_count: calcStats(days.map(d=>d.scratch_count ||0)),
+    scratch_time:  calcStats(days.map(d=>d.scratch_time  ||0)),
+    shake_count:   calcStats(days.map(d=>d.shake_count   ||0)),
+    shake_time:    calcStats(days.map(d=>d.shake_time    ||0)),
+    walk_count:    calcStats(days.map(d=>d.walk_count    ||0)),
+    walk_time:     calcStats(days.map(d=>d.walk_time     ||0)),
+    stop_time:     calcStats(days.map(d=>d.stop_time     ||0)),
+    stop_count:    calcStats(days.map(d=>d.stop_count    ||0))
+};
+
+let baseline = {
+    computed_at:      new Date().toISOString(),
+    days_count:       days.length,
+    required_days:    MIN_BASELINE_DAYS, // 讓面板可以動態顯示設定值
+    required_periods: REQUIRED_PERIODS,
+    period_coverage:  periodCoverage,
+    metrics
+};
+
+try {
+    global.set('v2_baseline', baseline, 'file');
+} catch(e) {
+    global.set('v2_baseline', baseline);
+}
+
+node.warn('基線計算完成：' + days.length + ' 天資料');
+msg.payload = baseline;
+return msg;

@@ -1,0 +1,233 @@
+<style>
+    .stream-floating-panel {
+        position: relative;
+        width: 100%;
+        min-width: 300px;
+        min-height: 220px;
+        background: #1a1a2e;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.35);
+        resize: both;
+    }
+
+    .stream-floating-panel.floating {
+        position: fixed;
+        top: 80px;
+        left: 80px;
+        width: 640px;
+        height: 420px;
+        z-index: 9999;
+        resize: both;
+    }
+
+    .stream-title-bar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 42px;
+        background: rgba(0, 0, 0, 0.72);
+        color: white;
+        z-index: 200;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+        cursor: move;
+        user-select: none;
+    }
+
+    .stream-title {
+        font-size: 14px;
+        font-weight: bold;
+        color: #00ff88;
+    }
+
+    .stream-buttons button {
+        background: rgba(255,255,255,0.15);
+        color: white;
+        border: 1px solid rgba(255,255,255,0.25);
+        border-radius: 6px;
+        padding: 4px 8px;
+        margin-left: 5px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+    .stream-buttons button:hover {
+        background: rgba(255,255,255,0.3);
+    }
+
+    .stream-image {
+        width: 100%;
+        height: 100%;
+        min-height: 260px;
+        object-fit: contain;
+        display: block;
+        background: #000;
+        padding-top: 42px;
+        box-sizing: border-box;
+    }
+
+    .stream-offline {
+        text-align: center;
+        padding: 100px 20px;
+        color: #95a5a6;
+        background: #111;
+        min-height: 260px;
+    }
+
+    .stream-offline-icon {
+        font-size: 5em;
+        margin-bottom: 20px;
+    }
+
+    .stream-floating-panel:fullscreen {
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0;
+        resize: none;
+    }
+
+    .stream-floating-panel:fullscreen .stream-image {
+        width: 100vw;
+        height: 100vh;
+        object-fit: contain;
+    }
+</style>
+
+<div class="stream-floating-panel" id="streamPanel">
+
+    <div class="stream-title-bar" id="dragBar">
+        <div class="stream-title" id="streamStatus">🔄 連線中...</div>
+
+        <div class="stream-buttons">
+            <button onclick="toggleFloating()">浮動</button>
+            <button onclick="toggleFullscreen()">全螢幕</button>
+            <button onclick="reloadStream()">重載</button>
+        </div>
+    </div>
+
+   
+
+    <img class="stream-image"
+         id="streamImg"
+         ng-src="{{msg.payload.ip ? ('http://' + msg.payload.ip + ':5000/stream') : (msg.stream_url || '')}}"
+         ondblclick="toggleFullscreen()"
+         onerror="streamOffline()"
+         onload="streamOnline()">
+
+    <div class="stream-offline" id="offlineMsg" style="display:none;">
+        <div class="stream-offline-icon">📹</div>
+        <p>視訊串流目前離線</p>
+        <p style="font-size:0.9em; color:#7f8c8d;">請確認 Python 串流程式是否正在運行</p>
+    </div>
+
+</div>
+
+<script>
+(function(scope) {
+
+    let panel = document.getElementById("streamPanel");
+    let dragBar = document.getElementById("dragBar");
+
+    let isDragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    window.streamOnline = function() {
+        document.getElementById("streamImg").style.display = "block";
+        document.getElementById("offlineMsg").style.display = "none";
+        document.getElementById("streamStatus").innerHTML = "✅ 串流正常";
+        document.getElementById("streamStatus").style.color = "#00ff88";
+    };
+
+    window.streamOffline = function() {
+        document.getElementById("streamImg").style.display = "none";
+        document.getElementById("offlineMsg").style.display = "block";
+        document.getElementById("streamStatus").innerHTML = "❌ 串流離線";
+        document.getElementById("streamStatus").style.color = "#ff5555";
+    };
+
+    window.toggleFullscreen = function() {
+        if (!document.fullscreenElement) {
+            panel.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
+    window.toggleFloating = function() {
+        panel.classList.toggle("floating");
+
+        if (panel.classList.contains("floating")) {
+            panel.style.top = "80px";
+            panel.style.left = "80px";
+            panel.style.width = "640px";
+            panel.style.height = "420px";
+        } else {
+            panel.style.top = "";
+            panel.style.left = "";
+            panel.style.width = "100%";
+            panel.style.height = "";
+        }
+    };
+
+    window.reloadStream = function() {
+        let img = document.getElementById("streamImg");
+        let oldSrc = img.src;
+
+        if (!oldSrc) return;
+
+        img.src = "";
+        setTimeout(function() {
+            img.src = oldSrc.split("?")[0] + "?t=" + new Date().getTime();
+        }, 300);
+
+        document.getElementById("streamStatus").innerHTML = "🔄 重新連線中...";
+        document.getElementById("streamStatus").style.color = "#ffaa00";
+    };
+
+    dragBar.addEventListener("mousedown", function(e) {
+        if (!panel.classList.contains("floating")) return;
+
+        isDragging = true;
+        offsetX = e.clientX - panel.offsetLeft;
+        offsetY = e.clientY - panel.offsetTop;
+
+        e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", function(e) {
+        if (!isDragging) return;
+
+        panel.style.left = (e.clientX - offsetX) + "px";
+        panel.style.top = (e.clientY - offsetY) + "px";
+    });
+
+    document.addEventListener("mouseup", function() {
+        isDragging = false;
+    });
+
+    scope.$watch("msg", function(msg) {
+        if (!msg) return;
+
+        let ip = msg.payload && msg.payload.ip ? msg.payload.ip : null;
+        let streamUrl = msg.stream_url || null;
+
+        let finalUrl = "";
+
+        if (ip) {
+            finalUrl = "http://" +" 192.168.0.120" + ":81/stream";
+        } else if (streamUrl) {
+            finalUrl = streamUrl;
+        }
+
+      
+    });
+
+})(scope);
+</script>

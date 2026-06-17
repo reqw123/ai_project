@@ -19,6 +19,12 @@ class NodeRedClient:
                 notify_data = {"status": "online", "ip": self.local_ip, "timestamp": now.strftime("%H:%M:%S")}
                 requests.post(self.url_notify, json=notify_data, timeout=NodeRedConfig.TIMEOUT)
             requests.post(self.url_result, json=data, timeout=NodeRedConfig.TIMEOUT)
+            v2_url = getattr(NodeRedConfig, 'ENDPOINT_RESULT_V2', None)
+            if v2_url and v2_url != self.url_result:
+                try:
+                    requests.post(v2_url, json=data, timeout=NodeRedConfig.TIMEOUT)
+                except Exception as e:
+                    logging.warning("NodeRedClient.send_data v2 failed: %s", e)
             return True
         except Exception as e:
             logging.warning("NodeRedClient.send_data failed: %s", e)

@@ -1,0 +1,99 @@
+﻿ID:8feb3527c9bca065  name:�欰�έp�ֿn��
+  func[0:200]: let data = msg.payload;
+if (!data || !data.today_stats) return [null, null, null, null];
+let stats   = data.today_stats;
+let current = data.current || {};
+
+// v2_today�]�ƭȨӦ� Python tracker�^
+let todayDa
+
+ID:0b1265ce733b827f  name:�欰�����p��
+  func[0:200]: let data = msg.payload;
+let td   = data.v2_today || {};
+let times = {
+    walk:    td.walk    ? td.walk.time    : 0,
+    lick:    td.lick    ? td.lick.time    : 0,
+    scratch: td.scratch ? td.scratch
+
+ID:66c6d611d39e8d50  name:�欰�`�ߤ��R
+  func[0:200]: let data   = msg.payload;
+let hourly = data.v2_hourly || {};
+let periods = {
+    '00-06': {walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},
+    '06-12': {walk:0,lick:0,scratch:0,shake:0,stop:0,total:0
+
+ID:7b161e3492a5cd6a  name:���t���R����
+  func[0:200]: let data = msg.payload;
+let td   = data.v2_today || {};
+let bl;
+try { bl = global.get('v2_baseline','file') || global.get('v2_baseline'); }
+catch(e) { bl = global.get('v2_baseline'); }
+
+if (!bl || !bl
+
+ID:4b0c232763de1461  name:���d�wĵ����
+  func[0:200]: let cfg     = global.get('v2_user_settings','file') || {};
+let LICK_THR    = cfg.lick_pct    != null ? +cfg.lick_pct    : 20;
+let SCRATCH_THR = cfg.scratch_pct != null ? +cfg.scratch_pct : 15;
+let SHA
+
+ID:57d44876136dba78  name:Discord ���I�q��
+  func[0:200]: let risk = msg.payload.risk || {};
+
+// URL �����ˬd�A���]�w�N����s dedup key�]�קK�]�w�ᤴ�L�kĲ�o�^
+let _dcfg = global.get('v2_user_settings','file') || {};
+let _url  = _dcfg.discord_webhook || '';
+if (!_url) { node.warn('
+
+ID:66a22e0ec663d07d  name:����ư�u�p�⾹
+  func[0:200]: // ��������������������������������������������������������������������������������������������������������������������������������
+//  ��u�z��]�w�]�i�̹�ںʱ����p�վ�^
+// ��������������������������������������������������������������������������������������������������������������������������������
+//
+//  MIN_BASELINE_DAYS�G�Ұʰ�u�p��һݪ��̤֦��ĤѼ�
+
+
+ID:c5ce881398ee6376  name:�C��έp�J��
+  func[0:200]: let today  = global.get('v2_today', 'file') || {};
+let hourly = global.get('v2_hourly') || {};
+let date   = today.date || new Date().toLocaleDateString('zh-TW');
+
+// �p��U�ɬq���欰�P�ʱ����
+const PERIOD_HOURS =
+
+ID:341f4eef4167c6ec  name:�P�_�O�_�����u
+  func[0:200]: // �� �{�w�q�}�D�]�wŪ���A�P�u����ư�u�p�⾹�v�۰ʫO���@�P
+const _rCfg = global.get('v2_user_settings','file') || {};
+const MIN_BASELINE_DAYS = _rCfg.baseline_days != null ? +_rCfg.baseline_days : 7;
+const RECALC_INTERVAL   = 
+
+ID:d843ffcf4f4bf414  name:�p�ɰ��t�ַ�
+  func[0:200]: let dev  = global.get('v2_deviation') || {};
+let risk = global.get('v2_risk')      || {};
+if (!dev.computed_at) return null;
+msg.payload = {
+    timestamp:   new Date().toLocaleString('zh-TW'),
+    li
+
+ID:25a5d07e18c136a9  name:����ƲM��
+  func[0:200]: let todayDate = new Date().toLocaleDateString('zh-TW');
+let today     = global.get('v2_today', 'file');
+let savedDate = today ? today.date : null;
+
+if (savedDate && savedDate !== todayDate) {
+    glob
+
+ID:ff00000000000002  name:�����M���]�������m�^
+  func[0:200]: global.set('v2_today', null, 'file');
+global.set('v2_hourly', {});
+global.set('v2_transition_matrix', {});
+node.warn('[��ʭ��m] �Ҧ� Node-RED ��Ƥw�M���A�U���ҰʱN��ܡu���s�Ұʡv');
+return null;
+
+ID:ff00000000000010  name:�ϥΪ̳]�w�޲z��
+  func[0:200]: let action = msg.payload && msg.payload.action;
+
+// �w�w ���� Discord �q�� �w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w�w
+if (action === 'test_discord') {
+    let url = (msg.payload.discord_webhook || '').trim(
+

@@ -1,0 +1,675 @@
+[
+    {
+        "id": "a57e2a51f4764c7e",
+        "type": "tab",
+        "label": "😺 貓咪健康監測系統",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "20a426aa12fe44b8",
+        "type": "group",
+        "z": "a57e2a51f4764c7e",
+        "style": {
+            "stroke": "#999999",
+            "stroke-opacity": "1",
+            "fill": "none",
+            "fill-opacity": "1",
+            "label": true,
+            "label-position": "nw",
+            "color": "#a4a4a4"
+        },
+        "nodes": [
+            "0b47210816be0ad4",
+            "2c7f1526410728b0",
+            "24d1a1677439734e",
+            "08d8bce3968d86f6",
+            "3f277d003df301be",
+            "01334d0781cc5822",
+            "306ff5952a190e04",
+            "a8424ee7758559af",
+            "eb0f92e5ddcecedf",
+            "c60345daba38a7bd",
+            "bcf77c03f24b4148",
+            "8f74501467cc6605",
+            "b837fc7fc33fbe1d",
+            "89b182d351391d5f",
+            "3ec14d6446e2c3c9",
+            "19227cd3418e36e6",
+            "b41970521d811237",
+            "d349c9a9a2509e65",
+            "1fef867d274aa8ca",
+            "257d6083ac06afed",
+            "f5dbb3d51fabb63d",
+            "965cd54fbc2f4f47",
+            "a8843440996e7bcf",
+            "373eb51a0b2e665a"
+        ],
+        "x": 394,
+        "y": 59,
+        "w": 932,
+        "h": 762
+    },
+    {
+        "id": "2c7f1526410728b0",
+        "type": "http in",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "python_online",
+        "url": "/python_online",
+        "method": "post",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 490,
+        "y": 480,
+        "wires": [
+            [
+                "24d1a1677439734e"
+            ]
+        ]
+    },
+    {
+        "id": "24d1a1677439734e",
+        "type": "json",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "parse_json",
+        "property": "payload",
+        "action": "obj",
+        "pretty": false,
+        "x": 690,
+        "y": 480,
+        "wires": [
+            [
+                "a8424ee7758559af"
+            ]
+        ]
+    },
+    {
+        "id": "08d8bce3968d86f6",
+        "type": "inject",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "發送訊息到discord",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0,
+        "topic": "",
+        "payload": "這是一則來自 Node-RED 的測試通知！",
+        "payloadType": "str",
+        "x": 550,
+        "y": 700,
+        "wires": [
+            [
+                "01334d0781cc5822"
+            ]
+        ]
+    },
+    {
+        "id": "3f277d003df301be",
+        "type": "http request",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "送到 Discord",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 1130,
+        "y": 680,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "01334d0781cc5822",
+        "type": "function",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "組成 Discord Webhook 格式",
+        "func": "\n\n// Discord Python 上線通知\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// IP\n// =========================\nlet ip = msg.payload?.ip || \"未知IP\";\n\n// 保存 IP 到持久化全域 context，讓重連/重啟後仍可取用\ntry {\n    global.set(\n        \"python_ip\",\n        ip,\n        \"file\"\n    );\n} catch (e) {\n    global.set(\n        \"python_ip\",\n        ip\n    );\n}\n\n// =========================\n// Discord Payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                \"🟢 Python AI 已上線\",\n\n            description:\n                `偵測到 Python 推論系統啟動`,\n\n            color:\n                65280,\n\n            fields: [\n\n                {\n                    name: \"Python IP\",\n                    value: String(ip),\n                    inline: false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 860,
+        "y": 680,
+        "wires": [
+            [
+                "3f277d003df301be"
+            ]
+        ]
+    },
+    {
+        "id": "306ff5952a190e04",
+        "type": "http response",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "response_200",
+        "statusCode": "200",
+        "headers": {},
+        "x": 1160,
+        "y": 480,
+        "wires": []
+    },
+    {
+        "id": "a8424ee7758559af",
+        "type": "function",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "build_response",
+        "func": "let ip = null;\ntry {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\", \"file\") || global.get(\"python_ip\") || null);\n} catch (e) {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\") || null);\n}\nif (ip) {\n    try {\n        global.set(\"python_ip\", ip, \"file\");\n    } catch (e) {\n        global.set(\"python_ip\", ip);\n    }\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = ip ? `http://${ip}:5000/stream` : \"\";\nnode.warn(\"python_online received IP: \" + (ip || 'null'));\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 900,
+        "y": 480,
+        "wires": [
+            [
+                "306ff5952a190e04",
+                "01334d0781cc5822",
+                "0b47210816be0ad4",
+                "global_float_video_01"
+            ]
+        ]
+    },
+    {
+        "id": "eb0f92e5ddcecedf",
+        "type": "inject",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "啟動時發送串流",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 2,
+        "topic": "",
+        "payload": "{}",
+        "payloadType": "json",
+        "x": 520,
+        "y": 580,
+        "wires": [
+            [
+                "c60345daba38a7bd"
+            ]
+        ]
+    },
+    {
+        "id": "c60345daba38a7bd",
+        "type": "function",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "從持久化context恢復串流",
+        "func": "let ip = null;\ntry {\n    ip = global.get(\"python_ip\", \"file\") || global.get(\"python_ip\") || null;\n} catch (e) {\n    ip = global.get(\"python_ip\") || null;\n}\nif (!ip) {\n    return null;\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 830,
+        "y": 580,
+        "wires": [
+            [
+                "0b47210816be0ad4",
+                "global_float_video_01"
+            ]
+        ]
+    },
+    {
+        "id": "bcf77c03f24b4148",
+        "type": "http in",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "接收Python數據",
+        "url": "/yolo_result",
+        "method": "post",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 500,
+        "y": 200,
+        "wires": [
+            [
+                "b837fc7fc33fbe1d",
+                "8f74501467cc6605"
+            ]
+        ]
+    },
+    {
+        "id": "8f74501467cc6605",
+        "type": "http response",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "回應200",
+        "statusCode": "200",
+        "headers": {},
+        "x": 680,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "b837fc7fc33fbe1d",
+        "type": "json",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "解析JSON",
+        "property": "payload",
+        "action": "obj",
+        "pretty": false,
+        "x": 710,
+        "y": 200,
+        "wires": [
+            [
+                "89b182d351391d5f"
+            ]
+        ]
+    },
+    {
+        "id": "89b182d351391d5f",
+        "type": "function",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "數據分發器",
+        "func": "let data = msg.payload;\nif (!data) return null;\n\nif (!data.current)     data.current     = {};\nif (!data.today_stats) data.today_stats = {};\n\nlet stats = data.today_stats;\nstats.walk             = stats.walk             || 0;\nstats.walk_time        = stats.walk_time        || 0;\nstats.lick             = stats.lick             || 0;\nstats.lick_time        = stats.lick_time        || 0;\nstats.scratch          = stats.scratch          || 0;\nstats.scratch_time     = stats.scratch_time     || 0;\nstats.shake            = stats.shake            || 0;\nstats.shake_time       = stats.shake_time       || 0;\nstats.stop             = stats.stop             || 0;\nstats.stop_time        = stats.stop_time        || 0;\nstats.not_detected_time = stats.not_detected_time || 0;\nstats.active_time      = stats.active_time      || 0;\nstats.rest_time        = stats.rest_time        || 0;\n\nif (Array.isArray(data.behavior_log)) {\n    data.behavior_log = data.behavior_log.map(function(item) {\n        return {\n            behavior: item.behavior || 'unknown',\n            time:     item.time     || '--:--',\n            duration: item.duration || 0,\n            emoji:    getEmoji(item.behavior)\n        };\n    });\n} else {\n    data.behavior_log = [];\n}\n\nif (!data.current.emoji)     data.current.emoji     = getEmoji(data.current.behavior);\nif (!data.current.timestamp) data.current.timestamp = new Date().toLocaleTimeString();\n\nmsg.payload = data;\n\n// CSV：每 5 分鐘寫一次（與 v2 flow 一致）\nlet now     = Date.now();\nlet lastCsv = flow.get('last_csv_write') || 0;\nlet doCsv   = (now - lastCsv) >= 300000;\nif (doCsv) flow.set('last_csv_write', now);\n\nlet csvMsg = doCsv ? { payload: {\n    timestamp:         (function(){var d=new Date(),p=function(n){return String(n).padStart(2,\"0\")};return d.getFullYear()+\"-\"+p(d.getMonth()+1)+\"-\"+p(d.getDate())+\" \"+p(d.getHours())+\":\"+p(d.getMinutes())+\":\"+p(d.getSeconds());})(),\n    walk:              stats.walk,              walk_time:         stats.walk_time,\n    lick:              stats.lick,              lick_time:         stats.lick_time,\n    scratch:           stats.scratch,           scratch_time:      stats.scratch_time,\n    shake:             stats.shake,             shake_time:        stats.shake_time,\n    stop:              stats.stop,              stop_time:         stats.stop_time,\n    active_time:       stats.active_time,\n    rest_time:         stats.rest_time,\n    not_detected_time: stats.not_detected_time,\n    activity_score:    data.activity_score || 0\n}} : null;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    msg,\n    { payload: data.activity_score || 0 },\n    csvMsg\n];\n\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case 'scratch': return '🐾';\n        case 'lick':    return '🧼';\n        case 'walk':    return '🚶';\n        case 'shake':   return '🔄';\n        case 'stop':    return '⏹';\n        case 'not':     return '📷';\n        default:        return '🐱';\n    }\n}",
+        "outputs": 6,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 910,
+        "y": 220,
+        "wires": [
+            [
+                "3ec14d6446e2c3c9"
+            ],
+            [
+                "19227cd3418e36e6"
+            ],
+            [
+                "b41970521d811237"
+            ],
+            [
+                "257d6083ac06afed"
+            ],
+            [
+                "1fef867d274aa8ca"
+            ],
+            [
+                "a8843440996e7bcf"
+            ]
+        ]
+    },
+    {
+        "id": "257d6083ac06afed",
+        "type": "function",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "健康引擎分析",
+        "func": "let data    = msg.payload;\nlet stats   = (data && data.today_stats) ? data.today_stats : {};\n\n// ── 讀取用戶設定（與 v2 P4 共用 global context）─────────────\nlet cfg         = global.get('v2_user_settings','file') || {};\nlet LICK_THR    = cfg.lick_pct    != null ? +cfg.lick_pct    : 20;\nlet SCRATCH_THR = cfg.scratch_pct != null ? +cfg.scratch_pct : 15;\nlet SHAKE_THR   = cfg.shake_pct   != null ? +cfg.shake_pct   : 10;\nlet STOP_THR    = cfg.stop_pct    != null ? +cfg.stop_pct    : 55;\nlet LSC_THR     = cfg.lsc_count   != null ? +cfg.lsc_count   : 10;\n\n// ── 基礎時間變數 ──────────────────────────────────────────────\nlet walk_t    = Number(stats.walk_time    || 0);\nlet lick_t    = Number(stats.lick_time    || 0);\nlet scratch_t = Number(stats.scratch_time || 0);\nlet shake_t   = Number(stats.shake_time   || 0);\nlet stop_t    = Number(stats.stop_time    || 0);\nlet td_active = Number(stats.active_time  || 0);\n\n// ── 1. 行為佔比 distribution ──────────────────────────────────\nlet totalBeh = walk_t + lick_t + scratch_t + shake_t + stop_t;\nlet dist = totalBeh > 0 ? {\n    walk:    parseFloat((walk_t    / totalBeh * 100).toFixed(2)),\n    lick:    parseFloat((lick_t    / totalBeh * 100).toFixed(2)),\n    scratch: parseFloat((scratch_t / totalBeh * 100).toFixed(2)),\n    shake:   parseFloat((shake_t   / totalBeh * 100).toFixed(2)),\n    stop:    parseFloat((stop_t    / totalBeh * 100).toFixed(2))\n} : {walk:0, lick:0, scratch:0, shake:0, stop:0};\ndata.distribution = dist;\n\n// ── 2. 節律分析 rhythm（from hourly_distribution in payload）──\nlet hourly = stats.hourly_distribution || {};\nlet _pds = {\n    '00-06':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '06-12':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '12-18':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '18-24':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0}\n};\nfor (let h=0; h<24; h++) {\n    let k=String(h).padStart(2,'0'), hd=hourly[k]||{};\n    let pd=h<6?'00-06':h<12?'06-12':h<18?'12-18':'18-24';\n    for (let b of ['walk','lick','scratch','shake','stop']) { _pds[pd][b]+=(hd[b]||0); _pds[pd].total+=(hd[b]||0); }\n}\nlet rhythm = {};\nfor (let [pd,d] of Object.entries(_pds)) {\n    if (d.total===0) { rhythm[pd]={dominant:'none',pct:{},total:0}; continue; }\n    let bs=['walk','lick','scratch','shake','stop'];\n    let dom=bs.reduce((a,b)=>d[a]>=d[b]?a:b,'stop');\n    let pct={}; for (let b of bs) pct[b]=parseFloat((d[b]/d.total*100).toFixed(2));\n    rhythm[pd]={dominant:dom, pct, total:parseFloat(d.total.toFixed(1))};\n}\n\n// ── 3. 同步寫入 v2 global context（讓 v2 定時任務基線引擎繼續正常運作）──\nlet _tdDate = new Date().toLocaleDateString('zh-TW');\nglobal.set('v2_today', {\n    date: _tdDate,\n    walk:{count:stats.walk||0,time:walk_t}, lick:{count:stats.lick||0,time:lick_t},\n    scratch:{count:stats.scratch||0,time:scratch_t}, shake:{count:stats.shake||0,time:shake_t},\n    stop:{count:stats.stop||0,time:stop_t},\n    active_time:stats.active_time||0, rest_time:stats.rest_time||0,\n    not_detected_time:stats.not_detected_time||0, monitoring_seconds:stats.monitoring_seconds||0\n}, 'file');\nglobal.set('v2_hourly',            stats.hourly_distribution||{});\nglobal.set('v2_transition_matrix', stats.transition_matrix  ||{});\n\n// ── 4. dScore：行為占比偏離 (0-100) — 不需基線 ───────────────\nlet dScore = 0;\nif (dist.lick    > LICK_THR)    dScore += Math.min(30, (dist.lick    - LICK_THR)    * 1.5);\nif (dist.scratch > SCRATCH_THR) dScore += Math.min(35, (dist.scratch - SCRATCH_THR) * 2.0);\nif (dist.shake   > SHAKE_THR)   dScore += Math.min(35, (dist.shake   - SHAKE_THR)   * 2.5);\nif (dist.stop    > STOP_THR)    dScore += Math.min(20, (dist.stop    - STOP_THR)    * 1.0);\nif (dist.walk    < 10 && td_active > 300) dScore += 15;\ndScore = Math.min(100, Math.round(dScore));\n\n// ── 5. fScore：頻率偏離（讀取 v2_baseline；無基線時 = 0）────────\nlet fScore = 0, hasBaseline = false;\ntry {\n    let bl = global.get('v2_baseline', 'file') || global.get('v2_baseline');\n    if (bl && bl.metrics) {\n        hasBaseline = true;\n        let m = bl.metrics;\n        let pctDev = function(cur, key) {\n            let b = m[key]; if (!b || b.mean === 0) return 0;\n            return (cur - b.mean) / b.mean * 100;\n        };\n        let ld  = pctDev(lick_t,                         'lick_time');\n        let sd  = pctDev(scratch_t,                      'scratch_time');\n        let shd = pctDev(Number(stats.shake_count || 0), 'shake_count');\n        let std = pctDev(stop_t,                         'stop_time');\n        if (ld  > 150) fScore += 30; else if (ld  > 100) fScore += 20; else if (ld  >  50) fScore += 10;\n        if (sd  > 200) fScore += 35; else if (sd  > 150) fScore += 25; else if (sd  >  80) fScore += 15;\n        if (shd > 100) fScore += 35; else if (shd >  50) fScore += 20; else if (shd >  30) fScore += 10;\n        if (std >  80) fScore += 20; else if (std >  50) fScore += 10;\n        fScore = Math.min(100, Math.round(fScore));\n    }\n} catch(e) {}\n\n// ── 6. rScore：節律偏離 (0-100) ───────────────────────────────\nlet rScore = 0;\nlet night = rhythm['00-06'] || {};\nif (night.dominant==='scratch'||night.dominant==='lick') rScore += 30;\nif (night.dominant==='shake')                             rScore += 25;\nif (night.pct && night.pct.scratch > 20)                 rScore += 20;\nlet day06 = rhythm['06-12'] || {}, day12 = rhythm['12-18'] || {};\nif (day06.pct && day12.pct && (day06.pct.walk||0)<15 && (day12.pct.walk||0)<15 && dist.walk<20) rScore += 20;\nrScore = Math.min(100, rScore);\n\n// ── 7. tScore：轉移偏離 (0-100) ───────────────────────────────\nlet mx = stats.transition_matrix || {};\nlet tScore = 0;\nlet lsc  = (mx['lick->scratch']||0) + (mx['scratch->lick']||0);\nlet shch = mx['shake->shake'] || 0;\nlet stst = mx['stop->stop']   || 0;\nif (lsc>LSC_THR*2) tScore+=40; else if(lsc>LSC_THR) tScore+=20; else if(lsc>Math.max(2,Math.round(LSC_THR/2))) tScore+=10;\nif (shch>15) tScore+=30; else if(shch>8) tScore+=15;\nif (stst>50) tScore+=20; else if(stst>30) tScore+=10;\ntScore = Math.min(100, tScore);\n\n// ── 8. 綜合風險分（四維加權：占比30% 頻率35% 節律20% 轉移15%）──\nlet riskScore = Math.round(dScore*0.30 + fScore*0.35 + rScore*0.20 + tScore*0.15);\nriskScore = Math.max(0, Math.min(100, riskScore));\n\nlet level, color, emoji;\nif      (riskScore < 20) { level='Normal';    color='#4caf50'; emoji='✅'; }\nelse if (riskScore < 45) { level='Attention'; color='#ffa726'; emoji='⚠️'; }\nelse if (riskScore < 70) { level='Warning';   color='#ff7043'; emoji='🚨'; }\nelse                      { level='High Risk'; color='#f44336'; emoji='🆘'; }\n\n// ── 警示列表 ──────────────────────────────────────────────────\nlet alerts = [];\nif (dist.lick    > LICK_THR)    alerts.push({type:'lick',       msg:'舔舐佔比 ' + dist.lick.toFixed(1)    + '%，超過閾值 ' + LICK_THR    + '%'});\nif (dist.scratch > SCRATCH_THR) alerts.push({type:'scratch',    msg:'搔抓佔比 ' + dist.scratch.toFixed(1) + '%，超過閾值 ' + SCRATCH_THR + '%'});\nif (dist.shake   > SHAKE_THR)   alerts.push({type:'shake',      msg:'甩頭佔比 ' + dist.shake.toFixed(1)   + '%，超過閾值 ' + SHAKE_THR   + '%'});\nif (dist.stop    > STOP_THR)    alerts.push({type:'inactivity', msg:'靜止佔比 ' + dist.stop.toFixed(1)    + '%，活動力偏低'});\nif (lsc > LSC_THR) {\n    let ls=mx['lick->scratch']||0, sl=mx['scratch->lick']||0, half=Math.max(2,Math.round(LSC_THR/2));\n    let transMsg=(ls>half&&sl>half)?'lick↔scratch 循環 '+lsc+' 次，疑似皮膚不適':sl>ls?'scratch→lick '+sl+' 次（搔後舔舐），疑似皮膚不適':'lick→scratch '+ls+' 次（舔後搔抓），疑似皮膚不適';\n    alerts.push({type:'transition', msg:transMsg});\n}\nif (hasBaseline && fScore >= 20) alerts.push({type:'dev', msg:'行為頻率與個體基線偏離（fScore: ' + fScore + '）'});\n\ndata.risk = {\n    score: riskScore, level, color, emoji,\n    components: { distribution:dScore, frequency:fScore, rhythm:rScore, transition:tScore },\n    alerts,\n    computed_at: (function(){ let d=new Date(),p=function(n){return String(n).padStart(2,'0')}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); })()\n};\ndata.alerts = alerts;\nglobal.set('v2_risk', data.risk);\nflow.set('v2_today_risk', {level, score: riskScore});\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 700,
+        "y": 420,
+        "wires": [
+            [
+                "d349c9a9a2509e65",
+                "f5dbb3d51fabb63d"
+            ]
+        ]
+    },
+    {
+        "id": "f5dbb3d51fabb63d",
+        "type": "function",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "發送提醒",
+        "func": "let risk   = msg.payload.risk   || {};\nlet alerts = msg.payload.alerts || [];\n\nif (!risk.level || risk.level === 'Normal') {\n    flow.set(\"last_discord_alert\", \"\");\n    return null;\n}\n\nlet dedup_key = risk.level + '|' + alerts.map(function(a){ return a.type||''; }).join(',');\nlet last_key  = flow.get(\"last_discord_alert\") || \"\";\nif (last_key === dedup_key) return null;\nflow.set(\"last_discord_alert\", dedup_key);\n\nlet colorMap = { Attention: 16753920, Warning: 16729344, 'High Risk': 16711680 };\nlet embed_color = colorMap[risk.level] || 16711680;\n\nlet fields = [\n    { name: '🎯 Risk Score', value: String(risk.score) + '/100', inline: true },\n    { name: '📊 風險等級',   value: (risk.emoji||'') + ' ' + risk.level, inline: true }\n];\nif (risk.components) {\n    fields.push({ name: '📊 占比偏離', value: String(risk.components.distribution||0), inline: true });\n    if ((risk.components.frequency||0) > 0) {\n        fields.push({ name: '📉 頻率偏離', value: String(risk.components.frequency||0), inline: true });\n    }\n}\nif (alerts.length > 0) {\n    fields.push({ name: '⚠️ 異常項目', value: alerts.map(function(a){ return a.msg; }).join('\\n'), inline: false });\n}\n\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = {\n    username: 'Cat Health Monitor',\n    embeds: [{\n        title:       (risk.emoji||'🚨') + ' 健康預警：' + risk.level,\n        description: '貓咪行為風險分析結果',\n        color:       embed_color,\n        fields:      fields,\n        footer:      { text: new Date().toLocaleString('zh-TW') }\n    }]\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 920,
+        "y": 420,
+        "wires": [
+            [
+                "965cd54fbc2f4f47"
+            ]
+        ]
+    },
+    {
+        "id": "965cd54fbc2f4f47",
+        "type": "http request",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "送到 Discord",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 1150,
+        "y": 420,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "a8843440996e7bcf",
+        "type": "csv",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "建立CSV",
+        "sep": ",",
+        "hdrin": false,
+        "hdrout": "once",
+        "multi": "one",
+        "ret": "\\n",
+        "temp": "timestamp,walk,walk_time,lick,lick_time,scratch,scratch_time,shake,shake_time,stop,stop_time,active_time,rest_time,not_detected_time,activity_score",
+        "skip": "0",
+        "strings": true,
+        "include_empty_strings": false,
+        "include_null_values": false,
+        "x": 1080,
+        "y": 780,
+        "wires": [
+            [
+                "373eb51a0b2e665a"
+            ]
+        ]
+    },
+    {
+        "id": "373eb51a0b2e665a",
+        "type": "file",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "儲存CSV",
+        "filename": "C:\\\\a\\\\noda_data.csv",
+        "filenameType": "str",
+        "appendNewline": true,
+        "createDir": true,
+        "overwriteFile": "false",
+        "encoding": "utf8",
+        "x": 1240,
+        "y": 780,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "1fef867d274aa8ca",
+        "type": "ui_gauge",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "name": "活動力儀表",
+        "group": "group_gauge_cat",
+        "order": 5,
+        "width": "8",
+        "height": "3",
+        "gtype": "gage",
+        "title": "",
+        "label": "",
+        "format": "",
+        "min": 0,
+        "max": 100,
+        "colors": [
+            "#ff6b6b",
+            "#ffa726",
+            "#4caf50"
+        ],
+        "seg1": "30",
+        "seg2": "70",
+        "diff": false,
+        "className": "",
+        "x": 1150,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "0b47210816be0ad4",
+        "type": "ui_template",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "group": "group_stream_cat",
+        "name": "影像串流",
+        "order": 6,
+        "width": "12",
+        "height": "1",
+        "format": "<style>.gfv-hidden-bridge-group{display:none!important;height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;}</style>\n<script>\n(function(scope){\n    scope.$watch('msg', function(msg){\n        if (!msg) return;\n        var ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : null;\n        var url = '';\n        if (ip) {\n            url = 'http://' + ip + ':5000/stream';\n            window._catIP = ip;\n        } else if (msg.stream_url) {\n            url = msg.stream_url;\n        }\n        if (!url) return;\n        if (typeof window.gfvSetUrl === 'function') {\n            window.gfvSetUrl(url);\n        } else {\n            setTimeout(function(){\n                if (typeof window.gfvSetUrl === 'function') window.gfvSetUrl(url);\n            }, 1000);\n        }\n    });\n})(scope);\n</script>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1140,
+        "y": 580,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "3ec14d6446e2c3c9",
+        "type": "ui_template",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "group": "group_status_cat",
+        "name": "即時狀態卡片",
+        "order": 1,
+        "width": "8",
+        "height": "5",
+        "format": "<style>\n  md-card,\n  md-card-content,\n  .nr-dashboard-template {\n    padding: 0 !important;\n    margin: 0 !important;\n  }\n\n  .sc {\n    position: relative;\n    width: 100%;\n    height: 100%;\n    min-height: 210px;\n    border-radius: 16px;\n    overflow: hidden;\n    font-family: 'Microsoft JhengHei', Arial, sans-serif;\n    background: #111;\n  }\n\n  .sc-bg {\n    position: absolute;\n    inset: 0;\n    background-size: cover;\n    background-position: center;\n    transform: scale(1.04);\n    filter: brightness(0.70) saturate(1.05);\n    transition: transform 0.6s ease, filter 0.6s ease;\n  }\n\n  .sc:hover .sc-bg {\n    transform: scale(1.07);\n    filter: brightness(0.76) saturate(1.1);\n  }\n\n  .sc-overlay {\n    position: absolute;\n    inset: 0;\n    background: linear-gradient(to bottom,\n        rgba(0, 0, 0, 0.18) 0%,\n        rgba(0, 0, 0, 0.06) 40%,\n        rgba(0, 0, 0, 0.62) 100%);\n  }\n\n  .sc-content {\n    position: relative;\n    z-index: 2;\n    width: 100%;\n    height: 100%;\n    color: #fff;\n  }\n\n  .sc-time {\n    position: absolute;\n    top: 12px;\n    right: 12px;\n    font-size: 11px;\n    font-weight: 600;\n    letter-spacing: 0.4px;\n    color: rgba(255, 255, 255, 0.88);\n    background: rgba(0, 0, 0, 0.32);\n    padding: 4px 10px;\n    border-radius: 20px;\n    backdrop-filter: blur(6px);\n    -webkit-backdrop-filter: blur(6px);\n  }\n\n  /* 底部資訊列：貼齊左右下三邊，無 padding 兩側 */\n  .sc-bottom {\n    position: absolute;\n    bottom: 0;\n    left: 0;\n    right: 0;\n    display: flex;\n    align-items: stretch;\n  }\n\n  /* 左側：emoji + 狀態，貼左下角 */\n  .sc-status {\n    flex: 1;\n    display: flex;\n    align-items: center;\n    gap: 8px;\n    background: rgba(0, 0, 0, 0.38);\n    backdrop-filter: blur(12px);\n    -webkit-backdrop-filter: blur(12px);\n    padding: 10px 14px;\n    border-top: 1px solid rgba(255, 255, 255, 0.08);\n    border-right: 1px solid rgba(255, 255, 255, 0.08);\n  }\n\n  .sc-emoji {\n    font-size: 22px;\n    line-height: 1;\n  }\n\n  .sc-status-inner {\n    display: flex;\n    flex-direction: column;\n  }\n\n  .sc-label {\n    font-size: 10px;\n    font-weight: 600;\n    color: rgba(255, 255, 255, 0.55);\n    letter-spacing: 0.5px;\n    margin-bottom: 1px;\n  }\n\n  .sc-text {\n    font-size: 14px;\n    font-weight: 700;\n    color: #fff;\n    line-height: 1.1;\n  }\n\n  /* 右側：活動力，貼右下角 */\n  .sc-activity {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    justify-content: center;\n    background: rgba(0, 0, 0, 0.38);\n    backdrop-filter: blur(12px);\n    -webkit-backdrop-filter: blur(12px);\n    padding: 10px 18px;\n    border-top: 1px solid rgba(255, 255, 255, 0.08);\n    min-width: 72px;\n  }\n\n  .sc-activity-val {\n    font-size: 20px;\n    font-weight: 800;\n    color: #fff;\n    line-height: 1;\n  }\n\n  .sc-activity-lbl {\n    font-size: 10px;\n    font-weight: 600;\n    color: rgba(255, 255, 255, 0.55);\n    letter-spacing: 0.5px;\n    margin-top: 2px;\n  }\n</style>\n\n<div class=\"sc\">\n\n  <div class=\"sc-bg\"\n    ng-style=\"{'background-image': 'url(' + (msg.payload.image_url || 'https://megapx-assets.dcard.tw/images/83358790-1cba-4543-89b7-7378e652b8bd/640.jpeg') + ')'}\">\n  </div>\n\n  <div class=\"sc-overlay\"></div>\n\n  <div class=\"sc-content\">\n\n    <div class=\"sc-time\">\n      ⏰ {{msg.payload.current.timestamp}}\n    </div>\n\n    <div class=\"sc-bottom\">\n\n      <div class=\"sc-status\">\n        <div class=\"sc-emoji\">{{msg.payload.current.emoji}}</div>\n        <div class=\"sc-status-inner\">\n          <span class=\"sc-label\">目前狀態</span>\n          <span class=\"sc-text\">{{msg.payload.current.text}}</span>\n        </div>\n      </div>\n\n      <div class=\"sc-activity\">\n        <span class=\"sc-activity-val\">{{msg.payload.activity_score || 0}}%</span>\n        <span class=\"sc-activity-lbl\">活動力</span>\n      </div>\n\n    </div>\n\n  </div>\n\n</div>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1160,
+        "y": 100,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "19227cd3418e36e6",
+        "type": "ui_template",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "group": "group_timeline_cat",
+        "name": "行為時間紀錄",
+        "order": 2,
+        "width": "6",
+        "height": "10",
+        "format": "<style>\n  .paw-wrap {\n    font-family: 'Microsoft JhengHei', sans-serif;\n    padding: 12px;\n  }\n\n  /* ── Header ── */\n  .paw-header {\n    display: flex;\n    align-items: center;\n    justify-content: space-between;\n    padding: 14px 16px;\n    background: #fff;\n    border-radius: 14px 14px 0 0;\n    border: 1px solid #EDE8DF;\n    border-bottom: none;\n  }\n\n  .paw-header-left {\n    display: flex;\n    align-items: center;\n    gap: 10px;\n  }\n\n  .paw-avatar {\n    width: 38px;\n    height: 38px;\n    border-radius: 50%;\n    background: #FAEEDA;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    font-size: 20px;\n    flex-shrink: 0;\n  }\n\n  .paw-title {\n    font-size: 15px;\n    font-weight: 700;\n    color: #2C2C2A;\n    margin: 0;\n    line-height: 1.2;\n  }\n\n  .paw-subtitle {\n    font-size: 11px;\n    color: #888780;\n    margin: 2px 0 0;\n  }\n\n  .paw-badge {\n    font-size: 11px;\n    font-weight: 700;\n    padding: 4px 10px;\n    border-radius: 20px;\n    background: #FAEEDA;\n    color: #633806;\n    letter-spacing: 0.3px;\n  }\n\n  /* ── Scroll body ── */\n  .paw-body {\n    background: #fff;\n    border: 1px solid #EDE8DF;\n    border-top: none;\n    border-radius: 0 0 14px 14px;\n    max-height: 480px;\n    overflow-y: auto;\n    padding: 6px 0 10px;\n  }\n\n  .paw-body::-webkit-scrollbar { width: 4px; }\n  .paw-body::-webkit-scrollbar-track { background: transparent; }\n  .paw-body::-webkit-scrollbar-thumb { background: #FAC775; border-radius: 4px; }\n\n  /* ── Timeline items ── */\n  .tl-item {\n    display: flex;\n    align-items: flex-start;\n    padding: 10px 18px;\n    gap: 12px;\n    transition: background 0.15s;\n  }\n\n  .tl-item:hover { background: #FAFAF8; }\n\n  .tl-spine {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    min-width: 34px;\n  }\n\n  .tl-dot {\n    width: 34px;\n    height: 34px;\n    border-radius: 50%;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    font-size: 16px;\n    flex-shrink: 0;\n  }\n\n  .tl-line {\n    width: 2px;\n    flex: 1;\n    min-height: 18px;\n    border-radius: 1px;\n    margin-top: 4px;\n    opacity: 0.5;\n  }\n\n  .tl-item:last-child .tl-line { visibility: hidden; }\n\n  .tl-content { flex: 1; padding-bottom: 4px; }\n\n  .tl-name {\n    font-size: 14px;\n    font-weight: 700;\n    color: #2C2C2A;\n    margin: 6px 0 4px;\n  }\n\n  .tl-meta {\n    display: flex;\n    align-items: center;\n    gap: 8px;\n    flex-wrap: wrap;\n  }\n\n  .tl-time {\n    font-size: 12px;\n    color: #888780;\n    display: flex;\n    align-items: center;\n    gap: 3px;\n  }\n\n  .tl-time svg {\n    width: 13px;\n    height: 13px;\n    stroke: #888780;\n    fill: none;\n    stroke-width: 2;\n    stroke-linecap: round;\n    flex-shrink: 0;\n  }\n\n  .tl-dur {\n    font-size: 11px;\n    font-weight: 700;\n    padding: 2px 8px;\n    border-radius: 10px;\n  }\n\n  /* ── 行為色系 ── */\n  .b-scratch .tl-dot  { background: #FAECE7; }\n  .b-scratch .tl-line { background: #F0997B; }\n  .b-scratch .tl-dur  { background: #FAECE7; color: #993C1D; }\n\n  .b-lick .tl-dot  { background: #FAEEDA; }\n  .b-lick .tl-line { background: #FAC775; }\n  .b-lick .tl-dur  { background: #FAEEDA; color: #633806; }\n\n  .b-walk .tl-dot  { background: #EAF3DE; }\n  .b-walk .tl-line { background: #97C459; }\n  .b-walk .tl-dur  { background: #EAF3DE; color: #3B6D11; }\n\n  .b-shake .tl-dot  { background: #E6F1FB; }\n  .b-shake .tl-line { background: #85B7EB; }\n  .b-shake .tl-dur  { background: #E6F1FB; color: #185FA5; }\n\n  .b-stop .tl-dot  { background: #EEEDFE; }\n  .b-stop .tl-line { background: #AFA9EC; }\n  .b-stop .tl-dur  { background: #EEEDFE; color: #3C3489; }\n\n  .b-not .tl-dot  { background: #F1EFE8; }\n  .b-not .tl-line { background: #B4B2A9; }\n  .b-not .tl-dur  { background: #F1EFE8; color: #444441; }\n\n  /* ── Empty state ── */\n  .paw-empty {\n    padding: 56px 20px;\n    text-align: center;\n  }\n\n  .paw-empty-icon { font-size: 42px; opacity: 0.3; }\n  .paw-empty-title { font-size: 14px; color: #5F5E5A; margin: 12px 0 4px; font-weight: 700; }\n  .paw-empty-sub   { font-size: 12px; color: #888780; }\n</style>\n\n<div class=\"paw-wrap\">\n\n  <div class=\"paw-header\">\n    <div class=\"paw-header-left\">\n      <div class=\"paw-avatar\">🐾</div>\n      <div>\n        <p class=\"paw-title\">行為時間軸</p>\n        <p class=\"paw-subtitle\">即時追蹤紀錄</p>\n      </div>\n    </div>\n    <span class=\"paw-badge\">最近 20 筆</span>\n  </div>\n\n  <div class=\"paw-body\">\n\n    <!-- 無資料 -->\n    <div ng-if=\"!msg.payload || !msg.payload.behavior_log || msg.payload.behavior_log.length === 0\"\n         class=\"paw-empty\">\n      <div class=\"paw-empty-icon\">🐱</div>\n      <p class=\"paw-empty-title\">暫無行為記錄</p>\n      <p class=\"paw-empty-sub\">等待貓咪活動...</p>\n    </div>\n\n    <!-- Timeline -->\n    <div ng-if=\"msg.payload && msg.payload.behavior_log && msg.payload.behavior_log.length > 0\">\n      <div ng-repeat=\"item in msg.payload.behavior_log.slice().reverse().slice(0,20) track by $index\"\n           class=\"tl-item\"\n           ng-class=\"'b-' + item.behavior\">\n\n        <div class=\"tl-spine\">\n          <div class=\"tl-dot\">\n            {{\n              item.behavior === 'scratch' ? '🐱' :\n              item.behavior === 'lick'    ? '😸' :\n              item.behavior === 'walk'    ? '🐈' :\n              item.behavior === 'shake'   ? '😼' :\n              item.behavior === 'stop'    ? '😴' :\n              item.behavior === 'not'     ? '🙈' : '🐾'\n            }}\n          </div>\n          <div class=\"tl-line\"></div>\n        </div>\n\n        <div class=\"tl-content\">\n          <div class=\"tl-name\">\n            {{\n              item.behavior === 'scratch' ? '搔抓' :\n              item.behavior === 'lick'    ? '舔舐' :\n              item.behavior === 'walk'    ? '行走' :\n              item.behavior === 'shake'   ? '甩頭' :\n              item.behavior === 'stop'    ? '靜止' :\n              item.behavior === 'not'     ? '不在畫面' : item.behavior\n            }}\n          </div>\n          <div class=\"tl-meta\">\n            <span class=\"tl-time\">\n              <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\">\n                <circle cx=\"12\" cy=\"12\" r=\"10\"/>\n                <polyline points=\"12 6 12 12 16 14\"/>\n              </svg>\n              {{item.time || '--:--'}}\n            </span>\n            <span class=\"tl-dur\" ng-if=\"item.duration > 0\">\n              ⏱ {{item.duration}} 秒\n            </span>\n          </div>\n        </div>\n\n      </div>\n    </div>\n\n  </div>\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 1140,
+        "y": 160,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "b41970521d811237",
+        "type": "ui_template",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "group": "group_stats_cat",
+        "name": "詳細統計",
+        "order": 3,
+        "width": "6",
+        "height": "10",
+        "format": "<style>\n.stats-container {\n    padding: 15px;\n    font-family: 'Microsoft JhengHei', Arial, sans-serif;\n    background: #fafbfc;\n    border-radius: 10px;\n}\n\n.stats-title {\n    font-size: 1.3em;\n    font-weight: 700;\n    margin-bottom: 18px;\n    color: #2c3e50;\n    border-bottom: 3px solid #ffa726;\n    padding-bottom: 10px;\n}\n\n.stat-card {\n    background: white;\n    border-radius: 12px;\n    padding: 15px;\n    margin-bottom: 12px;\n    box-shadow: 0 2px 8px rgba(0,0,0,0.08);\n    border-left: 6px solid #667eea;\n    transition: all 0.3s ease;\n}\n\n.stat-card:hover {\n    transform: translateY(-2px);\n    box-shadow: 0 4px 12px rgba(0,0,0,0.12);\n}\n\n/* =========================\n行走 - 綠\n========================= */\n\n.stat-card.walk {\nborder-left-color: #43a047;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#eef9f0 100%\n);\n}\n\n.stat-card.walk .time-display {\ncolor: #2e7d32;\n}\n\n.stat-card.walk .progress-fill {\nbackground: linear-gradient(\n90deg,\n#66bb6a 0%,\n#43a047 100%\n);\n}\n\n/* =========================\n舔拭 - 黃\n========================= */\n\n.stat-card.lick {\nborder-left-color: #fbc02d;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#fffbea 100%\n);\n}\n\n.stat-card.lick .time-display {\ncolor: #f9a825;\n}\n\n.stat-card.lick .progress-fill {\nbackground: linear-gradient(\n90deg,\n#fff176 0%,\n#fbc02d 100%\n);\n}\n\n/* =========================\n搔抓 - 紅\n========================= */\n\n.stat-card.scratch {\nborder-left-color: #ef5350;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#fff1f1 100%\n);\n}\n\n.stat-card.scratch .time-display {\ncolor: #d32f2f;\n}\n\n.stat-card.scratch .progress-fill {\nbackground: linear-gradient(\n90deg,\n#ef9a9a 0%,\n#ef5350 100%\n);\n}\n\n/* =========================\n甩頭 - 藍\n========================= */\n\n.stat-card.shake {\nborder-left-color: #42a5f5;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#eef7ff 100%\n);\n}\n\n.stat-card.shake .time-display {\ncolor: #1e88e5;\n}\n\n.stat-card.shake .progress-fill {\nbackground: linear-gradient(\n90deg,\n#90caf9 0%,\n#42a5f5 100%\n);\n}\n\n/* =========================\n靜止 - 靛\n========================= */\n\n.stat-card.stop {\nborder-left-color: #5c6bc0;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#f0f2ff 100%\n);\n}\n\n.stat-card.stop .time-display {\ncolor: #3949ab;\n}\n\n.stat-card.stop .progress-fill {\nbackground: linear-gradient(\n90deg,\n#9fa8da 0%,\n#5c6bc0 100%\n);\n}\n\n/* =========================\n活動時間 - 橙\n========================= */\n\n.stat-card.active {\nborder-left-color: #fb8c00;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#fff5eb 100%\n);\n}\n\n.stat-card.active .time-display {\ncolor: #ef6c00;\n}\n\n.stat-card.active .progress-fill {\nbackground: linear-gradient(\n90deg,\n#ffcc80 0%,\n#fb8c00 100%\n);\n}\n\n/* =========================\n休息時間 - 紫\n========================= */\n\n.stat-card.rest {\nborder-left-color: #ab47bc;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#faf0ff 100%\n);\n}\n\n.stat-card.rest .time-display {\ncolor: #8e24aa;\n}\n\n.stat-card.rest .progress-fill {\nbackground: linear-gradient(\n90deg,\n#ce93d8 0%,\n#ab47bc 100%\n);\n}\n\n.stat-header {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    margin-bottom: 10px;\n}\n\n.stat-icon {\n    font-size: 2em;\n}\n\n.stat-label {\n    font-size: 1em;\n    font-weight: 600;\n    color: #34495e;\n    margin-left: 10px;\n}\n\n.stat-count {\n    font-size: 1.8em;\n    font-weight: 700;\n    color: #2c3e50;\n}\n\n.time-display {\n    font-size: 1.3em;\n    font-weight: 700;\n}\n\n.progress-bar {\n    width: 100%;\n    height: 8px;\n    background: #ecf0f1;\n    border-radius: 10px;\n    overflow: hidden;\n    margin-top: 8px;\n}\n\n.progress-fill {\n    height: 100%;\n    border-radius: 10px;\n    transition: width 0.5s ease;\n}\n\n.summary-panel {\n    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n    color: white;\n    border-radius: 12px;\n    padding: 20px;\n    margin-bottom: 15px;\n    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);\n}\n\n.summary-title {\n    font-size: 1.1em;\n    font-weight: 700;\n    margin-bottom: 15px;\n    opacity: 0.9;\n}\n\n.summary-grid {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 15px;\n}\n\n.summary-item {\n    text-align: center;\n    padding: 10px;\n    background: rgba(255,255,255,0.15);\n    border-radius: 8px;\n}\n\n.summary-value {\n    font-size: 1.8em;\n    font-weight: 700;\n    margin-bottom: 5px;\n}\n\n.summary-label {\n    font-size: 0.85em;\n    opacity: 0.9;\n}\n</style>\n\n<div class=\"stats-container\">\n    <div class=\"stats-title\">📊 今日統計總覽</div>\n    \n    <div class=\"summary-panel\">\n        <div class=\"summary-title\">⏰ 今日時間分配</div>\n        <div class=\"summary-grid\">\n            <div class=\"summary-item\">\n                <div class=\"summary-value\">{{getTotalTime()}}秒</div>\n                <div class=\"summary-label\">總監測時間</div>\n            </div>\n            <div class=\"summary-item\">\n                <div class=\"summary-value\">{{getTotalBehaviors()}}</div>\n                <div class=\"summary-label\">行為轉換次數</div>\n            </div>\n        </div>\n    </div>\n    \n<!-- 行走 -->\n<div class=\"stat-card walk\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🚶</span>\n            <span class=\"stat-label\">行走</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.walk || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.walk_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.walk_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 舔拭 -->\n<div class=\"stat-card lick\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🧼</span>\n            <span class=\"stat-label\">舔拭</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.lick || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.lick_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.lick_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 搔抓 -->\n<div class=\"stat-card scratch\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🐾</span>\n            <span class=\"stat-label\">搔抓</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.scratch || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.scratch_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.scratch_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 甩頭 -->\n<div class=\"stat-card shake\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🔄</span>\n            <span class=\"stat-label\">甩頭</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.shake || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.shake_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.shake_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 停止 -->\n<div class=\"stat-card stop\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">⏹</span>\n            <span class=\"stat-label\">靜止</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.stop || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.stop_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.stop_time) + '%'}\"></div>\n    </div>\n</div>\n<!-- 活動時間 -->\n<div class=\"stat-card active\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">⚡</span>\n            <span class=\"stat-label\">活動時間</span>\n        </div>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.active_time || 0)}}\n    </div>\n</div>\n\n<!-- 休息時間 -->\n<div class=\"stat-card rest\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">😴</span>\n            <span class=\"stat-label\">休息時間</span>\n        </div>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.rest_time || 0)}}\n    </div>\n</div>\n\n<script>\n(function(scope) {\n    scope.formatTime = function(seconds) {\n        if (!seconds || seconds === 0) return '0秒';\n        \n        const hours = Math.floor(seconds / 3600);\n        const minutes = Math.floor((seconds % 3600) / 60);\n        const secs = Math.floor(seconds % 60);\n        \n        if (hours > 0) {\n            return hours + '小時' + minutes + '分' + secs + '秒';\n        } else if (minutes > 0) {\n            return minutes + '分' + secs + '秒';\n        } else {\n            return secs + '秒';\n        }\n    };\n    \n    scope.getTotalTime = function() {\n        if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n        const stats = scope.msg.payload.today_stats;\n        return Math.round((stats.active_time || 0) + (stats.rest_time || 0));\n    };\n    \n    scope.getTotalBehaviors = function() {\n        if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n        const stats = scope.msg.payload.today_stats;\n        return (stats.walk || 0) + (stats.lick || 0) + (stats.scratch || 0) + (stats.shake || 0) + (stats.stop || 0);\n    };\n    \n    scope.getPercentage = function(time) {\n        const total = scope.getTotalTime();\n        if (total === 0) return 0;\n        return Math.round((time / total) * 100);\n    };\n    \n    scope.getAverageDuration = function(totalTime, count) {\n        if (!count || count === 0) return 0;\n        return Math.round(totalTime / count);\n    };\n})(scope);\n</script>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 1140,
+        "y": 220,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "d349c9a9a2509e65",
+        "type": "ui_template",
+        "z": "a57e2a51f4764c7e",
+        "g": "20a426aa12fe44b8",
+        "group": "group_alerts_cat",
+        "name": "健康警示",
+        "order": 4,
+        "width": "12",
+        "height": "6",
+        "format": "<style>\n.hw{font-family:'Microsoft JhengHei',sans-serif;padding:14px;background:#0d1117;border-radius:14px}\n.hw-score-card{border-radius:16px;padding:24px;text-align:center;margin-bottom:16px}\n.hw-score-emoji{font-size:44px;line-height:1;margin-bottom:10px}\n.hw-score-num{font-size:60px;font-weight:900;line-height:1;margin-bottom:4px}\n.hw-score-level{font-size:18px;font-weight:700;letter-spacing:1px}\n.hw-score-sub{font-size:10px;color:rgba(255,255,255,.4);margin-top:8px}\n.hw-comps{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}\n.hw-comp-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}\n.hw-comp-title{font-size:10px;color:rgba(255,255,255,.45);margin-bottom:6px;font-weight:600}\n.hw-comp-score{font-size:24px;font-weight:800;margin-bottom:6px}\n.hw-comp-bar{height:5px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden}\n.hw-comp-fill{height:100%;border-radius:99px;transition:width .6s ease}\n.comp-dist{color:#85B7EB}.comp-freq{color:#F09595}.comp-rhy{color:#EF9F27}.comp-trans{color:#9FE1CB}\n.fill-dist{background:linear-gradient(90deg,#1e88e5,#64b5f6)}\n.fill-freq{background:linear-gradient(90deg,#e53935,#ef9a9a)}\n.fill-rhy{background:linear-gradient(90deg,#f9a825,#ffe082)}\n.fill-trans{background:linear-gradient(90deg,#1d9e75,#5dcaa5)}\n.hw-alerts-title{font-size:12px;font-weight:700;color:rgba(255,255,255,.55);margin-bottom:10px}\n.hw-alert-item{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;margin-bottom:6px}\n.hw-alert-ico{font-size:15px;flex-shrink:0}\n.hw-alert-txt{font-size:12px;color:rgba(255,255,255,.75);line-height:1.5}\n.hw-no-alerts{text-align:center;padding:14px;color:rgba(255,255,255,.3);font-size:12px}\n</style>\n<div class=\"hw\" ng-init=\"init()\">\n  <div class=\"hw-score-card\" ng-style=\"{border:'1px solid '+riskColor(),background:'rgba('+hexRgb(riskColor())+',0.08)'}\">\n    <div class=\"hw-score-emoji\">{{risk().emoji||'⏳'}}</div>\n    <div class=\"hw-score-num\" ng-style=\"{color:riskColor()}\">{{risk().score||0}}</div>\n    <div class=\"hw-score-level\" ng-style=\"{color:riskColor()}\">{{risk().level||'計算中...'}}</div>\n    <div class=\"hw-score-sub\">Behavior Risk Score（0=最佳 · 100=最高風險）</div>\n  </div>\n  <div class=\"hw-comps\">\n    <div class=\"hw-comp-card\">\n      <div class=\"hw-comp-title\">📊 行為占比偏離</div>\n      <div class=\"hw-comp-score comp-dist\">{{comp('distribution')}}</div>\n      <div class=\"hw-comp-bar\"><div class=\"hw-comp-fill fill-dist\" ng-style=\"{width:comp('distribution')+'%'}\"></div></div>\n    </div>\n    <div class=\"hw-comp-card\">\n      <div class=\"hw-comp-title\">📉 頻率偏離{{comp('frequency')>0?'':'(需基線)'}}</div>\n      <div class=\"hw-comp-score comp-freq\">{{comp('frequency')}}</div>\n      <div class=\"hw-comp-bar\"><div class=\"hw-comp-fill\" ng-class=\"comp('frequency')>0?'fill-freq':'fill-na'\" ng-style=\"{width:comp('frequency')+'%'}\"></div></div>\n    </div>\n    <div class=\"hw-comp-card\">\n      <div class=\"hw-comp-title\">🌙 節律偏離</div>\n      <div class=\"hw-comp-score comp-rhy\">{{comp('rhythm')}}</div>\n      <div class=\"hw-comp-bar\"><div class=\"hw-comp-fill fill-rhy\" ng-style=\"{width:comp('rhythm')+'%'}\"></div></div>\n    </div>\n    <div class=\"hw-comp-card\">\n      <div class=\"hw-comp-title\">🔀 轉移偏離</div>\n      <div class=\"hw-comp-score comp-trans\">{{comp('transition')}}</div>\n      <div class=\"hw-comp-bar\"><div class=\"hw-comp-fill fill-trans\" ng-style=\"{width:comp('transition')+'%'}\"></div></div>\n    </div>\n  </div>\n  <div class=\"hw-alerts-title\">⚠️ 異常警示列表</div>\n  <div ng-if=\"risk().alerts&&risk().alerts.length>0\">\n    <div class=\"hw-alert-item\" ng-repeat=\"a in risk().alerts\">\n      <div class=\"hw-alert-ico\">{{alertIco(a.type)}}</div>\n      <div class=\"hw-alert-txt\">{{a.msg}}</div>\n    </div>\n  </div>\n  <div class=\"hw-no-alerts\" ng-if=\"!risk().alerts||risk().alerts.length===0\">✅ 目前無異常警示</div>\n</div>\n<script>\n(function(scope){\n  scope.init = function(){};\n  scope.risk = function(){ return scope.msg&&scope.msg.payload&&scope.msg.payload.risk||{}; };\n  scope.comp = function(k){ var c=scope.risk().components; return c?c[k]||0:0; };\n  scope.riskColor = function(){ return scope.risk().color||'#888888'; };\n  scope.hexRgb = function(hex){ if(!hex||hex.length<7)return '136,136,136'; return parseInt(hex.slice(1,3),16)+','+parseInt(hex.slice(3,5),16)+','+parseInt(hex.slice(5,7),16); };\n  scope.alertIco = function(t){ return {lick:'😸',scratch:'🐾',shake:'🔄',dev:'📊',transition:'🔀',inactivity:'😴'}[t]||'⚠️'; };\n})(scope);\n</script>",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 1140,
+        "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "group_gauge_cat",
+        "type": "ui_group",
+        "name": "活動力指標",
+        "tab": "ui_tab_cat",
+        "order": 5,
+        "disp": true,
+        "width": "8",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "group_stream_cat",
+        "type": "ui_group",
+        "name": "即時影像串流",
+        "tab": "ui_tab_cat",
+        "order": 6,
+        "disp": false,
+        "width": "12",
+        "collapse": false,
+        "className": "gfv-hidden-bridge-group"
+    },
+    {
+        "id": "group_status_cat",
+        "type": "ui_group",
+        "name": "即時健康狀態",
+        "tab": "ui_tab_cat",
+        "order": 1,
+        "disp": true,
+        "width": "8",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "group_timeline_cat",
+        "type": "ui_group",
+        "name": "行為時間紀錄",
+        "tab": "ui_tab_cat",
+        "order": 2,
+        "disp": true,
+        "width": "6",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "group_stats_cat",
+        "type": "ui_group",
+        "name": "詳細統計分析",
+        "tab": "ui_tab_cat",
+        "order": 3,
+        "disp": true,
+        "width": "6",
+        "collapse": false
+    },
+    {
+        "id": "group_alerts_cat",
+        "type": "ui_group",
+        "name": "健康警示系統",
+        "tab": "ui_tab_cat",
+        "order": 4,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "ui_tab_cat",
+        "type": "ui_tab",
+        "name": "😺 貓咪健康監測",
+        "icon": "pets",
+        "order": 1,
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "057c2fd393d0b0b7",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-dashboard": "3.6.6"
+        }
+    },
+    {
+        "id": "global_float_video_01",
+        "type": "ui_template",
+        "name": "懸浮影像（全域）",
+        "order": 0,
+        "templateScope": "global",
+        "format": "<div id=\"gfv-nr-anchor\" style=\"display:none;height:0;width:0;overflow:hidden;position:absolute;\"></div>\n<script>\n(function(){\n\n  // ── 塌縮自己的容器（讓它不佔 layout 空間）────────────────────────────\n  function collapseContainer(){\n    var anchor = document.getElementById('gfv-nr-anchor');\n    if (!anchor) return;\n    var p = anchor.parentElement;\n    while (p && p !== document.body && p !== document.documentElement) {\n      var kids = p.children, allOurs = true;\n      for (var i = 0; i < kids.length; i++) {\n        var id = kids[i].id, tag = kids[i].tagName;\n        if (id !== 'gfv-nr-anchor' && id !== 'gfv_float_btn' && id !== 'gfv_float_panel' &&\n            tag !== 'SCRIPT' && tag !== 'STYLE') { allOurs = false; break; }\n      }\n      if (!allOurs) break;\n      p.style.height='0'; p.style.minHeight='0'; p.style.maxHeight='0';\n      p.style.overflow='hidden'; p.style.padding='0'; p.style.margin='0';\n      p.style.flexShrink='0'; p.style.flexGrow='0';\n      p = p.parentElement;\n    }\n  }\n  collapseContainer();\n  setTimeout(collapseContainer, 100);\n\n  // ── URL 橋接（供 local template 呼叫）──────────────────────────────\n  var _url = '';\n  window.gfvSetUrl = function(url){\n    if (!url || url === _url) return;\n    _url = url;\n    var img = document.getElementById('gfv_float_img');\n    if (img){ img.style.opacity=0; img.src=url; }\n  };\n\n  if (document.getElementById('gfv_float_btn')) return;\n\n  // ── CSS ──────────────────────────────────────────────────────────\n  var st = document.createElement('style');\n  st.textContent =\n    /* 📷 圓形按鈕 */\n    '#gfv_float_btn{position:fixed;bottom:20px;right:20px;' +\n      'width:46px;height:46px;border-radius:50%;' +\n      'background:rgba(13,17,23,.92);border:2px solid rgba(0,255,136,.5);' +\n      'color:#00ff88;font-size:22px;line-height:44px;text-align:center;' +\n      'cursor:pointer;z-index:2147483647;' +\n      'box-shadow:0 4px 16px rgba(0,0,0,.7);' +\n      'user-select:none;transition:transform .15s,border-color .15s;}' +\n    '#gfv_float_btn:hover{transform:scale(1.12);border-color:#00ff88;}' +\n    /* 浮動面板 */\n    '#gfv_float_panel{position:fixed;bottom:76px;right:20px;' +\n      'width:360px;height:240px;' +\n      'background:#0d1117;border:1px solid rgba(0,255,136,.28);' +\n      'border-radius:12px;overflow:hidden;z-index:2147483646;' +\n      'box-shadow:0 8px 32px rgba(0,0,0,.85);' +\n      'display:none;flex-direction:column;}' +\n    /* 標題列 */\n    '#gfv_bar{height:34px;flex-shrink:0;background:rgba(0,0,0,.72);' +\n      'padding:0 10px;font-size:12px;font-weight:600;color:#00ff88;' +\n      'display:flex;justify-content:space-between;align-items:center;' +\n      'cursor:move;user-select:none;' +\n      'border-bottom:1px solid rgba(255,255,255,.07);}' +\n    '#gfv_btns{display:flex;gap:5px;align-items:center;}' +\n    /* 圖示按鈕 */\n    '.gfv_ib{width:22px;height:22px;border-radius:4px;' +\n      'display:flex;align-items:center;justify-content:center;' +\n      'cursor:pointer;opacity:.55;font-size:13px;' +\n      'border:1px solid rgba(255,255,255,.12);' +\n      'background:rgba(255,255,255,.06);color:#fff;' +\n      'transition:opacity .15s,background .15s;flex-shrink:0;}' +\n    '.gfv_ib:hover{opacity:1;background:rgba(255,255,255,.15);}' +\n    /* 影像 */\n    '#gfv_float_img{flex:1;width:100%;min-height:0;' +\n      'display:block;background:#000;object-fit:contain;' +\n      'transition:opacity .25s;}' +\n    /* 離線提示 */\n    '#gfv_offline{flex:1;display:none;align-items:center;justify-content:center;' +\n      'flex-direction:column;gap:6px;' +\n      'color:rgba(255,255,255,.3);font-size:12px;}' +\n    /* 全螢幕 */\n    '#gfv_float_panel:-webkit-full-screen,' +\n    '#gfv_float_panel:fullscreen{' +\n      'width:100vw!important;height:100vh!important;' +\n      'top:0!important;left:0!important;' +\n      'right:auto!important;bottom:auto!important;border-radius:0;}';\n  document.head.appendChild(st);\n\n  // ── 📷 按鈕 ──────────────────────────────────────────────────────\n  var btn = document.createElement('div');\n  btn.id='gfv_float_btn'; btn.title='串流視窗'; btn.textContent='📷';\n  document.body.appendChild(btn);\n\n  // ── 面板 HTML ────────────────────────────────────────────────────\n  var pnl = document.createElement('div');\n  pnl.id = 'gfv_float_panel';\n  pnl.innerHTML =\n    '<div id=\"gfv_bar\">' +\n      '<span>📷 即時串流</span>' +\n      '<div id=\"gfv_btns\">' +\n        '<div class=\"gfv_ib\" id=\"gfv_rl\" title=\"重新載入\">↺</div>' +\n        '<div class=\"gfv_ib\" id=\"gfv_fs\" title=\"全螢幕\">⛶</div>' +\n        '<div class=\"gfv_ib\" id=\"gfv_cl\" title=\"關閉\">✕</div>' +\n      '</div>' +\n    '</div>' +\n    '<img id=\"gfv_float_img\" src=\"\" alt=\"\" style=\"opacity:0;\" ' +\n      'onload=\"this.style.opacity=1;' +\n             'var o=document.getElementById(\\'gfv_offline\\');if(o)o.style.display=\\'none\\';\" ' +\n      'onerror=\"this.style.opacity=0;' +\n              'var o=document.getElementById(\\'gfv_offline\\');if(o)o.style.display=\\'flex\\';\">' +\n    '<div id=\"gfv_offline\">📹<br>串流離線</div>';\n  document.body.appendChild(pnl);\n\n  // ── 開關 ─────────────────────────────────────────────────────────\n  function gfvOpen(){\n    pnl.style.display='flex';\n    if (!_url && window._catIP) window.gfvSetUrl('http://'+window._catIP+':5000/stream');\n  }\n  function gfvClose(){ pnl.style.display='none'; }\n  btn.addEventListener('click', function(){ pnl.style.display==='flex'?gfvClose():gfvOpen(); });\n\n  // ── 面板按鈕事件 ─────────────────────────────────────────────────\n  setTimeout(function(){\n    /* 關閉 */\n    var cl=document.getElementById('gfv_cl');\n    if (cl) cl.addEventListener('click', function(e){ e.stopPropagation(); gfvClose(); });\n\n    /* 全螢幕 */\n    var fs=document.getElementById('gfv_fs');\n    if (fs) fs.addEventListener('click', function(e){\n      e.stopPropagation();\n      if (!document.fullscreenElement){ pnl.requestFullscreen&&pnl.requestFullscreen(); }\n      else { document.exitFullscreen&&document.exitFullscreen(); }\n    });\n\n    /* 重新載入 */\n    var rl=document.getElementById('gfv_rl');\n    if (rl) rl.addEventListener('click', function(e){\n      e.stopPropagation();\n      if (!_url) return;\n      var img=document.getElementById('gfv_float_img');\n      if (img){ img.style.opacity=0; img.src='';\n        setTimeout(function(){ img.src=_url+'?t='+Date.now(); }, 200); }\n    });\n  }, 0);\n\n  // ── 拖曳（只允許拖標題列，不含按鈕）────────────────────────────────\n  var drag=false, ox=0, oy=0;\n  var bar=document.getElementById('gfv_bar');\n  if (bar) {\n    bar.addEventListener('mousedown', function(e){\n      if (e.target.classList.contains('gfv_ib')) return;\n      drag=true;\n      var r=pnl.getBoundingClientRect();\n      ox=e.clientX-r.left; oy=e.clientY-r.top;\n      e.preventDefault();\n    });\n  }\n  document.addEventListener('mousemove', function(e){\n    if (!drag) return;\n    pnl.style.left=(e.clientX-ox)+'px';\n    pnl.style.top=(e.clientY-oy)+'px';\n    pnl.style.right='auto'; pnl.style.bottom='auto';\n  });\n  document.addEventListener('mouseup', function(){ drag=false; });\n\n  // ── 雙擊影像 → 全螢幕 ────────────────────────────────────────────\n  pnl.addEventListener('dblclick', function(e){\n    if (e.target.classList.contains('gfv_ib')) return;\n    if (!document.fullscreenElement){ pnl.requestFullscreen&&pnl.requestFullscreen(); }\n    else { document.exitFullscreen&&document.exitFullscreen(); }\n  });\n\n})();\n</script>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "className": "",
+        "x": 200,
+        "y": 900,
+        "wires": [
+            []
+        ],
+        "z": "a57e2a51f4764c7e"
+    }
+]

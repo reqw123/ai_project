@@ -3,10 +3,13 @@
 """
 from collections import deque
 from datetime import datetime
+import json
+import logging
+import os
 import threading
 import time
 
-from config import BehaviorTrackingConfig
+from config import BehaviorTrackingConfig, LoggingConfig
 
 class ImprovedBehaviorTracker:
     def __init__(self):
@@ -23,6 +26,56 @@ class ImprovedBehaviorTracker:
         self.last_reset = datetime.now().date()
         self.activity_window = deque(maxlen=BehaviorTrackingConfig.ACTIVITY_WINDOW_SIZE)
         self.alerts = deque(maxlen=BehaviorTrackingConfig.MAX_ALERTS_SIZE)
+        self.transition_matrix = {}   # {"walk->lick": 3, ...}
+        self.hourly_distribution = {} # {"08": {"walk": 120.0, ...}, ...}
+        self.monitoring_seconds = 0.0
+        self._last_valid_behavior = None
+        self._last_save_time = 0.0
+        self.load_state()
+    def save_state(self):
+        try:
+            with self._lock:
+                state = {
+                    "date":               str(self.last_reset),
+                    "behavior_time":      dict(self.behavior_time),
+                    "behavior_count":     dict(self.behavior_count),
+                    "rest_time":          self.rest_time,
+                    "not_detected_time":  self.not_detected_time,
+                    "transition_matrix":   dict(self.transition_matrix),
+                    "hourly_distribution": {h: dict(v) for h, v in self.hourly_distribution.items()},
+                    "monitoring_seconds":  self.monitoring_seconds,
+                    "_last_valid_behavior": self._last_valid_behavior,
+                }
+            path = LoggingConfig.TRACKER_STATE_PATH
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(state, f)
+        except Exception as e:
+            logging.warning("TrackerState save failed: %s", e)
+
+    def load_state(self):
+        try:
+            path = LoggingConfig.TRACKER_STATE_PATH
+            if not os.path.exists(path):
+                return
+            with open(path, encoding="utf-8") as f:
+                state = json.load(f)
+            if state.get("date") != str(datetime.now().date()):
+                return  # 不同天的存檔，不還原
+            with self._lock:
+                self.behavior_time     = {k: float(v) for k, v in state.get("behavior_time",  {}).items()}
+                self.behavior_count    = {k: int(v)   for k, v in state.get("behavior_count", {}).items()}
+                self.rest_time         = float(state.get("rest_time",         0.0))
+                self.not_detected_time = float(state.get("not_detected_time", 0.0))
+                self.transition_matrix   = {k: int(v) for k, v in state.get("transition_matrix", {}).items()}
+                self.hourly_distribution = {h: {b: float(t) for b, t in v.items()}
+                                            for h, v in state.get("hourly_distribution", {}).items()}
+                self.monitoring_seconds  = float(state.get("monitoring_seconds", 0.0))
+                self._last_valid_behavior = state.get("_last_valid_behavior", None)
+            logging.info("TrackerState restored from %s", path)
+        except Exception as e:
+            logging.warning("TrackerState load failed: %s", e)
+
     def check_daily_reset(self):
         today = datetime.now().date()
         if today != self.last_reset:
@@ -32,6 +85,10 @@ class ImprovedBehaviorTracker:
             self.behavior_count = {k: 0 for k in self.behavior_count}
             self.rest_time = 0.0
             self.not_detected_time = 0.0
+            self.transition_matrix = {}
+            self.hourly_distribution = {}
+            self.monitoring_seconds = 0.0
+            self._last_valid_behavior = None
     def map_gcn_to_tracker(self, behavior_id):
         mapping = BehaviorTrackingConfig.BEHAVIOR_CATEGORIES
         return mapping.get(behavior_id, "walk")
@@ -39,9 +96,16 @@ class ImprovedBehaviorTracker:
         with self._lock:
             self.check_daily_reset()
             now = time.time()
-            # dt 僅用於 rest_time 累積（behavior_id == -1 路徑），須在更新 last_update_time 前計算
             dt = now - self.last_update_time
             self.last_update_time = now
+
+            # 每小時監控時間（所有狀態都累積，用於判斷時段是否有被監控）
+            hour_key = datetime.now().strftime("%H")
+            if hour_key not in self.hourly_distribution:
+                self.hourly_distribution[hour_key] = {b: 0.0 for b in ["walk", "lick", "scratch", "shake", "stop"]}
+            self.hourly_distribution[hour_key]["monitoring_sec"] = (
+                self.hourly_distribution[hour_key].get("monitoring_sec", 0.0) + dt
+            )
 
             # YOLO 未偵測到貓（behavior_id == -2）：累積到 not_detected_time，不算休息
             if behavior_id == -2:
@@ -56,6 +120,19 @@ class ImprovedBehaviorTracker:
 
             # 有效行為（0~4）：累積到對應 behavior_time
             behavior = self.map_gcn_to_tracker(behavior_id)
+
+            # 每小時分布（dt 為幀間隔，即時累積）
+            hour_key = datetime.now().strftime("%H")
+            if hour_key not in self.hourly_distribution:
+                self.hourly_distribution[hour_key] = {b: 0.0 for b in ["walk", "lick", "scratch", "shake", "stop"]}
+            self.hourly_distribution[hour_key][behavior] = self.hourly_distribution[hour_key].get(behavior, 0.0) + dt
+
+            # 轉移矩陣（只在行為切換時記錄）
+            if self._last_valid_behavior and self._last_valid_behavior != behavior:
+                key = self._last_valid_behavior + "->" + behavior
+                self.transition_matrix[key] = self.transition_matrix.get(key, 0) + 1
+            self._last_valid_behavior = behavior
+
             duration = now - self.behavior_start_time
             record_this = False
             if behavior != self.current_behavior:
@@ -84,6 +161,10 @@ class ImprovedBehaviorTracker:
                 self.behavior_start_time = now
             # 均勻權重：每幀貢獻相等，使 get_activity_score() 為純粹的時間視窗平均
             self.activity_window.append({"time": now, "activity": activity_value, "weight": 1.0})
+        now_t = time.time()
+        if now_t - self._last_save_time >= 30.0:
+            self._last_save_time = now_t
+            self.save_state()
     def get_activity_score(self):
         with self._lock:
             if len(self.activity_window) == 0:
@@ -115,8 +196,15 @@ class ImprovedBehaviorTracker:
                 "active_time": round(total_active, 1),
                 "rest_time": round(self.rest_time, 1),
                 "not_detected_time": round(self.not_detected_time, 1),
+                "monitoring_seconds": round(self.monitoring_seconds, 1),
+                "transition_matrix": dict(self.transition_matrix),
+                "hourly_distribution": {h: dict(v) for h, v in self.hourly_distribution.items()},
             }
         return stats
+    def add_monitoring_seconds(self, seconds: float) -> None:
+        with self._lock:
+            self.monitoring_seconds += seconds
+
     def add_alert(self, alert_type, message):
         with self._lock:
             self.alerts.append({"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "type": alert_type, "message": message})

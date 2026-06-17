@@ -13,6 +13,7 @@ class CSVLogger:
         if csv_path is None:
             csv_path = LoggingConfig.CSV_PATH
         self._lock = threading.Lock()
+        Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
         self.csv_file = open(csv_path, 'w', newline='', buffering=1)  # line-buffered
         try:
             self.csv_writer = csv.writer(self.csv_file)
@@ -69,6 +70,7 @@ class BehaviorSegmentLogger:
         self._open()
 
     def _open(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         write_header = not self.path.exists() or self.path.stat().st_size == 0
         self._file = open(self.path, 'a', newline='', encoding='utf-8', buffering=1)
         self._writer = csv.writer(self._file)
