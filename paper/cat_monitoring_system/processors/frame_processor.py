@@ -16,7 +16,7 @@ from logutils.csv_logger import CSVLogger, BehaviorSegmentLogger
 from utils.helpers import get_ip, get_behavior_name
 from utils.constants import *
 from models.stgcn_model import interpolate_missing
-from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig, SystemInfo
+from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig, SystemInfo, VisualizationConfig
 
 class FrameProcessor:
     def __init__(self, yolo_model_path, stgcn_model_path, video_path,
@@ -47,11 +47,14 @@ class FrameProcessor:
         self.window_stride = window_stride if window_stride is not None else STGCNConfig.WINDOW_STRIDE
         self._infer_frame_count = 0  # 累積有效幀計數器，以 window_stride 取模決定推論時機（貓咪消失時重置，確保重新出現後推論時機從 0 對齊）
         self.overlay = overlay
+        self.show_skeleton = True
+        self.show_label = True
+        self.show_bbox = True
         self.prev_time = time.time()
         self.last_send_time = time.time()
         self.nodered = None
         if nodered_url:
-            self.nodered = NodeRedClient(nodered_url, local_ip=self.local_ip)
+            self.nodered = NodeRedClient(nodered_url)
         self.csv_logger = CSVLogger()
         self.segment_logger = BehaviorSegmentLogger()
         self.frame_idx = 0
@@ -184,7 +187,17 @@ class FrameProcessor:
 
             # === Overlay 畫圖 ===
             if self.overlay:
-                frame = self.visualizer.draw(frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs)
+                frame = self.visualizer.draw(
+                    frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs,
+                    show_skeleton=self.show_skeleton,
+                    show_info=self.show_label,
+                    show_bbox=self.show_bbox,
+                )
+                # Plugin overlays（e.g. lick-stage nose trapezoid）
+                _show_trap = VisualizationConfig.SHOW_NOSE_TRAPEZOID
+                for _plugin in self._plugins:
+                    if hasattr(_plugin, 'draw_overlay'):
+                        _plugin.draw_overlay(frame, self.frame_idx, show=_show_trap)
 
         else:
             # === Plugin notification (no cat detected) ===

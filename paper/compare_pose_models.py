@@ -66,10 +66,10 @@ def _vrj(s: str, w: int) -> str:
 # ═══════════════════════════════════════════════════════
 #  設定區  ── 修改這裡，不需要命令列參數
 # ═══════════════════════════════════════════════════════
-OLD_MODEL_PATH   = r"C:\AI_Project\cat_pose\v11s_107.pt"
-NEW_MODEL_PATH   = r"C:\AI_Project\cat_pose\v11s_108.pt"
+OLD_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_107.pt"
+NEW_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_110.pt"
 BENCHMARK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試"
-OUTPUT_DIR       = r"C:\AI_Project\compare_results"
+OUTPUT_DIR       = r"C:\ai_project\compare_results"
 INFERENCE_DEVICE = "cuda"   # "cuda" 或 "cpu"
 EMA_ALPHA_OLD    = 1.0      # Old model EMA 平滑係數（1.0 = 不平滑；0.5 = 半衰期平滑）
 EMA_ALPHA_NEW    = 1.0      # New model EMA 平滑係數

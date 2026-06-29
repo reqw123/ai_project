@@ -1,0 +1,242 @@
+[INFO] ====================================================
+[INFO] YOLO Pose Model Comparison  [20260629_145839]
+[INFO]   Old : C:\ai_project\cat_pose\v11s_107.pt
+[INFO]   New : C:\ai_project\cat_pose\v11s_109.pt
+[INFO]   Data: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試
+[INFO]   Out : C:\ai_project\compare_results\20260629_145839  Device: cuda
+[INFO] ====================================================
+[INFO] Loading old model...
+[INFO] Loading new model...
+[INFO] Benchmark videos: 26
+[INFO]   walk: 4
+[INFO]   lick: 5
+[INFO]   scratch: 4
+[INFO]   shake: 6
+[INFO]   stop: 7
+[INFO] 
+--- OLD MODEL: v11s_107.pt  (EMA α=1.0) ---
+[INFO] Processing: walk/walk_15.mp4
+[INFO]   Frames: 280 | Inference Time: 5.96 sec | Confidence=0.991 Jitter=7.16
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_19.mp4
+[INFO]   Frames: 982 | Inference Time: 26.11 sec | Confidence=0.986 Jitter=8.40
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_20.mp4
+[INFO]   Frames: 121 | Inference Time: 3.51 sec | Confidence=0.998 Jitter=11.39
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_21.mp4
+[INFO]   Frames: 206 | Inference Time: 5.16 sec | Confidence=0.992 Jitter=19.69
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_60.mp4
+[INFO]   Frames: 240 | Inference Time: 5.29 sec | Confidence=0.998 Jitter=1.66
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_61.mp4
+[INFO]   Frames: 240 | Inference Time: 5.01 sec | Confidence=0.995 Jitter=1.75
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_62.mp4
+[INFO]   Frames: 240 | Inference Time: 5.47 sec | Confidence=0.997 Jitter=1.58
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_70.mp4
+[INFO]   Frames: 240 | Inference Time: 4.71 sec | Confidence=0.993 Jitter=2.50
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_74.mp4
+[INFO]   Frames: 178 | Inference Time: 3.85 sec | Confidence=0.995 Jitter=2.66
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch_27.mp4
+[INFO]   Frames: 240 | Inference Time: 4.12 sec | Confidence=0.920 Jitter=2.43
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch_32.mp4
+[INFO]   Frames: 240 | Inference Time: 4.24 sec | Confidence=0.991 Jitter=3.74
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch_33.mp4
+[INFO]   Frames: 240 | Inference Time: 4.17 sec | Confidence=0.995 Jitter=2.77
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch_39.mp4
+[INFO]   Frames: 240 | Inference Time: 4.19 sec | Confidence=0.977 Jitter=3.25
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_49.mp4
+[INFO]   Frames: 240 | Inference Time: 4.25 sec | Confidence=0.978 Jitter=3.37
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_50.mp4
+[INFO]   Frames: 240 | Inference Time: 4.41 sec | Confidence=0.998 Jitter=2.73
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_51.mp4
+[INFO]   Frames: 240 | Inference Time: 4.90 sec | Confidence=0.997 Jitter=2.05
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_57.mp4
+[INFO]   Frames: 240 | Inference Time: 4.82 sec | Confidence=0.998 Jitter=2.27
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_58.mp4
+[INFO]   Frames: 240 | Inference Time: 4.79 sec | Confidence=0.997 Jitter=1.29
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_63.mp4
+[INFO]   Frames: 240 | Inference Time: 4.66 sec | Confidence=0.996 Jitter=2.46
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_2.mp4
+[INFO]   Frames: 397 | Inference Time: 10.29 sec | Confidence=0.988 Jitter=4.74
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_3.mp4
+[INFO]   Frames: 248 | Inference Time: 6.98 sec | Confidence=0.980 Jitter=3.00
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_36.mp4
+[INFO]   Frames: 50 | Inference Time: 1.08 sec | Confidence=0.998 Jitter=0.61
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_48.mp4
+[INFO]   Frames: 55 | Inference Time: 1.19 sec | Confidence=0.994 Jitter=2.39
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_6.mp4
+[INFO]   Frames: 285 | Inference Time: 7.35 sec | Confidence=0.999 Jitter=0.43
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_71.mp4
+[INFO]   Frames: 92 | Inference Time: 2.57 sec | Confidence=0.995 Jitter=1.63
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_75.mp4
+[INFO]   Frames: 230 | Inference Time: 5.84 sec | Confidence=0.908 Jitter=2.54
+[INFO] --------------------------------
+[INFO] 
+--- NEW MODEL: v11s_109.pt  (EMA α=1.0) ---
+[INFO] Processing: walk/walk_15.mp4
+[INFO]   Frames: 280 | Inference Time: 5.11 sec | Confidence=0.991 Jitter=7.03
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_19.mp4
+[INFO]   Frames: 982 | Inference Time: 23.50 sec | Confidence=0.982 Jitter=8.69
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_20.mp4
+[INFO]   Frames: 121 | Inference Time: 2.90 sec | Confidence=0.999 Jitter=11.15
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_21.mp4
+[INFO]   Frames: 206 | Inference Time: 4.91 sec | Confidence=0.997 Jitter=19.39
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_60.mp4
+[INFO]   Frames: 240 | Inference Time: 4.53 sec | Confidence=0.998 Jitter=1.48
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_61.mp4
+[INFO]   Frames: 240 | Inference Time: 4.61 sec | Confidence=0.996 Jitter=2.17
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_62.mp4
+[INFO]   Frames: 240 | Inference Time: 4.39 sec | Confidence=0.990 Jitter=1.70
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_70.mp4
+[INFO]   Frames: 240 | Inference Time: 4.43 sec | Confidence=0.991 Jitter=3.43
+[INFO] --------------------------------
+[INFO] Processing: lick/lick_74.mp4
+[INFO]   Frames: 178 | Inference Time: 4.07 sec | Confidence=0.992 Jitter=2.44
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch_27.mp4
+[INFO]   Frames: 240 | Inference Time: 4.68 sec | Confidence=0.954 Jitter=2.33
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch_32.mp4
+[INFO]   Frames: 240 | Inference Time: 4.53 sec | Confidence=0.982 Jitter=3.80
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch_33.mp4
+[INFO]   Frames: 240 | Inference Time: 4.67 sec | Confidence=0.992 Jitter=2.95
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch_39.mp4
+[INFO]   Frames: 240 | Inference Time: 4.53 sec | Confidence=0.986 Jitter=3.41
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_49.mp4
+[INFO]   Frames: 240 | Inference Time: 4.62 sec | Confidence=0.968 Jitter=3.73
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_50.mp4
+[INFO]   Frames: 240 | Inference Time: 4.56 sec | Confidence=0.999 Jitter=2.32
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_51.mp4
+[INFO]   Frames: 240 | Inference Time: 4.58 sec | Confidence=0.998 Jitter=2.11
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_57.mp4
+[INFO]   Frames: 240 | Inference Time: 4.60 sec | Confidence=0.999 Jitter=2.56
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_58.mp4
+[INFO]   Frames: 240 | Inference Time: 4.65 sec | Confidence=0.997 Jitter=1.26
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_63.mp4
+[INFO]   Frames: 240 | Inference Time: 5.50 sec | Confidence=0.996 Jitter=2.58
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_2.mp4
+[INFO]   Frames: 397 | Inference Time: 10.20 sec | Confidence=0.976 Jitter=4.97
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_3.mp4
+[INFO]   Frames: 248 | Inference Time: 5.67 sec | Confidence=0.949 Jitter=3.25
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_36.mp4
+[INFO]   Frames: 50 | Inference Time: 1.09 sec | Confidence=0.996 Jitter=0.66
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_48.mp4
+[INFO]   Frames: 55 | Inference Time: 1.26 sec | Confidence=0.989 Jitter=2.07
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_6.mp4
+[INFO]   Frames: 285 | Inference Time: 6.29 sec | Confidence=0.998 Jitter=0.51
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_71.mp4
+[INFO]   Frames: 92 | Inference Time: 2.13 sec | Confidence=0.996 Jitter=1.49
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_75.mp4
+[INFO]   Frames: 230 | Inference Time: 5.12 sec | Confidence=0.889 Jitter=2.10
+[INFO] --------------------------------
+[INFO] 
+Aggregating metrics...
+[INFO] 
+Writing CSV files...
+[INFO] Generating figures...
+[INFO] Writing reports...
+[INFO] 
+[INFO] =====================================================================================================
+[INFO] 逐影片比較結果
+[INFO] =====================================================================================================
+[INFO] 行為       影片                               舊信心   新信心      信心Δ   舊抖動   新抖動      抖動Δ
+[INFO] -----------------------------------------------------------------------------------------------------
+[INFO] walk       walk_15.mp4                         0.991    0.991    -0.000↓     7.16     7.03     -0.13↓
+[INFO] walk       walk_19.mp4                         0.986    0.982    -0.003↓     8.40     8.69     +0.29↑
+[INFO] walk       walk_20.mp4                         0.998    0.999    +0.001↑    11.39    11.15     -0.24↓
+[INFO] walk       walk_21.mp4                         0.992    0.997    +0.004↑    19.69    19.39     -0.30↓
+[INFO] lick       lick_60.mp4                         0.998    0.998    -0.000↓     1.66     1.48     -0.18↓
+[INFO] lick       lick_61.mp4                         0.995    0.996    +0.001↑     1.75     2.17     +0.42↑
+[INFO] lick       lick_62.mp4                         0.997    0.990    -0.007↓     1.58     1.70     +0.12↑
+[INFO] lick       lick_70.mp4                         0.993    0.991    -0.002↓     2.50     3.43     +0.93↑
+[INFO] lick       lick_74.mp4                         0.995    0.992    -0.003↓     2.66     2.44     -0.23↓
+[INFO] scratch    scratch_27.mp4                      0.920    0.954    +0.034↑     2.43     2.33     -0.10↓
+[INFO] scratch    scratch_32.mp4                      0.991    0.982    -0.009↓     3.74     3.80     +0.07↑
+[INFO] scratch    scratch_33.mp4                      0.995    0.992    -0.002↓     2.77     2.95     +0.18↑
+[INFO] scratch    scratch_39.mp4                      0.977    0.986    +0.010↑     3.25     3.41     +0.16↑
+[INFO] shake      shake_49.mp4                        0.978    0.968    -0.010↓     3.37     3.73     +0.37↑
+[INFO] shake      shake_50.mp4                        0.998    0.999    +0.001↑     2.73     2.32     -0.40↓
+[INFO] shake      shake_51.mp4                        0.997    0.998    +0.001↑     2.05     2.11     +0.06↑
+[INFO] shake      shake_57.mp4                        0.998    0.999    +0.000↑     2.27     2.56     +0.29↑
+[INFO] shake      shake_58.mp4                        0.997    0.997    +0.000↑     1.29     1.26     -0.03↓
+[INFO] shake      shake_63.mp4                        0.996    0.996    +0.000↑     2.46     2.58     +0.12↑
+[INFO] stop       stop_2.mp4                          0.988    0.976    -0.012↓     4.74     4.97     +0.23↑
+[INFO] stop       stop_3.mp4                          0.980    0.949    -0.031↓     3.00     3.25     +0.25↑
+[INFO] stop       stop_36.mp4                         0.998    0.996    -0.003↓     0.61     0.66     +0.05↑
+[INFO] stop       stop_48.mp4                         0.994    0.989    -0.005↓     2.39     2.07     -0.33↓
+[INFO] stop       stop_6.mp4                          0.999    0.998    -0.001↓     0.43     0.51     +0.08↑
+[INFO] stop       stop_71.mp4                         0.995    0.996    +0.002↑     1.63     1.49     -0.14↓
+[INFO] stop       stop_75.mp4                         0.908    0.889    -0.019↓     2.54     2.10     -0.44↓
+[INFO] 
+[INFO] =================================================================================================
+[INFO] 行為類別摘要
+[INFO] =================================================================================================
+[INFO] 行為         舊信心   新信心   信心改善   舊抖動   新抖動   抖動改善   舊缺失   新缺失   缺失改善
+[INFO] -------------------------------------------------------------------------------------------------
+[INFO] walk          0.988    0.987     -0.14%     9.87     9.97     -1.01%     0.0%     0.0%     +0.00%
+[INFO] lick          0.996    0.994     -0.23%     2.00     2.23    -11.89%     0.0%     0.0%     +0.00%
+[INFO] scratch       0.970    0.979     +0.84%     3.05     3.12     -2.30%     0.0%     0.0%     +0.00%
+[INFO] shake         0.994    0.993     -0.13%     2.36     2.43     -2.87%     0.0%     0.0%     +0.00%
+[INFO] stop          0.976    0.964     -1.31%     2.67     2.72     -1.88%     0.0%     0.0%     +0.00%
+[INFO] 
+[INFO] =================================================================================================
+[INFO] 整體比較結果
+[INFO] =================================================================================================
+[INFO] 舊模型        v11s_107.pt   複合分數 96.48
+[INFO] 新模型        v11s_109.pt   複合分數 96.32
+[INFO] 
+[INFO] 平均信心值    0.986  →  0.983    改善 -0.25%
+[INFO] 平均抖動      4.31 px  →  4.42 px    改善 -2.58%
+[INFO] 缺失比率      0.0%  →  0.0%    改善 +0.00%
+[INFO] 尾尖缺失      1.1%  →  3.7%
+[INFO] 
+[INFO] 綜合改善分數  -0.99%
+[INFO] 進步最多行為  walk  （-0.4%）
+[INFO] 退步最多行為  lick  （-4.2%）
+[INFO] 
+[INFO] 結論          v11s_109.pt  相較  v11s_107.pt  →  WORSE（較差）
+[INFO] =================================================================================================

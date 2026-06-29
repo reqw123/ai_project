@@ -10,6 +10,7 @@ from config import AnomalyDetectionConfig as _AnomalyDetectionConfig
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 from config import VisualizationConfig as _VisualizationConfig
 from utils.helpers import get_behavior_name
+import bisect
 
 try:
     from PIL import Image, ImageSequence, ImageDraw, ImageFont
@@ -18,8 +19,6 @@ except ImportError:  # pragma: no cover - Pillow is available in the configured 
     ImageSequence = None
     ImageDraw = None
     ImageFont = None
-
-import bisect
 
 
 HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / r"C:\cat_paper_code-main\paper\cat_monitoring_system\h6bxw-tkcsv.gif"
@@ -355,8 +354,9 @@ class Visualizer:
             label = f"{class_name}: {prob*100:.1f}%"
             cv2.putText(frame, label, (start_x + 12, y + bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.86, BLACK, 2, cv2.LINE_AA)
             cv2.putText(frame, label, (start_x + 12, y + bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.86, WHITE, 1, cv2.LINE_AA)
-    def draw(self, frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs, show_info=True):
-        if _VisualizationConfig.SHOW_SKELETON:
+    def draw(self, frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs,
+             show_info=True, show_skeleton=True, show_bbox=True):
+        if show_skeleton:
             for edge_idx, (i, j) in enumerate(EAR_DISTANCE_SKELETON_EDGES):
                 if i >= len(kpts) or j >= len(kpts):
                     continue
@@ -393,14 +393,13 @@ class Visualizer:
             _overlay_image_centered(frame, overlay_frame, nose_pt, w, h)
 
         # 畫YOLO bbox/conf
-        if bbox is not None and conf is not None:
+        if show_bbox and bbox is not None and conf is not None:
             x1, y1, x2, y2 = map(int, bbox)
             outer_w = 4
             inner_w = 2
             cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, outer_w, cv2.LINE_AA)
             cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, inner_w, cv2.LINE_AA)
             label = f"conf: {conf:.2f}"
-            # 只畫黑字標籤
             cv2.putText(frame, label, (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2, cv2.LINE_AA)
         # 顯示行為預測與信心值、四行為機率條
         if not show_info:

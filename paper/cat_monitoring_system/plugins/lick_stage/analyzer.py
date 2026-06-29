@@ -28,6 +28,13 @@ class LickAnalyzer:
         self._stats         = LickStatistics()
         self._state_history = deque(maxlen=_C.STATE_SMOOTH_WINDOW)
         self._ema_kpts: Optional[np.ndarray] = None
+        # Last-frame overlay state (consumed by manager.draw_overlay)
+        self.last_trap_pts:    Optional[np.ndarray] = None  # (4,2) float64 or None
+        self.last_hit:         bool = False
+        self.last_zone_label:  str  = "NO_TARGET"
+        self.last_nose_xy:     tuple = (0.0, 0.0)
+        self.last_geom:        Optional[dict] = None        # full target_geom dict
+        self.last_nearest_label: str = "NO_TARGET"
 
     def analyze(
         self,
@@ -49,7 +56,11 @@ class LickAnalyzer:
     # ── Private helpers ───────────────────────────────────────────────
 
     def _handle_no_cat(self, frame_idx: int, elapsed_sec: float, dt_sec: float) -> LickResult:
-        self._ema_kpts = None
+        self._ema_kpts    = None
+        self.last_trap_pts = None
+        self.last_hit      = False
+        self.last_geom     = None
+        self.last_nearest_label = "NO_TARGET"
         self._state_history.append(_C.STATE_NO_CAT)
         state_sm, stability = smooth_state(self._state_history)
         self._stats.update("NO_TARGET", dt_sec)
@@ -85,6 +96,10 @@ class LickAnalyzer:
             state_sm  = state_now
             stability = 1.0
             zone_label = "NO_TARGET"
+            self.last_trap_pts     = None
+            self.last_hit          = False
+            self.last_geom         = None
+            self.last_nearest_label = "NO_TARGET"
         else:
             target_geom = compute_geometry(smooth_kpts, kpt_conf)
             cat_state, gaze_fwd, gaze_lat, gaze_angle = infer_face_state_cat_centric(target_geom, nose_ok)
@@ -102,6 +117,16 @@ class LickAnalyzer:
 
             nearest_label, _dist, hit = find_nearest_zone(target_geom)
             zone_label = nearest_label if hit else "NO_TARGET"
+
+            # Store overlay state for draw_overlay()
+            trap_raw = target_geom.get("nose_contact_trapezoid")
+            self.last_trap_pts      = np.asarray(trap_raw, dtype=np.float64) if trap_raw is not None else None
+            self.last_hit           = bool(hit)
+            self.last_zone_label    = nearest_label
+            self.last_nearest_label = nearest_label
+            self.last_geom          = target_geom
+            nose_kp = smooth_kpts[_C.KP_NOSE]
+            self.last_nose_xy       = (float(nose_kp[0]), float(nose_kp[1]))
 
         self._stats.update(zone_label, dt_sec)
         return self._build_result(

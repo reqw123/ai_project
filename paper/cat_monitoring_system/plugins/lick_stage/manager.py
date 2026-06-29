@@ -5,6 +5,7 @@ import logging
 from plugins.lick_stage.analyzer import LickAnalyzer
 from plugins.lick_stage.publisher import NodeRedPublisher
 from plugins.lick_stage.config import LickConfig as _C
+from plugins.lick_stage.overlay import draw_all_overlays
 
 _log = logging.getLogger(__name__)
 
@@ -54,6 +55,23 @@ class LickStagePlugin:
 
         except Exception as exc:
             _log.debug("LickStagePlugin.update error: %s", exc)
+
+    def draw_overlay(self, frame, frame_idx: int = 0, show: bool = True) -> None:
+        """Draw all lick-stage overlays onto *frame* in-place. Fail-safe."""
+        try:
+            draw_all_overlays(
+                frame,
+                self._analyzer.last_geom,
+                self._analyzer.last_trap_pts,
+                self._analyzer.last_hit,
+                self._analyzer.last_zone_label,
+                self._analyzer.last_nearest_label,
+                self._analyzer.last_nose_xy,
+                frame_idx=frame_idx,
+                show=show,
+            )
+        except Exception as exc:
+            _log.debug("LickStagePlugin.draw_overlay error: %s", exc)
 
     def close(self) -> None:
         if self._publisher is not None:

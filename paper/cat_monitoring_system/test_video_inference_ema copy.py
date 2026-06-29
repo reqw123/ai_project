@@ -64,12 +64,12 @@ DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 # 測試資料夾模式
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
-FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\lick_標記區2"  # 'single' 模式使用的扁平資料夾
+FOLDER_TEST_MODE = 'all'  # 'single' or 'all'
+SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_107.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_110.pt"
 STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_064_models_att_on\064_xy_conf_v_bone_att_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
@@ -107,8 +107,8 @@ RUN_MODE = 0  # 0: 啟動時選擇, 1: 只生成統計, 2: 只做視窗測試
 JITTER_WARNING_THRESHOLD = 30.0  # 像素抖動警告閾值
 
 # ===== 關鍵點顯示/統計門檻 =====
-DRAW_KP_CONF_THRESHOLD = 0.25  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
-SHOW_PROBABILITY_BARS = False  # 關閉機率條可減少每幀繪圖負載
+DRAW_KP_CONF_THRESHOLD = 0.5  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
+SHOW_PROBABILITY_BARS = False  # 關閉率條可減少每幀繪圖負載
 
 # ===== EMA 平滑設定 =====
 # alpha 越大 → 越貼近原始偵測值（響應快、平滑少）

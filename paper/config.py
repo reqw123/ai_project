@@ -276,9 +276,6 @@ class FlaskConfig:
     
     # JPEG 壓縮品質 (1-100)
     JPEG_QUALITY = _env_int("CAT_MONITORING_JPEG_QUALITY", 30)
-    
-    # 串流 FPS
-    STREAM_FPS = _env_int("CAT_MONITORING_STREAM_FPS", 30)
 
 # ==================== Node-RED 參數 ====================
 class NodeRedConfig:
@@ -303,15 +300,13 @@ class BehaviorTrackingConfig:
     
     # 歷史記錄大小
     MAX_HISTORY_SIZE = _env_int("CAT_MONITORING_MAX_HISTORY_SIZE", 100)  # 行為歷史清單最多保留筆數
-    MAX_ALERTS_SIZE = _env_int("CAT_MONITORING_MAX_ALERTS_SIZE", 50)      # 警報清單最多保留筆數
-    
+
     # 活動力窗口
     ACTIVITY_WINDOW_SIZE = _env_int("CAT_MONITORING_ACTIVITY_WINDOW_SIZE", 54)   # 30fps × 1.8s = 54；須 ≥ TARGET_MODEL_FPS × ACTIVITY_SCORE_WINDOW_SECONDS
 
     # 行為轉換與活動分數參數
     MIN_RECORD_DURATION_SECONDS = _env_float("CAT_MONITORING_MIN_RECORD_DURATION_SECONDS", 2.0)  # 單一行為最短記錄秒數
     ACTIVITY_SCORE_WINDOW_SECONDS = _env_float("CAT_MONITORING_ACTIVITY_SCORE_WINDOW_SECONDS", 1.2)  # 活動分數取樣時間窗（秒）；越短反應越快
-    DEFAULT_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_DEFAULT_ACTIVITY_WEIGHT", 0.5)  # 沒有持續時間時的預設權重
     LOW_CONFIDENCE_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_LOW_CONFIDENCE_ACTIVITY_WEIGHT", 0.5)  # 低信心幀的活動權重
     STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD = _env_float("CAT_MONITORING_STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD", 0.80,)  # ST-GCN 行為標籤輸出門檻；低於此值視為 normal
 
@@ -332,21 +327,6 @@ class BehaviorTrackingConfig:
         4: "stop",
     }
     
-    DISPLAY_TEXT = {
-        "walk": "一般活動",
-        "scratch": "搔抓動作",
-        "lick": "舔拭理毛",
-        "shake": "甩頭動作",
-        "stop": "靜止不動",
-    }
-
-    DISPLAY_EMOJI = {
-        "walk": "🐾",   # 腳印
-        "lick": "👅",   # 舌頭
-        "scratch": "🦶", # 肉掌
-        "shake": "🌀",  # 旋轉
-        "stop": "💤",   # 靜止
-    }
 
 # ==================== CSV 日誌參數 ====================
 class LoggingConfig:
@@ -359,14 +339,6 @@ class LoggingConfig:
     CSV_PATH = _env_str("CAT_MONITORING_CSV_PATH", r"C:\ai_project\paper\cat_monitoring_log.csv")
     # 行為區段 CSV（BehaviorSegmentLogger）路徑 — 獨立檔案，避免與 CSV_PATH 混寫
     SEGMENTS_CSV_PATH = _env_str("CAT_MONITORING_SEGMENTS_CSV_PATH", r"C:\ai_project\paper\behavior_segments_log.csv")
-    # CSV 欄位
-    CSV_COLUMNS = [
-        "Frame", "Timestamp", "Behavior", "GCN_Confidence",
-        "Is_Still", "Motion_Score", "Stability"
-    ]
-    
-    # 日誌等級
-    LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # ==================== 顯示和視覺化參數 ====================
 class VisualizationConfig:
@@ -388,6 +360,10 @@ class VisualizationConfig:
 
     # CLIP_SECONDS: /video_clip 保留的 ring buffer 秒數；記憶體佔用會隨這個值線性增加，但不會因長時間運行持續暴增。
     CLIP_SECONDS = _env_int("CAT_MONITORING_CLIP_SECONDS", 5)
+
+    # SHOW_NOSE_TRAPEZOID: True = 在串流畫面上繪製鼻子接觸梯形 overlay（lick_stage plugin 專用）
+    # 設為 False 可在不移除 plugin 的情況下完全隱藏此視覺效果。
+    SHOW_NOSE_TRAPEZOID = _env_bool("CAT_MONITORING_SHOW_NOSE_TRAPEZOID", True)
     
     # 骨架顏色 (BGR)
     COLOR_HEAD = (255, 255, 0)
@@ -479,7 +455,6 @@ def get_config_summary():
     🌐 Flask 服務
       - 主機        : {FlaskConfig.HOST}:{FlaskConfig.PORT}
       - JPEG 品質   : {FlaskConfig.JPEG_QUALITY}
-      - 串流 FPS    : {FlaskConfig.STREAM_FPS}
       - Debug 模式  : {FlaskConfig.DEBUG}
 
     🎞️ 串流視覺化  (硬編碼: L367 DRAW_OVERLAY_STREAM, L368 DRAW_OVERLAY_DEBUG,
@@ -503,11 +478,9 @@ def get_config_summary():
       - Result v1 端點: {NodeRedConfig.ENDPOINT_RESULT}
       - Result v2 端點: {NodeRedConfig.ENDPOINT_RESULT_V2}
 
-    📄 日誌設定  (硬編碼: L354-357 CSV_COLUMNS, L360 LOG_LEVEL)
+    📄 日誌設定
       - 主要 CSV        : {LoggingConfig.CSV_PATH}
       - 行為區段 CSV    : {LoggingConfig.SEGMENTS_CSV_PATH}
-      - 日誌等級        : {LoggingConfig.LOG_LEVEL}  ← 硬編碼 L360
-      - CSV 欄位        : {LoggingConfig.CSV_COLUMNS}  ← 硬編碼 L354
 
     📁 路徑配置
       - YOLO 模型   : {ModelPaths.YOLO_MODEL}
@@ -622,11 +595,9 @@ def get_runtime_config_snapshot():
         "behavior_tracking": {
             "stgcn_behavior_label_confidence_threshold": BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD,
             "max_history_size": BehaviorTrackingConfig.MAX_HISTORY_SIZE,
-            "max_alerts_size": BehaviorTrackingConfig.MAX_ALERTS_SIZE,
             "activity_window_size": BehaviorTrackingConfig.ACTIVITY_WINDOW_SIZE,
             "min_record_duration_seconds": BehaviorTrackingConfig.MIN_RECORD_DURATION_SECONDS,
             "activity_score_window_seconds": BehaviorTrackingConfig.ACTIVITY_SCORE_WINDOW_SECONDS,
-            "default_activity_weight": BehaviorTrackingConfig.DEFAULT_ACTIVITY_WEIGHT,
             "low_confidence_activity_weight": BehaviorTrackingConfig.LOW_CONFIDENCE_ACTIVITY_WEIGHT,
         },
         "flask": {
@@ -635,7 +606,6 @@ def get_runtime_config_snapshot():
             "debug": FlaskConfig.DEBUG,
             "threaded": FlaskConfig.THREADED,
             "jpeg_quality": FlaskConfig.JPEG_QUALITY,
-            "stream_fps": FlaskConfig.STREAM_FPS,
         },
         "nodered": {
             "host": NodeRedConfig.HOST,

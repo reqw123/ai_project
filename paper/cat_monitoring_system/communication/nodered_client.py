@@ -10,7 +10,6 @@ import logging
 import queue
 import threading
 import requests
-from datetime import datetime
 from config import NodeRedConfig
 
 
@@ -63,10 +62,7 @@ class NodeRedClient:
     背景 worker 自行處理網路延遲與重試，主迴圈零等待。
     """
 
-    def __init__(self, url_result: str, url_notify: str | None = None, local_ip: str | None = None):
-        self.url_notify = url_notify
-        self.local_ip = local_ip
-
+    def __init__(self, url_result: str):
         v2_url = getattr(NodeRedConfig, "ENDPOINT_RESULT_V2", None)
         if v2_url == url_result:
             v2_url = None

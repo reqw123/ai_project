@@ -116,7 +116,7 @@ MAX_MOTION    = float(_ADConfig.MAX_MOTION)
 # [門檻] 異常位移門檻（像素，NORMALIZE_BY_BODY_SCALE=False 時有效）
 # 原始設計：ema_motion > 0.2px → abnormal=True（閾值非常低，幾乎每幀都觸發）
 # ⚠ 此旗標目前只寫入 CSV，未接入任何警報邏輯
-ABNORMAL_THRES_PX = float(_ADConfig.ABNORMAL_THRESHOLD)
+ABNORMAL_THRES_PX = float(getattr(_ADConfig, 'ABNORMAL_THRESHOLD', 0.2))
 
 # ── activity_score 滾動窗口 ─────────────────────────────────────────────
 # [門檻] 滾動平均的時間窗口長度（秒）

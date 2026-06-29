@@ -2,7 +2,6 @@
 Flask 路由
 """
 from flask import Response, jsonify, request
-import ipaddress
 import time
 import sys
 import os
@@ -98,16 +97,6 @@ def _ensure_processor_started():
 
 
 def register_routes(app):
-    @app.route('/python_online', methods=['POST'])
-    def python_online():
-        data = request.get_json(force=True) or {}
-        ip = data.get('ip', '')
-        try:
-            ipaddress.ip_address(str(ip))
-        except ValueError:
-            ip = ''
-        print(f"[Node-RED] Python 上線通知，收到 IP: {ip}")
-        return jsonify({'ip': ip})
 
     @app.route('/stream')
     def stream():
@@ -222,6 +211,81 @@ def register_routes(app):
             "count": len(segments),
             "segments": segments,
         })
+
+    def _cors(resp, status=200):
+        """在回應上加 CORS header，讓 ui_template 的 fetch() 可跨 port 呼叫。"""
+        r = Response(resp.get_data(), status=status, mimetype='application/json')
+        r.headers['Access-Control-Allow-Origin']  = '*'
+        r.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        r.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return r
+
+    @app.route('/api/overlay', methods=['GET', 'POST', 'OPTIONS'])
+    def api_overlay():
+        """讀取或更新畫面 overlay 顯示旗標。
+        GET     → 回傳目前所有旗標狀態
+        OPTIONS → CORS preflight
+        POST    → {"key": "skeleton"|"label"|"bbox"|"master", "value": true|false}
+                  或 {"key": "...", "action": "toggle"} → server 自行翻轉，不需 client 追蹤狀態
+                  master=true 時同時重置所有子旗標為 true。
+        """
+        if request.method == 'OPTIONS':
+            return _cors(jsonify({}))
+
+        _ensure_processor_started()
+        if request.method == 'GET':
+            return _cors(jsonify({
+                "master":   frame_processor.overlay,
+                "skeleton": frame_processor.show_skeleton,
+                "label":    frame_processor.show_label,
+                "bbox":     frame_processor.show_bbox,
+            }))
+
+        body   = request.get_json(silent=True) or {}
+        key    = body.get('key')
+        value  = body.get('value')
+        action = body.get('action')
+        if key is None:
+            return _cors(jsonify({"error": "需要 key"}), 400)
+
+        if action == 'toggle':
+            current = {
+                'master':   frame_processor.overlay,
+                'skeleton': frame_processor.show_skeleton,
+                'label':    frame_processor.show_label,
+                'bbox':     frame_processor.show_bbox,
+            }
+            if key not in current:
+                return _cors(jsonify({"error": f"未知 key: {key!r}"}), 400)
+            value = not current[key]
+
+        if not isinstance(value, bool):
+            return _cors(jsonify({"error": "需要 value(bool) 或 action='toggle'"}), 400)
+
+        if key == 'master':
+            frame_processor.overlay = value
+            if value:
+                frame_processor.show_skeleton = True
+                frame_processor.show_label    = True
+                frame_processor.show_bbox     = True
+        elif key == 'skeleton':
+            frame_processor.show_skeleton = value
+        elif key == 'label':
+            frame_processor.show_label = value
+        elif key == 'bbox':
+            frame_processor.show_bbox = value
+        else:
+            return _cors(jsonify({"error": f"未知 key: {key!r}"}), 400)
+
+        return _cors(jsonify({
+            "ok": True, "key": key, "value": value,
+            "state": {
+                "master":   frame_processor.overlay,
+                "skeleton": frame_processor.show_skeleton,
+                "label":    frame_processor.show_label,
+                "bbox":     frame_processor.show_bbox,
+            }
+        }))
 
     @app.route('/')
     def index():
