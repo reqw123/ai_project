@@ -1,0 +1,122 @@
+# ST-GCN 設定檔範例 (stgcn_config.yaml)
+# 複製此檔為 stgcn_config.yaml 並依需求修改參數，或設定
+
+# 用於訓練的每支影片骨架 JSON 檔案資料夾路徑
+SKELETON_DATA_FOLDER: "C:/AI_Project/paper/skeletons"
+# 儲存最終/最佳模型檔案的路徑（執行時會加上 run 後綴）
+MODEL_SAVE_PATH: "C:/Users/homec/Downloads/stgcn_best.pth"
+# 訓練輸出（圖表、混淆矩陣、CSV 等）儲存目錄
+RESULTS_FOLDER: "C:/Users/homec/Downloads/stgcn_results"
+
+# Window filtering
+# 若為 true，會丟棄包含未標註幀的視窗；若為 false，至少一個已標註幀即保留
+STRICT_WINDOW_FILTER: false
+# 視窗內允許 bbox 缺失（YOLO 未偵測到貓）的最大幀數；超過則丟棄該視窗（0 = 完全不允許）
+MAX_NO_DETECT_FRAMES: 2
+
+# Keypoint EMA smoothing (null to disable)
+# 關鍵點時間平滑的指數衰減係數（設為 null 或 1.0 表示停用）
+# 若在 (0,1) 範圍內，執行 new = alpha*current + (1-alpha)*prev 的平滑
+KP_EMA_ALPHA: 1.0
+
+# Topology
+# 模型預測的行為類別數（例如 walk, lick, scratch, shake, stop）
+NUM_CLASSES: 5
+# 行為前綴對應：將檔名/視訊前綴映射到數值標籤
+# 範例：若檔名以 walk/lick/scratch/shake/stop 開頭，則會對應到下列索引
+BEHAVIOR_PREFIXES:
+  walk: 0
+  lick: 1
+  scratch: 2
+  shake: 3
+  stop: 4
+# 每一幀的關節數（圖的頂點數）
+NUM_JOINTS: 17
+# 經特徵建構後每關節的輸入通道數（例如 x,y,vx,vy -> 4）
+IN_CHANNELS: 4
+# 輸入模型的序列長度（幀數）
+SEQUENCE_LENGTH: 16
+# 訓練資料滑動視窗步長（幀數）；建議 SEQUENCE_LENGTH // 2（50% 重疊）
+WINDOW_STRIDE: 8
+# 空間 GCN 的 partition/kernel 大小（通常為 3：root/near/far）
+SPATIAL_KERNEL_SIZE: 3
+# 時間方向的 kernel 大小（每個 block 的時間感受野）
+TEMPORAL_KERNEL_SIZE: 9
+# 堆疊的 ST-GCN block 數量
+NUM_STGCN_LAYERS: 3
+
+# Dropout
+# 應用於輸入 embedding 的 dropout（正則化輸入）
+INPUT_DROPOUT:  0.02    # init: 0.02
+# 應用於 STGCN block 內的 dropout（中間層正則化）
+BLOCK_DROPOUT:  0.1     # init: 0.1
+# 最後分類器前的 dropout（控制頂層過擬合）
+FINAL_DROPOUT:  0.2     # init: 0.2
+# Label smoothing factor for CrossEntropy (use 0.0 to disable)
+LABEL_SMOOTHING: 0.01   # init: 0.01
+
+# Feature mode
+# 特徵模式，名稱直接反映所含特徵標籤（xy=位置, conf=信心值, v=速度, bone=骨架向量, bmotion=骨架位移）：
+# - xy:                     x,y                                                (2 ch)
+# - xy_conf:                x,y,conf                                           (3 ch)
+# - xy_conf_v:              x,y,conf,vx,vy                                     (5 ch)
+# - xy_conf_v_bone:         x,y,conf,vx,vy,bone_x,bone_y                       (7 ch)
+# - xy_conf_v_bone_bmotion: x,y,conf,vx,vy,bone_x,bone_y,bone_mx,bone_my      (9 ch)
+FEATURE_MODE: "xy"
+# 若為 true，執行消融實驗；若為 false，僅跑 FEATURE_MODE 單一設定
+RUN_ABLATION_STUDY: false
+# ABLATION_MODES: 建議用於論文特徵消融
+ABLATION_MODES:
+  - xy
+  - xy_conf
+  - xy_conf_v
+  - xy_conf_v_bone
+  - xy_conf_v_bone_bmotion
+
+# Spatial augmentation
+# 空間增強時允許的最大旋轉角度（度）
+SPATIAL_ROTATE_DEG: 5          # init: 5
+# 空間增強時的最小與最大縮放比例     # ← 縮放比例 1.0 = 不縮放，不是 0
+SPATIAL_SCALE_MIN: 0.9         # init: 0.9
+SPATIAL_SCALE_MAX: 1.1         # init: 1.1
+ # 應用於位移噪聲的標準差（座標已正規化）
+SPATIAL_TRANSLATE_STD: 0.02    # init: 0.02
+ # 隨機裁切的機率，會遮擋掉邊緣點
+SPATIAL_CROP_PROB: 0.1         # init: 0.1
+ # 隨機遮蔽若干關節的機率
+SPATIAL_OCCLUSION_PROB: 0.2    # init: 0.2
+ # 當發生遮蔽時，最多遮蔽多少個關節
+SPATIAL_OCCLUSION_MAX_JOINTS: 2  # init: 2
+
+# Training
+# DataLoader 的 batch size（每個裝置）
+BATCH_SIZE: 16
+# 訓練的 epoch 數
+NUM_EPOCHS: 100
+# 初始學習率
+LEARNING_RATE: 0.00005  # init: 0.00005
+# 優化器的 L2 權重衰減
+WEIGHT_DECAY: 0.0001    # init: 0.0001
+# Optimizer choice: 'adam', 'adamw', or 'sgd'
+OPTIMIZER: "adamw"
+# 早停判定的 patience（以驗證集表現計算）
+EARLY_STOP_PATIENCE: 10
+# 保留做驗證集的影片比例（以影片為單位切分）
+TRAIN_TEST_SPLIT: 0.2
+# 隨機種子，用於固定資料切分與增強
+
+RANDOM_SEED: 42
+
+# EMA Evaluation
+# 是否使用 EMA（指數移動平均）權重進行驗證
+# 可提升驗證穩定性，但小型資料集可能掩蓋過擬合問題
+USE_EMA_FOR_EVAL: false
+
+# Weighted Sampler
+# 是否使用類別加權抽樣
+# 可改善類別不平衡問題
+# 適合少數類別樣本明顯不足時使用
+USE_WEIGHTED_SAMPLER: false
+# Attention
+# 是否啟用關節注意力模組（true=啟用）
+USE_ATTENTION: true

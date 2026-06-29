@@ -1,6 +1,6 @@
 [
     {
-        "id": "a57e2a51f4764c7e",
+        "id": "4e2a501aa59e098d",
         "type": "tab",
         "label": "😺 貓咪健康監測系統",
         "disabled": false,
@@ -8,9 +8,9 @@
         "env": []
     },
     {
-        "id": "20a426aa12fe44b8",
+        "id": "99d88d9b46cc1d31",
         "type": "group",
-        "z": "a57e2a51f4764c7e",
+        "z": "4e2a501aa59e098d",
         "style": {
             "stroke": "#999999",
             "stroke-opacity": "1",
@@ -21,41 +21,45 @@
             "color": "#a4a4a4"
         },
         "nodes": [
-            "0b47210816be0ad4",
-            "2c7f1526410728b0",
-            "24d1a1677439734e",
-            "08d8bce3968d86f6",
-            "3f277d003df301be",
-            "01334d0781cc5822",
-            "306ff5952a190e04",
-            "a8424ee7758559af",
-            "eb0f92e5ddcecedf",
-            "c60345daba38a7bd",
-            "bcf77c03f24b4148",
-            "8f74501467cc6605",
-            "b837fc7fc33fbe1d",
-            "89b182d351391d5f",
-            "3ec14d6446e2c3c9",
-            "19227cd3418e36e6",
-            "b41970521d811237",
-            "d349c9a9a2509e65",
-            "1fef867d274aa8ca",
-            "257d6083ac06afed",
-            "f5dbb3d51fabb63d",
-            "965cd54fbc2f4f47",
-            "a8843440996e7bcf",
-            "373eb51a0b2e665a"
+            "ab9c9a53d56bd7b5",
+            "4470b2bd12a4643b",
+            "9f1de86be2cfd78e",
+            "85214af1dcf46061",
+            "d23565796a0e6d21",
+            "e6563fa57be33ec4",
+            "eb1cdb63265aeed5",
+            "58bbf5a88e0df468",
+            "4c48d644f66e4464",
+            "c2e098bb22711e54",
+            "f7a3e290a5fb003e",
+            "cb58a9e73906a888",
+            "e2db50fb39837262",
+            "beea1bf6090350a0",
+            "1c7a30fc729b4fdf",
+            "5566086f462f5d3e",
+            "29fdcebb714f0d5d",
+            "37cb7d4695ba4e2e",
+            "cbd44fef7e681d1c",
+            "745eeb904f6d8bf9",
+            "6fdba83de718e619",
+            "72e0028cc137e2da",
+            "a46e97afdaf80032",
+            "b9c88f8249e155c9",
+            "cfa4c15d6f86f6a4",
+            "d2e05c4d63dd839d",
+            "a9627aad18b37da1",
+            "4b9914a2c5e3598c"
         ],
         "x": 394,
-        "y": 59,
-        "w": 932,
-        "h": 762
+        "y": 79,
+        "w": 1032,
+        "h": 742
     },
     {
-        "id": "2c7f1526410728b0",
+        "id": "4470b2bd12a4643b",
         "type": "http in",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "python_online",
         "url": "/python_online",
         "method": "post",
@@ -66,15 +70,15 @@
         "y": 480,
         "wires": [
             [
-                "24d1a1677439734e"
+                "9f1de86be2cfd78e"
             ]
         ]
     },
     {
-        "id": "24d1a1677439734e",
+        "id": "9f1de86be2cfd78e",
         "type": "json",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "parse_json",
         "property": "payload",
         "action": "obj",
@@ -83,15 +87,15 @@
         "y": 480,
         "wires": [
             [
-                "a8424ee7758559af"
+                "58bbf5a88e0df468"
             ]
         ]
     },
     {
-        "id": "08d8bce3968d86f6",
+        "id": "85214af1dcf46061",
         "type": "inject",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "發送訊息到discord",
         "props": [
             {
@@ -109,15 +113,15 @@
         "y": 700,
         "wires": [
             [
-                "01334d0781cc5822"
+                "e6563fa57be33ec4"
             ]
         ]
     },
     {
-        "id": "3f277d003df301be",
+        "id": "d23565796a0e6d21",
         "type": "http request",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "送到 Discord",
         "method": "POST",
         "ret": "txt",
@@ -137,10 +141,10 @@
         ]
     },
     {
-        "id": "01334d0781cc5822",
+        "id": "e6563fa57be33ec4",
         "type": "function",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "組成 Discord Webhook 格式",
         "func": "\n\n// Discord Python 上線通知\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// IP\n// =========================\nlet ip = msg.payload?.ip || \"未知IP\";\n\n// 保存 IP 到持久化全域 context，讓重連/重啟後仍可取用\ntry {\n    global.set(\n        \"python_ip\",\n        ip,\n        \"file\"\n    );\n} catch (e) {\n    global.set(\n        \"python_ip\",\n        ip\n    );\n}\n\n// =========================\n// Discord Payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                \"🟢 Python AI 已上線\",\n\n            description:\n                `偵測到 Python 推論系統啟動`,\n\n            color:\n                65280,\n\n            fields: [\n\n                {\n                    name: \"Python IP\",\n                    value: String(ip),\n                    inline: false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
         "outputs": 1,
@@ -149,19 +153,19 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 860,
-        "y": 680,
+        "x": 920,
+        "y": 700,
         "wires": [
             [
-                "3f277d003df301be"
+                "d23565796a0e6d21"
             ]
         ]
     },
     {
-        "id": "306ff5952a190e04",
+        "id": "eb1cdb63265aeed5",
         "type": "http response",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "response_200",
         "statusCode": "200",
         "headers": {},
@@ -170,10 +174,10 @@
         "wires": []
     },
     {
-        "id": "a8424ee7758559af",
+        "id": "58bbf5a88e0df468",
         "type": "function",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "build_response",
         "func": "let ip = null;\ntry {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\", \"file\") || global.get(\"python_ip\") || null);\n} catch (e) {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\") || null);\n}\nif (ip) {\n    try {\n        global.set(\"python_ip\", ip, \"file\");\n    } catch (e) {\n        global.set(\"python_ip\", ip);\n    }\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = ip ? `http://${ip}:5000/stream` : \"\";\nnode.warn(\"python_online received IP: \" + (ip || 'null'));\nreturn msg;",
         "outputs": 1,
@@ -186,18 +190,18 @@
         "y": 480,
         "wires": [
             [
-                "306ff5952a190e04",
-                "01334d0781cc5822",
-                "0b47210816be0ad4",
-                "global_float_video_01"
+                "e6563fa57be33ec4",
+                "eb1cdb63265aeed5",
+                "ab9c9a53d56bd7b5",
+                "4b9914a2c5e3598c"
             ]
         ]
     },
     {
-        "id": "eb0f92e5ddcecedf",
+        "id": "4c48d644f66e4464",
         "type": "inject",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "啟動時發送串流",
         "props": [
             {
@@ -215,15 +219,15 @@
         "y": 580,
         "wires": [
             [
-                "c60345daba38a7bd"
+                "c2e098bb22711e54"
             ]
         ]
     },
     {
-        "id": "c60345daba38a7bd",
+        "id": "c2e098bb22711e54",
         "type": "function",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "從持久化context恢復串流",
         "func": "let ip = null;\ntry {\n    ip = global.get(\"python_ip\", \"file\") || global.get(\"python_ip\") || null;\n} catch (e) {\n    ip = global.get(\"python_ip\") || null;\n}\nif (!ip) {\n    return null;\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
         "outputs": 1,
@@ -232,20 +236,20 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 830,
+        "x": 770,
         "y": 580,
         "wires": [
             [
-                "0b47210816be0ad4",
-                "global_float_video_01"
+                "ab9c9a53d56bd7b5",
+                "4b9914a2c5e3598c"
             ]
         ]
     },
     {
-        "id": "bcf77c03f24b4148",
+        "id": "f7a3e290a5fb003e",
         "type": "http in",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "接收Python數據",
         "url": "/yolo_result",
         "method": "post",
@@ -256,16 +260,16 @@
         "y": 200,
         "wires": [
             [
-                "b837fc7fc33fbe1d",
-                "8f74501467cc6605"
+                "e2db50fb39837262",
+                "cb58a9e73906a888"
             ]
         ]
     },
     {
-        "id": "8f74501467cc6605",
+        "id": "cb58a9e73906a888",
         "type": "http response",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "回應200",
         "statusCode": "200",
         "headers": {},
@@ -274,10 +278,10 @@
         "wires": []
     },
     {
-        "id": "b837fc7fc33fbe1d",
+        "id": "e2db50fb39837262",
         "type": "json",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "解析JSON",
         "property": "payload",
         "action": "obj",
@@ -286,51 +290,54 @@
         "y": 200,
         "wires": [
             [
-                "89b182d351391d5f"
+                "beea1bf6090350a0"
             ]
         ]
     },
     {
-        "id": "89b182d351391d5f",
+        "id": "beea1bf6090350a0",
         "type": "function",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "數據分發器",
-        "func": "let data = msg.payload;\nif (!data) return null;\n\nif (!data.current)     data.current     = {};\nif (!data.today_stats) data.today_stats = {};\n\nlet stats = data.today_stats;\nstats.walk             = stats.walk             || 0;\nstats.walk_time        = stats.walk_time        || 0;\nstats.lick             = stats.lick             || 0;\nstats.lick_time        = stats.lick_time        || 0;\nstats.scratch          = stats.scratch          || 0;\nstats.scratch_time     = stats.scratch_time     || 0;\nstats.shake            = stats.shake            || 0;\nstats.shake_time       = stats.shake_time       || 0;\nstats.stop             = stats.stop             || 0;\nstats.stop_time        = stats.stop_time        || 0;\nstats.not_detected_time = stats.not_detected_time || 0;\nstats.active_time      = stats.active_time      || 0;\nstats.rest_time        = stats.rest_time        || 0;\n\nif (Array.isArray(data.behavior_log)) {\n    data.behavior_log = data.behavior_log.map(function(item) {\n        return {\n            behavior: item.behavior || 'unknown',\n            time:     item.time     || '--:--',\n            duration: item.duration || 0,\n            emoji:    getEmoji(item.behavior)\n        };\n    });\n} else {\n    data.behavior_log = [];\n}\n\nif (!data.current.emoji)     data.current.emoji     = getEmoji(data.current.behavior);\nif (!data.current.timestamp) data.current.timestamp = new Date().toLocaleTimeString();\n\nmsg.payload = data;\n\n// CSV：每 5 分鐘寫一次（與 v2 flow 一致）\nlet now     = Date.now();\nlet lastCsv = flow.get('last_csv_write') || 0;\nlet doCsv   = (now - lastCsv) >= 300000;\nif (doCsv) flow.set('last_csv_write', now);\n\nlet csvMsg = doCsv ? { payload: {\n    timestamp:         (function(){var d=new Date(),p=function(n){return String(n).padStart(2,\"0\")};return d.getFullYear()+\"-\"+p(d.getMonth()+1)+\"-\"+p(d.getDate())+\" \"+p(d.getHours())+\":\"+p(d.getMinutes())+\":\"+p(d.getSeconds());})(),\n    walk:              stats.walk,              walk_time:         stats.walk_time,\n    lick:              stats.lick,              lick_time:         stats.lick_time,\n    scratch:           stats.scratch,           scratch_time:      stats.scratch_time,\n    shake:             stats.shake,             shake_time:        stats.shake_time,\n    stop:              stats.stop,              stop_time:         stats.stop_time,\n    active_time:       stats.active_time,\n    rest_time:         stats.rest_time,\n    not_detected_time: stats.not_detected_time,\n    activity_score:    data.activity_score || 0\n}} : null;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    msg,\n    { payload: data.activity_score || 0 },\n    csvMsg\n];\n\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case 'scratch': return '🐾';\n        case 'lick':    return '🧼';\n        case 'walk':    return '🚶';\n        case 'shake':   return '🔄';\n        case 'stop':    return '⏹';\n        case 'not':     return '📷';\n        default:        return '🐱';\n    }\n}",
-        "outputs": 6,
+        "func": "let data = msg.payload;\nif (!data) return null;\n\nif (!data.current)     data.current     = {};\nif (!data.today_stats) data.today_stats = {};\n\nlet stats = data.today_stats;\nstats.walk             = stats.walk             || 0;\nstats.walk_time        = stats.walk_time        || 0;\nstats.lick             = stats.lick             || 0;\nstats.lick_time        = stats.lick_time        || 0;\nstats.scratch          = stats.scratch          || 0;\nstats.scratch_time     = stats.scratch_time     || 0;\nstats.shake            = stats.shake            || 0;\nstats.shake_time       = stats.shake_time       || 0;\nstats.stop             = stats.stop             || 0;\nstats.stop_time        = stats.stop_time        || 0;\nstats.not_detected_time = stats.not_detected_time || 0;\nstats.active_time      = stats.active_time      || 0;\nstats.rest_time        = stats.rest_time        || 0;\n\nif (Array.isArray(data.behavior_log)) {\n    data.behavior_log = data.behavior_log.map(function(item) {\n        return {\n            behavior: item.behavior || 'unknown',\n            time:     item.time     || '--:--',\n            duration: item.duration || 0,\n            emoji:    getEmoji(item.behavior)\n        };\n    });\n} else {\n    data.behavior_log = [];\n}\n\nif (!data.current.emoji)     data.current.emoji     = getEmoji(data.current.behavior);\nif (!data.current.timestamp) data.current.timestamp = new Date().toLocaleTimeString();\n\n\n\n// 行為開始時間追蹤（供時間軸進行中計時器使用）\nlet _curBeh = (data.current && data.current.behavior) || null;\nlet _prevBeh = flow.get('tl_cur_behavior');\nlet _startMs  = flow.get('tl_start_ms') || Date.now();\nif (_curBeh !== _prevBeh) {\n    _startMs = Date.now();\n    flow.set('tl_cur_behavior', _curBeh);\n    flow.set('tl_start_ms', _startMs);\n}\nif (data.current) data.current.start_epoch_ms = _startMs;\n\n// 今日各行為平均時長（供時間軸風險評估）\ndata.avg_duration = {};\nfor (let _b of ['walk','lick','scratch','shake','stop']) {\n    let _cnt = stats[_b] || 0;\n    let _t   = stats[_b + '_time'] || 0;\n    data.avg_duration[_b] = _cnt >= 2 ? Math.round(_t / _cnt * 10) / 10 : 0;\n}\n\nmsg.payload = data;\n\n// CSV：每 5 分鐘寫一次（與 v2 flow 一致）\nlet now     = Date.now();\nlet lastCsv = flow.get('last_csv_write') || 0;\nlet doCsv   = (now - lastCsv) >= 300000;\nif (doCsv) flow.set('last_csv_write', now);\n\nlet csvMsg = doCsv ? { payload: {\n    timestamp:         (function(){var d=new Date(),p=function(n){return String(n).padStart(2,\"0\")};return d.getFullYear()+\"-\"+p(d.getMonth()+1)+\"-\"+p(d.getDate())+\" \"+p(d.getHours())+\":\"+p(d.getMinutes())+\":\"+p(d.getSeconds());})(),\n    walk:              stats.walk,              walk_time:         stats.walk_time,\n    lick:              stats.lick,              lick_time:         stats.lick_time,\n    scratch:           stats.scratch,           scratch_time:      stats.scratch_time,\n    shake:             stats.shake,             shake_time:        stats.shake_time,\n    stop:              stats.stop,              stop_time:         stats.stop_time,\n    active_time:       stats.active_time,\n    rest_time:         stats.rest_time,\n    not_detected_time: stats.not_detected_time,\n    activity_score:    data.activity_score || 0\n}} : null;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    msg,\n    { payload: data.activity_score || 0 },\n    csvMsg,\n    msg\n];\n\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case 'scratch': return '🐾';\n        case 'lick':    return '🧼';\n        case 'walk':    return '🚶';\n        case 'shake':   return '🔄';\n        case 'stop':    return '⏹';\n        case 'not':     return '📷';\n        default:        return '🐱';\n    }\n}",
+        "outputs": 7,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
         "x": 910,
-        "y": 220,
+        "y": 200,
         "wires": [
             [
-                "3ec14d6446e2c3c9"
+                "1c7a30fc729b4fdf"
             ],
             [
-                "19227cd3418e36e6"
+                "5566086f462f5d3e"
             ],
             [
-                "b41970521d811237"
+                "29fdcebb714f0d5d"
             ],
             [
-                "257d6083ac06afed"
+                "745eeb904f6d8bf9"
             ],
             [
-                "1fef867d274aa8ca"
+                "cbd44fef7e681d1c"
             ],
             [
-                "a8843440996e7bcf"
+                "a46e97afdaf80032"
+            ],
+            [
+                "cfa4c15d6f86f6a4"
             ]
         ]
     },
     {
-        "id": "257d6083ac06afed",
+        "id": "745eeb904f6d8bf9",
         "type": "function",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "健康引擎分析",
         "func": "let data    = msg.payload;\nlet stats   = (data && data.today_stats) ? data.today_stats : {};\n\n// ── 讀取用戶設定（與 v2 P4 共用 global context）─────────────\nlet cfg         = global.get('v2_user_settings','file') || {};\nlet LICK_THR    = cfg.lick_pct    != null ? +cfg.lick_pct    : 20;\nlet SCRATCH_THR = cfg.scratch_pct != null ? +cfg.scratch_pct : 15;\nlet SHAKE_THR   = cfg.shake_pct   != null ? +cfg.shake_pct   : 10;\nlet STOP_THR    = cfg.stop_pct    != null ? +cfg.stop_pct    : 55;\nlet LSC_THR     = cfg.lsc_count   != null ? +cfg.lsc_count   : 10;\n\n// ── 基礎時間變數 ──────────────────────────────────────────────\nlet walk_t    = Number(stats.walk_time    || 0);\nlet lick_t    = Number(stats.lick_time    || 0);\nlet scratch_t = Number(stats.scratch_time || 0);\nlet shake_t   = Number(stats.shake_time   || 0);\nlet stop_t    = Number(stats.stop_time    || 0);\nlet td_active = Number(stats.active_time  || 0);\n\n// ── 1. 行為佔比 distribution ──────────────────────────────────\nlet totalBeh = walk_t + lick_t + scratch_t + shake_t + stop_t;\nlet dist = totalBeh > 0 ? {\n    walk:    parseFloat((walk_t    / totalBeh * 100).toFixed(2)),\n    lick:    parseFloat((lick_t    / totalBeh * 100).toFixed(2)),\n    scratch: parseFloat((scratch_t / totalBeh * 100).toFixed(2)),\n    shake:   parseFloat((shake_t   / totalBeh * 100).toFixed(2)),\n    stop:    parseFloat((stop_t    / totalBeh * 100).toFixed(2))\n} : {walk:0, lick:0, scratch:0, shake:0, stop:0};\ndata.distribution = dist;\n\n// ── 2. 節律分析 rhythm（from hourly_distribution in payload）──\nlet hourly = stats.hourly_distribution || {};\nlet _pds = {\n    '00-06':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '06-12':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '12-18':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '18-24':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0}\n};\nfor (let h=0; h<24; h++) {\n    let k=String(h).padStart(2,'0'), hd=hourly[k]||{};\n    let pd=h<6?'00-06':h<12?'06-12':h<18?'12-18':'18-24';\n    for (let b of ['walk','lick','scratch','shake','stop']) { _pds[pd][b]+=(hd[b]||0); _pds[pd].total+=(hd[b]||0); }\n}\nlet rhythm = {};\nfor (let [pd,d] of Object.entries(_pds)) {\n    if (d.total===0) { rhythm[pd]={dominant:'none',pct:{},total:0}; continue; }\n    let bs=['walk','lick','scratch','shake','stop'];\n    let dom=bs.reduce((a,b)=>d[a]>=d[b]?a:b,'stop');\n    let pct={}; for (let b of bs) pct[b]=parseFloat((d[b]/d.total*100).toFixed(2));\n    rhythm[pd]={dominant:dom, pct, total:parseFloat(d.total.toFixed(1))};\n}\n\n// ── 3. 同步寫入 v2 global context（讓 v2 定時任務基線引擎繼續正常運作）──\nlet _tdDate = new Date().toLocaleDateString('zh-TW');\nglobal.set('v2_today', {\n    date: _tdDate,\n    walk:{count:stats.walk||0,time:walk_t}, lick:{count:stats.lick||0,time:lick_t},\n    scratch:{count:stats.scratch||0,time:scratch_t}, shake:{count:stats.shake||0,time:shake_t},\n    stop:{count:stats.stop||0,time:stop_t},\n    active_time:stats.active_time||0, rest_time:stats.rest_time||0,\n    not_detected_time:stats.not_detected_time||0, monitoring_seconds:stats.monitoring_seconds||0\n}, 'file');\nglobal.set('v2_hourly',            stats.hourly_distribution||{});\nglobal.set('v2_transition_matrix', stats.transition_matrix  ||{});\n\n// ── 4. dScore：行為占比偏離 (0-100) — 不需基線 ───────────────\nlet dScore = 0;\nif (dist.lick    > LICK_THR)    dScore += Math.min(30, (dist.lick    - LICK_THR)    * 1.5);\nif (dist.scratch > SCRATCH_THR) dScore += Math.min(35, (dist.scratch - SCRATCH_THR) * 2.0);\nif (dist.shake   > SHAKE_THR)   dScore += Math.min(35, (dist.shake   - SHAKE_THR)   * 2.5);\nif (dist.stop    > STOP_THR)    dScore += Math.min(20, (dist.stop    - STOP_THR)    * 1.0);\nif (dist.walk    < 10 && td_active > 300) dScore += 15;\ndScore = Math.min(100, Math.round(dScore));\n\n// ── 5. fScore：頻率偏離（讀取 v2_baseline；無基線時 = 0）────────\nlet fScore = 0, hasBaseline = false;\ntry {\n    let bl = global.get('v2_baseline', 'file') || global.get('v2_baseline');\n    if (bl && bl.metrics) {\n        hasBaseline = true;\n        let m = bl.metrics;\n        let pctDev = function(cur, key) {\n            let b = m[key]; if (!b || b.mean === 0) return 0;\n            return (cur - b.mean) / b.mean * 100;\n        };\n        let ld  = pctDev(lick_t,                         'lick_time');\n        let sd  = pctDev(scratch_t,                      'scratch_time');\n        let shd = pctDev(Number(stats.shake_count || 0), 'shake_count');\n        let std = pctDev(stop_t,                         'stop_time');\n        if (ld  > 150) fScore += 30; else if (ld  > 100) fScore += 20; else if (ld  >  50) fScore += 10;\n        if (sd  > 200) fScore += 35; else if (sd  > 150) fScore += 25; else if (sd  >  80) fScore += 15;\n        if (shd > 100) fScore += 35; else if (shd >  50) fScore += 20; else if (shd >  30) fScore += 10;\n        if (std >  80) fScore += 20; else if (std >  50) fScore += 10;\n        fScore = Math.min(100, Math.round(fScore));\n    }\n} catch(e) {}\n\n// ── 6. rScore：節律偏離 (0-100) ───────────────────────────────\nlet rScore = 0;\nlet night = rhythm['00-06'] || {};\nif (night.dominant==='scratch'||night.dominant==='lick') rScore += 30;\nif (night.dominant==='shake')                             rScore += 25;\nif (night.pct && night.pct.scratch > 20)                 rScore += 20;\nlet day06 = rhythm['06-12'] || {}, day12 = rhythm['12-18'] || {};\nif (day06.pct && day12.pct && (day06.pct.walk||0)<15 && (day12.pct.walk||0)<15 && dist.walk<20) rScore += 20;\nrScore = Math.min(100, rScore);\n\n// ── 7. tScore：轉移偏離 (0-100) ───────────────────────────────\nlet mx = stats.transition_matrix || {};\nlet tScore = 0;\nlet lsc  = (mx['lick->scratch']||0) + (mx['scratch->lick']||0);\nlet shch = mx['shake->shake'] || 0;\nlet stst = mx['stop->stop']   || 0;\nif (lsc>LSC_THR*2) tScore+=40; else if(lsc>LSC_THR) tScore+=20; else if(lsc>Math.max(2,Math.round(LSC_THR/2))) tScore+=10;\nif (shch>15) tScore+=30; else if(shch>8) tScore+=15;\nif (stst>50) tScore+=20; else if(stst>30) tScore+=10;\ntScore = Math.min(100, tScore);\n\n// ── 8. 綜合風險分（四維加權：占比30% 頻率35% 節律20% 轉移15%）──\nlet riskScore = Math.round(dScore*0.30 + fScore*0.35 + rScore*0.20 + tScore*0.15);\nriskScore = Math.max(0, Math.min(100, riskScore));\n\nlet level, color, emoji;\nif      (riskScore < 20) { level='Normal';    color='#4caf50'; emoji='✅'; }\nelse if (riskScore < 45) { level='Attention'; color='#ffa726'; emoji='⚠️'; }\nelse if (riskScore < 70) { level='Warning';   color='#ff7043'; emoji='🚨'; }\nelse                      { level='High Risk'; color='#f44336'; emoji='🆘'; }\n\n// ── 警示列表 ──────────────────────────────────────────────────\nlet alerts = [];\nif (dist.lick    > LICK_THR)    alerts.push({type:'lick',       msg:'舔舐佔比 ' + dist.lick.toFixed(1)    + '%，超過閾值 ' + LICK_THR    + '%'});\nif (dist.scratch > SCRATCH_THR) alerts.push({type:'scratch',    msg:'搔抓佔比 ' + dist.scratch.toFixed(1) + '%，超過閾值 ' + SCRATCH_THR + '%'});\nif (dist.shake   > SHAKE_THR)   alerts.push({type:'shake',      msg:'甩頭佔比 ' + dist.shake.toFixed(1)   + '%，超過閾值 ' + SHAKE_THR   + '%'});\nif (dist.stop    > STOP_THR)    alerts.push({type:'inactivity', msg:'靜止佔比 ' + dist.stop.toFixed(1)    + '%，活動力偏低'});\nif (lsc > LSC_THR) {\n    let ls=mx['lick->scratch']||0, sl=mx['scratch->lick']||0, half=Math.max(2,Math.round(LSC_THR/2));\n    let transMsg=(ls>half&&sl>half)?'lick↔scratch 循環 '+lsc+' 次，疑似皮膚不適':sl>ls?'scratch→lick '+sl+' 次（搔後舔舐），疑似皮膚不適':'lick→scratch '+ls+' 次（舔後搔抓），疑似皮膚不適';\n    alerts.push({type:'transition', msg:transMsg});\n}\nif (hasBaseline && fScore >= 20) alerts.push({type:'dev', msg:'行為頻率與個體基線偏離（fScore: ' + fScore + '）'});\n\ndata.risk = {\n    score: riskScore, level, color, emoji,\n    components: { distribution:dScore, frequency:fScore, rhythm:rScore, transition:tScore },\n    alerts,\n    computed_at: (function(){ let d=new Date(),p=function(n){return String(n).padStart(2,'0')}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); })()\n};\ndata.alerts = alerts;\nglobal.set('v2_risk', data.risk);\nflow.set('v2_today_risk', {level, score: riskScore});\nreturn msg;",
         "outputs": 1,
@@ -343,18 +350,18 @@
         "y": 420,
         "wires": [
             [
-                "d349c9a9a2509e65",
-                "f5dbb3d51fabb63d"
+                "37cb7d4695ba4e2e",
+                "6fdba83de718e619"
             ]
         ]
     },
     {
-        "id": "f5dbb3d51fabb63d",
+        "id": "6fdba83de718e619",
         "type": "function",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "發送提醒",
-        "func": "let risk   = msg.payload.risk   || {};\nlet alerts = msg.payload.alerts || [];\n\nif (!risk.level || risk.level === 'Normal') {\n    flow.set(\"last_discord_alert\", \"\");\n    return null;\n}\n\nlet dedup_key = risk.level + '|' + alerts.map(function(a){ return a.type||''; }).join(',');\nlet last_key  = flow.get(\"last_discord_alert\") || \"\";\nif (last_key === dedup_key) return null;\nflow.set(\"last_discord_alert\", dedup_key);\n\nlet colorMap = { Attention: 16753920, Warning: 16729344, 'High Risk': 16711680 };\nlet embed_color = colorMap[risk.level] || 16711680;\n\nlet fields = [\n    { name: '🎯 Risk Score', value: String(risk.score) + '/100', inline: true },\n    { name: '📊 風險等級',   value: (risk.emoji||'') + ' ' + risk.level, inline: true }\n];\nif (risk.components) {\n    fields.push({ name: '📊 占比偏離', value: String(risk.components.distribution||0), inline: true });\n    if ((risk.components.frequency||0) > 0) {\n        fields.push({ name: '📉 頻率偏離', value: String(risk.components.frequency||0), inline: true });\n    }\n}\nif (alerts.length > 0) {\n    fields.push({ name: '⚠️ 異常項目', value: alerts.map(function(a){ return a.msg; }).join('\\n'), inline: false });\n}\n\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = {\n    username: 'Cat Health Monitor',\n    embeds: [{\n        title:       (risk.emoji||'🚨') + ' 健康預警：' + risk.level,\n        description: '貓咪行為風險分析結果',\n        color:       embed_color,\n        fields:      fields,\n        footer:      { text: new Date().toLocaleString('zh-TW') }\n    }]\n};\nreturn msg;",
+        "func": "let risk   = msg.payload.risk   || {};\nlet alerts = msg.payload.alerts || [];\n\nif (!risk.level || risk.level === 'Normal') {\n    flow.set(\"last_discord_alert\", \"\");\n    return null;\n}\n\nlet dedup_key = risk.level + '|' + alerts.map(function(a){ return a.type||''; }).join(',');\nlet last_key  = flow.get(\"last_discord_alert\") || \"\";\nif (last_key === dedup_key) return null;\nflow.set(\"last_discord_alert\", dedup_key);\n\nlet colorMap = { Attention: 16753920, Warning: 16729344, 'High Risk': 16711680 };\nlet embed_color = colorMap[risk.level] || 16711680;\n\nlet fields = [\n    { name: '🎯 Risk Score', value: String(risk.score) + '/100', inline: true },\n    { name: '📊 風險等級',   value: (risk.emoji||'') + ' ' + risk.level, inline: true }\n];\nif (risk.components) {\n    fields.push({ name: '📊 占比偏離', value: String(risk.components.distribution||0), inline: true });\n    if ((risk.components.frequency||0) > 0) {\n        fields.push({ name: '📉 頻率偏離', value: String(risk.components.frequency||0), inline: true });\n    }\n}\nif (alerts.length > 0) {\n    fields.push({ name: '⚠️ 異常項目', value: alerts.map(function(a){ return a.msg; }).join('\\n'), inline: false });\n}\n\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = {\n    username: 'Cat Health Monitor',\n    embeds: [{\n        title:       (risk.emoji||'🚨') + ' 健康預警：' + risk.level,\n        description: '貓咪行為風險分析結果',\n        color:       embed_color,\n        fields:      fields,\n        footer:      { text: new Date().toLocaleString('zh-TW') }\n    }]\n};\nlet _cfg = {};\ntry { _cfg = global.get('v2_user_settings','file') || {}; } catch(e) { _cfg = global.get('v2_user_settings') || {}; }\nlet _url = (_cfg.discord_webhook || '').trim();\nif (!_url) { node.warn('健康預警 Discord：webhook URL 未設定，請在 P4 設定面板填入'); return null; }\nmsg.url = _url;\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -365,20 +372,20 @@
         "y": 420,
         "wires": [
             [
-                "965cd54fbc2f4f47"
+                "72e0028cc137e2da"
             ]
         ]
     },
     {
-        "id": "965cd54fbc2f4f47",
+        "id": "72e0028cc137e2da",
         "type": "http request",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "送到 Discord",
         "method": "POST",
         "ret": "txt",
         "paytoqs": "ignore",
-        "url": "",
+        "url": "https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO",
         "tls": "",
         "persist": false,
         "proxy": "",
@@ -393,10 +400,10 @@
         ]
     },
     {
-        "id": "a8843440996e7bcf",
+        "id": "a46e97afdaf80032",
         "type": "csv",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "建立CSV",
         "sep": ",",
         "hdrin": false,
@@ -412,15 +419,15 @@
         "y": 780,
         "wires": [
             [
-                "373eb51a0b2e665a"
+                "b9c88f8249e155c9"
             ]
         ]
     },
     {
-        "id": "373eb51a0b2e665a",
+        "id": "b9c88f8249e155c9",
         "type": "file",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "儲存CSV",
         "filename": "C:\\\\a\\\\noda_data.csv",
         "filenameType": "str",
@@ -435,10 +442,10 @@
         ]
     },
     {
-        "id": "1fef867d274aa8ca",
+        "id": "cbd44fef7e681d1c",
         "type": "ui_gauge",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "name": "活動力儀表",
         "group": "group_gauge_cat",
         "order": 5,
@@ -464,32 +471,32 @@
         "wires": []
     },
     {
-        "id": "0b47210816be0ad4",
+        "id": "ab9c9a53d56bd7b5",
         "type": "ui_template",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "group": "group_stream_cat",
         "name": "影像串流",
         "order": 6,
         "width": "12",
-        "height": "1",
-        "format": "<style>.gfv-hidden-bridge-group{display:none!important;height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;}</style>\n<script>\n(function(scope){\n    scope.$watch('msg', function(msg){\n        if (!msg) return;\n        var ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : null;\n        var url = '';\n        if (ip) {\n            url = 'http://' + ip + ':5000/stream';\n            window._catIP = ip;\n        } else if (msg.stream_url) {\n            url = msg.stream_url;\n        }\n        if (!url) return;\n        if (typeof window.gfvSetUrl === 'function') {\n            window.gfvSetUrl(url);\n        } else {\n            setTimeout(function(){\n                if (typeof window.gfvSetUrl === 'function') window.gfvSetUrl(url);\n            }, 1000);\n        }\n    });\n})(scope);\n</script>",
+        "height": "8",
+        "format": "<style>\n.sv-wrap{height:100%;display:flex;flex-direction:column;background:#060a0f;border-radius:10px;overflow:hidden;}\n.sv-bar{height:42px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;background:linear-gradient(135deg,rgba(0,14,8,.96),rgba(2,20,12,.96));border-bottom:1px solid rgba(0,255,136,.12);}\n.sv-dot{width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0;transition:background .4s,box-shadow .4s;}\n.sv-label{flex:1;font-size:11px;font-weight:700;color:rgba(0,255,136,.72);letter-spacing:.6px;}\n.sv-ib{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.18);color:#fff;transition:all .18s;flex-shrink:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}\n.sv-ib:hover{background:rgba(0,255,136,.22);border-color:rgba(0,255,136,.6);transform:scale(1.1);}\n.sv-ib.sv-dis{opacity:.28;cursor:default;pointer-events:none;}\n.sv-ib.sv-on{background:rgba(0,255,136,.18)!important;color:#00ff88!important;border-color:rgba(0,255,136,.42)!important;}\n.sv-body{flex:1;position:relative;background:#000;min-height:0;overflow:hidden;}\n.sv-offline{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.22);font-size:12px;pointer-events:none;}\n.sv-off-ico{font-size:36px;opacity:.28;}\n</style>\n<div class=\"sv-wrap\">\n  <div class=\"sv-bar\">\n    <div class=\"sv-dot\" id=\"sv_dot\"></div>\n    <span class=\"sv-label\">📷 LIVE CAM</span>\n    <div class=\"sv-ib sv-dis\" id=\"sv_btn_play\" title=\"開啟串流\">▶</div>\n    <div class=\"sv-ib\" id=\"sv_btn_float\" title=\"浮動視窗\">⧉</div>\n  </div>\n  <div class=\"sv-body\" id=\"sv_body\">\n    <div class=\"sv-offline\" id=\"sv_offline\">\n      <div class=\"sv-off-ico\">📹</div>\n      <div id=\"sv_status\">等待串流連線...</div>\n    </div>\n  </div>\n</div>\n<script>\n(function(scope){\n  var _url='',_stream=false,_svTimer=null;\n\n  function svOn(){\n    if(!_url||_stream)return;\n    _stream=true;\n    var body=document.getElementById('sv_body');\n    var off=document.getElementById('sv_offline');\n    var dot=document.getElementById('sv_dot');\n    var btn=document.getElementById('sv_btn_play');\n    if(!body)return;\n    if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    var old=body.querySelector('img.sv-img');if(old)body.removeChild(old);\n    var img=document.createElement('img');\n    img.className='sv-img';\n    img.style.cssText='width:100%;height:100%;object-fit:contain;display:block;opacity:0;transition:opacity .3s;pointer-events:none;';\n    img.onload=function(){\n      this.style.opacity=1;\n      if(off)off.style.display='none';\n      if(dot){dot.style.background='#00ff88';dot.style.boxShadow='0 0 6px #00ff88';}\n      if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    };\n    img.onerror=function(){svOff();};\n    if(off)off.style.display='none';\n    body.insertBefore(img,off);\n    img.src=_url;\n    if(btn){btn.textContent='⏹';btn.title='停止串流';btn.classList.add('sv-on');}\n    _svTimer=setTimeout(function(){\n      var ci=body&&body.querySelector('img.sv-img');\n      if(ci&&!ci.naturalWidth)svOff();\n    },10000);\n  }\n\n  function svOff(){\n    _stream=false;\n    if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    var body=document.getElementById('sv_body');\n    var off=document.getElementById('sv_offline');\n    var dot=document.getElementById('sv_dot');\n    var btn=document.getElementById('sv_btn_play');\n    var old=body&&body.querySelector('img.sv-img');if(old)body.removeChild(old);\n    if(off)off.style.display='flex';\n    if(dot){dot.style.background=_url?'#f5a623':'#444';dot.style.boxShadow=_url?'0 0 4px rgba(245,166,35,.5)':'none';}\n    if(btn){btn.textContent='▶';btn.title='開啟串流';btn.classList.remove('sv-on');}\n    var st=document.getElementById('sv_status');\n    if(st)st.textContent=_url?'點擊 ▶ 開啟串流':'等待串流連線...';\n  }\n\n  function urlReady(url){\n    _url=url;\n    var dot=document.getElementById('sv_dot');\n    var btn=document.getElementById('sv_btn_play');\n    var st=document.getElementById('sv_status');\n    if(dot&&!_stream){dot.style.background='#f5a623';dot.style.boxShadow='0 0 4px rgba(245,166,35,.5)';}\n    if(btn)btn.classList.remove('sv-dis');\n    if(st&&!_stream)st.textContent='點擊 ▶ 開啟串流';\n    if(btn&&!btn._bound){\n      btn._bound=true;\n      btn.addEventListener('click',function(e){e.stopPropagation();_stream?svOff():svOn();});\n    }\n  }\n\n  var floatBtn=document.getElementById('sv_btn_float');\n  if(floatBtn)floatBtn.addEventListener('click',function(e){\n    e.stopPropagation();\n    if(window.gfvToggle)window.gfvToggle();\n  });\n\n  scope.$watch('msg',function(msg){\n    if(!msg)return;\n    var ip=(msg.payload&&msg.payload.ip)?msg.payload.ip:null;\n    var url='';\n    if(ip){url='http://'+ip+':5000/stream';window._catIP=ip;}\n    else if(msg.stream_url){url=msg.stream_url;}\n    if(!url||url===_url)return;\n    urlReady(url);\n    /* 通知浮動面板 URL 就緒（不自動開啟串流） */\n    if(typeof window.gfvSetUrl==='function')window.gfvSetUrl(url);\n    else setTimeout(function(){if(typeof window.gfvSetUrl==='function')window.gfvSetUrl(url);},1000);\n  });\n})(scope);\n</script>",
         "storeOutMessages": false,
         "fwdInMessages": true,
         "resendOnRefresh": true,
         "templateScope": "local",
         "className": "",
-        "x": 1140,
+        "x": 1180,
         "y": 580,
         "wires": [
             []
         ]
     },
     {
-        "id": "3ec14d6446e2c3c9",
+        "id": "1c7a30fc729b4fdf",
         "type": "ui_template",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "group": "group_status_cat",
         "name": "即時狀態卡片",
         "order": 1,
@@ -501,45 +508,45 @@
         "resendOnRefresh": true,
         "templateScope": "local",
         "className": "",
-        "x": 1160,
-        "y": 100,
+        "x": 1140,
+        "y": 120,
         "wires": [
             []
         ]
     },
     {
-        "id": "19227cd3418e36e6",
+        "id": "5566086f462f5d3e",
         "type": "ui_template",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "group": "group_timeline_cat",
         "name": "行為時間紀錄",
         "order": 2,
         "width": "6",
         "height": "10",
-        "format": "<style>\n  .paw-wrap {\n    font-family: 'Microsoft JhengHei', sans-serif;\n    padding: 12px;\n  }\n\n  /* ── Header ── */\n  .paw-header {\n    display: flex;\n    align-items: center;\n    justify-content: space-between;\n    padding: 14px 16px;\n    background: #fff;\n    border-radius: 14px 14px 0 0;\n    border: 1px solid #EDE8DF;\n    border-bottom: none;\n  }\n\n  .paw-header-left {\n    display: flex;\n    align-items: center;\n    gap: 10px;\n  }\n\n  .paw-avatar {\n    width: 38px;\n    height: 38px;\n    border-radius: 50%;\n    background: #FAEEDA;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    font-size: 20px;\n    flex-shrink: 0;\n  }\n\n  .paw-title {\n    font-size: 15px;\n    font-weight: 700;\n    color: #2C2C2A;\n    margin: 0;\n    line-height: 1.2;\n  }\n\n  .paw-subtitle {\n    font-size: 11px;\n    color: #888780;\n    margin: 2px 0 0;\n  }\n\n  .paw-badge {\n    font-size: 11px;\n    font-weight: 700;\n    padding: 4px 10px;\n    border-radius: 20px;\n    background: #FAEEDA;\n    color: #633806;\n    letter-spacing: 0.3px;\n  }\n\n  /* ── Scroll body ── */\n  .paw-body {\n    background: #fff;\n    border: 1px solid #EDE8DF;\n    border-top: none;\n    border-radius: 0 0 14px 14px;\n    max-height: 480px;\n    overflow-y: auto;\n    padding: 6px 0 10px;\n  }\n\n  .paw-body::-webkit-scrollbar { width: 4px; }\n  .paw-body::-webkit-scrollbar-track { background: transparent; }\n  .paw-body::-webkit-scrollbar-thumb { background: #FAC775; border-radius: 4px; }\n\n  /* ── Timeline items ── */\n  .tl-item {\n    display: flex;\n    align-items: flex-start;\n    padding: 10px 18px;\n    gap: 12px;\n    transition: background 0.15s;\n  }\n\n  .tl-item:hover { background: #FAFAF8; }\n\n  .tl-spine {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    min-width: 34px;\n  }\n\n  .tl-dot {\n    width: 34px;\n    height: 34px;\n    border-radius: 50%;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    font-size: 16px;\n    flex-shrink: 0;\n  }\n\n  .tl-line {\n    width: 2px;\n    flex: 1;\n    min-height: 18px;\n    border-radius: 1px;\n    margin-top: 4px;\n    opacity: 0.5;\n  }\n\n  .tl-item:last-child .tl-line { visibility: hidden; }\n\n  .tl-content { flex: 1; padding-bottom: 4px; }\n\n  .tl-name {\n    font-size: 14px;\n    font-weight: 700;\n    color: #2C2C2A;\n    margin: 6px 0 4px;\n  }\n\n  .tl-meta {\n    display: flex;\n    align-items: center;\n    gap: 8px;\n    flex-wrap: wrap;\n  }\n\n  .tl-time {\n    font-size: 12px;\n    color: #888780;\n    display: flex;\n    align-items: center;\n    gap: 3px;\n  }\n\n  .tl-time svg {\n    width: 13px;\n    height: 13px;\n    stroke: #888780;\n    fill: none;\n    stroke-width: 2;\n    stroke-linecap: round;\n    flex-shrink: 0;\n  }\n\n  .tl-dur {\n    font-size: 11px;\n    font-weight: 700;\n    padding: 2px 8px;\n    border-radius: 10px;\n  }\n\n  /* ── 行為色系 ── */\n  .b-scratch .tl-dot  { background: #FAECE7; }\n  .b-scratch .tl-line { background: #F0997B; }\n  .b-scratch .tl-dur  { background: #FAECE7; color: #993C1D; }\n\n  .b-lick .tl-dot  { background: #FAEEDA; }\n  .b-lick .tl-line { background: #FAC775; }\n  .b-lick .tl-dur  { background: #FAEEDA; color: #633806; }\n\n  .b-walk .tl-dot  { background: #EAF3DE; }\n  .b-walk .tl-line { background: #97C459; }\n  .b-walk .tl-dur  { background: #EAF3DE; color: #3B6D11; }\n\n  .b-shake .tl-dot  { background: #E6F1FB; }\n  .b-shake .tl-line { background: #85B7EB; }\n  .b-shake .tl-dur  { background: #E6F1FB; color: #185FA5; }\n\n  .b-stop .tl-dot  { background: #EEEDFE; }\n  .b-stop .tl-line { background: #AFA9EC; }\n  .b-stop .tl-dur  { background: #EEEDFE; color: #3C3489; }\n\n  .b-not .tl-dot  { background: #F1EFE8; }\n  .b-not .tl-line { background: #B4B2A9; }\n  .b-not .tl-dur  { background: #F1EFE8; color: #444441; }\n\n  /* ── Empty state ── */\n  .paw-empty {\n    padding: 56px 20px;\n    text-align: center;\n  }\n\n  .paw-empty-icon { font-size: 42px; opacity: 0.3; }\n  .paw-empty-title { font-size: 14px; color: #5F5E5A; margin: 12px 0 4px; font-weight: 700; }\n  .paw-empty-sub   { font-size: 12px; color: #888780; }\n</style>\n\n<div class=\"paw-wrap\">\n\n  <div class=\"paw-header\">\n    <div class=\"paw-header-left\">\n      <div class=\"paw-avatar\">🐾</div>\n      <div>\n        <p class=\"paw-title\">行為時間軸</p>\n        <p class=\"paw-subtitle\">即時追蹤紀錄</p>\n      </div>\n    </div>\n    <span class=\"paw-badge\">最近 20 筆</span>\n  </div>\n\n  <div class=\"paw-body\">\n\n    <!-- 無資料 -->\n    <div ng-if=\"!msg.payload || !msg.payload.behavior_log || msg.payload.behavior_log.length === 0\"\n         class=\"paw-empty\">\n      <div class=\"paw-empty-icon\">🐱</div>\n      <p class=\"paw-empty-title\">暫無行為記錄</p>\n      <p class=\"paw-empty-sub\">等待貓咪活動...</p>\n    </div>\n\n    <!-- Timeline -->\n    <div ng-if=\"msg.payload && msg.payload.behavior_log && msg.payload.behavior_log.length > 0\">\n      <div ng-repeat=\"item in msg.payload.behavior_log.slice().reverse().slice(0,20) track by $index\"\n           class=\"tl-item\"\n           ng-class=\"'b-' + item.behavior\">\n\n        <div class=\"tl-spine\">\n          <div class=\"tl-dot\">\n            {{\n              item.behavior === 'scratch' ? '🐱' :\n              item.behavior === 'lick'    ? '😸' :\n              item.behavior === 'walk'    ? '🐈' :\n              item.behavior === 'shake'   ? '😼' :\n              item.behavior === 'stop'    ? '😴' :\n              item.behavior === 'not'     ? '🙈' : '🐾'\n            }}\n          </div>\n          <div class=\"tl-line\"></div>\n        </div>\n\n        <div class=\"tl-content\">\n          <div class=\"tl-name\">\n            {{\n              item.behavior === 'scratch' ? '搔抓' :\n              item.behavior === 'lick'    ? '舔舐' :\n              item.behavior === 'walk'    ? '行走' :\n              item.behavior === 'shake'   ? '甩頭' :\n              item.behavior === 'stop'    ? '靜止' :\n              item.behavior === 'not'     ? '不在畫面' : item.behavior\n            }}\n          </div>\n          <div class=\"tl-meta\">\n            <span class=\"tl-time\">\n              <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\">\n                <circle cx=\"12\" cy=\"12\" r=\"10\"/>\n                <polyline points=\"12 6 12 12 16 14\"/>\n              </svg>\n              {{item.time || '--:--'}}\n            </span>\n            <span class=\"tl-dur\" ng-if=\"item.duration > 0\">\n              ⏱ {{item.duration}} 秒\n            </span>\n          </div>\n        </div>\n\n      </div>\n    </div>\n\n  </div>\n</div>",
+        "format": "<link href=\"https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500&display=swap\" rel=\"stylesheet\">\n\n<style>\n.paw-wrap {\n  font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;\n  padding: 12px;\n}\n\n/* ── Header ── */\n.paw-header {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 14px 16px;\n  background: #fff;\n  border-radius: 14px 14px 0 0;\n  border: 1px solid #EDE8DF; border-bottom: none;\n}\n.paw-header-left { display: flex; align-items: center; gap: 10px; }\n.paw-avatar {\n  width: 38px; height: 38px; border-radius: 50%;\n  background: #FAEEDA; display: flex; align-items: center;\n  justify-content: center; font-size: 20px; flex-shrink: 0;\n}\n.paw-title {\n  font-size: 15px; font-weight: 500; color: #2C2C2A; margin: 0; line-height: 1.2;\n  font-family: 'Noto Sans TC', sans-serif;\n  letter-spacing: 0.03em;\n}\n.paw-subtitle {\n  font-size: 10px; color: #B0ADA8; margin: 2px 0 0;\n  font-weight: 300; letter-spacing: 0.1em; text-transform: uppercase;\n  font-family: 'Nunito', sans-serif;\n}\n.paw-badge {\n  font-size: 11px; font-weight: 600; padding: 4px 11px;\n  border-radius: 20px; background: #FAEEDA; color: #633806;\n  letter-spacing: 0.02em; font-family: 'Nunito', sans-serif;\n}\n\n/* ── Scroll body ── */\n.paw-body {\n  background: #fff; border: 1px solid #EDE8DF; border-top: none;\n  border-radius: 0 0 14px 14px; max-height: 480px; overflow-y: auto; padding: 6px 0 10px;\n}\n.paw-body::-webkit-scrollbar { width: 4px; }\n.paw-body::-webkit-scrollbar-track { background: transparent; }\n.paw-body::-webkit-scrollbar-thumb { background: #FAC775; border-radius: 4px; }\n\n/* ── Timeline items ── */\n.tl-item {\n  display: flex; align-items: flex-start;\n  padding: 9px 18px; gap: 12px;\n  transition: background 0.12s;\n}\n.tl-item:hover { background: #FAFAF8; }\n.tl-spine { display: flex; flex-direction: column; align-items: center; min-width: 34px; }\n.tl-dot {\n  width: 34px; height: 34px; border-radius: 50%;\n  display: flex; align-items: center; justify-content: center;\n  font-size: 16px; flex-shrink: 0;\n}\n.tl-line {\n  width: 2px; flex: 1; min-height: 16px;\n  border-radius: 1px; margin-top: 4px; opacity: 0.35;\n}\n.tl-item:last-child .tl-line { visibility: hidden; }\n\n.tl-content { flex: 1; padding-bottom: 2px; padding-top: 2px; }\n.tl-name {\n  font-size: 13px; font-weight: 500; color: #2C2C2A; margin: 0 0 5px;\n  font-family: 'Noto Sans TC', sans-serif; letter-spacing: 0.02em;\n}\n.tl-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }\n.tl-time {\n  font-size: 11px; color: #B0ADA8;\n  display: flex; align-items: center; gap: 3px;\n  font-family: 'Nunito', sans-serif; font-weight: 400;\n  font-variant-numeric: tabular-nums;\n}\n.tl-time svg {\n  width: 12px; height: 12px; stroke: #C8C5C0; fill: none;\n  stroke-width: 2; stroke-linecap: round; flex-shrink: 0;\n}\n.tl-dur {\n  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;\n  font-family: 'Nunito', sans-serif; font-variant-numeric: tabular-nums;\n}\n\n/* ── 行為色系 ── */\n.b-scratch .tl-dot  { background: #FAECE7; }\n.b-scratch .tl-line { background: #F0997B; }\n.b-scratch .tl-dur  { background: #FAECE7; color: #993C1D; }\n.b-lick .tl-dot  { background: #FAEEDA; }\n.b-lick .tl-line { background: #FAC775; }\n.b-lick .tl-dur  { background: #FAEEDA; color: #633806; }\n.b-walk .tl-dot  { background: #EAF3DE; }\n.b-walk .tl-line { background: #97C459; }\n.b-walk .tl-dur  { background: #EAF3DE; color: #3B6D11; }\n.b-shake .tl-dot  { background: #E6F1FB; }\n.b-shake .tl-line { background: #85B7EB; }\n.b-shake .tl-dur  { background: #E6F1FB; color: #185FA5; }\n.b-stop .tl-dot  { background: #EEEDFE; }\n.b-stop .tl-line { background: #AFA9EC; }\n.b-stop .tl-dur  { background: #EEEDFE; color: #3C3489; }\n.b-not .tl-dot  { background: #F1EFE8; }\n.b-not .tl-line { background: #B4B2A9; }\n.b-not .tl-dur  { background: #F1EFE8; color: #444441; }\n\n/* ── Empty state ── */\n.paw-empty { padding: 48px 20px; text-align: center; }\n.paw-empty-icon { font-size: 38px; opacity: 0.25; }\n.paw-empty-title {\n  font-size: 13px; color: #5F5E5A; margin: 10px 0 3px; font-weight: 500;\n  font-family: 'Noto Sans TC', sans-serif;\n}\n.paw-empty-sub {\n  font-size: 11px; color: #B0ADA8; font-weight: 300; letter-spacing: 0.04em;\n}\n\n/* ── Live card ── */\n.tl-live {\n  display: flex; flex-direction: column; gap: 8px;\n  padding: 13px 16px;\n  background: #F0FAF3;\n  border-radius: 12px; margin: 10px 14px 6px;\n  border: 1px solid rgba(76,175,80,.2);\n}\n.live-pulse {\n  width: 9px; height: 9px; border-radius: 50%;\n  background: #4CAF50; flex-shrink: 0;\n  animation: live-pulse 1.4s infinite;\n}\n@keyframes live-pulse {\n  0%  { box-shadow: 0 0 0 0   rgba(76,175,80,.7); }\n  70% { box-shadow: 0 0 0 7px rgba(76,175,80, 0); }\n  100%{ box-shadow: 0 0 0 0   rgba(76,175,80, 0); }\n}\n.live-top   { display: flex; align-items: center; justify-content: space-between; }\n.live-left  { display: flex; align-items: center; gap: 8px; }\n.live-bottom { display: flex; align-items: center; justify-content: space-between; padding-top: 4px; }\n.live-emoji { font-size: 19px; flex-shrink: 0; }\n.live-name  {\n  font-size: 14px; font-weight: 500; color: #2C2C2A;\n  font-family: 'Noto Sans TC', sans-serif;\n}\n.live-sub   {\n  font-size: 10px; color: #888780; font-weight: 300;\n  letter-spacing: 0.04em; font-family: 'Nunito', sans-serif;\n}\n.live-timer {\n  font-size: 20px; font-weight: 800; color: #2E7D32;\n  font-variant-numeric: tabular-nums;\n  font-family: 'Nunito', sans-serif; letter-spacing: -0.02em;\n}\n.live-badge {\n  font-size: 10px; font-weight: 700; padding: 3px 9px;\n  border-radius: 20px; background: rgba(211,47,47,.08); color: #C62828;\n  border: 1px solid rgba(211,47,47,.25); white-space: nowrap;\n  font-family: 'Nunito', sans-serif;\n  animation: badge-blink 1.8s ease-in-out infinite;\n}\n@keyframes badge-blink {\n  0%, 100% { opacity: 1; }\n  50%       { opacity: 0.15; }\n}\n\n/* ── 風險徽章 ── */\n.risk-badge {\n  font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px;\n  font-family: 'Nunito', sans-serif;\n}\n.risk-normal  { background: #EAF3DE; color: #3B6D11; }\n.risk-notable { background: #FFF3E0; color: #E65100; }\n.risk-high    { background: #FFEBEE; color: #B71C1C; }\n\n/* ── Divider ── */\n.tl-divider {\n  font-size: 9px; color: #C8C5C0; padding: 10px 18px 4px;\n  font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase;\n  font-family: 'Nunito', sans-serif;\n}\n</style>\n\n<div class=\"paw-wrap\" ng-init=\"init()\">\n\n  <div class=\"paw-header\">\n    <div class=\"paw-header-left\">\n      <div class=\"paw-avatar\">🐾</div>\n      <div>\n        <p class=\"paw-title\">行為時間軸</p>\n        <p class=\"paw-subtitle\">即時追蹤紀錄</p>\n      </div>\n    </div>\n    <span class=\"paw-badge\">最近 20 筆</span>\n  </div>\n\n  <div class=\"paw-body\">\n\n    <!-- 進行中 card -->\n    <div ng-if=\"msg.payload && msg.payload.current && msg.payload.current.behavior !== 'not'\"\n         class=\"tl-live\">\n      <div class=\"live-top\">\n        <div class=\"live-left\">\n          <div class=\"live-pulse\"></div>\n          <div class=\"live-emoji\">{{bEmoji(msg.payload.current.behavior)}}</div>\n          <div class=\"live-name\">{{bName(msg.payload.current.behavior)}}</div>\n        </div>\n        <span class=\"live-badge\">進行中</span>\n      </div>\n      <div class=\"live-bottom\">\n        <span class=\"live-sub\">自 {{msg.payload.current.timestamp}} 開始</span>\n        <div class=\"live-timer\">{{liveStr}}</div>\n      </div>\n    </div>\n\n    <!-- 分隔 -->\n    <div class=\"tl-divider\"\n         ng-if=\"msg.payload && msg.payload.behavior_log && msg.payload.behavior_log.length > 0\">\n      歷史紀錄\n    </div>\n\n    <!-- 無資料 -->\n    <div ng-if=\"!msg.payload || !msg.payload.behavior_log || msg.payload.behavior_log.length === 0\"\n         class=\"paw-empty\">\n      <div class=\"paw-empty-icon\">🐱</div>\n      <p class=\"paw-empty-title\">暫無行為記錄</p>\n      <p class=\"paw-empty-sub\">等待貓咪活動...</p>\n    </div>\n\n    <!-- Timeline -->\n    <div ng-if=\"msg.payload && msg.payload.behavior_log && msg.payload.behavior_log.length > 0\">\n      <div ng-repeat=\"item in msg.payload.behavior_log.slice().reverse().slice(0,20) track by $index\"\n           class=\"tl-item\"\n           ng-class=\"'b-' + item.behavior\">\n\n        <div class=\"tl-spine\">\n          <div class=\"tl-dot\">{{bEmoji(item.behavior)}}</div>\n          <div class=\"tl-line\"></div>\n        </div>\n\n        <div class=\"tl-content\">\n          <div class=\"tl-name\">{{bName(item.behavior)}}</div>\n          <div class=\"tl-meta\">\n            <span class=\"tl-time\">\n              <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\">\n                <circle cx=\"12\" cy=\"12\" r=\"10\"/>\n                <polyline points=\"12 6 12 12 16 14\"/>\n              </svg>\n              {{item.time || '--:--'}}\n            </span>\n            <span class=\"tl-dur\" ng-if=\"item.duration > 0\">⏱ {{item.duration}} 秒</span>\n            <span class=\"risk-badge\"\n                  ng-class=\"'risk-' + riskLevel(item.behavior, item.duration)\"\n                  ng-if=\"item.duration > 0\">{{riskLabel(item.behavior, item.duration)}}</span>\n          </div>\n        </div>\n\n      </div>\n    </div>\n\n  </div>\n</div>\n\n<script>\n(function(scope) {\n  var _timer = null;\n\n  scope.bEmoji = function(b) {\n    return {scratch:'🐱',lick:'😸',walk:'🐈',shake:'😼',stop:'😴',not:'🙈'}[b] || '🐾';\n  };\n  scope.bName = function(b) {\n    return {scratch:'搔抓',lick:'舔舐',walk:'行走',shake:'甩頭',stop:'靜止',not:'不在畫面'}[b] || b;\n  };\n\n  function fmtElapsed(sec) {\n    if (sec < 60) return sec + ' 秒';\n    var m = Math.floor(sec / 60), s = sec % 60;\n    if (m < 60) return m + '分' + (s ? s + '秒' : '');\n    var h = Math.floor(m / 60); m = m % 60;\n    return h + '時' + (m ? m + '分' : '');\n  }\n\n  function restartTimer() {\n    if (_timer) { clearInterval(_timer); _timer = null; }\n    var startMs = scope.msg && scope.msg.payload && scope.msg.payload.current\n                  ? scope.msg.payload.current.start_epoch_ms : null;\n    if (!startMs) { scope.liveStr = '--'; return; }\n    function tick() {\n      var sec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));\n      var s = fmtElapsed(sec);\n      if (scope.liveStr !== s) { scope.liveStr = s; scope.$applyAsync(); }\n    }\n    tick();\n    _timer = setInterval(tick, 1000);\n  }\n\n  scope.init    = function() { scope.liveStr = '--'; restartTimer(); };\n  scope.$watch('msg', function(n, o) { if (n !== o) restartTimer(); });\n\n  scope.riskLevel = function(b, dur) {\n    if (b === 'shake')   { return dur > 3 ? 'high' : 'notable'; }\n    if (b === 'scratch') { if (dur > 20) return 'high'; if (dur > 10) return 'notable'; }\n    var avg = scope.msg && scope.msg.payload && scope.msg.payload.avg_duration\n              ? (scope.msg.payload.avg_duration[b] || 0) : 0;\n    if (avg > 0) { var r = dur / avg; if (r > 4) return 'high'; if (r > 2.5) return 'notable'; }\n    return 'normal';\n  };\n\n  scope.riskLabel = function(b, dur) {\n    return {high:'⚠ 偏高', notable:'△ 偏長', normal:'正常'}[scope.riskLevel(b, dur)];\n  };\n})(scope);\n</script>",
         "storeOutMessages": false,
         "fwdInMessages": true,
         "resendOnRefresh": false,
         "templateScope": "local",
         "className": "",
         "x": 1140,
-        "y": 160,
+        "y": 180,
         "wires": [
             []
         ]
     },
     {
-        "id": "b41970521d811237",
+        "id": "29fdcebb714f0d5d",
         "type": "ui_template",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "group": "group_stats_cat",
         "name": "詳細統計",
         "order": 3,
         "width": "6",
         "height": "10",
-        "format": "<style>\n.stats-container {\n    padding: 15px;\n    font-family: 'Microsoft JhengHei', Arial, sans-serif;\n    background: #fafbfc;\n    border-radius: 10px;\n}\n\n.stats-title {\n    font-size: 1.3em;\n    font-weight: 700;\n    margin-bottom: 18px;\n    color: #2c3e50;\n    border-bottom: 3px solid #ffa726;\n    padding-bottom: 10px;\n}\n\n.stat-card {\n    background: white;\n    border-radius: 12px;\n    padding: 15px;\n    margin-bottom: 12px;\n    box-shadow: 0 2px 8px rgba(0,0,0,0.08);\n    border-left: 6px solid #667eea;\n    transition: all 0.3s ease;\n}\n\n.stat-card:hover {\n    transform: translateY(-2px);\n    box-shadow: 0 4px 12px rgba(0,0,0,0.12);\n}\n\n/* =========================\n行走 - 綠\n========================= */\n\n.stat-card.walk {\nborder-left-color: #43a047;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#eef9f0 100%\n);\n}\n\n.stat-card.walk .time-display {\ncolor: #2e7d32;\n}\n\n.stat-card.walk .progress-fill {\nbackground: linear-gradient(\n90deg,\n#66bb6a 0%,\n#43a047 100%\n);\n}\n\n/* =========================\n舔拭 - 黃\n========================= */\n\n.stat-card.lick {\nborder-left-color: #fbc02d;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#fffbea 100%\n);\n}\n\n.stat-card.lick .time-display {\ncolor: #f9a825;\n}\n\n.stat-card.lick .progress-fill {\nbackground: linear-gradient(\n90deg,\n#fff176 0%,\n#fbc02d 100%\n);\n}\n\n/* =========================\n搔抓 - 紅\n========================= */\n\n.stat-card.scratch {\nborder-left-color: #ef5350;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#fff1f1 100%\n);\n}\n\n.stat-card.scratch .time-display {\ncolor: #d32f2f;\n}\n\n.stat-card.scratch .progress-fill {\nbackground: linear-gradient(\n90deg,\n#ef9a9a 0%,\n#ef5350 100%\n);\n}\n\n/* =========================\n甩頭 - 藍\n========================= */\n\n.stat-card.shake {\nborder-left-color: #42a5f5;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#eef7ff 100%\n);\n}\n\n.stat-card.shake .time-display {\ncolor: #1e88e5;\n}\n\n.stat-card.shake .progress-fill {\nbackground: linear-gradient(\n90deg,\n#90caf9 0%,\n#42a5f5 100%\n);\n}\n\n/* =========================\n靜止 - 靛\n========================= */\n\n.stat-card.stop {\nborder-left-color: #5c6bc0;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#f0f2ff 100%\n);\n}\n\n.stat-card.stop .time-display {\ncolor: #3949ab;\n}\n\n.stat-card.stop .progress-fill {\nbackground: linear-gradient(\n90deg,\n#9fa8da 0%,\n#5c6bc0 100%\n);\n}\n\n/* =========================\n活動時間 - 橙\n========================= */\n\n.stat-card.active {\nborder-left-color: #fb8c00;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#fff5eb 100%\n);\n}\n\n.stat-card.active .time-display {\ncolor: #ef6c00;\n}\n\n.stat-card.active .progress-fill {\nbackground: linear-gradient(\n90deg,\n#ffcc80 0%,\n#fb8c00 100%\n);\n}\n\n/* =========================\n休息時間 - 紫\n========================= */\n\n.stat-card.rest {\nborder-left-color: #ab47bc;\nbackground: linear-gradient(\n135deg,\n#ffffff 0%,\n#faf0ff 100%\n);\n}\n\n.stat-card.rest .time-display {\ncolor: #8e24aa;\n}\n\n.stat-card.rest .progress-fill {\nbackground: linear-gradient(\n90deg,\n#ce93d8 0%,\n#ab47bc 100%\n);\n}\n\n.stat-header {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    margin-bottom: 10px;\n}\n\n.stat-icon {\n    font-size: 2em;\n}\n\n.stat-label {\n    font-size: 1em;\n    font-weight: 600;\n    color: #34495e;\n    margin-left: 10px;\n}\n\n.stat-count {\n    font-size: 1.8em;\n    font-weight: 700;\n    color: #2c3e50;\n}\n\n.time-display {\n    font-size: 1.3em;\n    font-weight: 700;\n}\n\n.progress-bar {\n    width: 100%;\n    height: 8px;\n    background: #ecf0f1;\n    border-radius: 10px;\n    overflow: hidden;\n    margin-top: 8px;\n}\n\n.progress-fill {\n    height: 100%;\n    border-radius: 10px;\n    transition: width 0.5s ease;\n}\n\n.summary-panel {\n    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n    color: white;\n    border-radius: 12px;\n    padding: 20px;\n    margin-bottom: 15px;\n    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);\n}\n\n.summary-title {\n    font-size: 1.1em;\n    font-weight: 700;\n    margin-bottom: 15px;\n    opacity: 0.9;\n}\n\n.summary-grid {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 15px;\n}\n\n.summary-item {\n    text-align: center;\n    padding: 10px;\n    background: rgba(255,255,255,0.15);\n    border-radius: 8px;\n}\n\n.summary-value {\n    font-size: 1.8em;\n    font-weight: 700;\n    margin-bottom: 5px;\n}\n\n.summary-label {\n    font-size: 0.85em;\n    opacity: 0.9;\n}\n</style>\n\n<div class=\"stats-container\">\n    <div class=\"stats-title\">📊 今日統計總覽</div>\n    \n    <div class=\"summary-panel\">\n        <div class=\"summary-title\">⏰ 今日時間分配</div>\n        <div class=\"summary-grid\">\n            <div class=\"summary-item\">\n                <div class=\"summary-value\">{{getTotalTime()}}秒</div>\n                <div class=\"summary-label\">總監測時間</div>\n            </div>\n            <div class=\"summary-item\">\n                <div class=\"summary-value\">{{getTotalBehaviors()}}</div>\n                <div class=\"summary-label\">行為轉換次數</div>\n            </div>\n        </div>\n    </div>\n    \n<!-- 行走 -->\n<div class=\"stat-card walk\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🚶</span>\n            <span class=\"stat-label\">行走</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.walk || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.walk_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.walk_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 舔拭 -->\n<div class=\"stat-card lick\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🧼</span>\n            <span class=\"stat-label\">舔拭</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.lick || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.lick_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.lick_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 搔抓 -->\n<div class=\"stat-card scratch\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🐾</span>\n            <span class=\"stat-label\">搔抓</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.scratch || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.scratch_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.scratch_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 甩頭 -->\n<div class=\"stat-card shake\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">🔄</span>\n            <span class=\"stat-label\">甩頭</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.shake || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.shake_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.shake_time) + '%'}\"></div>\n    </div>\n</div>\n\n<!-- 停止 -->\n<div class=\"stat-card stop\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">⏹</span>\n            <span class=\"stat-label\">靜止</span>\n        </div>\n        <span class=\"stat-count\">{{msg.payload.today_stats.stop || 0}}次</span>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.stop_time || 0)}}\n    </div>\n    <div class=\"progress-bar\">\n        <div class=\"progress-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.stop_time) + '%'}\"></div>\n    </div>\n</div>\n<!-- 活動時間 -->\n<div class=\"stat-card active\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">⚡</span>\n            <span class=\"stat-label\">活動時間</span>\n        </div>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.active_time || 0)}}\n    </div>\n</div>\n\n<!-- 休息時間 -->\n<div class=\"stat-card rest\">\n    <div class=\"stat-header\">\n        <div style=\"display: flex; align-items: center;\">\n            <span class=\"stat-icon\">😴</span>\n            <span class=\"stat-label\">休息時間</span>\n        </div>\n    </div>\n    <div class=\"time-display\">\n        ⏱️ {{formatTime(msg.payload.today_stats.rest_time || 0)}}\n    </div>\n</div>\n\n<script>\n(function(scope) {\n    scope.formatTime = function(seconds) {\n        if (!seconds || seconds === 0) return '0秒';\n        \n        const hours = Math.floor(seconds / 3600);\n        const minutes = Math.floor((seconds % 3600) / 60);\n        const secs = Math.floor(seconds % 60);\n        \n        if (hours > 0) {\n            return hours + '小時' + minutes + '分' + secs + '秒';\n        } else if (minutes > 0) {\n            return minutes + '分' + secs + '秒';\n        } else {\n            return secs + '秒';\n        }\n    };\n    \n    scope.getTotalTime = function() {\n        if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n        const stats = scope.msg.payload.today_stats;\n        return Math.round((stats.active_time || 0) + (stats.rest_time || 0));\n    };\n    \n    scope.getTotalBehaviors = function() {\n        if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n        const stats = scope.msg.payload.today_stats;\n        return (stats.walk || 0) + (stats.lick || 0) + (stats.scratch || 0) + (stats.shake || 0) + (stats.stop || 0);\n    };\n    \n    scope.getPercentage = function(time) {\n        const total = scope.getTotalTime();\n        if (total === 0) return 0;\n        return Math.round((time / total) * 100);\n    };\n    \n    scope.getAverageDuration = function(totalTime, count) {\n        if (!count || count === 0) return 0;\n        return Math.round(totalTime / count);\n    };\n})(scope);\n</script>",
+        "format": "<link href=\"https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500&display=swap\" rel=\"stylesheet\">\n\n<style>\n.cs-wrap {\n  padding: 1rem 0.5rem;\n  font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;\n  font-weight: 400;\n}\n\n.cs-eyebrow {\n  font-size: 10px;\n  font-weight: 500;\n  color: #bbb;\n  letter-spacing: 0.18em;\n  text-transform: uppercase;\n  margin: 0 0 4px;\n  font-family: 'Nunito', sans-serif;\n}\n\n.cs-date {\n  font-size: 19px;\n  font-weight: 300;\n  color: #1a1a2e;\n  margin: 0 0 1.25rem;\n  letter-spacing: 0.03em;\n}\n\n.cs-date strong {\n  font-weight: 500;\n}\n\n.cs-summary {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 10px;\n  margin-bottom: 1.25rem;\n}\n\n.cs-meta {\n  background: #f4f5f7;\n  border-radius: 10px;\n  padding: 13px 15px;\n}\n\n.cs-meta-val {\n  font-size: 24px;\n  font-weight: 700;\n  color: #1a1a2e;\n  font-variant-numeric: tabular-nums;\n  margin: 0 0 1px;\n  font-family: 'Nunito', sans-serif;\n  letter-spacing: -0.02em;\n  line-height: 1.1;\n}\n\n.cs-meta-unit {\n  font-size: 13px;\n  font-weight: 400;\n  font-family: 'Noto Sans TC', sans-serif;\n  letter-spacing: 0;\n  opacity: 0.6;\n}\n\n.cs-meta-lbl {\n  font-size: 11px;\n  color: #888;\n  margin: 0;\n  font-weight: 300;\n  letter-spacing: 0.04em;\n}\n\n.cs-section-label {\n  font-size: 10px;\n  font-weight: 500;\n  color: #bbb;\n  letter-spacing: 0.15em;\n  text-transform: uppercase;\n  margin: 0 0 9px;\n  font-family: 'Nunito', sans-serif;\n}\n\n.cs-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 9px;\n  margin-bottom: 9px;\n}\n\n.cs-card {\n  border-radius: 12px;\n  padding: 14px 14px 12px;\n}\n\n.cs-card.walk    { background: #EAF3DE; }\n.cs-card.lick    { background: #FAEEDA; }\n.cs-card.scratch { background: #FCEBEB; }\n.cs-card.shake   { background: #E6F1FB; }\n.cs-card.stop    { background: #EEEDFE; }\n\n.cs-card-icon {\n  font-size: 18px;\n  margin-bottom: 7px;\n  display: block;\n}\n\n.cs-card-name {\n  font-size: 11px;\n  font-weight: 300;\n  margin: 0 0 4px;\n  letter-spacing: 0.08em;\n}\n\n.cs-card.walk    .cs-card-name { color: #3B6D11; }\n.cs-card.lick    .cs-card-name { color: #854F0B; }\n.cs-card.scratch .cs-card-name { color: #791F1F; }\n.cs-card.shake   .cs-card-name { color: #0C447C; }\n.cs-card.stop    .cs-card-name { color: #3C3489; }\n\n.cs-card-count {\n  font-size: 22px;\n  font-weight: 700;\n  font-variant-numeric: tabular-nums;\n  margin: 0 0 3px;\n  letter-spacing: -0.03em;\n  font-family: 'Nunito', sans-serif;\n  line-height: 1;\n}\n\n.cs-card.walk    .cs-card-count { color: #27500A; }\n.cs-card.lick    .cs-card-count { color: #633806; }\n.cs-card.scratch .cs-card-count { color: #501313; }\n.cs-card.shake   .cs-card-count { color: #042C53; }\n.cs-card.stop    .cs-card-count { color: #26215C; }\n\n.cs-card-count-unit {\n  font-size: 12px;\n  font-weight: 400;\n  margin-left: 1px;\n  opacity: 0.55;\n  font-family: 'Noto Sans TC', sans-serif;\n  letter-spacing: 0.02em;\n}\n\n.cs-card-time {\n  font-size: 11px;\n  margin: 0 0 9px;\n  font-variant-numeric: tabular-nums;\n  opacity: 0.6;\n  font-weight: 300;\n  letter-spacing: 0.03em;\n}\n\n.cs-card.walk    .cs-card-time { color: #3B6D11; }\n.cs-card.lick    .cs-card-time { color: #854F0B; }\n.cs-card.scratch .cs-card-time { color: #791F1F; }\n.cs-card.shake   .cs-card-time { color: #0C447C; }\n.cs-card.stop    .cs-card-time { color: #3C3489; }\n\n.cs-bar {\n  height: 3px;\n  border-radius: 2px;\n  overflow: hidden;\n}\n\n.cs-card.walk    .cs-bar { background: #C0DD97; }\n.cs-card.lick    .cs-bar { background: #FAC775; }\n.cs-card.scratch .cs-bar { background: #F7C1C1; }\n.cs-card.shake   .cs-bar { background: #B5D4F4; }\n.cs-card.stop    .cs-bar { background: #CECBF6; }\n\n.cs-bar-fill {\n  height: 100%;\n  border-radius: 2px;\n  transition: width 0.6s ease;\n}\n\n.cs-card.walk    .cs-bar-fill { background: #639922; }\n.cs-card.lick    .cs-bar-fill { background: #BA7517; }\n.cs-card.scratch .cs-bar-fill { background: #A32D2D; }\n.cs-card.shake   .cs-bar-fill { background: #185FA5; }\n.cs-card.stop    .cs-bar-fill { background: #534AB7; }\n\n.cs-time-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 9px;\n  margin-bottom: 1rem;\n}\n\n.cs-time-card {\n  border-radius: 12px;\n  padding: 13px 14px;\n  display: flex;\n  align-items: center;\n  gap: 11px;\n}\n\n.cs-time-card.active { background: #EAF3DE; }\n.cs-time-card.rest   { background: #EEEDFE; }\n\n.cs-time-icon {\n  width: 34px;\n  height: 34px;\n  border-radius: 50%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n  font-size: 16px;\n}\n\n.cs-time-card.active .cs-time-icon { background: #C0DD97; }\n.cs-time-card.rest   .cs-time-icon { background: #CECBF6; }\n\n.cs-time-lbl {\n  font-size: 11px;\n  margin: 0 0 2px;\n  font-weight: 300;\n  letter-spacing: 0.06em;\n}\n\n.cs-time-card.active .cs-time-lbl { color: #3B6D11; }\n.cs-time-card.rest   .cs-time-lbl { color: #3C3489; }\n\n.cs-time-val {\n  font-size: 17px;\n  font-weight: 600;\n  margin: 0;\n  font-variant-numeric: tabular-nums;\n  font-family: 'Nunito', sans-serif;\n  letter-spacing: -0.02em;\n}\n\n.cs-time-card.active .cs-time-val { color: #27500A; }\n.cs-time-card.rest   .cs-time-val { color: #26215C; }\n</style>\n\n<div class=\"cs-wrap\" ng-if=\"msg.payload.today_stats\">\n\n  <p class=\"cs-eyebrow\">Daily Report</p>\n  <p class=\"cs-date\"><strong>今日監測</strong></p>\n\n  <div class=\"cs-summary\">\n    <div class=\"cs-meta\">\n      <p class=\"cs-meta-val\">{{getTotalTime()}}<span class=\"cs-meta-unit\"> 秒</span></p>\n      <p class=\"cs-meta-lbl\">總監測時間</p>\n    </div>\n    <div class=\"cs-meta\">\n      <p class=\"cs-meta-val\">{{getTotalBehaviors()}}<span class=\"cs-meta-unit\"> 次</span></p>\n      <p class=\"cs-meta-lbl\">行為轉換次數</p>\n    </div>\n  </div>\n\n  <p class=\"cs-section-label\">Behavior</p>\n  <div class=\"cs-grid\">\n\n    <div class=\"cs-card walk\">\n      <span class=\"cs-card-icon\">🚶</span>\n      <p class=\"cs-card-name\">行走</p>\n      <p class=\"cs-card-count\">{{msg.payload.today_stats.walk || 0}}<span class=\"cs-card-count-unit\">次</span></p>\n      <p class=\"cs-card-time\">{{formatTime(msg.payload.today_stats.walk_time || 0)}}</p>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.walk_time) + '%'}\"></div></div>\n    </div>\n\n    <div class=\"cs-card lick\">\n      <span class=\"cs-card-icon\">🧼</span>\n      <p class=\"cs-card-name\">舔拭</p>\n      <p class=\"cs-card-count\">{{msg.payload.today_stats.lick || 0}}<span class=\"cs-card-count-unit\">次</span></p>\n      <p class=\"cs-card-time\">{{formatTime(msg.payload.today_stats.lick_time || 0)}}</p>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.lick_time) + '%'}\"></div></div>\n    </div>\n\n    <div class=\"cs-card scratch\">\n      <span class=\"cs-card-icon\">🐾</span>\n      <p class=\"cs-card-name\">搔抓</p>\n      <p class=\"cs-card-count\">{{msg.payload.today_stats.scratch || 0}}<span class=\"cs-card-count-unit\">次</span></p>\n      <p class=\"cs-card-time\">{{formatTime(msg.payload.today_stats.scratch_time || 0)}}</p>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.scratch_time) + '%'}\"></div></div>\n    </div>\n\n    <div class=\"cs-card shake\">\n      <span class=\"cs-card-icon\">🔄</span>\n      <p class=\"cs-card-name\">甩頭</p>\n      <p class=\"cs-card-count\">{{msg.payload.today_stats.shake || 0}}<span class=\"cs-card-count-unit\">次</span></p>\n      <p class=\"cs-card-time\">{{formatTime(msg.payload.today_stats.shake_time || 0)}}</p>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.shake_time) + '%'}\"></div></div>\n    </div>\n\n    <div class=\"cs-card stop\">\n      <span class=\"cs-card-icon\">⏹</span>\n      <p class=\"cs-card-name\">靜止</p>\n      <p class=\"cs-card-count\">{{msg.payload.today_stats.stop || 0}}<span class=\"cs-card-count-unit\">次</span></p>\n      <p class=\"cs-card-time\">{{formatTime(msg.payload.today_stats.stop_time || 0)}}</p>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.stop_time) + '%'}\"></div></div>\n    </div>\n\n  </div>\n\n  <p class=\"cs-section-label\" style=\"margin-top:1rem;\">Time</p>\n  <div class=\"cs-time-grid\">\n\n    <div class=\"cs-time-card active\">\n      <div class=\"cs-time-icon\">⚡</div>\n      <div>\n        <p class=\"cs-time-lbl\">活動時間</p>\n        <p class=\"cs-time-val\">{{formatTime(msg.payload.today_stats.active_time || 0)}}</p>\n      </div>\n    </div>\n\n    <div class=\"cs-time-card rest\">\n      <div class=\"cs-time-icon\">😴</div>\n      <div>\n        <p class=\"cs-time-lbl\">休息時間</p>\n        <p class=\"cs-time-val\">{{formatTime(msg.payload.today_stats.rest_time || 0)}}</p>\n      </div>\n    </div>\n\n  </div>\n</div>\n\n<script>\n(function(scope) {\n  scope.formatTime = function(s) {\n    s = Math.round(s || 0);\n    if (!s) return '0 秒';\n    var h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;\n    if (h > 0) return h + ' 小時 ' + m + ' 分';\n    if (m > 0) return m + ' 分 ' + sec + ' 秒';\n    return sec + ' 秒';\n  };\n  scope.getTotalTime = function() {\n    if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n    var s = scope.msg.payload.today_stats;\n    return Math.round((s.active_time || 0) + (s.rest_time || 0));\n  };\n  scope.getTotalBehaviors = function() {\n    if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n    var s = scope.msg.payload.today_stats;\n    return (s.walk||0)+(s.lick||0)+(s.scratch||0)+(s.shake||0)+(s.stop||0);\n  };\n  scope.getPercentage = function(t) {\n    var total = scope.getTotalTime();\n    if (!total) return 0;\n    return Math.round((t / total) * 100);\n  };\n})(scope);\n</script>",
         "storeOutMessages": false,
         "fwdInMessages": true,
         "resendOnRefresh": false,
@@ -552,10 +559,10 @@
         ]
     },
     {
-        "id": "d349c9a9a2509e65",
+        "id": "37cb7d4695ba4e2e",
         "type": "ui_template",
-        "z": "a57e2a51f4764c7e",
-        "g": "20a426aa12fe44b8",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
         "group": "group_alerts_cat",
         "name": "健康警示",
         "order": 4,
@@ -569,6 +576,98 @@
         "className": "",
         "x": 1140,
         "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "cfa4c15d6f86f6a4",
+        "type": "function",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
+        "name": "事件時間軸引擎",
+        "func": "// fs loaded via node libs: {\"var\":\"fs\",\"module\":\"fs\"}\nconst TRACKER_PATH = 'C:\\\\a\\\\tracker_state.json';\n\nlet data = msg.payload;\nif (!data || !data.current) return null;\n\nlet curBeh = data.current.behavior;\nif (!curBeh || curBeh === 'not') return null;\n\n// ── Read tracker_state.json (authoritative daily totals) ──────────\nlet tracker = {};\ntry {\n    tracker = JSON.parse(fs.readFileSync(TRACKER_PATH, 'utf8'));\n} catch(e) {\n    node.warn('tracker_state.json: ' + e.message);\n}\n\n// ── Date helpers ─────────────────────────────────────────────────\nfunction pad(n){ return String(n).padStart(2,'0'); }\nfunction fmtTime(d){\n    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+\n           ' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());\n}\nlet now      = new Date();\nlet nowMs    = now.getTime();\nlet nowStr   = fmtTime(now);\nlet todayStr = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());\nlet isToday  = (tracker.date === todayStr);\n\n// Derive start_time from Python's end_time (HH:MM:SS) and duration (sec)\nfunction deriveStart(endHMS, durSec) {\n    let pts = (endHMS||'00:00:00').split(':').map(Number);\n    let endSec   = (pts[0]||0)*3600 + (pts[1]||0)*60 + (pts[2]||0);\n    let startSec = Math.max(0, endSec - Math.round(durSec));\n    return todayStr+' '+pad(Math.floor(startSec/3600))+':'+\n           pad(Math.floor((startSec%3600)/60))+':'+pad(startSec%60);\n}\n\n// ── Accumulate Python's behavior_log (deduplicate by time+beh+dur) ─\nlet sessionEvents = flow.get('evt_session') || [];\nlet sessionKeys   = new Set(flow.get('evt_keys') || []);\nlet sessionDate   = flow.get('evt_date') || '';\n\nif (sessionDate && sessionDate !== todayStr) {\n    sessionEvents = [];\n    sessionKeys   = new Set();\n}\nflow.set('evt_date', todayStr);\n\nlet inLog   = data.behavior_log || [];\nlet changed = false;\nfor (let i = 0; i < inLog.length; i++) {\n    let rec = inLog[i];\n    if (!rec || !rec.behavior || rec.behavior === 'not' || !rec.time) continue;\n    let dur = Math.max(1, Math.round(rec.duration || 1));\n    let key = rec.time + '|' + rec.behavior + '|' + dur;\n    if (sessionKeys.has(key)) continue;\n    sessionKeys.add(key);\n    let nextId = sessionEvents.length > 0 ? sessionEvents[sessionEvents.length-1].event_id + 1 : 1;\n    sessionEvents.push({\n        event_id:   nextId,\n        behavior:   rec.behavior,\n        end_time:   todayStr + ' ' + rec.time,\n        start_time: deriveStart(rec.time, rec.duration || 0),\n        duration:   dur\n    });\n    changed = true;\n}\nif (changed) {\n    if (sessionEvents.length > 500) {\n        // trim oldest keys too\n        let trimmed = sessionEvents.slice(-500);\n        let keptKeys = new Set(trimmed.map(function(e){\n            return e.end_time.slice(11,19)+'|'+e.behavior+'|'+e.duration;\n        }));\n        sessionKeys = keptKeys;\n        sessionEvents = trimmed;\n    }\n    flow.set('evt_session', sessionEvents);\n    flow.set('evt_keys', Array.from(sessionKeys));\n}\n\n// ── Merge adjacent same-behavior events (Python sends ~2s segments) ─\n// Adjacent = gap ≤ 2s between end_time of one and start_time of the next\nfunction _tsec(dt) {\n    var t = dt.slice(11,19).split(':').map(Number);\n    return t[0]*3600 + t[1]*60 + t[2];\n}\nlet mergedEvents = (function(evts) {\n    if (evts.length < 2) return evts.slice();\n    var res = [{ event_id:evts[0].event_id, behavior:evts[0].behavior,\n                 start_time:evts[0].start_time, end_time:evts[0].end_time,\n                 duration:evts[0].duration }];\n    for (var i = 1; i < evts.length; i++) {\n        var prev = res[res.length-1], cur = evts[i];\n        if (prev.behavior === cur.behavior &&\n            _tsec(cur.start_time) - _tsec(prev.end_time) <= 2) {\n            prev.end_time = cur.end_time;\n            prev.duration = _tsec(cur.end_time) - _tsec(prev.start_time);\n        } else {\n            res.push({ event_id:cur.event_id, behavior:cur.behavior,\n                       start_time:cur.start_time, end_time:cur.end_time,\n                       duration:cur.duration });\n        }\n    }\n    return res;\n})(sessionEvents);\n\n// ── Current event live timer (Node-RED side) ──────────────────────\nlet currentEvt = flow.get('evt_cur') || null;\nif (!currentEvt || currentEvt.behavior !== curBeh) {\n    currentEvt = { behavior: curBeh, start_time: nowStr, start_ms: nowMs };\n}\nif (!currentEvt.start_ms) currentEvt.start_ms = nowMs;\ncurrentEvt.duration_running = Math.max(0, Math.round((nowMs - currentEvt.start_ms) / 1000));\nflow.set('evt_cur', currentEvt);\n\n// ── Per-behavior stats: tracker_state.json for count/total/avg ────\n// IQR / mode / max / min derived from accumulated session events\nlet bCount = (isToday && tracker.behavior_count) ? tracker.behavior_count : {};\nlet bTime  = (isToday && tracker.behavior_time)  ? tracker.behavior_time  : {};\n\n// 優先用 HTTP payload（每 2s 更新），避免等 30s 存檔才反映\nlet _statsMinMax = (data.today_stats) || {};\nlet minDur = _statsMinMax.behavior_min_duration\n             || ((isToday && tracker.behavior_min_duration) ? tracker.behavior_min_duration : {});\nlet maxDur = _statsMinMax.behavior_max_duration\n             || ((isToday && tracker.behavior_max_duration) ? tracker.behavior_max_duration : {});\n\nlet stats = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let count  = Math.round(bCount[b] || 0);\n    let totSec = bTime[b] || 0;\n    if (count === 0) {\n        stats[b] = { count:0, total_duration:0, avg_duration:0,\n                     max_duration:0, min_duration:0,\n                     mode_duration:null, mode_count:0,\n                     outlier_high:null, outlier_low:null };\n        return;\n    }\n    let durs = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .map(function(e){ return e.duration; });\n\n    let outlierHigh = null, outlierLow = null;\n    if (durs.length >= 5) {\n        let sorted = durs.slice().sort(function(a,b){ return a-b; });\n        let n  = sorted.length;\n        let q1 = sorted[Math.floor(n * 0.25)];\n        let q3 = sorted[Math.floor(n * 0.75)];\n        let iqr = q3 - q1;\n        if (iqr > 0) {\n            outlierHigh = Math.round(q3 + 1.5 * iqr);\n            outlierLow  = Math.max(1, Math.round(q1 - 1.5 * iqr));\n        }\n    }\n    let modeKey = null, modeCnt = 0;\n    if (durs.length >= 2) {\n        let buckets = {};\n        durs.forEach(function(d){\n            buckets[d] = (buckets[d]||0) + 1;\n        });\n        Object.keys(buckets).forEach(function(k){\n            if (buckets[k] > modeCnt) { modeCnt = buckets[k]; modeKey = Number(k); }\n        });\n    }\n    stats[b] = {\n        count:         count,\n        total_duration: Math.round(totSec),\n        avg_duration:   Math.round(totSec / count * 10) / 10,\n        max_duration:   maxDur[b] != null ? Math.max(1, Math.round(maxDur[b])) : (durs.length > 0 ? Math.max.apply(null, durs) : 0),\n        min_duration:   minDur[b] != null ? Math.max(1, Math.round(minDur[b])) : (durs.length > 0 ? Math.min.apply(null, durs) : 0),\n        mode_duration:  modeCnt >= 2 ? modeKey : null,\n        mode_count:     modeCnt >= 2 ? modeCnt : 0,\n        outlier_high:   outlierHigh,\n        outlier_low:    outlierLow\n    };\n});\n\n// ── Per-behavior event arrays with outlier flag ───────────────────\nlet byBehavior = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let s = stats[b];\n    byBehavior[b] = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .slice(-20).reverse()\n        .map(function(ev) {\n            let outlier = null;\n            if (s.outlier_high !== null && ev.duration > s.outlier_high) outlier = 'high';\n            else if (s.outlier_low !== null && ev.duration < s.outlier_low) outlier = 'low';\n            return { event_id:ev.event_id, behavior:ev.behavior,\n                     start_time:ev.start_time, end_time:ev.end_time,\n                     duration:ev.duration, outlier:outlier };\n        });\n});\n\nlet todayTotal = Object.values(bCount).reduce(function(a,v){ return a+Math.round(v||0); }, 0);\n\nmsg.payload = {\n    current_event: {\n        behavior:         currentEvt.behavior,\n        start_time:       currentEvt.start_time,\n        duration_running: currentEvt.duration_running,\n        status:           'running'\n    },\n    event_table:       mergedEvents.slice(-20).reverse(),\n    event_by_behavior: byBehavior,\n    event_stats:       stats,\n    total_events:      todayTotal\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "fs",
+                "module": "fs"
+            }
+        ],
+        "x": 1280,
+        "y": 380,
+        "wires": [
+            [
+                "d2e05c4d63dd839d"
+            ]
+        ]
+    },
+    {
+        "id": "d2e05c4d63dd839d",
+        "type": "ui_template",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
+        "group": "66d2f5137a604c19",
+        "name": "行為事件分析",
+        "order": 1,
+        "width": "20",
+        "height": "10",
+        "format": "<style>\n  .evt-wrap {\n    font-family: 'Microsoft JhengHei', sans-serif;\n    padding: 12px;\n    height: 100%;\n    display: flex;\n    flex-direction: column;\n  }\n\n  /* ── Header ── */\n  .evt-header {\n    display: flex; align-items: center; justify-content: space-between;\n    padding: 14px 18px; background: #fff;\n    border-radius: 14px 14px 0 0; border: 1px solid #EDE8DF; border-bottom: none;\n    flex-shrink: 0;\n  }\n  .evt-header-left { display: flex; align-items: center; gap: 10px; }\n  .evt-avatar {\n    width:42px;height:42px;border-radius:50%;\n    background:linear-gradient(135deg,#E8F4FD,#D0E8F9);\n    display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;\n    box-shadow:0 2px 8px rgba(21,101,192,.12);\n  }\n  .evt-title  { font-size:16px;font-weight:700;color:#2C2C2A;margin:0;line-height:1.2; }\n  .evt-sub    { font-size:11px;color:#888780;margin:2px 0 0; }\n  .evt-cnt-badge {\n    font-size:13px;font-weight:700;padding:5px 14px;border-radius:20px;\n    background:linear-gradient(135deg,#E8F4FD,#D0E8F9);color:#1565C0;\n    white-space:nowrap; border:1px solid rgba(21,101,192,.15);\n    box-shadow:0 1px 4px rgba(21,101,192,.1);\n  }\n\n  /* ── Body shell ── */\n  .evt-body {\n    background:#fff; border:1px solid #EDE8DF; border-top:none;\n    border-radius:0 0 14px 14px; flex:1; min-height:0;\n    display:flex; flex-direction:column; overflow:hidden;\n  }\n\n  /* ── Live card (full width) ── */\n  .evt-current {\n    display:flex; align-items:center; justify-content:space-between; gap:16px;\n    padding:14px 20px; flex-shrink:0;\n    background:linear-gradient(135deg,#F0FAF3 0%,#E4F5EA 100%);\n    border-bottom:1px solid rgba(76,175,80,.18);\n  }\n  .evt-cur-left  { display:flex;align-items:center;gap:12px; }\n  .evt-cur-pulse {\n    width:12px;height:12px;border-radius:50%;background:#4CAF50;flex-shrink:0;\n    box-shadow:0 0 0 0 rgba(76,175,80,.7); animation:evt-pulse 1.4s infinite;\n  }\n  @keyframes evt-pulse {\n    0%  { box-shadow:0 0 0 0   rgba(76,175,80,.7); }\n    70% { box-shadow:0 0 0 9px rgba(76,175,80,0); }\n    100%{ box-shadow:0 0 0 0   rgba(76,175,80,0); }\n  }\n  .evt-cur-emoji { font-size:26px;line-height:1; }\n  .evt-cur-info  { display:flex;flex-direction:column;gap:2px; }\n  .evt-cur-name  { font-size:17px;font-weight:700;color:#1B5E20; }\n  .evt-cur-start { font-size:11px;color:#388E3C; }\n  .evt-cur-right { display:flex;align-items:center;gap:16px; }\n  .evt-cur-badge {\n    font-size:11px;font-weight:800;padding:4px 11px;\n    border-radius:20px;background:rgba(211,47,47,.08);color:#C62828;\n    border:1px solid rgba(211,47,47,.28);\n    animation:evt-blink 1.8s ease-in-out infinite;\n  }\n  @keyframes evt-blink { 0%,100%{opacity:1} 50%{opacity:.12} }\n  .evt-cur-timer {\n    font-size:26px;font-weight:800;color:#2E7D32;\n    font-variant-numeric:tabular-nums; letter-spacing:-0.5px;\n  }\n\n  /* ── Two-column layout ── */\n  .evt-cols { display:flex; flex:1; min-height:0; overflow:hidden; }\n  .evt-left {\n    width:36%; flex-shrink:0; border-right:1px solid #F0EEE8;\n    overflow-y:auto; padding:14px 14px;\n  }\n  .evt-left::-webkit-scrollbar { width:3px; }\n  .evt-left::-webkit-scrollbar-track { background:transparent; }\n  .evt-left::-webkit-scrollbar-thumb { background:#EDE8DF;border-radius:3px; }\n  .evt-right { flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden; }\n\n  /* ── Stat cards (left) ── */\n  .stat-section-title {\n    font-size:10px;font-weight:700;color:#B0ADA8;letter-spacing:.7px;\n    padding:0 2px 10px; text-transform:uppercase;\n  }\n  .beh-card {\n    border-radius:13px; padding:13px 15px; margin-bottom:9px;\n    border:1px solid transparent;\n    transition:transform .15s, box-shadow .15s;\n  }\n  .beh-card:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,.09); }\n  .beh-card-top  { display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:9px; }\n  .beh-card-id   { display:flex;align-items:center;gap:9px; }\n  .beh-icon      { font-size:22px;line-height:1; }\n  .beh-label-wrap { display:flex;flex-direction:column;gap:3px; }\n  .beh-name      { font-size:14px;font-weight:700;line-height:1; }\n  .beh-cnt-badge { font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;display:inline-block; }\n  .beh-avg-wrap  { text-align:right;flex-shrink:0; }\n  .beh-avg-val   { font-size:22px;font-weight:800;line-height:1; }\n  .beh-avg-lbl   { font-size:9px;font-weight:700;opacity:.6;letter-spacing:.3px;margin-top:2px; }\n  .beh-card-bot  { display:flex;align-items:center;gap:6px;flex-wrap:wrap; }\n  .beh-meta      { font-size:11px;color:#888780; }\n  .beh-meta b    { color:#5F5E5A;font-weight:700; }\n  .beh-sep       { color:#D8D4CB;font-size:10px; }\n  .beh-mode-tag  {\n    margin-left:auto;\n    font-size:10px;font-weight:700;padding:2px 7px;border-radius:7px;\n    background:#F3F0FF;color:#5C35C9;white-space:nowrap;\n  }\n  .beh-zero .beh-name    { color:#C8C6C2!important; }\n  .beh-zero .beh-avg-val { color:#C8C6C2!important;font-size:13px!important; }\n\n  /* Card themes */\n  .bc-walk    { background:#F4FAF0;border-color:#CEEAB0; }\n  .bc-walk    .beh-name    { color:#2E7D32; }\n  .bc-walk    .beh-avg-val { color:#2E7D32; }\n  .bc-walk    .beh-cnt-badge { background:#EAF3DE;color:#3B6D11; }\n  .bc-lick    { background:#FFFBF2;border-color:#FAE0A8; }\n  .bc-lick    .beh-name    { color:#6D4000; }\n  .bc-lick    .beh-avg-val { color:#6D4000; }\n  .bc-lick    .beh-cnt-badge { background:#FAEEDA;color:#633806; }\n  .bc-scratch { background:#FFF6F4;border-color:#F5C4B4; }\n  .bc-scratch .beh-name    { color:#993C1D; }\n  .bc-scratch .beh-avg-val { color:#993C1D; }\n  .bc-scratch .beh-cnt-badge { background:#FAECE7;color:#993C1D; }\n  .bc-shake   { background:#F2F8FE;border-color:#B8D8F5; }\n  .bc-shake   .beh-name    { color:#185FA5; }\n  .bc-shake   .beh-avg-val { color:#185FA5; }\n  .bc-shake   .beh-cnt-badge { background:#E6F1FB;color:#185FA5; }\n  .bc-stop    { background:#F5F4FF;border-color:#C5C2EE; }\n  .bc-stop    .beh-name    { color:#3C3489; }\n  .bc-stop    .beh-avg-val { color:#3C3489; }\n  .bc-stop    .beh-cnt-badge { background:#EEEDFE;color:#3C3489; }\n\n  /* ── Right: filter bar ── */\n  .evt-filter {\n    display:flex; align-items:center; gap:10px;\n    padding:12px 16px; background:#FAFAF8;\n    border-bottom:1px solid #EDE8DF; flex-shrink:0;\n  }\n  .filter-label { font-size:11px;font-weight:700;color:#888780;white-space:nowrap;flex-shrink:0; }\n  .beh-select {\n    flex:1;min-width:0;\n    font-size:13px;font-weight:600;color:#2C2C2A;\n    border:1px solid #D8D4CB;border-radius:10px;\n    padding:7px 11px;background:#fff;\n    cursor:pointer;outline:none;\n    font-family:'Microsoft JhengHei',sans-serif;\n    transition:border-color .15s,box-shadow .15s;\n  }\n  .beh-select:focus { border-color:#85B7EB;box-shadow:0 0 0 3px rgba(133,183,235,.15); }\n  .filter-count {\n    font-size:11px;font-weight:700;padding:4px 11px;\n    border-radius:12px;white-space:nowrap;flex-shrink:0;\n  }\n  .fc-all      { background:#EDE8DF;color:#5F5E5A; }\n  .fc-walk     { background:#EAF3DE;color:#3B6D11; }\n  .fc-lick     { background:#FAEEDA;color:#633806; }\n  .fc-scratch  { background:#FAECE7;color:#993C1D; }\n  .fc-shake    { background:#E6F1FB;color:#185FA5; }\n  .fc-stop     { background:#EEEDFE;color:#3C3489; }\n\n  .evt-divider {\n    font-size:10px;color:#B0ADA8;padding:8px 16px 5px;\n    font-weight:700;letter-spacing:.5px;flex-shrink:0;\n    display:flex;align-items:center;gap:8px;\n  }\n  .iqr-pill {\n    font-size:9px;background:#FFF3E0;color:#E65100;\n    padding:2px 7px;border-radius:8px;font-weight:700;\n    border:1px solid rgba(230,81,0,.18);\n  }\n\n  /* ── Event table (right) ── */\n  .evt-tbl-wrap { flex:1;overflow-y:auto; }\n  .evt-tbl-wrap::-webkit-scrollbar { width:4px; }\n  .evt-tbl-wrap::-webkit-scrollbar-track { background:transparent; }\n  .evt-tbl-wrap::-webkit-scrollbar-thumb { background:#85B7EB;border-radius:4px; }\n  .evt-tbl { width:100%;border-collapse:collapse; }\n  .evt-tbl thead th {\n    position:sticky;top:0;z-index:1;\n    padding:9px 12px;font-size:11px;font-weight:700;color:#888780;\n    background:#FAFAF8;border-bottom:2px solid #EDE8DF;\n    white-space:nowrap;text-align:left;\n  }\n  .evt-tbl thead th.tc { text-align:center; }\n  .evt-tbl td { padding:10px 12px;border-bottom:1px solid #F5F4F2;vertical-align:middle; }\n  .evt-tbl tr:last-child td { border-bottom:none; }\n  .evt-tbl tr:hover td { background:#FAFAF8; }\n\n  .evt-id     { text-align:center;font-size:11px;color:#C8C6C2;font-weight:700;width:32px; }\n  .evt-beh    { display:flex;align-items:center;gap:7px; }\n  .evt-circle {\n    width:26px;height:26px;border-radius:50%;\n    display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;\n  }\n  .evt-bname  { font-size:13px;font-weight:700;color:#2C2C2A; }\n  .evt-time   { font-size:12px;color:#888780;white-space:nowrap;font-variant-numeric:tabular-nums; }\n  .evt-dur-wrap { display:flex;align-items:center;gap:6px; }\n  .evt-dur    { font-size:12px;font-weight:700;padding:3px 9px;border-radius:8px;white-space:nowrap; }\n  .outlier-badge { font-size:10px;font-weight:800;padding:2px 7px;border-radius:7px;white-space:nowrap; }\n  .outlier-high { background:#FFF3E0;color:#E65100; }\n  .outlier-low  { background:#E3F2FD;color:#1565C0; }\n\n  .bc-walk    .evt-circle { background:#EAF3DE; }\n  .bc-walk    .evt-dur    { background:#EAF3DE;color:#3B6D11; }\n  .bc-lick    .evt-circle { background:#FAEEDA; }\n  .bc-lick    .evt-dur    { background:#FAEEDA;color:#633806; }\n  .bc-scratch .evt-circle { background:#FAECE7; }\n  .bc-scratch .evt-dur    { background:#FAECE7;color:#993C1D; }\n  .bc-shake   .evt-circle { background:#E6F1FB; }\n  .bc-shake   .evt-dur    { background:#E6F1FB;color:#185FA5; }\n  .bc-stop    .evt-circle { background:#EEEDFE; }\n  .bc-stop    .evt-dur    { background:#EEEDFE;color:#3C3489; }\n\n  .row-outlier-high td { background:rgba(255,152,0,.05)!important; }\n  .row-outlier-low  td { background:rgba(33,150,243,.05)!important; }\n\n  .evt-empty {\n    flex:1;display:flex;flex-direction:column;\n    align-items:center;justify-content:center;gap:10px;\n    color:#888780;padding:32px;\n  }\n  .evt-empty-icon { font-size:36px;opacity:.28; }\n  .evt-empty-text { font-size:13px; }\n</style>\n\n<div class=\"evt-wrap\" ng-init=\"init()\">\n\n  <div class=\"evt-header\">\n    <div class=\"evt-header-left\">\n      <div class=\"evt-avatar\">📋</div>\n      <div>\n        <p class=\"evt-title\">行為事件分析</p>\n        <p class=\"evt-sub\">統計摘要・異常偵測・原始事件</p>\n      </div>\n    </div>\n    <span class=\"evt-cnt-badge\">共 {{msg.payload.total_events || 0}} 筆紀錄</span>\n  </div>\n\n  <div class=\"evt-body\">\n\n    <!-- ── 進行中 Live card (full width) ── -->\n    <div ng-if=\"msg.payload && msg.payload.current_event\" class=\"evt-current\">\n      <div class=\"evt-cur-left\">\n        <div class=\"evt-cur-pulse\"></div>\n        <div class=\"evt-cur-emoji\">{{bEmoji(msg.payload.current_event.behavior)}}</div>\n        <div class=\"evt-cur-info\">\n          <div class=\"evt-cur-name\">{{bName(msg.payload.current_event.behavior)}}</div>\n          <div class=\"evt-cur-start\">自 {{msg.payload.current_event.start_time.slice(11,19)}} 開始</div>\n        </div>\n      </div>\n      <div class=\"evt-cur-right\">\n        <span class=\"evt-cur-badge\">進行中</span>\n        <div class=\"evt-cur-timer\">{{liveStr}}</div>\n      </div>\n    </div>\n\n    <!-- ── Two-column content ── -->\n    <div class=\"evt-cols\">\n\n      <!-- Left: behavior stat cards -->\n      <div class=\"evt-left\">\n        <div class=\"stat-section-title\">📊 行為統計摘要</div>\n\n        <div ng-repeat=\"b in behaviors\"\n             class=\"beh-card\"\n             ng-class=\"getStats(b).count > 0 ? 'bc-'+b : 'bc-'+b+' beh-zero'\">\n          <div class=\"beh-card-top\">\n            <div class=\"beh-card-id\">\n              <span class=\"beh-icon\">{{bEmoji(b)}}</span>\n              <div class=\"beh-label-wrap\">\n                <span class=\"beh-name\">{{bName(b)}}</span>\n                <span class=\"beh-cnt-badge\" ng-if=\"getStats(b).count > 0\">{{getStats(b).count}} 次</span>\n              </div>\n            </div>\n            <div class=\"beh-avg-wrap\">\n              <div class=\"beh-avg-val\" ng-if=\"getStats(b).count > 0\">{{fmtAvg(getStats(b).avg_duration)}}</div>\n              <div class=\"beh-avg-val\" ng-if=\"getStats(b).count === 0\" style=\"font-size:13px;color:#C8C6C2\">無紀錄</div>\n              <div class=\"beh-avg-lbl\" ng-if=\"getStats(b).count > 0\">平均時長 ★</div>\n            </div>\n          </div>\n          <div class=\"beh-card-bot\" ng-if=\"getStats(b).count > 0\">\n            <ng-container ng-if=\"getStats(b).max_duration > 0\">\n              <span class=\"beh-meta\">最長 <b>{{fmtDur(getStats(b).max_duration)}}</b></span>\n              <span class=\"beh-sep\">·</span>\n              <span class=\"beh-meta\">最短 <b>{{fmtDur(getStats(b).min_duration)}}</b></span>\n              <span class=\"beh-sep\">·</span>\n            </ng-container>\n            <span class=\"beh-meta\">總計 <b>{{getStats(b).total_duration}}秒</b></span>\n            <span class=\"beh-mode-tag\" ng-if=\"getStats(b).mode_duration\">\n              眾={{fmtDur(getStats(b).mode_duration)}}×{{getStats(b).mode_count}}\n            </span>\n          </div>\n        </div>\n      </div>\n\n      <!-- Right: filter + event table -->\n      <div class=\"evt-right\">\n\n        <div class=\"evt-filter\">\n          <span class=\"filter-label\">篩選行為</span>\n          <select class=\"beh-select\" ng-model=\"selectedBehavior\">\n            <option value=\"all\">全部行為</option>\n            <option value=\"walk\">🐈 行走</option>\n            <option value=\"lick\">😸 舔舐</option>\n            <option value=\"scratch\">🐱 搔抓</option>\n            <option value=\"shake\">😼 甩頭</option>\n            <option value=\"stop\">😴 靜止</option>\n          </select>\n          <span class=\"filter-count\" ng-class=\"'fc-'+selectedBehavior\">\n            {{selectedBehavior === 'all' ? filteredEvents.length : getStats(selectedBehavior).count}} 筆\n          </span>\n        </div>\n\n        <div class=\"evt-divider\">\n          {{selectedBehavior === 'all' ? '歷史事件（最近 20 筆）' : bName(selectedBehavior) + ' 最近 20 筆'}}\n          <span class=\"iqr-pill\"\n                ng-if=\"selectedBehavior !== 'all' && getStats(selectedBehavior).outlier_high\">\n            IQR 上限 {{fmtDur(getStats(selectedBehavior).outlier_high)}}\n          </span>\n        </div>\n\n        <div class=\"evt-tbl-wrap\" ng-if=\"filteredEvents.length > 0\">\n          <table class=\"evt-tbl\">\n            <thead>\n              <tr>\n                <th class=\"tc\">#</th>\n                <th ng-if=\"selectedBehavior === 'all'\">行為</th>\n                <th>時段</th>\n                <th>時長</th>\n              </tr>\n            </thead>\n            <tbody>\n              <tr ng-repeat=\"ev in filteredEvents track by ev.event_id\"\n                  ng-class=\"['bc-'+ev.behavior, (selectedBehavior !== 'all' && ev.outlier) ? 'row-outlier-'+ev.outlier : '']\">\n                <td class=\"evt-id\">{{ev.event_id}}</td>\n                <td ng-if=\"selectedBehavior === 'all'\">\n                  <div class=\"evt-beh\">\n                    <div class=\"evt-circle\">{{bEmoji(ev.behavior)}}</div>\n                    <span class=\"evt-bname\">{{bName(ev.behavior)}}</span>\n                  </div>\n                </td>\n                <td class=\"evt-time\">{{ev.start_time.slice(11,19)}} → {{ev.end_time.slice(11,19)}}</td>\n                <td>\n                  <div class=\"evt-dur-wrap\">\n                    <span class=\"evt-dur\">{{fmtDur(ev.duration)}}</span>\n                    <span class=\"outlier-badge outlier-high\"\n                          ng-if=\"selectedBehavior !== 'all' && ev.outlier === 'high'\">⬆ 偏長</span>\n                    <span class=\"outlier-badge outlier-low\"\n                          ng-if=\"selectedBehavior !== 'all' && ev.outlier === 'low'\">⬇ 偏短</span>\n                  </div>\n                </td>\n              </tr>\n            </tbody>\n          </table>\n        </div>\n\n        <div ng-if=\"filteredEvents.length === 0\" class=\"evt-empty\">\n          <div class=\"evt-empty-icon\">📋</div>\n          <p class=\"evt-empty-text\">\n            {{selectedBehavior === 'all' ? '等待第一次行為切換...' : '尚無' + bName(selectedBehavior) + '事件'}}\n          </p>\n        </div>\n\n      </div>\n    </div>\n\n  </div>\n</div>\n\n<script>\n(function(scope) {\n  var _timer = null;\n  scope.behaviors = ['walk','lick','scratch','shake','stop'];\n  scope.selectedBehavior = 'all';\n  scope.filteredEvents = [];\n\n  scope.bEmoji = function(b) {\n    return {scratch:'🐱',lick:'😸',walk:'🐈',shake:'😼',stop:'😴'}[b] || '🐾';\n  };\n  scope.bName = function(b) {\n    return {scratch:'搔抓',lick:'舔舐',walk:'行走',shake:'甩頭',stop:'靜止'}[b] || b;\n  };\n  scope.fmtDur = function(sec) {\n    if (!sec && sec !== 0) return '-';\n    sec = Math.round(sec);\n    if (sec < 60) return sec + '秒';\n    var m = Math.floor(sec / 60), s = sec % 60;\n    if (m < 60) return m + '分' + (s ? s + '秒' : '');\n    var h = Math.floor(m / 60); m = m % 60;\n    return h + '時' + (m ? m + '分' : '');\n  };\n  scope.fmtAvg = function(sec) {\n    if (!sec && sec !== 0) return '-';\n    if (sec < 60) return (Math.round(sec * 10) / 10) + '秒';\n    var m = Math.floor(sec / 60), s = Math.round(sec % 60);\n    if (m < 60) return m + '分' + (s ? s + '秒' : '');\n    var h = Math.floor(m / 60); m = m % 60;\n    return h + '時' + (m ? m + '分' : '');\n  };\n  scope.getStats = function(b) {\n    var s = scope.msg && scope.msg.payload && scope.msg.payload.event_stats;\n    return (s && s[b]) ? s[b] : {\n      count:0, total_duration:0, avg_duration:0,\n      max_duration:0, min_duration:0,\n      mode_duration:null, mode_count:0, outlier_high:null\n    };\n  };\n\n  function updateFiltered() {\n    if (!scope.msg || !scope.msg.payload) { scope.filteredEvents = []; return; }\n    if (scope.selectedBehavior === 'all') {\n      scope.filteredEvents = scope.msg.payload.event_table || [];\n    } else {\n      var byB = scope.msg.payload.event_by_behavior;\n      scope.filteredEvents = (byB && byB[scope.selectedBehavior]) ? byB[scope.selectedBehavior] : [];\n    }\n  }\n\n  function restartTimer() {\n    if (_timer) { clearInterval(_timer); _timer = null; }\n    var cur = scope.msg && scope.msg.payload && scope.msg.payload.current_event;\n    if (!cur) { scope.liveStr = '--'; return; }\n    var base = cur.duration_running || 0;\n    var baseMs = Date.now();\n    function tick() {\n      var elapsed = base + Math.floor((Date.now() - baseMs) / 1000);\n      var s = scope.fmtDur(Math.max(0, elapsed));\n      if (scope.liveStr !== s) { scope.liveStr = s; scope.$applyAsync(); }\n    }\n    tick();\n    _timer = setInterval(tick, 1000);\n  }\n\n  scope.init = function() {\n    scope.selectedBehavior = 'all';\n    scope.liveStr = '--';\n    updateFiltered();\n    restartTimer();\n  };\n  scope.$watch('selectedBehavior', function() { updateFiltered(); scope.$applyAsync(); });\n  scope.$watch('msg', function(n, o) { if (n !== o) { updateFiltered(); restartTimer(); } });\n})(scope);\n</script>",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": false,
+        "templateScope": "local",
+        "className": "",
+        "x": 1320,
+        "y": 440,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "a9627aad18b37da1",
+        "type": "ui_template",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
+        "group": "",
+        "name": "🎨 Dashboard Global Theme",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "format": "<style>\n:root{\n  --cat-blue:#03a9f4;\n  --cat-green:#4caf50;\n  --cat-orange:#ff9800;\n  --cat-red:#f44336;\n  --cat-purple:#9c27b0;\n  --cat-dark:#0f172a;\n  --cat-event:#673ab7;\n}\n\n/* ==========================\n   Group 標題顏色\n========================== */\n.group-status .nr-dashboard-cardtitle{\n  color:var(--cat-blue) !important;\n}\n\n.group-timeline .nr-dashboard-cardtitle{\n  color:var(--cat-green) !important;\n}\n\n.group-analysis .nr-dashboard-cardtitle{\n  color:var(--cat-orange) !important;\n}\n\n.group-risk .nr-dashboard-cardtitle{\n  color:var(--cat-red) !important;\n}\n\n.group-history .nr-dashboard-cardtitle{\n  color:var(--cat-purple) !important;\n}\n.group-event .nr-dashboard-cardtitle{\ncolor:var(--cat-event) !important;\n}\n\n.group-event md-card{\nborder:1px solid rgba(103,58,183,.20);\n}\n/* ==========================\n   Group 標題共通樣式\n========================== */\n.nr-dashboard-cardtitle{\n  font-size:28px !important;\n  font-weight:700 !important;\n  letter-spacing:1px;\n  padding-bottom:6px;\n}\n\n/* ==========================\n   Group 卡片外觀\n========================== */\nmd-card{\n  border-radius:16px !important;\n  overflow:hidden;\n  box-shadow:\n    0 4px 12px rgba(0,0,0,.12),\n    0 2px 6px rgba(0,0,0,.08);\n}\n\n/* ==========================\n   Scrollbar 美化\n========================== */\n::-webkit-scrollbar{\n  width:8px;\n  height:8px;\n}\n\n::-webkit-scrollbar-track{\n  background:#f1f1f1;\n  border-radius:20px;\n}\n\n::-webkit-scrollbar-thumb{\n  background:#bdbdbd;\n  border-radius:20px;\n}\n\n::-webkit-scrollbar-thumb:hover{\n  background:#9e9e9e;\n}\n\n/* ==========================\n   Group 特效（可自行開啟）\n========================== */\n.group-risk md-card{\n  border:1px solid rgba(244,67,54,.25);\n}\n\n.group-status md-card{\n  border:1px solid rgba(3,169,244,.20);\n}\n\n.group-timeline md-card{\n  border:1px solid rgba(76,175,80,.20);\n}\n\n.group-analysis md-card{\n  border:1px solid rgba(255,152,0,.20);\n}\n\n.group-history md-card{\n  border:1px solid rgba(156,39,176,.20);\n}\n</style>",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "global",
+        "className": "",
+        "x": 680,
+        "y": 120,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "4b9914a2c5e3598c",
+        "type": "ui_template",
+        "z": "4e2a501aa59e098d",
+        "g": "99d88d9b46cc1d31",
+        "group": "",
+        "name": "懸浮影像（全域）",
+        "order": 0,
+        "width": "",
+        "height": "",
+        "format": "<div id=\"gfv-nr-anchor\" style=\"display:none;height:0;width:0;overflow:hidden;position:absolute;pointer-events:none;\"></div>\n<script>\n(function(){\n  if(window.__gfvReady) return;\n  window.__gfvReady = true;\n\n  var fr = document.createElement('iframe');\n  fr.id  = 'gfv_host_iframe';\n  fr.setAttribute('allowtransparency','true');\n  fr.style.cssText =\n    'position:fixed!important;top:0!important;left:0!important;'+\n    'width:100vw!important;height:100vh!important;'+\n    'border:none!important;background:transparent!important;'+\n    'z-index:2147483647!important;'+\n    'pointer-events:auto!important;'+\n    'overflow:hidden!important;';\n  document.body.appendChild(fr);\n\n  /* z-index 永遠不動，只切 pointer-events */\n  /* unlocked = pointer-events:none（串流可見，底層可點） */\n  /* locked   = pointer-events:auto（panel 可操作）        */\n  var _unlocked = false;\n\n  function applyState(){\n    if(_unlocked){\n      /* 解鎖：整個 iframe pointer-events:none\n         → 滑鼠事件穿透到底層 Dashboard\n         → panel 內的按鈕也點不到（但串流畫面還在）\n         這是預期行為：要操作 panel 就再按一次鎖回來 */\n      fr.style.setProperty('pointer-events','none','important');\n    } else {\n      fr.style.setProperty('pointer-events','auto','important');\n    }\n    /* 通知 iframe 更新按鈕樣式 */\n    try{ fr.contentWindow.postMessage({type:'gfv-lockstate', unlocked:_unlocked},'*'); }catch(e){}\n  }\n\n  var doc = fr.contentDocument || fr.contentWindow.document;\n  doc.open();\n  doc.write(`<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>\n*{box-sizing:border-box;margin:0;padding:0;}\nhtml,body{width:100%;height:100%;background:transparent;overflow:hidden;font-family:system-ui,sans-serif;}\n#overlay{position:fixed;inset:0;background:transparent;}\n#pnl{\n  position:fixed;bottom:24px;right:20px;\n  width:240px;height:160px;\n  min-width:160px;min-height:120px;\n  background:#070b0f;\n  border:1px solid rgba(0,255,136,.28);\n  border-radius:14px;overflow:hidden;\n  display:flex;flex-direction:column;\n  box-shadow:0 16px 48px rgba(0,0,0,.9);\n  transition:border-color .25s;\n}\n#pnl.unlocked{border-color:rgba(255,167,38,.55)!important;}\n#bar{\n  height:40px;flex-shrink:0;\n  display:flex;align-items:center;\n  padding:0 4px 0 10px;gap:4px;\n  background:linear-gradient(90deg,rgba(0,16,9,.97),rgba(0,22,12,.97));\n  border-bottom:1px solid rgba(0,255,136,.1);\n  user-select:none;cursor:grab;\n}\n#bar.dragging{cursor:grabbing!important;}\n#dot{width:9px;height:9px;border-radius:50%;background:#444;flex-shrink:0;transition:background .4s,box-shadow .4s;}\n#title{font-size:10px;font-weight:700;color:rgba(0,255,136,.72);letter-spacing:.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n#btns{display:flex;align-items:center;gap:2px;flex-shrink:0;}\n.ib{\n  width:32px;height:32px;border-radius:7px;\n  display:flex;align-items:center;justify-content:center;\n  cursor:pointer;font-size:14px;\n  border:1px solid rgba(255,255,255,.09);\n  background:rgba(255,255,255,.05);color:rgba(255,255,255,.55);\n  transition:background .15s,color .15s,border-color .15s,transform .1s;\n  user-select:none;-webkit-tap-highlight-color:transparent;flex-shrink:0;\n}\n.ib:hover{background:rgba(255,255,255,.2)!important;color:#fff!important;border-color:rgba(255,255,255,.28)!important;transform:scale(1.08);}\n.ib:active{transform:scale(0.88)!important;}\n.ib.on{background:rgba(0,255,136,.18)!important;color:#00ff88!important;border-color:rgba(0,255,136,.4)!important;}\n#btn-lock.locked{color:#ffa726!important;border-color:rgba(255,167,38,.4)!important;background:rgba(255,167,38,.1)!important;}\n#btn-lock.unlocked-state{color:#81c784!important;border-color:rgba(76,175,80,.4)!important;background:rgba(76,175,80,.1)!important;}\n#drag-icon{font-size:12px;cursor:grab;display:flex;align-items:center;justify-content:center;width:24px;height:32px;color:rgba(255,255,255,.3);flex-shrink:0;}\n#drag-icon:hover{color:rgba(0,255,136,.8);}\n#drag-icon.on{color:#00ff88;}\n#offline{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:rgba(255,255,255,.22);font-size:10px;}\n#off-ico{font-size:24px;opacity:.28;}\n#sv-img{flex:1;width:100%;min-height:0;display:none;background:#000;object-fit:contain;}\n#rh-e{position:absolute;top:14px;bottom:14px;right:0;width:8px;cursor:e-resize;border-radius:0 14px 14px 0;transition:background .15s;}\n#rh-e:hover,#rh-e.active{background:rgba(0,255,136,.25);}\n#rh-e::after{content:'';position:absolute;top:50%;left:2px;transform:translateY(-50%);width:2px;height:28px;background:rgba(0,255,136,.35);border-radius:2px;opacity:0;transition:opacity .15s;}\n#rh-e:hover::after,#rh-e.active::after{opacity:1;}\n#rh-s{position:absolute;left:14px;right:14px;bottom:0;height:8px;cursor:s-resize;border-radius:0 0 14px 14px;transition:background .15s;}\n#rh-s:hover,#rh-s.active{background:rgba(0,255,136,.25);}\n#rh-s::after{content:'';position:absolute;left:50%;top:2px;transform:translateX(-50%);height:2px;width:28px;background:rgba(0,255,136,.35);border-radius:2px;opacity:0;transition:opacity .15s;}\n#rh-s:hover::after,#rh-s.active::after{opacity:1;}\n</style></head><body>\n<div id=\"overlay\"></div>\n<div id=\"pnl\">\n  <div id=\"bar\">\n    <div id=\"dot\"></div>\n    <span id=\"title\">stream</span>\n    <div id=\"btns\">\n      <div class=\"ib\" id=\"btn-s\" title=\"stream\">&#9654;</div>\n      <div class=\"ib locked\" id=\"btn-lock\" title=\"解鎖：讓底層可操作（串流仍可見）\">&#128274;</div>\n      <div class=\"ib\" id=\"btn-m\" title=\"size\">&#9633;</div>\n    </div>\n    <div id=\"drag-icon\" title=\"drag\">&#10035;</div>\n  </div>\n  <div id=\"offline\"><div id=\"off-ico\">&#128249;</div><div>click &#9654; to stream</div></div>\n  <img id=\"sv-img\" alt=\"\">\n  <div id=\"rh-e\"></div>\n  <div id=\"rh-s\"></div>\n</div>\n<script>\nvar pnl=document.getElementById('pnl');\nvar bar=document.getElementById('bar');\nvar dot=document.getElementById('dot');\nvar offline=document.getElementById('offline');\nvar img=document.getElementById('sv-img');\nvar btnS=document.getElementById('btn-s');\nvar btnM=document.getElementById('btn-m');\nvar btnLock=document.getElementById('btn-lock');\nvar dragIcon=document.getElementById('drag-icon');\nvar overlay=document.getElementById('overlay');\nvar rhE=document.getElementById('rh-e');\nvar rhS=document.getElementById('rh-s');\n\nvar _url='',_on=false,_mini=true;\nvar NW=480,NH=300,MW=240,MH=160;\nvar MIN_W=160,MIN_H=120;\n\n/* overlay 穿透（原版不動） */\noverlay.addEventListener('pointerdown',function(e){\n  if(!pnl.contains(e.target)){\n    parent.postMessage({type:'gfv-passthrough',x:e.clientX,y:e.clientY},'*');\n    e.preventDefault();\n  }\n});\n\n/* 🔒/🔓 按鈕：只送訊號，由父頁面切 pointer-events */\nbtnLock.addEventListener('click',function(e){\n  e.stopPropagation();\n  parent.postMessage({type:'gfv-toggle-lock'},'*');\n});\n\n/* 父頁面回傳目前鎖定狀態 → 更新按鈕樣式 */\nwindow.addEventListener('message',function(e){\n  if(!e.data) return;\n  if(e.data.type==='gfv-url'){\n    _url=e.data.url;\n    dot.style.background='#f5a623';\n    dot.style.boxShadow='0 0 4px rgba(245,166,35,.5)';\n  }\n  if(e.data.type==='gfv-toggle'){\n    var show=pnl.style.display==='none';\n    pnl.style.display=show?'flex':'none';\n    parent.postMessage({type:'gfv-visible',on:show},'*');\n  }\n  if(e.data.type==='gfv-open'){\n    pnl.style.display='flex';\n    parent.postMessage({type:'gfv-visible',on:true},'*');\n  }\n  if(e.data.type==='gfv-lockstate'){\n    if(e.data.unlocked){\n      btnLock.className='ib unlocked-state';\n      btnLock.innerHTML='&#128275;';\n      btnLock.title='已解鎖（點此鎖回，恢復panel操作）';\n      pnl.classList.add('unlocked');\n    } else {\n      btnLock.className='ib locked';\n      btnLock.innerHTML='&#128274;';\n      btnLock.title='解鎖：讓底層可操作（串流仍可見）';\n      pnl.classList.remove('unlocked');\n    }\n  }\n});\n\nfunction streamOn(){\n  if(!_url)return;\n  _on=true;img.style.display='block';offline.style.display='none';\n  img.onload=function(){dot.style.background='#00ff88';dot.style.boxShadow='0 0 5px #00ff88';};\n  img.onerror=function(){streamOff();};\n  img.src=_url+'?t='+Date.now();\n  btnS.innerHTML='&#9646;&#9646;';btnS.classList.add('on');\n}\nfunction streamOff(){\n  _on=false;img.src='';img.style.display='none';offline.style.display='flex';\n  dot.style.background=_url?'#f5a623':'#444';\n  dot.style.boxShadow=_url?'0 0 4px rgba(245,166,35,.5)':'none';\n  btnS.innerHTML='&#9654;';btnS.classList.remove('on');\n}\nbtnS.addEventListener('click',function(e){e.stopPropagation();_on?streamOff():streamOn();});\nbtnM.addEventListener('click',function(e){\n  e.stopPropagation();\n  if(_mini){pnl.style.width=NW+'px';pnl.style.height=NH+'px';_mini=false;btnM.innerHTML='&#8861;';}\n  else{NW=pnl.offsetWidth||NW;NH=pnl.offsetHeight||NH;pnl.style.width=MW+'px';pnl.style.height=MH+'px';_mini=true;btnM.innerHTML='&#9633;';}\n});\n\n/* 拖曳（原版不動） */\nvar da=false,ox=0,oy=0,pid=null;\nfunction isDragTarget(el){return el===dragIcon||dragIcon.contains(el)||el===bar||el===dot||el.id==='title';}\nfunction dragStart(e){\n  if(e.pointerType==='mouse'&&e.button!==0)return;\n  if(e.target===rhE||e.target===rhS)return;\n  if(!isDragTarget(e.target))return;\n  da=true;pid=e.pointerId;\n  var r=pnl.getBoundingClientRect();ox=e.clientX-r.left;oy=e.clientY-r.top;\n  pnl.setPointerCapture(e.pointerId);bar.classList.add('dragging');dragIcon.classList.add('on');\n  e.preventDefault();e.stopPropagation();\n}\nfunction dragMove(e){\n  if(!da||e.pointerId!==pid)return;\n  var x=Math.max(0,Math.min(e.clientX-ox,window.innerWidth-pnl.offsetWidth));\n  var y=Math.max(0,Math.min(e.clientY-oy,window.innerHeight-pnl.offsetHeight));\n  pnl.style.left=x+'px';pnl.style.top=y+'px';pnl.style.right='auto';pnl.style.bottom='auto';\n  e.preventDefault();\n}\nfunction dragEnd(e){\n  if(!da||e.pointerId!==pid)return;\n  da=false;pid=null;pnl.releasePointerCapture(e.pointerId);bar.classList.remove('dragging');dragIcon.classList.remove('on');\n}\npnl.addEventListener('pointerdown',dragStart);pnl.addEventListener('pointermove',dragMove);\npnl.addEventListener('pointerup',dragEnd);pnl.addEventListener('pointercancel',dragEnd);\n\n/* Resize 右（原版不動） */\nvar reW=false,reWpid=null,reWSX=0,reWW0=0;\nrhE.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.button!==0)return;e.stopPropagation();e.preventDefault();reW=true;reWpid=e.pointerId;reWSX=e.clientX;reWW0=pnl.offsetWidth;rhE.setPointerCapture(e.pointerId);rhE.classList.add('active');});\nrhE.addEventListener('pointermove',function(e){if(!reW||e.pointerId!==reWpid)return;pnl.style.width=Math.max(MIN_W,Math.min(reWW0+(e.clientX-reWSX),window.innerWidth-pnl.getBoundingClientRect().left))+'px';e.preventDefault();});\nrhE.addEventListener('pointerup',function(e){if(!reW||e.pointerId!==reWpid)return;reW=false;reWpid=null;rhE.releasePointerCapture(e.pointerId);rhE.classList.remove('active');NW=pnl.offsetWidth;_mini=false;btnM.innerHTML='&#8861;';});\nrhE.addEventListener('pointercancel',function(e){reW=false;reWpid=null;rhE.classList.remove('active');});\n\n/* Resize 下（原版不動） */\nvar reH=false,reHpid=null,reHSY=0,reHH0=0;\nrhS.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.button!==0)return;e.stopPropagation();e.preventDefault();reH=true;reHpid=e.pointerId;reHSY=e.clientY;reHH0=pnl.offsetHeight;rhS.setPointerCapture(e.pointerId);rhS.classList.add('active');});\nrhS.addEventListener('pointermove',function(e){if(!reH||e.pointerId!==reHpid)return;pnl.style.height=Math.max(MIN_H,Math.min(reHH0+(e.clientY-reHSY),window.innerHeight-pnl.getBoundingClientRect().top))+'px';e.preventDefault();});\nrhS.addEventListener('pointerup',function(e){if(!reH||e.pointerId!==reHpid)return;reH=false;reHpid=null;rhS.releasePointerCapture(e.pointerId);rhS.classList.remove('active');NH=pnl.offsetHeight;_mini=false;btnM.innerHTML='&#8861;';});\nrhS.addEventListener('pointercancel',function(e){reH=false;reHpid=null;rhS.classList.remove('active');});\n<\\/script></body></html>`);\n  doc.close();\n\n  window.gfvSetUrl = function(url){\n    if(!url) return;\n    fr.contentWindow.postMessage({type:'gfv-url', url:url},'*');\n  };\n  window.gfvToggle = function(){\n    fr.contentWindow.postMessage({type:'gfv-toggle'},'*');\n  };\n  window.gfvOpen = function(){\n    fr.contentWindow.postMessage({type:'gfv-open'},'*');\n    fr.style.setProperty('pointer-events','auto','important');\n    _unlocked = false;\n    try{ fr.contentWindow.postMessage({type:'gfv-lockstate',unlocked:false},'*'); }catch(e){}\n  };\n\n  window.addEventListener('message', function(e){\n    if(!e.data) return;\n    /* 🔒/🔓 切換：只動 pointer-events，z-index 永遠不動 */\n    if(e.data.type === 'gfv-toggle-lock'){\n      _unlocked = !_unlocked;\n      applyState();\n    }\n    /* 原版 passthrough（不動） */\n    if(e.data.type === 'gfv-passthrough'){\n      /* 解鎖狀態下 iframe 已是 pointer-events:none，不需要再處理 passthrough */\n      if(_unlocked) return;\n      fr.style.setProperty('pointer-events','none','important');\n      var el = document.elementFromPoint(e.data.x, e.data.y);\n      if(el){\n        el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,clientX:e.data.x,clientY:e.data.y}));\n        el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:e.data.x,clientY:e.data.y}));\n      }\n      setTimeout(function(){ if(!_unlocked) fr.style.setProperty('pointer-events','auto','important'); }, 50);\n    }\n    if(e.data.type === 'gfv-visible'){\n      if(!_unlocked) fr.style.setProperty('pointer-events', e.data.on ? 'auto' : 'none', 'important');\n    }\n  });\n\n})();\n</script>\n",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "global",
+        "className": "",
+        "x": 1310,
+        "y": 540,
         "wires": [
             []
         ]
@@ -590,10 +689,10 @@
         "name": "即時影像串流",
         "tab": "ui_tab_cat",
         "order": 6,
-        "disp": false,
+        "disp": true,
         "width": "12",
         "collapse": false,
-        "className": "gfv-hidden-bridge-group"
+        "className": "group-history"
     },
     {
         "id": "group_status_cat",
@@ -604,7 +703,7 @@
         "disp": true,
         "width": "8",
         "collapse": false,
-        "className": ""
+        "className": "group-status"
     },
     {
         "id": "group_timeline_cat",
@@ -615,7 +714,7 @@
         "disp": true,
         "width": "6",
         "collapse": false,
-        "className": ""
+        "className": "group-timeline"
     },
     {
         "id": "group_stats_cat",
@@ -625,7 +724,8 @@
         "order": 3,
         "disp": true,
         "width": "6",
-        "collapse": false
+        "collapse": false,
+        "className": "group-analysis"
     },
     {
         "id": "group_alerts_cat",
@@ -635,7 +735,19 @@
         "order": 4,
         "disp": true,
         "width": "12",
-        "collapse": false
+        "collapse": false,
+        "className": "group-risk"
+    },
+    {
+        "id": "66d2f5137a604c19",
+        "type": "ui_group",
+        "name": "行為事件分析",
+        "tab": "ui_tab_cat",
+        "order": 10,
+        "disp": true,
+        "width": "20",
+        "collapse": false,
+        "className": "group-event"
     },
     {
         "id": "ui_tab_cat",
@@ -647,29 +759,11 @@
         "hidden": false
     },
     {
-        "id": "057c2fd393d0b0b7",
+        "id": "e59227f19a4ad979",
         "type": "global-config",
         "env": [],
         "modules": {
             "node-red-dashboard": "3.6.6"
         }
-    },
-    {
-        "id": "global_float_video_01",
-        "type": "ui_template",
-        "name": "懸浮影像（全域）",
-        "order": 0,
-        "templateScope": "global",
-        "format": "<div id=\"gfv-nr-anchor\" style=\"display:none;height:0;width:0;overflow:hidden;position:absolute;\"></div>\n<script>\n(function(){\n\n  // ── 塌縮自己的容器（讓它不佔 layout 空間）────────────────────────────\n  function collapseContainer(){\n    var anchor = document.getElementById('gfv-nr-anchor');\n    if (!anchor) return;\n    var p = anchor.parentElement;\n    while (p && p !== document.body && p !== document.documentElement) {\n      var kids = p.children, allOurs = true;\n      for (var i = 0; i < kids.length; i++) {\n        var id = kids[i].id, tag = kids[i].tagName;\n        if (id !== 'gfv-nr-anchor' && id !== 'gfv_float_btn' && id !== 'gfv_float_panel' &&\n            tag !== 'SCRIPT' && tag !== 'STYLE') { allOurs = false; break; }\n      }\n      if (!allOurs) break;\n      p.style.height='0'; p.style.minHeight='0'; p.style.maxHeight='0';\n      p.style.overflow='hidden'; p.style.padding='0'; p.style.margin='0';\n      p.style.flexShrink='0'; p.style.flexGrow='0';\n      p = p.parentElement;\n    }\n  }\n  collapseContainer();\n  setTimeout(collapseContainer, 100);\n\n  // ── URL 橋接（供 local template 呼叫）──────────────────────────────\n  var _url = '';\n  window.gfvSetUrl = function(url){\n    if (!url || url === _url) return;\n    _url = url;\n    var img = document.getElementById('gfv_float_img');\n    if (img){ img.style.opacity=0; img.src=url; }\n  };\n\n  if (document.getElementById('gfv_float_btn')) return;\n\n  // ── CSS ──────────────────────────────────────────────────────────\n  var st = document.createElement('style');\n  st.textContent =\n    /* 📷 圓形按鈕 */\n    '#gfv_float_btn{position:fixed;bottom:20px;right:20px;' +\n      'width:46px;height:46px;border-radius:50%;' +\n      'background:rgba(13,17,23,.92);border:2px solid rgba(0,255,136,.5);' +\n      'color:#00ff88;font-size:22px;line-height:44px;text-align:center;' +\n      'cursor:pointer;z-index:2147483647;' +\n      'box-shadow:0 4px 16px rgba(0,0,0,.7);' +\n      'user-select:none;transition:transform .15s,border-color .15s;}' +\n    '#gfv_float_btn:hover{transform:scale(1.12);border-color:#00ff88;}' +\n    /* 浮動面板 */\n    '#gfv_float_panel{position:fixed;bottom:76px;right:20px;' +\n      'width:360px;height:240px;' +\n      'background:#0d1117;border:1px solid rgba(0,255,136,.28);' +\n      'border-radius:12px;overflow:hidden;z-index:2147483646;' +\n      'box-shadow:0 8px 32px rgba(0,0,0,.85);' +\n      'display:none;flex-direction:column;}' +\n    /* 標題列 */\n    '#gfv_bar{height:34px;flex-shrink:0;background:rgba(0,0,0,.72);' +\n      'padding:0 10px;font-size:12px;font-weight:600;color:#00ff88;' +\n      'display:flex;justify-content:space-between;align-items:center;' +\n      'cursor:move;user-select:none;' +\n      'border-bottom:1px solid rgba(255,255,255,.07);}' +\n    '#gfv_btns{display:flex;gap:5px;align-items:center;}' +\n    /* 圖示按鈕 */\n    '.gfv_ib{width:22px;height:22px;border-radius:4px;' +\n      'display:flex;align-items:center;justify-content:center;' +\n      'cursor:pointer;opacity:.55;font-size:13px;' +\n      'border:1px solid rgba(255,255,255,.12);' +\n      'background:rgba(255,255,255,.06);color:#fff;' +\n      'transition:opacity .15s,background .15s;flex-shrink:0;}' +\n    '.gfv_ib:hover{opacity:1;background:rgba(255,255,255,.15);}' +\n    /* 影像 */\n    '#gfv_float_img{flex:1;width:100%;min-height:0;' +\n      'display:block;background:#000;object-fit:contain;' +\n      'transition:opacity .25s;}' +\n    /* 離線提示 */\n    '#gfv_offline{flex:1;display:none;align-items:center;justify-content:center;' +\n      'flex-direction:column;gap:6px;' +\n      'color:rgba(255,255,255,.3);font-size:12px;}' +\n    /* 全螢幕 */\n    '#gfv_float_panel:-webkit-full-screen,' +\n    '#gfv_float_panel:fullscreen{' +\n      'width:100vw!important;height:100vh!important;' +\n      'top:0!important;left:0!important;' +\n      'right:auto!important;bottom:auto!important;border-radius:0;}';\n  document.head.appendChild(st);\n\n  // ── 📷 按鈕 ──────────────────────────────────────────────────────\n  var btn = document.createElement('div');\n  btn.id='gfv_float_btn'; btn.title='串流視窗'; btn.textContent='📷';\n  document.body.appendChild(btn);\n\n  // ── 面板 HTML ────────────────────────────────────────────────────\n  var pnl = document.createElement('div');\n  pnl.id = 'gfv_float_panel';\n  pnl.innerHTML =\n    '<div id=\"gfv_bar\">' +\n      '<span>📷 即時串流</span>' +\n      '<div id=\"gfv_btns\">' +\n        '<div class=\"gfv_ib\" id=\"gfv_rl\" title=\"重新載入\">↺</div>' +\n        '<div class=\"gfv_ib\" id=\"gfv_fs\" title=\"全螢幕\">⛶</div>' +\n        '<div class=\"gfv_ib\" id=\"gfv_cl\" title=\"關閉\">✕</div>' +\n      '</div>' +\n    '</div>' +\n    '<img id=\"gfv_float_img\" src=\"\" alt=\"\" style=\"opacity:0;\" ' +\n      'onload=\"this.style.opacity=1;' +\n             'var o=document.getElementById(\\'gfv_offline\\');if(o)o.style.display=\\'none\\';\" ' +\n      'onerror=\"this.style.opacity=0;' +\n              'var o=document.getElementById(\\'gfv_offline\\');if(o)o.style.display=\\'flex\\';\">' +\n    '<div id=\"gfv_offline\">📹<br>串流離線</div>';\n  document.body.appendChild(pnl);\n\n  // ── 開關 ─────────────────────────────────────────────────────────\n  function gfvOpen(){\n    pnl.style.display='flex';\n    if (!_url && window._catIP) window.gfvSetUrl('http://'+window._catIP+':5000/stream');\n  }\n  function gfvClose(){ pnl.style.display='none'; }\n  btn.addEventListener('click', function(){ pnl.style.display==='flex'?gfvClose():gfvOpen(); });\n\n  // ── 面板按鈕事件 ─────────────────────────────────────────────────\n  setTimeout(function(){\n    /* 關閉 */\n    var cl=document.getElementById('gfv_cl');\n    if (cl) cl.addEventListener('click', function(e){ e.stopPropagation(); gfvClose(); });\n\n    /* 全螢幕 */\n    var fs=document.getElementById('gfv_fs');\n    if (fs) fs.addEventListener('click', function(e){\n      e.stopPropagation();\n      if (!document.fullscreenElement){ pnl.requestFullscreen&&pnl.requestFullscreen(); }\n      else { document.exitFullscreen&&document.exitFullscreen(); }\n    });\n\n    /* 重新載入 */\n    var rl=document.getElementById('gfv_rl');\n    if (rl) rl.addEventListener('click', function(e){\n      e.stopPropagation();\n      if (!_url) return;\n      var img=document.getElementById('gfv_float_img');\n      if (img){ img.style.opacity=0; img.src='';\n        setTimeout(function(){ img.src=_url+'?t='+Date.now(); }, 200); }\n    });\n  }, 0);\n\n  // ── 拖曳（只允許拖標題列，不含按鈕）────────────────────────────────\n  var drag=false, ox=0, oy=0;\n  var bar=document.getElementById('gfv_bar');\n  if (bar) {\n    bar.addEventListener('mousedown', function(e){\n      if (e.target.classList.contains('gfv_ib')) return;\n      drag=true;\n      var r=pnl.getBoundingClientRect();\n      ox=e.clientX-r.left; oy=e.clientY-r.top;\n      e.preventDefault();\n    });\n  }\n  document.addEventListener('mousemove', function(e){\n    if (!drag) return;\n    pnl.style.left=(e.clientX-ox)+'px';\n    pnl.style.top=(e.clientY-oy)+'px';\n    pnl.style.right='auto'; pnl.style.bottom='auto';\n  });\n  document.addEventListener('mouseup', function(){ drag=false; });\n\n  // ── 雙擊影像 → 全螢幕 ────────────────────────────────────────────\n  pnl.addEventListener('dblclick', function(e){\n    if (e.target.classList.contains('gfv_ib')) return;\n    if (!document.fullscreenElement){ pnl.requestFullscreen&&pnl.requestFullscreen(); }\n    else { document.exitFullscreen&&document.exitFullscreen(); }\n  });\n\n})();\n</script>",
-        "storeOutMessages": false,
-        "fwdInMessages": true,
-        "resendOnRefresh": true,
-        "className": "",
-        "x": 200,
-        "y": 900,
-        "wires": [
-            []
-        ],
-        "z": "a57e2a51f4764c7e"
     }
 ]

@@ -45,12 +45,12 @@ VIDEO_FOLDERS = [
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\shake",
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\stop",
 ]
-OUTPUT_FOLDER = r"C:\AI_Project\paper\skeletons/"
-MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_94.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
+OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_106.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
 TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5
-KP_CONF_THRESHOLD = 0.3
+KP_CONF_THRESHOLD = 0.5
 # ==================== Main Processing Function ====================
 
 # 恢復批次推論多資料夾影片功能
@@ -549,7 +549,9 @@ def _list_json_files_menu(folder: str, last_annotated: str = None):
         print(f"[Error] 資料夾不存在: {folder}")
         return None
 
-    json_files = sorted(p.glob("*.json"), key=lambda f: f.name.lower())
+    json_files = sorted(p.glob("*.json"),
+                        key=lambda f: [int(t) if t.isdigit() else t
+                                       for t in re.split(r'(\d+)', f.name.lower())])
     if not json_files:
         print(f"[Error] 找不到任何 JSON 檔案: {folder}")
         return None
@@ -708,7 +710,7 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
         print(f"  [檔名預設行為]  {current_action.upper()}  （可按 1-5 手動切換）")
 
     print("\n操作說明：")
-    print("  1/2/3/4 切換行為  |  s 標記起點/終點  |  u 撤銷上一個區間")
+    print("  1/2/3/4/5 切換行為  |  s 標記起點/終點  |  u 撤銷上一個區間")
     print("  a/d 前/後幀  |  z/x 調整步長  |  SPACE 播放/暫停  |  t 跳轉秒數")
     print("  q 儲存並離開    [未標記片段訓練時自動捨棄]\n")
 
@@ -1175,16 +1177,133 @@ def manual_action_labeling():
     print("\n[Done] All annotation tasks completed.")
 
 
+def reextract_preserve_labels():
+    """
+    以新 YOLO 模型重新推論骨架，但保留既有 JSON 的 action_intervals 與 frame label。
+    前提：TARGET_FPS 不變，則抽幀順序相同，區間 index 可直接重用。
+    """
+    print("="*60)
+    print("Skeleton Re-extraction (preserve annotations)")
+    print("="*60)
+    setup_directories()
+
+    video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv']
+
+    video_files = []
+    for folder in VIDEO_FOLDERS:
+        vp = Path(folder)
+        if not vp.exists():
+            print(f"[Warning] 資料夾不存在: {folder}")
+            continue
+        video_files.extend(f for f in vp.iterdir() if f.suffix.lower() in video_extensions)
+
+    if not video_files:
+        print("✗ 找不到任何影片。")
+        return
+
+    # 讀取所有既有 JSON 的 action_intervals
+    saved_intervals: dict[str, list] = {}
+    for vf in video_files:
+        jp = Path(OUTPUT_FOLDER) / f"{vf.stem}.json"
+        if jp.exists():
+            try:
+                with open(jp, 'r', encoding='utf-8') as f:
+                    d = json.load(f)
+                ivs = d.get('action_intervals', [])
+                saved_intervals[vf.stem] = ivs
+            except Exception as e:
+                print(f"  [Warning] 無法讀取 {jp.name}: {e}")
+
+    annotated   = [v for v in video_files if saved_intervals.get(v.stem)]
+    unannotated = [v for v in video_files if not saved_intervals.get(v.stem)]
+
+    print(f"\n影片總數：{len(video_files)}")
+    print(f"  含標注（保留區間）：{len(annotated)}")
+    print(f"  無標注（全段重推）：{len(unannotated)}")
+    if annotated:
+        print("\n  [含標注]")
+        for v in annotated:
+            n = len(saved_intervals[v.stem])
+            print(f"    {v.name}  →  {n} 個區間將保留")
+
+    confirm = input('\n確認後輸入 "ok" 開始重新推論（其他任意鍵取消）：').strip().lower()
+    if confirm != "ok":
+        print("✗ 已取消。")
+        return
+
+    pose_extractor = PoseExtractor(
+        model_path=MODEL_PATH,
+        imgsz=IMGSZ,
+        conf_threshold=CONF_THRESHOLD
+    )
+
+    for idx, video_path in enumerate(video_files, 1):
+        print(f"\n[{idx}/{len(video_files)}] {video_path.name}")
+        video_id    = video_path.stem
+        output_path = Path(OUTPUT_FOLDER) / f"{video_id}.json"
+        label       = video_path.parent.name.lower()
+
+        result = extract_skeleton_from_video(
+            video_path, pose_extractor, target_fps=TARGET_FPS, label=label
+        )
+        if result is None:
+            print("  ✗ 推論失敗，跳過")
+            continue
+        skeleton_data, actual_fps = result
+
+        # 還原既有標注
+        ivs = saved_intervals.get(video_id, [])
+        if ivs:
+            total_f = len(skeleton_data)
+            frame_labels = ['unannotated'] * total_f
+            for iv in ivs:
+                for i in range(iv['start'], iv['end'] + 1):
+                    if 0 <= i < total_f:
+                        frame_labels[i] = iv['action']
+            for i, fd in enumerate(skeleton_data):
+                fd['label'] = frame_labels[i]
+            print(f"  ✓ 還原 {len(ivs)} 個 action_intervals，frame label 已重新套用")
+        else:
+            print("  → 無既有標注，frame label 保持資料夾名稱")
+
+        video_metadata = {
+            "video_id": video_id,
+            "video_filename": video_path.name,
+            "video_path": str(video_path),
+            "target_fps": TARGET_FPS,
+            "actual_fps": actual_fps,
+            "model_used": MODEL_PATH,
+            "imgsz": IMGSZ,
+            "conf_threshold": CONF_THRESHOLD,
+            "kp_conf_threshold": KP_CONF_THRESHOLD
+        }
+        out_data = {
+            "video_metadata": video_metadata,
+            "frames": skeleton_data,
+            "total_frames": len(skeleton_data),
+            "action_intervals": ivs,
+        }
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(out_data, f, indent=2, ensure_ascii=False)
+        print(f"  ✓ 已儲存: {output_path}")
+
+    print("\n✓ 全部重新推論完成。")
+
+
 if __name__ == "__main__":
     print("\n==== Cat Skeleton 批次推論/手動標註 ====")
-    print("1. 批次推論五個資料夾影片 (YOLO-Pose)")
+    print("1. 批次推論五個資料夾影片 (YOLO-Pose)  [增量，跳過已有 JSON]")
     print("   → 影片依資料夾名稱 (walk/lick/scratch/shake/stop) 自動標記，可直接訓練")
     print("2. 連續手動標記多個 skeleton JSON")
     print("   → 適用影片含多種行為、需精確逐段標記的情況")
-    mode = input("請選擇模式 (1/2): ").strip()
+    print("3. 重新推論骨架（新模型），保留既有 action_intervals 與 frame label")
+    print("   → YOLO 模型更換後使用；TARGET_FPS 不變則標注 index 可直接重用")
+    mode = input("請選擇模式 (1/2/3): ").strip()
     if mode == '1':
         process_all_videos()
     elif mode == '2':
         manual_action_labeling()
+    elif mode == '3':
+        reextract_preserve_labels()
     else:
         print("✗ 未選擇正確模式，程式結束。")

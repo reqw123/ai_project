@@ -22,6 +22,8 @@ class SharedFrameStreamer:
     - latest_jpeg 為 Python bytes（不可變），消費者可直接回傳參考，無需額外拷貝。
     - JPEG 品質與編碼參數於寫入執行緒啟動時快取，避免熱路徑上重複建立 list。
     - clip_buffer 保存 BGR numpy 供 /video_clip，與 JPEG 快取使用各自獨立鎖。
+    - _client_count 追蹤目前活躍的串流客戶端數；無客戶端時跳過 JPEG 編碼以節省 CPU，
+      但推論執行緒仍持續運行（行為追蹤不中斷）。
     """
 
     def __init__(self, frame_processor):
@@ -31,19 +33,23 @@ class SharedFrameStreamer:
         clip_maxlen = max(30, int(_TARGET_MODEL_FPS * _CLIP_SECONDS))
         self.clip_buffer = deque(maxlen=clip_maxlen)
         self.clip_lock = threading.Lock()
+        self._client_count = 0
+        self._client_lock = threading.Lock()
         self.running = True
         self.thread = threading.Thread(target=self._update_frame, daemon=True)
         self.thread.start()
 
-    def _update_frame(self):
-        cap = self.frame_processor.cap
-        if cap is None or not cap.isOpened():
-            logging.error("SharedFrameStreamer: VideoCapture is not available")
-            return
+    def acquire_client(self) -> None:
+        with self._client_lock:
+            self._client_count += 1
 
-        source_fps = cap.get(cv2.CAP_PROP_FPS)
-        if source_fps <= 1:
-            source_fps = _TARGET_MODEL_FPS
+    def release_client(self) -> None:
+        with self._client_lock:
+            if self._client_count > 0:
+                self._client_count -= 1
+
+    def _update_frame(self):
+        source_fps = self.frame_processor.source_fps
 
         frame_step = 1
         if _ENABLE_FPS_DOWNSAMPLE and source_fps > _TARGET_MODEL_FPS + 1e-6:
@@ -57,11 +63,9 @@ class SharedFrameStreamer:
 
         while self.running:
             try:
-                ret, frame = cap.read()
+                ret, frame = self.frame_processor.read_raw_frame()
                 if not ret:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     raw_frame_count = 0
-                    self.frame_processor.reset_ema()
                     continue
 
                 raw_frame_count += 1
@@ -70,17 +74,31 @@ class SharedFrameStreamer:
 
                 processed_frame, *_ = self.frame_processor.process(frame)
 
+                display_frame = processed_frame
                 if _STREAM_DISPLAY_SIZE is not None:
-                    processed_frame = cv2.resize(processed_frame, _STREAM_DISPLAY_SIZE)
+                    h, w = processed_frame.shape[:2]
+                    tw, th = _STREAM_DISPLAY_SIZE
+                    if w > 0 and h > 0 and tw > 0 and th > 0:
+                        display_frame = cv2.resize(processed_frame, _STREAM_DISPLAY_SIZE)
+                    else:
+                        logging.warning(
+                            "SharedFrameStreamer: 跳過 resize，尺寸無效 frame=(%d,%d) target=(%d,%d)",
+                            w, h, tw, th,
+                        )
+
+                with self.clip_lock:
+                    self.clip_buffer.append(display_frame.copy())
+
+                # 無客戶端時跳過 JPEG 編碼，節省 CPU；推論已在上方完成不受影響
+                with self._client_lock:
+                    has_client = self._client_count > 0
+                if not has_client:
+                    continue
 
                 # 每幀只編碼一次；bytes 不可變，所有消費者共享同一物件
-                _, buf = cv2.imencode('.jpg', processed_frame, _encode_param)
-                jpeg_bytes: bytes = buf.tobytes()
-
+                _, buf = cv2.imencode('.jpg', display_frame, _encode_param)
                 with self.lock:
-                    self.latest_jpeg = jpeg_bytes
-                with self.clip_lock:
-                    self.clip_buffer.append(processed_frame.copy())
+                    self.latest_jpeg = buf.tobytes()
 
             except Exception as e:
                 logging.error("SharedFrameStreamer._update_frame error: %s", e)

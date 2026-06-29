@@ -184,8 +184,9 @@ flowchart LR
 | ST-GCN 類別數 | 5 | [config.py](config.py) 的 `STGCNConfig.NUM_CLASSES` |
 | ST-GCN 關節數 | 17 | [config.py](config.py) 的 `STGCNConfig.NUM_JOINTS` |
 | ST-GCN 層數 | 3 | [config.py](config.py) 的 `STGCNConfig.NUM_LAYERS` |
-| 預設特徵模式 | xy_v | [config.py](config.py) 的 `STGCNConfig.FEATURE_MODE` |
-| xy_v 通道數 | 4 | `x, y, vx, vy` |
+| 預設特徵模式 | xy | [config.py](config.py) 的 `STGCNConfig.FEATURE_MODE` |
+| xy 通道數 | 2 | `x, y` |
+| xy_conf 通道數 | 3 | `x, y, conf` |
 | xy_conf_v 通道數 | 5 | `x, y, conf, vx, vy` |
 | xy_conf_v_bone 通道數 | 7 | `x, y, conf, vx, vy, bone_x, bone_y` |
 | xy_conf_v_bone_bmotion 通道數 | 9 | `x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my` |

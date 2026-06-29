@@ -43,10 +43,11 @@
 │  │                                   以胸-髖距為尺度縮放          │ │
 │  │  5. build_feature_tensor()  → 依 FEATURE_MODE 組合通道        │ │
 │  │                                                               │ │
-│  │     xy_v               4ch: x, y, vx, vy                     │ │
-│  │     xy_conf_v          5ch: x, y, conf, vx, vy               │ │
-│  │     xy_conf_v_bone     7ch: x, y, conf, vx, vy, bx, by       │ │
-│  │     xy_conf_v_bone_bmotion  9ch: + bone_mx, bone_my          │ │
+│  │     xy                     2ch: x, y                         │ │
+│  │     xy_conf               3ch: x, y, conf                    │ │
+│  │     xy_conf_v             5ch: x, y, conf, vx, vy            │ │
+│  │     xy_conf_v_bone        7ch: + bone_x, bone_y              │ │
+│  │     xy_conf_v_bone_bmotion 9ch: + bone_mx, bone_my           │ │
 │  │                                                               │ │
 │  │     (T, V, C) → permute(2,0,1).unsqueeze(0) → (N=1, C, T, V)│ │
 │  └───────────────────────────────────────────────────────────────┘ │
@@ -166,7 +167,7 @@ FC 輸出         (N=1, 4)            walk / lick / scratch / shake
 | `STRICT_WINDOW_FILTER` | false | 訓練時是否丟棄含 unannotated 幀的視窗（`stgcn_config.yaml`） |
 | `TARGET_MODEL_FPS` | 30 | 來源 FPS > 30 時做降採樣 |
 | `NUM_JOINTS` | 17 | COCO 17 關鍵點（重映射至貓體） |
-| `FEATURE_MODE` | xy_v | 預設 4 通道；可改為 xy_conf_v / xy_conf_v_bone / xy_conf_v_bone_bmotion |
+| `FEATURE_MODE` | xy | 預設 2 通道；可改為 xy_conf / xy_conf_v / xy_conf_v_bone / xy_conf_v_bone_bmotion |
 | `STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD` | 0.80 | 低於此值輸出 LOW_CONF（不顯示行為標籤）|
 | `KP_EMA_ALPHA` | 1.0 | 關鍵點 EMA（1.0 = 無平滑，直接使用原始值）|
 | `KP_CONF_THRES` | 0.5 | 低於此信心的關鍵點視為遮蔽，進入插值補點 |
@@ -238,7 +239,7 @@ flowchart TD
 
     G["⑦ ST-GCN 模型設計<br/>JointAttention 關節注意力機制<br/>多尺度時間卷積（k=3,5,9）<br/>滑動窗口序列建模（T=16 幀）"]:::model
 
-    H{"消融實驗<br/>Ablation Study<br/>四種特徵通道模式比較"}:::decision
+    H{"消融實驗<br/>Ablation Study<br/>五種特徵通道模式比較"}:::decision
 
     I["⑧ 模型訓練與調優<br/>類別加權採樣 · Label Smoothing<br/>學習率調度 · EMA · 早停策略"]:::model
 

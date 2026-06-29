@@ -17,7 +17,7 @@ from pathlib import Path
 # ==================== 可調整變數 ====================
 
 # 骨架 JSON 資料夾路徑
-SKELETONS_ROOT = Path(r"C:/AI_Project/paper/skeletons")
+SKELETONS_ROOT = Path(r"C:\ai_project\paper\skeletons")
 
 # ST-GCN 時間窗長度（幀數），需與訓練設定一致
 SEQUENCE_LENGTH = 16

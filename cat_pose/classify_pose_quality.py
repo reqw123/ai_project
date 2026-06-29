@@ -11,7 +11,7 @@ import shutil
 from tqdm import tqdm
 
 # ==================== 配置 ====================
-MODEL_PATH = r"C:\cat_pose\no_aug.pt"
+MODEL_PATH = r"C:\cat_pose\v11s_103.pt"
 INPUT_IMAGE_DIR = r"C:\cat_pose\test\images"
 OUTPUT_BASE_DIR = r"C:\Users\homec\Downloads\10"
 NORMAL_DIR = os.path.join(OUTPUT_BASE_DIR, "normal")

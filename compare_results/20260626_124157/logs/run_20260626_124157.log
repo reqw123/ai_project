@@ -1,0 +1,158 @@
+[INFO] ====================================================
+[INFO] YOLO Pose Model Comparison  [20260626_124157]
+[INFO]   Old : C:\AI_Project\cat_pose\v11s_104.pt
+[INFO]   New : C:\AI_Project\cat_pose\v11s_105.pt
+[INFO]   Data: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試
+[INFO]   Out : C:\AI_Project\compare_results\20260626_124157  Device: cuda
+[INFO] ====================================================
+[INFO] Loading old model...
+[INFO] Loading new model...
+[INFO] Benchmark videos: 14
+[INFO]   walk: 3
+[INFO]   lick: 3
+[INFO]   scratch: 2
+[INFO]   shake: 2
+[INFO]   stop: 4
+[INFO] 
+--- OLD MODEL: v11s_104.pt ---
+[INFO] Processing: walk/screen_86.mp4
+[INFO]   Frames: 444 | Inference Time: 10.39 sec | Confidence=0.989 Jitter=6.15
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_11.mp4
+[INFO]   Frames: 135 | Inference Time: 2.89 sec | Confidence=0.991 Jitter=16.73
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_22.mp4
+[INFO]   Frames: 159 | Inference Time: 3.50 sec | Confidence=0.985 Jitter=11.04
+[INFO] --------------------------------
+[INFO] Processing: lick/calico_lick1.mp4
+[INFO]   Frames: 397 | Inference Time: 8.39 sec | Confidence=0.975 Jitter=4.09
+[INFO] --------------------------------
+[INFO] Processing: lick/grassland_white_lick2.mp4
+[INFO]   Frames: 241 | Inference Time: 5.16 sec | Confidence=0.995 Jitter=3.94
+[INFO] --------------------------------
+[INFO] Processing: lick/white_lick2.mp4
+[INFO]   Frames: 558 | Inference Time: 13.71 sec | Confidence=0.994 Jitter=3.13
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch4847.mp4
+[INFO]   Frames: 121 | Inference Time: 3.44 sec | Confidence=0.986 Jitter=2.89
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch578.mp4
+[INFO]   Frames: 159 | Inference Time: 4.33 sec | Confidence=0.959 Jitter=9.23
+[INFO] --------------------------------
+[INFO] Processing: shake/shake5772.mp4
+[INFO]   Frames: 343 | Inference Time: 9.10 sec | Confidence=0.971 Jitter=13.48
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_3.mp4
+[INFO]   Frames: 121 | Inference Time: 3.24 sec | Confidence=0.988 Jitter=10.20
+[INFO] --------------------------------
+[INFO] Processing: stop/6月2日(1).mp4
+[INFO]   Frames: 167 | Inference Time: 4.57 sec | Confidence=0.975 Jitter=5.04
+[INFO] --------------------------------
+[INFO] Processing: stop/6月2日(19).mp4
+[INFO]   Frames: 455 | Inference Time: 10.38 sec | Confidence=0.884 Jitter=4.74
+[INFO] --------------------------------
+[INFO] Processing: stop/6月2日(2).mp4
+[INFO]   Frames: 230 | Inference Time: 5.36 sec | Confidence=0.871 Jitter=3.27
+[INFO] --------------------------------
+[INFO] Processing: stop/6月2日(3).mp4
+[INFO]   Frames: 283 | Inference Time: 6.93 sec | Confidence=0.892 Jitter=1.98
+[INFO] --------------------------------
+[INFO] 
+--- NEW MODEL: v11s_105.pt ---
+[INFO] Processing: walk/screen_86.mp4
+[INFO]   Frames: 444 | Inference Time: 10.55 sec | Confidence=0.987 Jitter=5.97
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_11.mp4
+[INFO]   Frames: 135 | Inference Time: 3.36 sec | Confidence=0.993 Jitter=16.74
+[INFO] --------------------------------
+[INFO] Processing: walk/walk_22.mp4
+[INFO]   Frames: 159 | Inference Time: 3.98 sec | Confidence=0.989 Jitter=10.88
+[INFO] --------------------------------
+[INFO] Processing: lick/calico_lick1.mp4
+[INFO]   Frames: 397 | Inference Time: 9.78 sec | Confidence=0.967 Jitter=3.87
+[INFO] --------------------------------
+[INFO] Processing: lick/grassland_white_lick2.mp4
+[INFO]   Frames: 241 | Inference Time: 5.94 sec | Confidence=0.995 Jitter=2.70
+[INFO] --------------------------------
+[INFO] Processing: lick/white_lick2.mp4
+[INFO]   Frames: 558 | Inference Time: 13.45 sec | Confidence=0.989 Jitter=2.72
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch4847.mp4
+[INFO]   Frames: 121 | Inference Time: 3.24 sec | Confidence=0.988 Jitter=2.74
+[INFO] --------------------------------
+[INFO] Processing: scratch/scratch578.mp4
+[INFO]   Frames: 159 | Inference Time: 3.50 sec | Confidence=0.974 Jitter=6.05
+[INFO] --------------------------------
+[INFO] Processing: shake/shake5772.mp4
+[INFO]   Frames: 343 | Inference Time: 7.44 sec | Confidence=0.965 Jitter=12.86
+[INFO] --------------------------------
+[INFO] Processing: shake/shake_3.mp4
+[INFO]   Frames: 121 | Inference Time: 2.84 sec | Confidence=0.985 Jitter=9.72
+[INFO] --------------------------------
+[INFO] Processing: stop/6月2日(1).mp4
+[INFO]   Frames: 167 | Inference Time: 4.34 sec | Confidence=0.980 Jitter=4.80
+[INFO] --------------------------------
+[INFO] Processing: stop/6月2日(19).mp4
+[INFO]   Frames: 455 | Inference Time: 11.59 sec | Confidence=0.923 Jitter=3.93
+[INFO] --------------------------------
+[INFO] Processing: stop/6月2日(2).mp4
+[INFO]   Frames: 230 | Inference Time: 4.66 sec | Confidence=0.877 Jitter=1.86
+[INFO] --------------------------------
+[INFO] Processing: stop/6月2日(3).mp4
+[INFO]   Frames: 283 | Inference Time: 5.77 sec | Confidence=0.960 Jitter=1.64
+[INFO] --------------------------------
+[INFO] 
+Aggregating metrics...
+[INFO] 
+Writing CSV files...
+[INFO] Generating figures...
+[INFO] Writing reports...
+[INFO] 
+[INFO] =====================================================================================================
+[INFO] 逐影片比較結果
+[INFO] =====================================================================================================
+[INFO] 行為       影片                               舊信心   新信心      信心Δ   舊抖動   新抖動      抖動Δ
+[INFO] -----------------------------------------------------------------------------------------------------
+[INFO] walk       screen_86.mp4                       0.989    0.987    -0.002↓     6.15     5.97     -0.18↓
+[INFO] walk       walk_11.mp4                         0.991    0.993    +0.002↑    16.73    16.74     +0.02↑
+[INFO] walk       walk_22.mp4                         0.985    0.989    +0.004↑    11.04    10.88     -0.16↓
+[INFO] lick       calico_lick1.mp4                    0.975    0.967    -0.008↓     4.09     3.87     -0.22↓
+[INFO] lick       grassland_white_lick2.mp4           0.995    0.995    +0.000↑     3.94     2.70     -1.23↓
+[INFO] lick       white_lick2.mp4                     0.994    0.989    -0.005↓     3.13     2.72     -0.40↓
+[INFO] scratch    scratch4847.mp4                     0.986    0.988    +0.002↑     2.89     2.74     -0.15↓
+[INFO] scratch    scratch578.mp4                      0.959    0.974    +0.016↑     9.23     6.05     -3.18↓
+[INFO] shake      shake5772.mp4                       0.971    0.965    -0.006↓    13.48    12.86     -0.62↓
+[INFO] shake      shake_3.mp4                         0.988    0.985    -0.002↓    10.20     9.72     -0.48↓
+[INFO] stop       6月2日(1).mp4                       0.975    0.980    +0.004↑     5.04     4.80     -0.24↓
+[INFO] stop       6月2日(19).mp4                      0.884    0.923    +0.040↑     4.74     3.93     -0.81↓
+[INFO] stop       6月2日(2).mp4                       0.871    0.877    +0.006↑     3.27     1.86     -1.41↓
+[INFO] stop       6月2日(3).mp4                       0.892    0.960    +0.068↑     1.98     1.64     -0.34↓
+[INFO] 
+[INFO] =================================================================================================
+[INFO] 行為類別摘要
+[INFO] =================================================================================================
+[INFO] 行為         舊信心   新信心   信心改善   舊抖動   新抖動   抖動改善   舊缺失   新缺失   缺失改善
+[INFO] -------------------------------------------------------------------------------------------------
+[INFO] walk          0.989    0.988     -0.01%     9.16     9.01     +1.59%     0.0%     0.0%     +0.00%
+[INFO] lick          0.988    0.983     -0.48%     3.59     3.07    +14.54%     0.0%     0.0%     +0.00%
+[INFO] scratch       0.971    0.980     +0.99%     6.26     4.50    +28.15%     0.4%     0.4%     +0.00%
+[INFO] shake         0.975    0.970     -0.53%    12.63    12.04     +4.66%     0.0%     0.0%     +0.00%
+[INFO] stop          0.897    0.931     +3.89%     3.76     3.01    +19.87%     0.0%     0.0%     +0.00%
+[INFO] 
+[INFO] =================================================================================================
+[INFO] 整體比較結果
+[INFO] =================================================================================================
+[INFO] 舊模型        v11s_104.pt   複合分數 94.27
+[INFO] 新模型        v11s_105.pt   複合分數 94.99
+[INFO] 
+[INFO] 平均信心值    0.958  →  0.967    改善 +0.93%
+[INFO] 平均抖動      6.08 px  →  5.49 px    改善 +9.71%
+[INFO] 缺失比率      0.0%  →  0.0%    改善 +0.00%
+[INFO] 尾尖缺失      9.7%  →  14.1%
+[INFO] 
+[INFO] 綜合改善分數  +3.73%
+[INFO] 進步最多行為  scratch  （+10.2%）
+[INFO] 退步最多行為  walk  （+0.6%）
+[INFO] 
+[INFO] 結論          v11s_105.pt  相較  v11s_104.pt  →  BETTER（較優）
+[INFO] =================================================================================================

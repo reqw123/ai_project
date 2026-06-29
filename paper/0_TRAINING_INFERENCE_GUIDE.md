@@ -39,16 +39,16 @@ $Env:STGCN_NUM_EPOCHS='50'; $Env:STGCN_BATCH_SIZE='8'; $Env:STGCN_LEARNING_RATE=
 
 #### 控制特徵模式（多模式 ablation）
 ```powershell
-# 單模式（默認 xyv，關閉 ablation study）
-$Env:STGCN_FEATURE_MODE='xyv_conf'; $Env:STGCN_RUN_ABLATION='0'; python -u cat_monitoring_system/train_gcn.py
+# 單模式（默認 xy，關閉 ablation study）
+$Env:STGCN_FEATURE_MODE='xy_conf_v'; $Env:STGCN_RUN_ABLATION='0'; python -u cat_monitoring_system/0_train_gcn.py
 
-# 多模式 ablation（訓練所有特徵組合）
-$Env:STGCN_RUN_ABLATION='1'; python -u cat_monitoring_system/train_gcn.py
+# 多模式 ablation（訓練所有五種特徵組合）
+$Env:STGCN_RUN_ABLATION='1'; python -u cat_monitoring_system/0_train_gcn.py
 ```
 
-#### 完整範例：xyv_conf 模式，長訓，Attention on
+#### 完整範例：xy_conf_v_bone_bmotion 模式，長訓，Attention on
 ```powershell
-$Env:STGCN_NUM_EPOCHS='50'; $Env:STGCN_BATCH_SIZE='8'; $Env:STGCN_USE_ATTENTION='1'; $Env:STGCN_RUN_ABLATION='0'; $Env:STGCN_FEATURE_MODE='xyv_conf'; python -u cat_monitoring_system/train_gcn.py
+$Env:STGCN_NUM_EPOCHS='50'; $Env:STGCN_BATCH_SIZE='8'; $Env:STGCN_USE_ATTENTION='1'; $Env:STGCN_RUN_ABLATION='0'; $Env:STGCN_FEATURE_MODE='xy_conf_v_bone_bmotion'; python -u cat_monitoring_system/0_train_gcn.py
 ```
 
 ### 環境變數完整清單
@@ -57,7 +57,7 @@ $Env:STGCN_NUM_EPOCHS='50'; $Env:STGCN_BATCH_SIZE='8'; $Env:STGCN_USE_ATTENTION=
 | `STGCN_NUM_EPOCHS` | 40 | 訓練 epoch 數 |
 | `STGCN_BATCH_SIZE` | 8 | 批次大小 |
 | `STGCN_LR` | 0.001 | 學習率 |
-| `STGCN_FEATURE_MODE` | xyv | 特徵模式（xyv / xyv_conf / xyv_bone / xyv_conf_bone） |
+| `STGCN_FEATURE_MODE` | xy | 特徵模式（xy / xy_conf / xy_conf_v / xy_conf_v_bone / xy_conf_v_bone_bmotion） |
 | `STGCN_USE_ATTENTION` | 1 | 是否啟用 JointAttention（0=off, 1=on） |
 | `STGCN_RUN_ABLATION` | 1 | 是否執行 ablation study（0=off, 1=on） |
 | `STGCN_RANDOM_SEED` | 42 | 隨機種子 |
@@ -115,20 +115,20 @@ C:\cat_pose\gcn_pose\models\
 ### 方案 A：快速對照（3 epoch，Attention on/off）
 ```powershell
 # Baseline（Attention off）
-$Env:STGCN_NUM_EPOCHS='3'; $Env:STGCN_USE_ATTENTION='0'; $Env:STGCN_RUN_ABLATION='0'; $Env:STGCN_FEATURE_MODE='xyv_conf'; python -u cat_monitoring_system/train_gcn.py
+$Env:STGCN_NUM_EPOCHS='3'; $Env:STGCN_USE_ATTENTION='0'; $Env:STGCN_RUN_ABLATION='0'; $Env:STGCN_FEATURE_MODE='xy_conf_v'; python -u cat_monitoring_system/0_train_gcn.py
 
 # Attention enabled
-$Env:STGCN_NUM_EPOCHS='3'; $Env:STGCN_USE_ATTENTION='1'; $Env:STGCN_RUN_ABLATION='0'; $Env:STGCN_FEATURE_MODE='xyv_conf'; python -u cat_monitoring_system/train_gcn.py
+$Env:STGCN_NUM_EPOCHS='3'; $Env:STGCN_USE_ATTENTION='1'; $Env:STGCN_RUN_ABLATION='0'; $Env:STGCN_FEATURE_MODE='xy_conf_v'; python -u cat_monitoring_system/0_train_gcn.py
 ```
 
-### 方案 B：完整 ablation（所有特徵模式，40 epoch）
+### 方案 B：完整 ablation（五種特徵模式，40 epoch）
 ```powershell
-$Env:STGCN_NUM_EPOCHS='40'; $Env:STGCN_RUN_ABLATION='1'; python -u cat_monitoring_system/train_gcn.py
+$Env:STGCN_NUM_EPOCHS='40'; $Env:STGCN_RUN_ABLATION='1'; python -u cat_monitoring_system/0_train_gcn.py
 ```
 
-### 方案 C：單一最佳配置（xyv_conf，50 epoch，Attention on）
+### 方案 C：單一最佳配置（xy_conf_v_bone_bmotion，50 epoch，Attention on）
 ```powershell
-$Env:STGCN_NUM_EPOCHS='50'; $Env:STGCN_BATCH_SIZE='8'; $Env:STGCN_USE_ATTENTION='1'; $Env:STGCN_RUN_ABLATION='0'; $Env:STGCN_FEATURE_MODE='xyv_conf'; python -u cat_monitoring_system/train_gcn.py
+$Env:STGCN_NUM_EPOCHS='50'; $Env:STGCN_BATCH_SIZE='8'; $Env:STGCN_USE_ATTENTION='1'; $Env:STGCN_RUN_ABLATION='0'; $Env:STGCN_FEATURE_MODE='xy_conf_v_bone_bmotion'; python -u cat_monitoring_system/0_train_gcn.py
 ```
 
 ---

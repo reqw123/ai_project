@@ -2,22 +2,30 @@
 # 複製此檔為 stgcn_config.yaml 並依需求修改參數，或設定
 
 # 用於訓練的每支影片骨架 JSON 檔案資料夾路徑
-SKELETON_DATA_FOLDER: "C:/AI_Project/paper/skeletons"
-# 儲存最終/最佳模型檔案的路徑（執行時會加上 run 後綴）
-MODEL_SAVE_PATH: "C:/Users/homec/Downloads/stgcn_best.pth"
+SKELETON_DATA_FOLDER: "C:/ai_project/paper/skeletons"
 # 訓練輸出（圖表、混淆矩陣、CSV 等）儲存目錄
 RESULTS_FOLDER: "C:/Users/homec/Downloads/stgcn_results"
 
 # Window filtering
 # 若為 true，會丟棄包含未標註幀的視窗；若為 false，至少一個已標註幀即保留
-STRICT_WINDOW_FILTER: false
+STRICT_WINDOW_FILTER: true
 # 視窗內允許 bbox 缺失（YOLO 未偵測到貓）的最大幀數；超過則丟棄該視窗（0 = 完全不允許）
 MAX_NO_DETECT_FRAMES: 2
 
 # Keypoint EMA smoothing (null to disable)
 # 關鍵點時間平滑的指數衰減係數（設為 null 或 1.0 表示停用）
 # 若在 (0,1) 範圍內，執行 new = alpha*current + (1-alpha)*prev 的平滑
-KP_EMA_ALPHA: 1.0
+KP_EMA_ALPHA: 0.5
+
+# KP EMA Alpha Ablation
+# 是否對不同的 KP_EMA_ALPHA 做消融實驗（true 時使用下方列表，忽略 KP_EMA_ALPHA 單值）
+RUN_KP_EMA_ABLATION: false
+# 要依序比較的 EMA alpha 值（1.0 = 不平滑，值愈小平滑愈強）
+ABLATION_KP_EMA_ALPHAS:
+  - 1.0
+  - 0.9
+  - 0.7
+  - 0.5
 
 # Topology
 # 模型預測的行為類別數（例如 walk, lick, scratch, shake, stop）
@@ -32,8 +40,6 @@ BEHAVIOR_PREFIXES:
   stop: 4
 # 每一幀的關節數（圖的頂點數）
 NUM_JOINTS: 17
-# 經特徵建構後每關節的輸入通道數（例如 x,y,vx,vy -> 4）
-IN_CHANNELS: 4
 # 輸入模型的序列長度（幀數）
 SEQUENCE_LENGTH: 16
 # 訓練資料滑動視窗步長（幀數）；建議 SEQUENCE_LENGTH // 2（50% 重疊）
@@ -57,18 +63,18 @@ LABEL_SMOOTHING: 0.01   # init: 0.01
 
 # Feature mode
 # 特徵模式，名稱直接反映所含特徵標籤（xy=位置, conf=信心值, v=速度, bone=骨架向量, bmotion=骨架位移）：
-# - xy_v:               x,y,vx,vy                                              (4 ch)
-# - xy_conf_v:          x,y,conf,vx,vy                                         (5 ch)
-# - xy_conf_v_bone:     x,y,conf,vx,vy,bone_x,bone_y                           (7 ch)
+# - xy:                     x,y                                                (2 ch)
+# - xy_conf:                x,y,conf                                           (3 ch)
+# - xy_conf_v:              x,y,conf,vx,vy                                     (5 ch)
+# - xy_conf_v_bone:         x,y,conf,vx,vy,bone_x,bone_y                       (7 ch)
 # - xy_conf_v_bone_bmotion: x,y,conf,vx,vy,bone_x,bone_y,bone_mx,bone_my      (9 ch)
-FEATURE_MODE: "xy_v"
+FEATURE_MODE: "xy_conf_v_bone"
 # 若為 true，執行消融實驗；若為 false，僅跑 FEATURE_MODE 單一設定
-RUN_ABLATION_STUDY: false
-# 若你的 0_train_gcn.py 有支援 SELECT_FEATURE_MODE，可用此欄位只跑單一模式；沒有支援也不影響
-SELECT_FEATURE_MODE: null
+RUN_ABLATION_STUDY: true
 # ABLATION_MODES: 建議用於論文特徵消融
 ABLATION_MODES:
-  - xy_v
+  - xy
+  - xy_conf
   - xy_conf_v
   - xy_conf_v_bone
   - xy_conf_v_bone_bmotion
@@ -116,7 +122,7 @@ USE_EMA_FOR_EVAL: false
 # 是否使用類別加權抽樣
 # 可改善類別不平衡問題
 # 適合少數類別樣本明顯不足時使用
-USE_WEIGHTED_SAMPLER: false
+USE_WEIGHTED_SAMPLER: true
 # Attention
 # 是否啟用關節注意力模組（true=啟用）
 USE_ATTENTION: true

@@ -91,66 +91,10 @@ class ModelEMA:
         self.device = device
         return self
 
-# ==================== Configuration (centralized) ====================
-# Initial defaults are kept only for type-shape convenience before the
-# external config file is loaded and assigned to CONFIG below.
-CONFIG = {
-    # Window filtering / labeling
-    'STRICT_WINDOW_FILTER': os.getenv('STGCN_STRICT_WINDOW_FILTER', '0').strip().lower() in {'1','true','yes','y','on'},
-    'MAX_NO_DETECT_FRAMES': int(os.getenv('STGCN_MAX_NO_DETECT_FRAMES', '2')),
-
-    # Keypoint EMA smoothing (None to disable)
-    'KP_EMA_ALPHA': None if os.getenv('STGCN_KP_EMA_ALPHA', '1.0').strip().lower() in {'none',''} else float(os.getenv('STGCN_KP_EMA_ALPHA', '1.0')),
-
-    # Dataset / model topology
-    'NUM_CLASSES': int(os.getenv('STGCN_NUM_CLASSES', '5')),
-    'BEHAVIOR_PREFIXES': {
-        'walk': 0, 'lick': 1, 'scratch': 2, 'shake': 3, 'stop': 4,
-    },
-    'NUM_JOINTS': int(os.getenv('STGCN_NUM_JOINTS', '17')),
-    'IN_CHANNELS': int(os.getenv('STGCN_IN_CHANNELS', '4')),
-    'SEQUENCE_LENGTH': int(os.getenv('STGCN_SEQUENCE_LENGTH', '16')),
-    # 訓練滑動窗口步長：0 = 自動（SEQUENCE_LENGTH // 2，即 50% 重疊）
-    # 常見慣例：stride=T/2（50% overlap）兼顧資料量與樣本多樣性
-    'WINDOW_STRIDE': int(os.getenv('STGCN_WINDOW_STRIDE', '0')),
-    'SPATIAL_KERNEL_SIZE': int(os.getenv('STGCN_SPATIAL_KERNEL_SIZE', '3')),
-    'TEMPORAL_KERNEL_SIZE': int(os.getenv('STGCN_TEMPORAL_KERNEL_SIZE', '9')),
-    'NUM_STGCN_LAYERS': int(os.getenv('STGCN_NUM_STGCN_LAYERS', '3')),
-
-    # Regularization / dropout
-    'INPUT_DROPOUT': float(os.getenv('STGCN_INPUT_DROPOUT', '0.05')),
-    'BLOCK_DROPOUT': float(os.getenv('STGCN_BLOCK_DROPOUT', '0.15')),
-    'FINAL_DROPOUT': float(os.getenv('STGCN_FINAL_DROPOUT', '0.50')),
-
-    # Feature modes and ablation
-    'FEATURE_MODE': os.getenv('STGCN_FEATURE_MODE', 'xy_v').strip().lower(),
-    'RUN_ABLATION_STUDY': os.getenv('STGCN_RUN_ABLATION', '1').strip().lower() in {'1','true','yes','y','on'},
-    'ABLATION_MODES': ['xy_v', 'xy_conf_v', 'xy_conf_v_bone', 'xy_conf_v_bone_bmotion'],
-
-    # Spatial augmentation (conservative defaults for cat poses)
-    'SPATIAL_ROTATE_DEG': float(os.getenv('STGCN_SPATIAL_ROTATE_DEG', '12')),
-    'SPATIAL_SCALE_MIN': float(os.getenv('STGCN_SPATIAL_SCALE_MIN', '0.90')),
-    'SPATIAL_SCALE_MAX': float(os.getenv('STGCN_SPATIAL_SCALE_MAX', '1.10')),
-    'SPATIAL_TRANSLATE_STD': float(os.getenv('STGCN_SPATIAL_TRANSLATE_STD', '0.04')),
-    'SPATIAL_CROP_PROB': float(os.getenv('STGCN_SPATIAL_CROP_PROB', '0.30')),
-    'SPATIAL_OCCLUSION_PROB': float(os.getenv('STGCN_SPATIAL_OCCLUSION_PROB', '0.25')),
-    'SPATIAL_OCCLUSION_MAX_JOINTS': int(os.getenv('STGCN_SPATIAL_OCCLUSION_MAX_JOINTS', '2')),
-
-    # Training hyperparameters
-    'BATCH_SIZE': int(os.getenv('STGCN_BATCH_SIZE', '8')),
-    'NUM_EPOCHS': int(os.getenv('STGCN_NUM_EPOCHS', '10')),
-    'LEARNING_RATE': float(os.getenv('STGCN_LR', '0.001')),
-    'WEIGHT_DECAY': float(os.getenv('STGCN_WEIGHT_DECAY', '0.0001')),
-    'EARLY_STOP_PATIENCE': int(os.getenv('STGCN_EARLY_STOP', '10')),
-    'TRAIN_TEST_SPLIT': float(os.getenv('STGCN_TRAIN_TEST_SPLIT', '0.2')),
-    'RANDOM_SEED': int(os.getenv('STGCN_RANDOM_SEED', '42')),
-
-    # Attention toggle
-    'USE_ATTENTION': os.getenv('STGCN_USE_ATTENTION', '1').strip().lower() in {'1','true','yes','y','on'},
-}
-# Attempt to load external config file (JSON or YAML) and merge into CONFIG.
-# Priority: defaults defined above < external config file < explicit environment vars
-# If you want to use a specific file, set STGCN_CONFIG_PATH env var.
+# ==================== Configuration ====================
+# Load external config file (JSON or YAML). The config file is required;
+# the script will raise RuntimeError if it is missing or unreadable.
+# To use a custom path, set the STGCN_CONFIG_PATH environment variable.
 def _load_external_config():
     config_path = os.getenv('STGCN_CONFIG_PATH', r'C:\ai_project\paper\cat_monitoring_system\stgcn_config.yaml')
     if not os.path.exists(config_path):
@@ -183,8 +127,6 @@ def _load_external_config():
         return None
 
 
-# Merge external config (if present) into CONFIG (external overrides defaults,
-# but explicit environment variables used above still take precedence for now).
 _external = _load_external_config()
 # Enforce strict config-only mode: require an external config file and
 # fail fast if missing or incomplete. This removes reliance on script
@@ -200,9 +142,9 @@ CONFIG = _external
 
 # Validate required top-level keys are present
 required_keys = [
-    'SKELETON_DATA_FOLDER', 'MODEL_SAVE_PATH', 'RESULTS_FOLDER',
+    'SKELETON_DATA_FOLDER', 'RESULTS_FOLDER',
     'STRICT_WINDOW_FILTER', 'KP_EMA_ALPHA',
-    'NUM_CLASSES', 'BEHAVIOR_PREFIXES', 'NUM_JOINTS', 'IN_CHANNELS', 'SEQUENCE_LENGTH', 'WINDOW_STRIDE',
+    'NUM_CLASSES', 'BEHAVIOR_PREFIXES', 'NUM_JOINTS', 'SEQUENCE_LENGTH', 'WINDOW_STRIDE',
     'SPATIAL_KERNEL_SIZE', 'TEMPORAL_KERNEL_SIZE', 'NUM_STGCN_LAYERS',
     'INPUT_DROPOUT', 'BLOCK_DROPOUT', 'FINAL_DROPOUT',
     'FEATURE_MODE', 'RUN_ABLATION_STUDY', 'ABLATION_MODES',
@@ -217,7 +159,6 @@ if missing:
 
 # Unpack to module-level constants (keeps backward compatibility with code below)
 SKELETON_DATA_FOLDER = CONFIG['SKELETON_DATA_FOLDER']
-MODEL_SAVE_PATH = CONFIG['MODEL_SAVE_PATH']
 RESULTS_FOLDER = CONFIG['RESULTS_FOLDER']
 STRICT_WINDOW_FILTER = CONFIG['STRICT_WINDOW_FILTER']
 MAX_NO_DETECT_FRAMES = int(CONFIG.get('MAX_NO_DETECT_FRAMES', 2))
@@ -225,7 +166,6 @@ KP_EMA_ALPHA = CONFIG['KP_EMA_ALPHA']
 NUM_CLASSES = CONFIG['NUM_CLASSES']
 BEHAVIOR_PREFIXES = CONFIG['BEHAVIOR_PREFIXES']
 NUM_JOINTS = CONFIG['NUM_JOINTS']
-IN_CHANNELS = CONFIG['IN_CHANNELS']
 SEQUENCE_LENGTH = CONFIG['SEQUENCE_LENGTH']
 WINDOW_STRIDE   = CONFIG['WINDOW_STRIDE']
 SPATIAL_KERNEL_SIZE = CONFIG['SPATIAL_KERNEL_SIZE']
@@ -254,6 +194,8 @@ RANDOM_SEED = CONFIG['RANDOM_SEED']
 USE_ATTENTION = CONFIG['USE_ATTENTION']
 USE_EMA_FOR_EVAL = CONFIG.get('USE_EMA_FOR_EVAL', False)
 OPTIMIZER = CONFIG.get('OPTIMIZER', 'adam')
+RUN_KP_EMA_ABLATION    = CONFIG.get('RUN_KP_EMA_ABLATION', False)
+ABLATION_KP_EMA_ALPHAS = CONFIG.get('ABLATION_KP_EMA_ALPHAS', [1.0, 0.9, 0.7, 0.5])
 
 # Device configuration (runtime detection remains)
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -262,7 +204,6 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def setup_directories():
     """Create necessary directories"""
     Path(RESULTS_FOLDER).mkdir(parents=True, exist_ok=True)
-    Path(os.path.dirname(MODEL_SAVE_PATH)).mkdir(parents=True, exist_ok=True)
     print(f"✓ Directories created")
 
 
@@ -292,6 +233,20 @@ def _format_duration(seconds: float) -> str:
     if m > 0:
         return f"{m}m {s}s"
     return f"{s}s"
+
+
+def get_unique_path(path):
+    """回傳不衝突的路徑：若目標已存在，自動補 _001、_002 … 後綴。"""
+    path = Path(path)
+    if not path.exists():
+        return path
+    stem, suffix, parent = path.stem, path.suffix, path.parent
+    counter = 1
+    while True:
+        candidate = parent / f"{stem}_{counter:03d}{suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
 
 
 # ==================== Dataset Class ====================
@@ -398,15 +353,15 @@ class CatSkeletonDataset(Dataset):
     """
     
     def __init__(self, skeleton_folder, sequence_length=32,
-                 in_channels=2, num_joints=17, augment=False, feature_mode="xyv",
-                 window_stride=0):
+                 num_joints=17, augment=False, feature_mode="xyv",
+                 window_stride=0, kp_ema_alpha=None):
         self.skeleton_folder = Path(skeleton_folder)
         self.sequence_length = sequence_length
-        self.in_channels = in_channels
         self.num_joints = num_joints
         self.augment = augment
         self.feature_mode = feature_mode
         self.window_stride = window_stride
+        self.kp_ema_alpha = kp_ema_alpha if kp_ema_alpha is not None else KP_EMA_ALPHA
         # idx_to_label: map numeric label -> behaviour name (derived from CONFIG)
         self.idx_to_label = {v: k for k, v in BEHAVIOR_PREFIXES.items()}
         
@@ -461,11 +416,12 @@ class CatSkeletonDataset(Dataset):
 
             # EMA 平滑：在插值補全後、滑動切窗前對整段影片套用，與推論行為一致
             # 必須在切窗前套，否則跨窗的平滑狀態不連貫
-            if KP_EMA_ALPHA is not None and 0.0 < KP_EMA_ALPHA < 1.0:
+            _ema = self.kp_ema_alpha
+            if _ema is not None and 0.0 < _ema < 1.0:
                 for t in range(1, len(keypoint_frames)):
                     keypoint_frames[t] = (
-                        KP_EMA_ALPHA * keypoint_frames[t]
-                        + (1.0 - KP_EMA_ALPHA) * keypoint_frames[t - 1]
+                        _ema * keypoint_frames[t]
+                        + (1.0 - _ema) * keypoint_frames[t - 1]
                     )
 
             if len(keypoint_frames) < self.sequence_length:
@@ -655,13 +611,23 @@ def validate(model, dataloader, criterion, device):
     except Exception:
         pass
 
-    return avg_loss, accuracy, macro_f1, all_preds, all_labels
+    from sklearn.metrics import precision_recall_fscore_support
+    _, _, per_class_f1, _ = precision_recall_fscore_support(
+        all_labels, all_preds,
+        average=None,
+        labels=list(range(NUM_CLASSES)),
+        zero_division=0,
+    )
+    return avg_loss, accuracy, macro_f1, all_preds, all_labels, per_class_f1
 
 
 # ==================== Main Training Loop ====================
-def train_model(feature_mode=FEATURE_MODE, run_name=None):
+def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
+                shared_models_dir=None, kp_ema_alpha=None):
     """Main training function"""
     in_channels = get_in_channels_for_mode(feature_mode)
+    eff_alpha = kp_ema_alpha if kp_ema_alpha is not None else KP_EMA_ALPHA
+    alpha_tag = f"_ema{eff_alpha:.2f}" if (eff_alpha is not None and eff_alpha < 1.0) else ""
 
     # Fix random seeds for more stable runs (does not guarantee identical across GPUs)
     np.random.seed(RANDOM_SEED)
@@ -675,33 +641,38 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
     use_attention = bool(USE_ATTENTION)
     att_suffix = "att_on" if use_attention else "att_off"
 
-    # 以 3 位流水號命名，方便排序比較；掃 RESULTS_FOLDER 取下一個可用編號
-    run_num = _next_run_number(RESULTS_FOLDER)
+    # 消融研究傳入 run_number 讓同批所有模式共用同一組號；單次訓練自動取下一個
+    run_num = run_number if run_number is not None else _next_run_number(RESULTS_FOLDER)
     run_tag = f"{run_num:03d}"
     if run_name:
-        run_suffix = f"{run_tag}_{run_name}_{att_suffix}"
+        run_suffix = f"{run_tag}_{run_name}{alpha_tag}_{att_suffix}"
     else:
-        run_suffix = f"{run_tag}_{feature_mode}_{att_suffix}"
-    print(f"✓ Run #{run_tag}  ({run_suffix})")
+        run_suffix = f"{run_tag}_{feature_mode}{alpha_tag}_{att_suffix}"
+    print(f"✓ Run #{run_tag}  ({run_suffix})  KP_EMA_ALPHA={eff_alpha}")
 
     run_results_dir = os.path.join(RESULTS_FOLDER, f"run_{run_suffix}")
-    model_root = Path(MODEL_SAVE_PATH)
-    run_model_path = str(model_root.with_name(f"{model_root.stem}_{run_suffix}{model_root.suffix}"))
 
     # Setup directories
     setup_directories()
     Path(run_results_dir).mkdir(parents=True, exist_ok=True)
+    # 消融研究：模型權重統一存至共用資料夾，以特徵名區分檔名
+    # 單次訓練：存在自己的 run 資料夾內
+    if shared_models_dir:
+        model_filename = f"{run_tag}_{feature_mode}{alpha_tag}_{att_suffix}.pth"
+        run_model_path = str(get_unique_path(Path(shared_models_dir) / model_filename))
+    else:
+        run_model_path = str(get_unique_path(Path(run_results_dir) / "best_model.pth"))
 
     # Load dataset (no augmentation)
     print("\nLoading dataset...")
     full_dataset = CatSkeletonDataset(
         SKELETON_DATA_FOLDER,
         sequence_length=SEQUENCE_LENGTH,
-        in_channels=in_channels,
         num_joints=NUM_JOINTS,
         augment=False,
         feature_mode=feature_mode,
         window_stride=WINDOW_STRIDE,
+        kp_ema_alpha=eff_alpha,
     )
 
     if len(full_dataset) == 0:
@@ -720,6 +691,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
         'random_seed': RANDOM_SEED,
         'use_attention': use_attention,
         'use_ema_for_eval': bool(USE_EMA_FOR_EVAL),
+        'kp_ema_alpha': eff_alpha,
         'training_params': {
             'batch_size': BATCH_SIZE,
             'num_epochs': NUM_EPOCHS,
@@ -1004,6 +976,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
     best_val_preds = None
     best_val_labels = None
     best_val_macro_f1 = 0.0
+    best_val_per_class_f1 = None
     patience_counter = 0
 
     train_losses = []
@@ -1025,9 +998,9 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
         # Validate: optionally use EMA shadow weights for evaluation/saving
         if USE_EMA_FOR_EVAL:
             # ema.ema is the cloned EMA model kept on the same device
-            val_loss, val_acc, val_macro_f1, val_preds, val_labels = validate(ema.ema, val_loader, criterion, DEVICE)
+            val_loss, val_acc, val_macro_f1, val_preds, val_labels, val_per_class_f1 = validate(ema.ema, val_loader, criterion, DEVICE)
         else:
-            val_loss, val_acc, val_macro_f1, val_preds, val_labels = validate(model, val_loader, criterion, DEVICE)
+            val_loss, val_acc, val_macro_f1, val_preds, val_labels, val_per_class_f1 = validate(model, val_loader, criterion, DEVICE)
         val_losses.append(val_loss)
         val_accs.append(val_acc)
 
@@ -1068,6 +1041,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
                 best_state_dict = copy.deepcopy(model.state_dict())  # 暫存於記憶體，不寫檔
             best_val_preds = val_preds
             best_val_labels = val_labels
+            best_val_per_class_f1 = val_per_class_f1
             patience_counter = 0
             print(f"  → New best: acc={best_val_acc:.4f}, macro_f1={best_val_macro_f1:.4f}, loss={best_val_loss:.4f} (will save after training)")
         else:
@@ -1097,6 +1071,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
         'best_val_acc': float(best_val_acc),
         'best_val_macro_f1': float(best_val_macro_f1),
         'best_val_loss': float(best_val_loss),
+        'best_val_per_class_f1': best_val_per_class_f1.tolist() if best_val_per_class_f1 is not None else [],
         'model_path': run_model_path,
     }
     try:
@@ -1112,6 +1087,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
         'timestamp': training_end_time.isoformat(),
         'run_suffix': run_suffix,
         'feature_mode': feature_mode,
+        'kp_ema_alpha': eff_alpha,
         'in_channels': in_channels,
         'sequence_length': SEQUENCE_LENGTH,
         'window_stride': WINDOW_STRIDE,
@@ -1166,12 +1142,19 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None):
 
     return {
         'feature_mode': feature_mode,
+        'kp_ema_alpha': eff_alpha,
         'in_channels': in_channels,
         'best_val_acc': float(best_val_acc),
         'best_val_macro_f1': float(best_val_macro_f1),
         'best_val_loss': float(best_val_loss),
+        'best_val_per_class_f1': best_val_per_class_f1.tolist() if best_val_per_class_f1 is not None else [],
         'model_path': run_model_path,
         'results_dir': run_results_dir,
+        'train_losses': train_losses,
+        'val_losses': val_losses,
+        'train_accs': train_accs,
+        'val_accs': val_accs,
+        'total_epochs_run': total_epochs_run,
     }
 
 
@@ -1222,6 +1205,16 @@ def run_ablation_study(modes=None):
             modes = [selected]
     else:
         modes = modes or ABLATION_MODES
+
+    # 同一批消融研究共用同一個組號，所有模式的結果資料夾都用這個號碼
+    shared_run_num = _next_run_number(RESULTS_FOLDER)
+    shared_tag = f"{shared_run_num:03d}"
+    att_suffix = "att_on" if USE_ATTENTION else "att_off"
+    shared_models_dir = Path(RESULTS_FOLDER) / f"run_{shared_tag}_models_{att_suffix}"
+    shared_models_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n✓ 消融研究組號 #{shared_tag}  ({len(modes)} 種特徵模式)")
+    print(f"  模型權重目錄: {shared_models_dir}")
+
     summary = []
     print("\n" + "=" * 70)
     print("Feature Ablation Study")
@@ -1230,7 +1223,9 @@ def run_ablation_study(modes=None):
         print("\n" + "-" * 70)
         print(f"Running mode: {mode}")
         print("-" * 70)
-        result = train_model(feature_mode=mode, run_name=mode)
+        result = train_model(feature_mode=mode, run_name=mode,
+                             run_number=shared_run_num,
+                             shared_models_dir=str(shared_models_dir))
         if result is not None:
             summary.append(result)
 
@@ -1238,21 +1233,18 @@ def run_ablation_study(modes=None):
         print("✗ No ablation results generated.")
         return
 
-    summary_csv = os.path.join(RESULTS_FOLDER, 'ablation_summary.csv')
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # ── Ablation summary CSV（含時戳，不覆蓋） ────────────────────────────
     import csv
+    summary_csv = str(get_unique_path(Path(RESULTS_FOLDER) / f'ablation_summary_{ts}.csv'))
+    csv_fields = [
+        'feature_mode', 'in_channels', 'best_val_acc',
+        'best_val_macro_f1', 'best_val_loss', 'total_epochs_run',
+        'model_path', 'results_dir',
+    ]
     with open(summary_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=[
-                'feature_mode',
-                'in_channels',
-                'best_val_acc',
-                'best_val_macro_f1',
-                'best_val_loss',
-                'model_path',
-                'results_dir',
-            ],
-        )
+        writer = csv.DictWriter(f, fieldnames=csv_fields, extrasaction='ignore')
         writer.writeheader()
         writer.writerows(summary)
 
@@ -1261,17 +1253,246 @@ def run_ablation_study(modes=None):
     print("=" * 70)
     for rec in summary:
         print(
-            f"{rec['feature_mode']:>14s} | C={rec['in_channels']} | "
+            f"{rec['feature_mode']:>22s} | C={rec['in_channels']} | "
             f"Acc={rec['best_val_acc']:.4f} | Macro-F1={rec['best_val_macro_f1']:.4f} | "
             f"Loss={rec['best_val_loss']:.4f}"
         )
     print(f"\n✓ Summary CSV saved to: {summary_csv}")
 
+    # ── 模式短標籤 ─────────────────────────────────────────────────────────
+    _mode_short = {
+        'xy': 'E0', 'xy_conf': 'E1', 'xy_conf_v': 'E2',
+        'xy_conf_v_bone': 'E3', 'xy_conf_v_bone_bmotion': 'E4',
+    }
+    label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+
+    # ── Plot A：ablation_result_comparison（Acc/F1 折線 + 每類 F1 長條） ──
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+
+        modes_run   = [r['feature_mode'] for r in summary]
+        short_labels = [_mode_short.get(m, m) for m in modes_run]
+        accs = [r['best_val_acc']     for r in summary]
+        f1s  = [r['best_val_macro_f1'] for r in summary]
+
+        x = np.arange(len(modes_run))
+        ax1.plot(x, accs, 'o-',  linewidth=2, markersize=8, label='Val Accuracy')
+        ax1.plot(x, f1s,  's--', linewidth=2, markersize=8, label='Macro-F1')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(short_labels)
+        ax1.set_ylim(0, 1.08)
+        ax1.set_xlabel('Feature Mode', fontsize=12)
+        ax1.set_ylabel('Score', fontsize=12)
+        ax1.set_title('Accuracy & Macro-F1 per Feature Mode', fontsize=13, fontweight='bold')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        for xi, (a, f) in enumerate(zip(accs, f1s)):
+            ax1.annotate(f'{a:.3f}', (xi, a), textcoords='offset points', xytext=(0, 8),  ha='center', fontsize=8)
+            ax1.annotate(f'{f:.3f}', (xi, f), textcoords='offset points', xytext=(0, -14), ha='center', fontsize=8)
+
+        # Per-class F1 grouped bar chart
+        has_per_class = any(r.get('best_val_per_class_f1') for r in summary)
+        if has_per_class:
+            n_modes   = len(summary)
+            n_classes = len(label_names)
+            bar_w = 0.8 / n_modes
+            colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+            for mi, rec in enumerate(summary):
+                pcf1 = rec.get('best_val_per_class_f1') or [0.0] * n_classes
+                xs = np.arange(n_classes) + mi * bar_w - (n_modes - 1) * bar_w / 2
+                ax2.bar(xs, pcf1, width=bar_w, color=colors[mi % len(colors)],
+                        label=_mode_short.get(rec['feature_mode'], rec['feature_mode']))
+            ax2.set_xticks(np.arange(n_classes))
+            ax2.set_xticklabels(label_names, rotation=20, ha='right')
+            ax2.set_ylim(0, 1.08)
+            ax2.set_xlabel('Class', fontsize=12)
+            ax2.set_ylabel('F1 Score', fontsize=12)
+            ax2.set_title('Per-Class F1 Score by Feature Mode', fontsize=13, fontweight='bold')
+            ax2.legend()
+            ax2.grid(True, alpha=0.3, axis='y')
+        else:
+            ax2.text(0.5, 0.5, 'Per-class F1 not available',
+                     transform=ax2.transAxes, ha='center', va='center', fontsize=12)
+
+        plt.tight_layout()
+        cmp_path = str(get_unique_path(Path(RESULTS_FOLDER) / f'ablation_result_comparison_{ts}.png'))
+        plt.savefig(cmp_path, dpi=150, bbox_inches='tight')
+        print(f"✓ Result comparison saved to: {cmp_path}")
+        plt.close()
+    except Exception as e:
+        print(f"⚠ Failed to plot result comparison: {e}")
+
+    # ── Plot B：ablation_convergence_comparison（val_loss + val_acc vs epoch） ──
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        for ci, rec in enumerate(summary):
+            short = _mode_short.get(rec['feature_mode'], rec['feature_mode'])
+            col   = colors[ci % len(colors)]
+            vl = rec.get('val_losses', [])
+            va = rec.get('val_accs',   [])
+            if vl:
+                ax1.plot(range(1, len(vl) + 1), vl, '-o', linewidth=2,
+                         markersize=4, color=col, label=short)
+            if va:
+                ax2.plot(range(1, len(va) + 1), va, '-o', linewidth=2,
+                         markersize=4, color=col, label=short)
+
+        ax1.set_xlabel('Epoch', fontsize=12)
+        ax1.set_ylabel('Val Loss', fontsize=12)
+        ax1.set_title('Validation Loss Convergence', fontsize=13, fontweight='bold')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+
+        ax2.set_xlabel('Epoch', fontsize=12)
+        ax2.set_ylabel('Val Accuracy', fontsize=12)
+        ax2.set_title('Validation Accuracy Convergence', fontsize=13, fontweight='bold')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        conv_path = str(get_unique_path(Path(RESULTS_FOLDER) / f'ablation_convergence_comparison_{ts}.png'))
+        plt.savefig(conv_path, dpi=150, bbox_inches='tight')
+        print(f"✓ Convergence comparison saved to: {conv_path}")
+        plt.close()
+    except Exception as e:
+        print(f"⚠ Failed to plot convergence comparison: {e}")
+
+
+# ==================== KP EMA Alpha Ablation ====================
+def run_kp_ema_ablation(alphas=None):
+    """對不同 KP_EMA_ALPHA 做消融實驗，固定使用 FEATURE_MODE。"""
+    alphas = alphas or list(ABLATION_KP_EMA_ALPHAS)
+    shared_run_num = _next_run_number(RESULTS_FOLDER)
+    shared_tag     = f"{shared_run_num:03d}"
+    att_suffix     = "att_on" if USE_ATTENTION else "att_off"
+    shared_models_dir = Path(RESULTS_FOLDER) / f"run_{shared_tag}_ema_ablation_{att_suffix}"
+    shared_models_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n✓ KP EMA Alpha 消融研究 #{shared_tag}  ({len(alphas)} 種 alpha)")
+    print(f"  Feature mode : {FEATURE_MODE}")
+    print(f"  Alphas       : {alphas}")
+    print(f"  模型目錄     : {shared_models_dir}")
+
+    summary = []
+    for alpha in alphas:
+        print(f"\n{'─'*70}")
+        print(f"KP_EMA_ALPHA = {alpha}")
+        print(f"{'─'*70}")
+        result = train_model(
+            feature_mode=FEATURE_MODE,
+            kp_ema_alpha=alpha,
+            run_number=shared_run_num,
+            shared_models_dir=str(shared_models_dir),
+        )
+        if result is not None:
+            summary.append(result)
+
+    if not summary:
+        print("✗ No KP EMA ablation results generated.")
+        return
+
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # Summary CSV
+    import csv
+    summary_csv = str(get_unique_path(
+        Path(RESULTS_FOLDER) / f'kp_ema_ablation_summary_{ts}.csv'
+    ))
+    csv_fields = [
+        'kp_ema_alpha', 'feature_mode', 'in_channels',
+        'best_val_acc', 'best_val_macro_f1', 'best_val_loss',
+        'total_epochs_run', 'model_path', 'results_dir',
+    ]
+    with open(summary_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=csv_fields, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(summary)
+
+    print(f"\n{'='*70}")
+    print("KP EMA Alpha Ablation Summary")
+    print(f"{'='*70}")
+    for rec in summary:
+        print(
+            f"  alpha={rec['kp_ema_alpha']:.2f} | "
+            f"Acc={rec['best_val_acc']:.4f} | "
+            f"Macro-F1={rec['best_val_macro_f1']:.4f} | "
+            f"Loss={rec['best_val_loss']:.4f}"
+        )
+    print(f"\n✓ Summary CSV: {summary_csv}")
+
+    # Plot: alpha vs acc / f1
+    try:
+        alphas_run  = [r['kp_ema_alpha'] for r in summary]
+        accs = [r['best_val_acc']      for r in summary]
+        f1s  = [r['best_val_macro_f1'] for r in summary]
+
+        fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+        fig.suptitle(f'KP EMA Alpha Ablation  [{FEATURE_MODE}]',
+                     fontsize=13, fontweight='bold')
+
+        # Left: line chart (alpha vs score)
+        ax1 = axes[0]
+        ax1.plot(alphas_run, accs, 'o-',  linewidth=2, markersize=8, label='Val Accuracy')
+        ax1.plot(alphas_run, f1s,  's--', linewidth=2, markersize=8, label='Macro-F1')
+        ax1.set_xlabel('KP EMA Alpha  (← stronger smoothing)', fontsize=11)
+        ax1.set_ylabel('Score', fontsize=11)
+        ax1.set_title('Score vs EMA Alpha', fontsize=12, fontweight='bold')
+        ax1.set_ylim(0, 1.08)
+        ax1.invert_xaxis()   # 右 = 不平滑(1.0)，左 = 強平滑
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        for al, a, f in zip(alphas_run, accs, f1s):
+            ax1.annotate(f'{a:.3f}', (al, a), textcoords='offset points',
+                         xytext=(0, 8),   ha='center', fontsize=9)
+            ax1.annotate(f'{f:.3f}', (al, f), textcoords='offset points',
+                         xytext=(0, -14), ha='center', fontsize=9)
+
+        # Right: per-class F1 grouped bar chart
+        ax2 = axes[1]
+        label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+        has_per_class = any(r.get('best_val_per_class_f1') for r in summary)
+        if has_per_class:
+            n_modes   = len(summary)
+            n_classes = len(label_names)
+            bar_w  = 0.8 / n_modes
+            colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+            for mi, rec in enumerate(summary):
+                pcf1 = rec.get('best_val_per_class_f1') or [0.0] * n_classes
+                xs   = np.arange(n_classes) + mi * bar_w - (n_modes - 1) * bar_w / 2
+                ax2.bar(xs, pcf1, width=bar_w, color=colors[mi % len(colors)],
+                        label=f"α={rec['kp_ema_alpha']:.2f}")
+            ax2.set_xticks(np.arange(n_classes))
+            ax2.set_xticklabels(label_names, rotation=20, ha='right')
+            ax2.set_ylim(0, 1.08)
+            ax2.set_ylabel('F1 Score', fontsize=11)
+            ax2.set_title('Per-Class F1 by Alpha', fontsize=12, fontweight='bold')
+            ax2.legend(fontsize=9)
+            ax2.grid(True, alpha=0.3, axis='y')
+        else:
+            ax2.text(0.5, 0.5, 'Per-class F1 not available',
+                     transform=ax2.transAxes, ha='center', va='center', fontsize=12)
+
+        plt.tight_layout()
+        plot_path = str(get_unique_path(
+            Path(RESULTS_FOLDER) / f'kp_ema_ablation_comparison_{ts}.png'
+        ))
+        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        print(f"✓ Ablation plot: {plot_path}")
+        plt.close()
+    except Exception as e:
+        print(f"⚠ Failed to plot KP EMA ablation: {e}")
+
 
 # ==================== Main Entry Point ====================
 if __name__ == "__main__":
+    ran = False
+    if RUN_KP_EMA_ABLATION:
+        run_kp_ema_ablation()
+        ran = True
     if RUN_ABLATION_STUDY:
         run_ablation_study()
-    else:
+        ran = True
+    if not ran:
         train_model(feature_mode=FEATURE_MODE)
 

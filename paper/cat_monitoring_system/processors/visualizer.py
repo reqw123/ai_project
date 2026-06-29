@@ -22,8 +22,9 @@ except ImportError:  # pragma: no cover - Pillow is available in the configured 
 import bisect
 
 
-HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / "cat_monitoring_system/maolex-blogs-cat-face-rabbit.webp"
+HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / r"C:\cat_paper_code-main\paper\cat_monitoring_system\h6bxw-tkcsv.gif"
 HIP_IMAGE_ALPHA_BOOST = 1.6
+HIP_IMAGE_SCALE = 0  # float | None — None=跟隨 bbox 動態計算；浮點數=原圖等比例倍率（1.0=原尺寸、2.0=放大兩倍）
 
 
 def _load_overlay_frames(image_path):
@@ -160,8 +161,10 @@ def _draw_text_with_pil(frame, text, pos, font_size=28, color=(255, 255, 255), o
     return bgr
 
 
-def _overlay_image_centered(frame, image, center_xy, target_width):
-    """將圖像以中心點方式疊到 frame 上，支援透明通道與邊界裁切。"""
+def _overlay_image_centered(frame, image, center_xy, target_width, target_height=None):
+    """將圖像以中心點方式疊到 frame 上，支援透明通道與邊界裁切。
+    target_height=None 表示依原始比例自動計算高度。
+    """
     if frame is None or image is None:
         return
 
@@ -179,12 +182,17 @@ def _overlay_image_centered(frame, image, center_xy, target_width):
 
     # 對齊最近 4px 讓相同大小的貓共用快取，減少重複 resize
     tw = (int(target_width) // 4) * 4
-    cache_key = (id(image), tw)
+    if tw <= 0:
+        return
+    th_fixed = (int(target_height) // 4) * 4 if target_height else None
+    cache_key = (id(image), tw, th_fixed)
     if cache_key in _overlay_resize_cache:
         resized = _overlay_resize_cache[cache_key]
     else:
-        th = max(1, int(round(tw * src_h / max(src_w, 1))))
-        resized = cv2.resize(image, (tw, th), interpolation=cv2.INTER_AREA)
+        th = th_fixed if th_fixed else max(1, int(round(tw * src_h / max(src_w, 1))))
+        # 縮小用 INTER_AREA（品質最佳）；放大用 INTER_LANCZOS4（避免鋸齒）
+        interp = cv2.INTER_AREA if (tw <= src_w and th <= src_h) else cv2.INTER_LANCZOS4
+        resized = cv2.resize(image, (tw, th), interpolation=interp)
         if len(_overlay_resize_cache) < 64:  # 防止記憶體無限增長
             _overlay_resize_cache[cache_key] = resized
     # 不論快取命中或新計算，都從 resized 取得最終尺寸
@@ -376,7 +384,13 @@ class Visualizer:
             else:
                 base_width = 72
 
-            _overlay_image_centered(frame, overlay_frame, nose_pt, base_width)
+            if HIP_IMAGE_SCALE is not None:
+                src_h, src_w = overlay_frame.shape[:2]
+                w = max(1, int(round(src_w * HIP_IMAGE_SCALE)))
+                h = max(1, int(round(src_h * HIP_IMAGE_SCALE)))
+            else:
+                w, h = base_width, None
+            _overlay_image_centered(frame, overlay_frame, nose_pt, w, h)
 
         # 畫YOLO bbox/conf
         if bbox is not None and conf is not None:
@@ -398,7 +412,7 @@ class Visualizer:
         if is_display_normal:
             # 顯示層使用中文標籤（若可用字型）
             low_text = get_behavior_name(LOW_CONF_ID, use_text=False, fallback=LOW_CONF_TEXT, confidence=confidence)
-            self.draw_prediction_on_frame(frame, low_text, 0.0, (200, 200, 200))
+            self.draw_prediction_on_frame(frame, low_text, confidence, (200, 200, 200))
             if class_probs is not None and any(p > 0 for p in class_probs):
                 self.draw_probability_bars(frame, class_probs, BEHAVIOR_CLASSES)
         elif behavior_id is not None and confidence > 0:

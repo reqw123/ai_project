@@ -94,7 +94,7 @@ def _is_valid_port(port):
 def _normalize_feature_mode(feature_mode):
     mode = str(feature_mode).strip().lower()
     if not mode:
-        return "xy_v"
+        return "xy"
     return mode
 
 
@@ -102,10 +102,15 @@ def _get_stgcn_feature_spec(feature_mode):
     """回傳 ST-GCN 特徵模式的通道數與特徵名稱說明。"""
     mode = _normalize_feature_mode(feature_mode)
     specs = {
-        "xy_v": {
-            "in_channels": 4,
-            "features": ["x", "y", "vx", "vy"],
-            "description": "位置 + 速度",
+        "xy": {
+            "in_channels": 2,
+            "features": ["x", "y"],
+            "description": "位置資訊",
+        },
+        "xy_conf": {
+            "in_channels": 3,
+            "features": ["x", "y", "conf"],
+            "description": "位置 + 信心值",
         },
         "xy_conf_v": {
             "in_channels": 5,
@@ -132,14 +137,15 @@ class ModelPaths:
     """模型和資料檔案路徑"""
     
     # YOLO 模型
-    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_96.pt")
+    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_101.pt")
     
     # ST-GCN 模型
-    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_best_033_xy_v_att_on.pth")
+    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_results\stgcn_best_047_xy_conf_v_att_on.pth")
     
     # 測試視頻
-    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\6月2日 (2).mp4")
-    
+    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\5月5日(1).mp4")
+                                                                  # rtsp://12345678:456456123@192.168.0.46:554/stream1
+    # 日誌和輸出目錄                                             # C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\5月5日(1).mp4"
     # 日誌和輸出目錄
     LOG_DIR = _env_str("CAT_MONITORING_LOG_DIR", "./logs")
     OUTPUT_DIR = _env_str("CAT_MONITORING_OUTPUT_DIR", "./output")
@@ -207,7 +213,7 @@ class STGCNConfig:
     NUM_LAYERS = 3                # ST-GCN 層數
 
     # 特徵模式（與 train_gcn.py / 推論腳本共用概念）
-    FEATURE_MODE = _normalize_feature_mode(_env_str("CAT_MONITORING_STGCN_FEATURE_MODE", "xy_v"))
+    FEATURE_MODE = _normalize_feature_mode(_env_str("CAT_MONITORING_STGCN_FEATURE_MODE", "xy"))
     FEATURE_SPEC = _get_stgcn_feature_spec(FEATURE_MODE)
     IN_CHANNELS = FEATURE_SPEC["in_channels"]
     FEATURE_NAMES = FEATURE_SPEC["features"]
@@ -282,7 +288,7 @@ class NodeRedConfig:
     PORT = _env_int("CAT_MONITORING_NODERED_PORT", 1880)
     
     # 推送間隔（秒）
-    PUSH_INTERVAL = _env_float("CAT_MONITORING_NODERED_PUSH_INTERVAL", 0.5)
+    PUSH_INTERVAL = _env_float("CAT_MONITORING_NODERED_PUSH_INTERVAL", 2)
 
     ENDPOINT_NOTIFY = _env_str("CAT_MONITORING_NODERED_ENDPOINT_NOTIFY", f"http://{HOST}:{PORT}/python_online")
     ENDPOINT_RESULT = _env_str("CAT_MONITORING_NODERED_ENDPOINT_RESULT", f"http://{HOST}:{PORT}/yolo_result")
@@ -335,11 +341,11 @@ class BehaviorTrackingConfig:
     }
 
     DISPLAY_EMOJI = {
-        "walk": "🚶",
-        "scratch": "🐾",
-        "lick": "🧼",
-        "shake": "甩頭",
-        "stop": "⏹",
+        "walk": "🐾",   # 腳印
+        "lick": "👅",   # 舌頭
+        "scratch": "🦶", # 肉掌
+        "shake": "🌀",  # 旋轉
+        "stop": "💤",   # 靜止
     }
 
 # ==================== CSV 日誌參數 ====================
@@ -367,7 +373,7 @@ class VisualizationConfig:
     """顯示和繪圖參數"""
     
     # 骨架 UI：True = 畫骨架邊線與關鍵點圓圈；False = 不畫，偵測與推論照常運行
-    SHOW_SKELETON = False
+    SHOW_SKELETON = True
 
     # 覆蓋層顯示設置
     DRAW_OVERLAY_STREAM = True    # Node-RED 串流用
@@ -493,8 +499,9 @@ def get_config_summary():
       - 主機        : {NodeRedConfig.HOST}:{NodeRedConfig.PORT}
       - 推送間隔    : {NodeRedConfig.PUSH_INTERVAL} s
       - 超時        : {NodeRedConfig.TIMEOUT} s
-      - Notify 端點 : {NodeRedConfig.ENDPOINT_NOTIFY}
-      - Result 端點 : {NodeRedConfig.ENDPOINT_RESULT}
+      - Notify 端點   : {NodeRedConfig.ENDPOINT_NOTIFY}
+      - Result v1 端點: {NodeRedConfig.ENDPOINT_RESULT}
+      - Result v2 端點: {NodeRedConfig.ENDPOINT_RESULT_V2}
 
     📄 日誌設定  (硬編碼: L354-357 CSV_COLUMNS, L360 LOG_LEVEL)
       - 主要 CSV        : {LoggingConfig.CSV_PATH}

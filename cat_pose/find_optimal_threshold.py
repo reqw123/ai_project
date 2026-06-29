@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 # ==================== 配置 ====================
-MODEL_PATH = r"C:\cat_pose\no_aug.pt"
-INPUT_IMAGE_DIR = r"C:\cat_pose\test\images"
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_103.pt"
+INPUT_IMAGE_DIR = r"C:\Users\homec\Downloads\11.v235i.yolov8\valid\images"
 
 # YOLO 推理参数
 IMGSZ = 640

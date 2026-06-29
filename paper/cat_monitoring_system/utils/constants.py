@@ -65,12 +65,24 @@ EAR_DISTANCE_EDGE_COLORS = [
 BEHAVIOR_CLASSES = ['walk', 'lick', 'scratch', 'shake', 'stop']
 BEHAVIOR_COLORS = {0: (0, 255, 0), 1: (0, 255, 255), 2: (255, 165, 0), 3: (0, 0, 255), 4: (0, 165, 255)}
 BEHAVIOR_TEXT_MAP = {0: "走動", 1: "舔舐", 2: "搔抓", 3: "甩頭", 4: "靜止"}
-BEHAVIOR_EMOJI_MAP = {0: "🐾", 1: "🧼", 2: "🐈", 3: "🐈↺", 4: "⏹"}
+BEHAVIOR_EMOJI_MAP = {
+    0: "🐾",   # walk    — 腳印，貓咪在移動
+    1: "👅",   # lick    — 舌頭，正在舔舐理毛
+    2: "🦶",   # scratch — 肉掌，正在搔抓
+    3: "🌀",   # shake   — 旋轉，甩頭動作
+    4: "💤",   # stop    — 睡著符號，靜止休息
+}
 
-LOW_CONF_ID = -1          # sentinel：信心度不足（YOLO 有偵測到貓，但 ST-GCN 信心未達門檻）
-NOT_VISIBLE_ID = -2       # sentinel：YOLO 未偵測到貓（貓不在畫面中）
-LOW_CONF_TEXT = "normal"
-LOW_CONF_EMOJI = "😴"
-NOT_VISIBLE_TEXT = "not"
+# ── 三層狀態 sentinel ────────────────────────────────────────
+# Layer 1  YOLO 偵測層
+NOT_VISIBLE_ID = -2       # YOLO 未偵測到貓 → ST-GCN 不執行
+NOT_VISIBLE_TEXT = "NO_CAT"
 NOT_VISIBLE_DISPLAY_TEXT = "不在畫面"
-NOT_VISIBLE_EMOJI = "📷"
+NOT_VISIBLE_EMOJI = "🔍"  # 放大鏡：找不到貓
+
+# Layer 3  推論失效層（有貓、有骨架，但模型信心不足）
+LOW_CONF_ID = -1
+LOW_CONF_TEXT = "LOW_CONF"
+LOW_CONF_EMOJI = "❓"     # 問號：模型不確定
+
+# Layer 2  ST-GCN 行為輸出層（id 0–4，見 BEHAVIOR_* 上方）

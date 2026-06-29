@@ -66,13 +66,22 @@ def _build_frame_processor():
         conf_thres=_CONF_THRES,
         sequence_length=_SEQUENCE_LENGTH,
         overlay=True,
-        width=640,
-        height=640,
+        width=_SystemInfo.OUTPUT_WIDTH,
+        height=_SystemInfo.OUTPUT_HEIGHT,
         normalize=True,
         kp_ema_alpha=_KP_EMA_ALPHA,
     )
 
 
+
+
+def _try_register_lick_stage(processor) -> None:
+    """Optionally attach the Lick Stage plugin. Silently skipped if plugin is absent."""
+    try:
+        from plugins.lick_stage import LickStagePlugin as _LickStagePlugin
+        processor.register_plugin(_LickStagePlugin())
+    except ImportError:
+        pass
 
 
 def _ensure_processor_started():
@@ -83,6 +92,7 @@ def _ensure_processor_started():
     with _init_lock:
         if frame_processor is None:
             frame_processor = _build_frame_processor()
+            _try_register_lick_stage(frame_processor)
         if frame_streamer is None:
             frame_streamer = SharedFrameStreamer(frame_processor)
 
@@ -103,6 +113,7 @@ def register_routes(app):
     def stream():
         _ensure_processor_started()
         def mjpeg_stream():
+            frame_streamer.acquire_client()
             try:
                 while True:
                     jpeg = frame_streamer.get_jpeg()
@@ -110,16 +121,28 @@ def register_routes(app):
                         yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
                     else:
                         time.sleep(0.01)
-            except GeneratorExit:
-                pass  # 客戶端正常斷線，允許 generator 終止
+            finally:
+                # GeneratorExit（客戶端斷線）或任何例外都能正確釋放計數
+                frame_streamer.release_client()
         return Response(mjpeg_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
     @app.route('/snapshot')
     def snapshot():
         _ensure_processor_started()
-        jpeg = frame_streamer.get_jpeg() if frame_streamer else None
-        if jpeg is None:
+        if frame_streamer is None:
             return Response(b'', status=503, mimetype='image/jpeg')
-        return Response(jpeg, mimetype='image/jpeg')
+        # 暫時佔用一個 client slot，確保 JPEG 編碼執行緒會產生最新幀
+        frame_streamer.acquire_client()
+        try:
+            deadline = time.time() + 0.5
+            while time.time() < deadline:
+                jpeg = frame_streamer.get_jpeg()
+                if jpeg:
+                    return Response(jpeg, mimetype='image/jpeg')
+                time.sleep(0.02)
+        finally:
+            frame_streamer.release_client()
+        return Response(b'', status=503, mimetype='image/jpeg')
 
     @app.route('/video_clip')
     def video_clip():
@@ -184,17 +207,17 @@ def register_routes(app):
             limit = max(1, min(int(request.args.get('limit', 200)), 1000))
         except (TypeError, ValueError):
             limit = 200
-        t = frame_processor.tracker
-        history = list(t.behavior_history)[-limit:]
-        segments = []
-        for rec in reversed(history):
-            segments.append({
+        records = frame_processor.get_behavior_history_records(limit)
+        segments = [
+            {
                 "behavior_id": int(rec["gcn_behavior_id"]),
                 "behavior": BEHAVIOR_TEXT_MAP.get(rec["gcn_behavior_id"], rec["behavior"]),
                 "timestamp": rec["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                 "duration_sec": round(float(rec["duration"]), 1),
                 "activity": int(rec.get("activity", 0)),
-            })
+            }
+            for rec in reversed(records)
+        ]
         return jsonify({
             "count": len(segments),
             "segments": segments,

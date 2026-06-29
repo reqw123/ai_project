@@ -15,21 +15,14 @@ from communication.nodered_client import NodeRedClient
 from logutils.csv_logger import CSVLogger, BehaviorSegmentLogger
 from utils.helpers import get_ip, get_behavior_name
 from utils.constants import *
-from models.stgcn_model import (
-    interpolate_missing,
-    flip_normalize,
-    orientation_normalize,
-    normalize_skeleton_coords,
-    build_feature_tensor,
-    get_in_channels_for_mode,
-)
+from models.stgcn_model import interpolate_missing
 from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig, SystemInfo
 
 class FrameProcessor:
     def __init__(self, yolo_model_path, stgcn_model_path, video_path,
                  nodered_url=None, device='cuda', imgsz=640, conf_thres=0.5, sequence_length=STGCNConfig.SEQUENCE_LENGTH,
                  overlay=True, width=None, height=None, normalize=True, kp_ema_alpha=STGCNConfig.KP_EMA_ALPHA,
-                 feature_mode=None, window_stride=None):
+                 feature_mode=None, window_stride=None, plugins=None):
         self.local_ip = get_ip()
         self.cap = cv2.VideoCapture(video_path)
         if not self.cap.isOpened():
@@ -54,7 +47,6 @@ class FrameProcessor:
         self.window_stride = window_stride if window_stride is not None else STGCNConfig.WINDOW_STRIDE
         self._infer_frame_count = 0  # 累積有效幀計數器，以 window_stride 取模決定推論時機（貓咪消失時重置，確保重新出現後推論時機從 0 對齊）
         self.overlay = overlay
-        self.fps_display = 0.0
         self.prev_time = time.time()
         self.last_send_time = time.time()
         self.nodered = None
@@ -63,26 +55,38 @@ class FrameProcessor:
         self.csv_logger = CSVLogger()
         self.segment_logger = BehaviorSegmentLogger()
         self.frame_idx = 0
-        # 推論時機快取：避免 process() 熱路徑上每幀重複 getattr
-        _m = getattr(self.behavior_classifier, 'model', None)
-        self._use_multichannel  = (_m is not None and getattr(_m, 'in_channels', 4) != 4)
-        self._model_normalize   = getattr(_m, 'normalize',     True)    if _m else True
-        self._model_feature_mode = getattr(_m, 'feature_mode', 'xy_v') if _m else 'xy_v'
         # 關鍵點 EMA：用於 overlay 顯示與異常偵測（不進入 ST-GCN buffer）
         self.kp_ema_alpha = kp_ema_alpha
         self._ema_kpts = None
+        self._plugins: list = list(plugins) if plugins else []
         # 保存上次推論結果，非推論幀沿用，避免標籤閃爍
         self._last_behavior_id = LOW_CONF_ID
         self._last_confidence = 0.0
-        self._last_class_probs = [0.0] * 5
+        self._last_class_probs = [0.0] * STGCNConfig.NUM_CLASSES
+
+    @property
+    def source_fps(self) -> float:
+        """影片來源 FPS；無效時回傳 TARGET_MODEL_FPS。"""
+        fps = self.cap.get(cv2.CAP_PROP_FPS)
+        return fps if fps > 1 else STGCNConfig.TARGET_MODEL_FPS
+
+    def read_raw_frame(self):
+        """讀取下一幀；影片結尾時自動 loop 並重置 EMA。
+        Returns: (ret: bool, frame | None)
+        """
+        ret, frame = self.cap.read()
+        if not ret:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self.reset_ema()
+        return ret, frame
+
+    def get_behavior_history_records(self, limit: int = 200) -> list:
+        """回傳最近 limit 筆行為紀錄（原始 dict，由呼叫方決定格式化）。"""
+        return list(self.tracker.behavior_history)[-limit:]
 
     def process(self, frame):
         self.frame_idx += 1
-        # FPS 計算
         current_time = time.time()
-        dt = current_time - self.prev_time
-        if dt > 0:
-            self.fps_display = 0.9 * self.fps_display + 0.1 * (1.0 / dt)
         self.prev_time = current_time
 
         kpts, kpt_conf, bbox, conf = self.keypoint_detector.detect(frame)
@@ -94,6 +98,13 @@ class FrameProcessor:
 
         if kpts is not None:
             raw_kpts = kpts.copy()
+
+            # === Plugin notification (raw keypoints, before any smoothing) ===
+            for _plugin in self._plugins:
+                try:
+                    _plugin.update(raw_kpts, kpt_conf)
+                except Exception:
+                    pass
 
             # === Frame-level EMA：僅用於 overlay 顯示與異常偵測，原始 raw_kpts 進 ST-GCN buffer ===
             # 注意：此 EMA 不影響 STGCN 推論路徑；ST-GCN 輸入的唯一平滑來源是下方 window-level EMA
@@ -123,15 +134,7 @@ class FrameProcessor:
                     for t in range(1, seq_array.shape[0]):
                         seq_array[t] = (self.kp_ema_alpha * seq_array[t]
                                         + (1.0 - self.kp_ema_alpha) * seq_array[t - 1])
-                if self._use_multichannel:
-                    if self._model_normalize:
-                        seq_array = flip_normalize(seq_array)
-                        seq_array = orientation_normalize(seq_array)
-                        seq_array = normalize_skeleton_coords(seq_array)
-                    seq_features = build_feature_tensor(seq_array, conf_arr, self._model_feature_mode)
-                    new_bid, new_conf, new_probs = self.behavior_classifier.classify(seq_features, precomputed=True)
-                else:
-                    new_bid, new_conf, new_probs = self.behavior_classifier.classify(seq_array)
+                new_bid, new_conf, new_probs = self.behavior_classifier.classify(seq_array, conf_arr)
                 if new_bid is None:
                     new_bid = LOW_CONF_ID
                     new_conf = 0.0
@@ -140,7 +143,7 @@ class FrameProcessor:
                 # 更新持久化結果，本幀也立即採用
                 self._last_behavior_id = new_bid
                 self._last_confidence = new_conf
-                self._last_class_probs = new_probs if new_probs is not None else [0.0] * 5
+                self._last_class_probs = new_probs if new_probs is not None else [0.0] * STGCNConfig.NUM_CLASSES
                 behavior_id = self._last_behavior_id
                 confidence = self._last_confidence
                 class_probs = self._last_class_probs
@@ -162,49 +165,9 @@ class FrameProcessor:
 
             # === Node-RED 資料推送 ===
             now = time.time()
-            if self.nodered and (now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL): #設定的最小送出間隔
-                # 根據顯示門檻決定呈現標籤（若 confidence 未達 BEHAVIOR_MIN_CONFIDENCE 則顯示為 LOW_CONF_TEXT）
-                is_display_normal = (behavior_id == LOW_CONF_ID) or (float(confidence) < BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD)
-                if is_display_normal:
-                    display_behavior = LOW_CONF_TEXT
-                    display_text = LOW_CONF_TEXT
-                    display_emoji = LOW_CONF_EMOJI
-                else:
-                    display_behavior = BEHAVIOR_CLASSES[int(behavior_id)] if 0 <= int(behavior_id) < len(BEHAVIOR_CLASSES) else "unknown"
-                    display_text = BEHAVIOR_TEXT_MAP.get(behavior_id, "未知")
-                    display_emoji = BEHAVIOR_EMOJI_MAP.get(behavior_id, "❓")
-
-                data = {
-                    "current": {
-                        "behavior_id": int(behavior_id),
-                        "text": display_text,
-                        "behavior": display_behavior,
-                        "emoji": display_emoji,
-                        "timestamp": time.strftime("%H:%M:%S")
-                    },
-                    "activity_score": int(self.tracker.get_activity_score()),
-                    "today_stats": self.tracker.get_today_stats(),
-                    "behavior_log": [
-                        {
-                            "behavior": rec["behavior"],
-                            "gcn_id": rec["gcn_behavior_id"],
-                            "time": (rec["timestamp"].strftime("%H:%M:%S")
-                                     if hasattr(rec["timestamp"], "strftime")
-                                     else str(rec["timestamp"])),
-                            "duration": rec["duration"]
-                        }
-                        for rec in list(self.tracker.behavior_history)[-10:]
-                    ],
-                    "alerts": self.tracker.get_alerts(),
-                    "system": {
-                        "ip": self.local_ip,
-                        "model": "YOLO-Pose + ST-GCN",
-                        "version": SystemInfo.VERSION,
-                        "gcn_confidence": round(float(confidence), 3)
-                    }
-                }
+            if self.nodered and (now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL):
                 self.tracker.add_monitoring_seconds(now - self.last_send_time)
-                self.nodered.send_data(data)
+                self.nodered.send_data(self._build_nodered_payload(behavior_id, confidence))
                 self.last_send_time = now
 
             # === CSV 日誌 ===
@@ -224,6 +187,13 @@ class FrameProcessor:
                 frame = self.visualizer.draw(frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs)
 
         else:
+            # === Plugin notification (no cat detected) ===
+            for _plugin in self._plugins:
+                try:
+                    _plugin.update(None, None)
+                except Exception:
+                    pass
+
             # 貓咪消失時重置 EMA、推論計數器、keypoints buffer 與上次推論結果
             # _infer_frame_count 重置確保貓重新出現後推論時機從 0 對齊，不受之前計數影響
             # keypoints_buffer 清除確保舊幀不污染下次推論窗口
@@ -232,48 +202,80 @@ class FrameProcessor:
             self.keypoints_buffer.clear()
             self._last_behavior_id = LOW_CONF_ID
             self._last_confidence = 0.0
-            self._last_class_probs = [0.0] * 5
+            self._last_class_probs = [0.0] * STGCNConfig.NUM_CLASSES
             self.tracker.update(NOT_VISIBLE_ID, 0.0)
             # Node-RED 推送：通知貓咪不在畫面
             now = time.time()
             if self.nodered and (now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL):
-                data = {
-                    "current": {
-                        "behavior_id": NOT_VISIBLE_ID,
-                        "text": NOT_VISIBLE_DISPLAY_TEXT,
-                        "behavior": NOT_VISIBLE_TEXT,
-                        "emoji": NOT_VISIBLE_EMOJI,
-                        "timestamp": time.strftime("%H:%M:%S")
-                    },
-                    "activity_score": int(self.tracker.get_activity_score()),
-                    "today_stats": self.tracker.get_today_stats(),
-                    "behavior_log": [
-                        {
-                            "behavior": rec["behavior"],
-                            "gcn_id": rec["gcn_behavior_id"],
-                            "time": (rec["timestamp"].strftime("%H:%M:%S")
-                                     if hasattr(rec["timestamp"], "strftime")
-                                     else str(rec["timestamp"])),
-                            "duration": rec["duration"]
-                        }
-                        for rec in list(self.tracker.behavior_history)[-10:]
-                    ],
-                    "alerts": self.tracker.get_alerts(),
-                    "system": {
-                        "ip": self.local_ip,
-                        "model": "YOLO-Pose + ST-GCN",
-                        "version": SystemInfo.VERSION,
-                        "gcn_confidence": 0.0
-                    }
-                }
-                self.nodered.send_data(data)
+                self.nodered.send_data(self._build_nodered_payload(NOT_VISIBLE_ID, 0.0))
                 self.last_send_time = now
 
         return frame, behavior_id, confidence, class_probs, is_still, activity_value
 
+    def register_plugin(self, plugin) -> None:
+        """Register an optional plugin. Called before the first frame."""
+        self._plugins.append(plugin)
+
     def reset_ema(self):
         """重置 EMA 狀態（影片重播或貓咪重新出現時由外部呼叫）。"""
         self._ema_kpts = None
+
+    def _build_nodered_payload(self, behavior_id, confidence) -> dict:
+        """組裝 Node-RED 推送資料，貓咪在畫面與不在畫面共用此方法。"""
+        if behavior_id == NOT_VISIBLE_ID:
+            current = {
+                "behavior_id": NOT_VISIBLE_ID,
+                "text": NOT_VISIBLE_DISPLAY_TEXT,
+                "behavior": NOT_VISIBLE_TEXT,
+                "emoji": NOT_VISIBLE_EMOJI,
+                "timestamp": time.strftime("%H:%M:%S"),
+            }
+            gcn_confidence = 0.0
+        else:
+            is_low_conf = (behavior_id == LOW_CONF_ID) or (
+                float(confidence) < BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
+            )
+            if is_low_conf:
+                current = {
+                    "behavior_id": int(behavior_id),
+                    "text": LOW_CONF_TEXT,
+                    "behavior": LOW_CONF_TEXT,
+                    "emoji": LOW_CONF_EMOJI,
+                    "timestamp": time.strftime("%H:%M:%S"),
+                }
+            else:
+                current = {
+                    "behavior_id": int(behavior_id),
+                    "text": BEHAVIOR_TEXT_MAP.get(behavior_id, "未知"),
+                    "behavior": BEHAVIOR_CLASSES[int(behavior_id)] if 0 <= int(behavior_id) < len(BEHAVIOR_CLASSES) else "unknown",
+                    "emoji": BEHAVIOR_EMOJI_MAP.get(behavior_id, "❓"),
+                    "timestamp": time.strftime("%H:%M:%S"),
+                }
+            gcn_confidence = round(float(confidence), 3)
+
+        return {
+            "current": current,
+            "activity_score": int(self.tracker.get_activity_score()),
+            "today_stats": self.tracker.get_today_stats(),
+            "behavior_log": [
+                {
+                    "behavior": rec["behavior"],
+                    "gcn_id": rec["gcn_behavior_id"],
+                    "time": (rec["timestamp"].strftime("%H:%M:%S")
+                             if hasattr(rec["timestamp"], "strftime")
+                             else str(rec["timestamp"])),
+                    "duration": rec["duration"],
+                }
+                for rec in list(self.tracker.behavior_history)[-10:]
+            ],
+            "alerts": self.tracker.get_alerts(),
+            "system": {
+                "ip": self.local_ip,
+                "model": "YOLO-Pose + ST-GCN",
+                "version": SystemInfo.VERSION,
+                "gcn_confidence": gcn_confidence,
+            },
+        }
 
     def cleanup(self):
         self.cap.release()
@@ -281,4 +283,11 @@ class FrameProcessor:
             self.csv_logger.close()
         if self.segment_logger:
             self.segment_logger.close()
+        if self.nodered:
+            self.nodered.close()
+        for _plugin in self._plugins:
+            try:
+                _plugin.close()
+            except Exception:
+                pass
         cv2.destroyAllWindows()

@@ -193,11 +193,12 @@ self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
 
 ## 三、特徵工程（Feature Engineering）
 
-### 3.1 四種特徵通道模式
+### 3.1 五種特徵通道模式
 
 | 模式 | 通道數 | 特徵組成 |
 |---|:---:|---|
-| `xy_v` | 4 | x, y, vx, vy |
+| `xy` | 2 | x, y |
+| `xy_conf` | 3 | x, y, conf |
 | `xy_conf_v` | 5 | x, y, conf, vx, vy |
 | `xy_conf_v_bone` | 7 | x, y, conf, vx, vy, bone_x, bone_y |
 | `xy_conf_v_bone_bmotion` | 9 | x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my |
@@ -519,5 +520,5 @@ use_attention = any(k.startswith('joint_attention.') for k in state_dict.keys())
 | 增強 | 時間偏移 / 幀丟棄 / 抖動 | `temporal_augment()` | Temporal augmentation |
 | 增強 | 旋轉 / 縮放 / 平移 / 遮蔽 | `spatial_augment()` | Spatial augmentation |
 | 推論 | 信心門檻回退（0.80） | `LOW_CONF_ID` | Confidence threshold fallback |
-| 實驗 | 四特徵模式消融 | `ABLATION_MODES` | Feature ablation study |
+| 實驗 | 五特徵模式消融 | `ABLATION_MODES` | Feature ablation study |
 | 實驗 | Attention on/off 對照 | `USE_ATTENTION` | Attention ablation |

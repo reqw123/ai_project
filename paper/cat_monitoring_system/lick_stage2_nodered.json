@@ -1,0 +1,419 @@
+[
+  {
+    "id": "889faede23dd76c6",
+    "type": "tab",
+    "label": "第5層 舔舐部位分析",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "037aeb367edbeeef",
+    "type": "http in",
+    "z": "889faede23dd76c6",
+    "name": "接收舔舐分析資料",
+    "url": "/lick_zone_result",
+    "method": "post",
+    "upload": false,
+    "skipBodyParsing": false,
+    "x": 130,
+    "y": 100,
+    "wires": [
+      [
+        "03b4428d6a505194",
+        "88be5fb67d3b4b64"
+      ]
+    ]
+  },
+  {
+    "id": "88be5fb67d3b4b64",
+    "type": "http response",
+    "z": "889faede23dd76c6",
+    "name": "200 OK",
+    "statusCode": "200",
+    "headers": {},
+    "x": 330,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "03b4428d6a505194",
+    "type": "json",
+    "z": "889faede23dd76c6",
+    "name": "",
+    "property": "payload",
+    "action": "obj",
+    "pretty": false,
+    "x": 330,
+    "y": 100,
+    "wires": [
+      [
+        "a3b34fe8204e2270"
+      ]
+    ]
+  },
+  {
+    "id": "a3b34fe8204e2270",
+    "type": "function",
+    "z": "889faede23dd76c6",
+    "name": "舔舐部位分析器",
+    "func": "let d = msg.payload;\nif (!d) return [null, null, null];\n\n// Compute pref% and sec/hit from plugin slim payload (new field names)\nlet times = {\n    BODY: parseFloat(d.body_time || 0),\n    FL:   parseFloat(d.fl_time   || 0),\n    FR:   parseFloat(d.fr_time   || 0),\n    HL:   parseFloat(d.hl_time   || 0),\n    HR:   parseFloat(d.hr_time   || 0)\n};\nlet hits = {\n    BODY: parseInt(d.body_hits || 0),\n    FL:   parseInt(d.fl_hits   || 0),\n    FR:   parseInt(d.fr_hits   || 0),\n    HL:   parseInt(d.hl_hits   || 0),\n    HR:   parseInt(d.hr_hits   || 0)\n};\nlet totalTime = Object.values(times).reduce(function(a,b){return a+b;},0);\n\nlet zones = {};\n['BODY','FL','FR','HL','HR'].forEach(function(k){\n    let t=times[k], h=hits[k];\n    zones[k]={\n        hits:        h,\n        time_sec:    t,\n        pref_pct:    totalTime>1e-9 ? 100*t/totalTime : NaN,\n        sec_per_hit: h>0 ? t/h : NaN\n    };\n});\n\n// best_zone from plugin is authoritative; recompute best_pct\nlet best_zone = d.best_zone || 'NO_TARGET';\nlet best_pct  = null;\nif (best_zone!=='NO_TARGET' && zones[best_zone]) {\n    let bp=zones[best_zone].pref_pct;\n    best_pct = isFinite(bp) ? parseFloat(bp.toFixed(1)) : null;\n}\n\nfunction nf(v){return (v!=null&&v!==undefined)?parseFloat(v):NaN;}\n\nlet out = {\n    zones,\n    best_zone,\n    best_pct,\n    current_zone:       d.current_zone  || 'NO_TARGET',\n    nearest_label:      d.current_zone  || 'NO_TARGET',\n    nearest_t:          NaN,\n    nose_detected:      d.valid ? 1 : 0,\n    face_state:         d.face_state    || 'UNKNOWN',\n    state_stability:    nf(d.state_stability),\n    distance_px:        nf(d.dist_px),\n    distance_norm:      nf(d.dist_norm),\n    gaze_forward_norm:  nf(d.gaze_fwd),\n    gaze_lateral_norm:  nf(d.gaze_lat),\n    gaze_angle_deg:     nf(d.gaze_angle),\n    lick_axis_score:    NaN,\n    lick_lateral_score: NaN,\n    valid:              d.valid ? 1 : 0,\n    frame:              parseInt(d.frame    || 0),\n    time_sec:           nf(d.time_sec),\n    video_path:         ''\n};\n\nglobal.set('lick_s2_latest', out);\nmsg.payload = out;\nreturn [msg, msg, msg];",
+    "outputs": 3,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 530,
+    "y": 100,
+    "wires": [
+      [
+        "7251a39d674fd3c1"
+      ],
+      [
+        "a09d6eacd2ab9b39"
+      ],
+      [
+        "1429b8d4c0739470"
+      ]
+    ]
+  },
+  {
+    "id": "7251a39d674fd3c1",
+    "type": "link out",
+    "z": "889faede23dd76c6",
+    "name": "→ P1即時接觸",
+    "links": [
+      "87ef34695690a4db"
+    ],
+    "x": 720,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "a09d6eacd2ab9b39",
+    "type": "link out",
+    "z": "889faede23dd76c6",
+    "name": "→ P2部位統計",
+    "links": [
+      "e084d91ad7547fd9"
+    ],
+    "x": 720,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "1429b8d4c0739470",
+    "type": "link out",
+    "z": "889faede23dd76c6",
+    "name": "→ P3耳距面向",
+    "links": [
+      "28287d1dcb8711e6"
+    ],
+    "x": 720,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "87ef34695690a4db",
+    "type": "link in",
+    "z": "889faede23dd76c6",
+    "name": "→ P1入口",
+    "links": [
+      "7251a39d674fd3c1"
+    ],
+    "x": 100,
+    "y": 360,
+    "wires": [
+      [
+        "136f39d94fe987e6"
+      ]
+    ]
+  },
+  {
+    "id": "136f39d94fe987e6",
+    "type": "ui_template",
+    "z": "889faede23dd76c6",
+    "group": "lk_g3",
+    "name": "P1 關鍵即時指標",
+    "order": 1,
+    "width": "0",
+    "height": "9",
+    "format": "<style>\n.lk1h{font-family:'Microsoft JhengHei',sans-serif;padding:10px;background:#0d1117;border-radius:14px;height:100%;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;box-sizing:border-box}\n.lk1h-card{border-radius:12px;padding:12px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px solid rgba(255,255,255,.07);transition:border-color .4s,background .4s;overflow:hidden;min-width:0}\n.lk1h-lbl{font-size:9px;font-weight:700;color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}\n.lk1h-ico{font-size:30px;line-height:1;margin-bottom:5px}\n.lk1h-val{font-size:18px;font-weight:800;color:#fff;line-height:1.2}\n.lk1h-sub{font-size:9px;color:rgba(255,255,255,.38);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}\n.c-zone-body{background:linear-gradient(160deg,rgba(249,168,37,.18),rgba(249,168,37,.04))!important;border-color:rgba(249,168,37,.45)!important}\n.c-zone-limb{background:linear-gradient(160deg,rgba(30,136,229,.18),rgba(30,136,229,.04))!important;border-color:rgba(30,136,229,.45)!important}\n.c-zone-none{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.07)}\n.c-face-front{background:linear-gradient(160deg,rgba(76,175,80,.18),rgba(76,175,80,.04))!important;border-color:rgba(76,175,80,.45)!important}\n.c-face-back{background:linear-gradient(160deg,rgba(33,150,243,.18),rgba(33,150,243,.04))!important;border-color:rgba(33,150,243,.45)!important}\n.c-face-fv{background:linear-gradient(160deg,rgba(255,112,67,.18),rgba(255,112,67,.04))!important;border-color:rgba(255,112,67,.45)!important}\n.c-stab{background:rgba(156,39,176,.07);border-color:rgba(156,39,176,.3)}\n.c-time{background:rgba(0,188,212,.06);border-color:rgba(0,188,212,.25)}\n.lk1h-ring{width:52px;height:52px;margin:2px auto 4px}\n.lk1h-ring circle{transition:stroke-dasharray .5s ease}\n@keyframes lk1h-beat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(1.08)}}\n.c-zone-body .lk1h-ico,.c-zone-limb .lk1h-ico{animation:lk1h-beat 1.2s ease-in-out infinite}\n.lk1h-time{font-size:26px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:.5px;margin:2px 0}\n.lk1h-nose-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}\n.nose-on{background:#4caf50;box-shadow:0 0 6px #4caf50}\n.nose-off{background:#555}\n</style>\n<div class='lk1h'>\n  <div class='lk1h-card' ng-class='zoneClass()'>\n    <div class='lk1h-lbl'>接觸區域</div>\n    <div class='lk1h-ico'>{{zoneIcon()}}</div>\n    <div class='lk1h-val'>{{zoneName()}}</div>\n    <div class='lk1h-sub'><span class='lk1h-nose-dot' ng-class=\"p().nose_detected?'nose-on':'nose-off'\"></span>{{p().nearest_label||'—'}}</div>\n  </div>\n  <div class='lk1h-card' ng-class='faceClass()'>\n    <div class='lk1h-lbl'>頭部面向</div>\n    <div class='lk1h-ico'>{{faceIcon()}}</div>\n    <div class='lk1h-val'>{{faceLabel()}}</div>\n    <div class='lk1h-sub'>耳距 {{p().valid?'✓ 有效':'✗ 無效'}}</div>\n  </div>\n  <div class='lk1h-card c-stab'>\n    <div class='lk1h-lbl'>判定穩定度</div>\n    <svg class='lk1h-ring' viewBox='0 0 54 54'>\n      <circle cx='27' cy='27' r='21' fill='none' stroke='rgba(255,255,255,.08)' stroke-width='5'/>\n      <circle cx='27' cy='27' r='21' fill='none' ng-attr-stroke='{{stabColor()}}' stroke-width='5'\n        ng-attr-stroke-dasharray='{{stabDash()}}' stroke-linecap='round' transform='rotate(-90 27 27)'/>\n    </svg>\n    <div class='lk1h-val'>{{stabPct()}}<span style='font-size:12px;font-weight:400'>%</span></div>\n    <div class='lk1h-sub'>{{faceStateShort()}}</div>\n  </div>\n  <div class='lk1h-card c-time'>\n    <div class='lk1h-lbl'>影片時間</div>\n    <div class='lk1h-ico' style='font-size:20px;margin-bottom:2px'>⏱</div>\n    <div class='lk1h-time'>{{fmtTime()}}</div>\n    <div class='lk1h-sub'>Frame {{p().frame||0}}</div>\n  </div>\n</div>\n<script>\n(function(scope){\n  function p(){return scope.msg&&scope.msg.payload||{};}\n  scope.p=p;\n  scope.zoneIcon=function(){return {BODY_CENTER:'🐈',FL:'🐾',FR:'🐾',HL:'🐾',HR:'🐾',NO_TARGET:'◻'}[p().current_zone]||'◻';};\n  scope.zoneName=function(){return {BODY_CENTER:'身體中心',FL:'前左腳',FR:'前右腳',HL:'後左腳',HR:'後右腳',NO_TARGET:'無接觸'}[p().current_zone]||'無接觸';};\n  scope.zoneClass=function(){var z=p().current_zone;if(z==='BODY_CENTER')return 'lk1h-card c-zone-body';if(z&&z!=='NO_TARGET')return 'lk1h-card c-zone-limb';return 'lk1h-card c-zone-none';};\n  scope.faceIcon=function(){return {FACING_CAMERA:'🎯',FRONT_LEFT:'↖',FRONT_RIGHT:'↗',BACK_VIEW:'↩',FRONT_VIEW:'🚧',UNKNOWN:'?',NO_CAT:'—'}[p().face_state]||'?';};\n  scope.faceLabel=function(){return {FACING_CAMERA:'正面朝鏡',FRONT_LEFT:'前左',FRONT_RIGHT:'前右',BACK_VIEW:'背向鏡頭',FRONT_VIEW:'前視守門',UNKNOWN:'未知',NO_CAT:'無貓'}[p().face_state]||'—';};\n  scope.faceClass=function(){var s=p().face_state;if(!s)return 'lk1h-card';if(s==='BACK_VIEW')return 'lk1h-card c-face-back';if(s==='FRONT_VIEW')return 'lk1h-card c-face-fv';if(s&&(s.includes('FRONT')||s==='FACING_CAMERA'))return 'lk1h-card c-face-front';return 'lk1h-card';};\n  scope.stabPct=function(){var v=p().state_stability;return (v!=null&&!isNaN(v))?Math.round(v*100):0;};\n  scope.stabColor=function(){var v=scope.stabPct();return v>=80?'#66bb6a':v>=50?'#ffd54f':'#ef9a9a';};\n  scope.stabDash=function(){var c=2*Math.PI*21,r=scope.stabPct()/100;return (c*r)+' '+(c*(1-r));};\n  scope.faceStateShort=function(){return {FACING_CAMERA:'正面',FRONT_LEFT:'前左',FRONT_RIGHT:'前右',BACK_VIEW:'背向',FRONT_VIEW:'守門',UNKNOWN:'未知',NO_CAT:'無貓'}[p().face_state]||'—';};\n  scope.fmtTime=function(){var s=p().time_sec||0;var m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+(sec<10?'0':'')+sec;};\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 360,
+    "y": 360,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "e084d91ad7547fd9",
+    "type": "link in",
+    "z": "889faede23dd76c6",
+    "name": "→ P2入口",
+    "links": [
+      "a09d6eacd2ab9b39"
+    ],
+    "x": 100,
+    "y": 480,
+    "wires": [
+      [
+        "e2135698aa7f7d19"
+      ]
+    ]
+  },
+  {
+    "id": "e2135698aa7f7d19",
+    "type": "ui_template",
+    "z": "889faede23dd76c6",
+    "group": "lk_g2",
+    "name": "P2 部位時長統計",
+    "order": 1,
+    "width": "0",
+    "height": "9",
+    "format": "<style>\n.lk{font-family:'Microsoft JhengHei',sans-serif;padding:12px 14px;background:#0d1117;border-radius:14px;color:#fff}\n.lk-title{font-size:11px;font-weight:700;color:rgba(255,255,255,.45);margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid rgba(255,255,255,.08);letter-spacing:.6px}\n.lk-best{display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(249,168,37,.1);border:1px solid rgba(249,168,37,.3);border-radius:10px;margin-bottom:12px}\n.lk-best-lbl{font-size:11px;color:rgba(249,168,37,.75);font-weight:600}\n.lk-best-zone{font-size:22px;font-weight:900;color:#ffd54f;letter-spacing:-.5px}\n.lk-best-pct{font-size:13px;color:rgba(255,255,255,.5)}\n.lk-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}\n.lk-card{border-radius:12px;padding:12px 10px;text-align:center;position:relative}\n.lk-card.body{background:rgba(249,168,37,.12);border:1px solid rgba(249,168,37,.3)}\n.lk-card.fl  {background:rgba(30,136,229,.12);border:1px solid rgba(30,136,229,.3)}\n.lk-card.fr  {background:rgba(30,136,229,.09);border:1px solid rgba(30,136,229,.22)}\n.lk-card.hl  {background:rgba(92,107,192,.12);border:1px solid rgba(92,107,192,.3)}\n.lk-card.hr  {background:rgba(92,107,192,.09);border:1px solid rgba(92,107,192,.22)}\n.lk-ico{font-size:20px;margin-bottom:3px}\n.lk-zone-name{font-size:10px;color:rgba(255,255,255,.4);margin-bottom:10px;font-weight:600;letter-spacing:.5px}\n.lk-count{font-size:32px;font-weight:900;color:#fff;line-height:1;margin-bottom:0}\n.lk-count-lbl{font-size:10px;color:rgba(255,255,255,.4);margin-bottom:10px;font-weight:600;letter-spacing:.4px}\n.lk-time{font-size:22px;font-weight:800;color:#ffe082;line-height:1;margin-bottom:2px}\n.lk-time-lbl{font-size:9px;color:rgba(255,255,255,.35);margin-bottom:8px;letter-spacing:.4px}\n.lk-bar{height:5px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin-bottom:6px}\n.lk-bar-fill{height:100%;border-radius:99px}\n.body .lk-bar-fill{background:#f9a825}\n.fl   .lk-bar-fill{background:#1e88e5}\n.fr   .lk-bar-fill{background:#42a5f5}\n.hl   .lk-bar-fill{background:#5c6bc0}\n.hr   .lk-bar-fill{background:#7986cb}\n.lk-sph{font-size:10px;color:rgba(255,255,255,.35)}\n.lk-detail-title{font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.6px;margin-bottom:7px;font-weight:700}\n.lk-tbl{width:100%;border-collapse:collapse}\n.lk-tbl th{padding:6px 10px;font-size:10px;font-weight:700;color:rgba(255,255,255,.4);background:rgba(255,255,255,.05);text-align:right;border:1px solid rgba(255,255,255,.06)}\n.lk-tbl th:first-child{text-align:left}\n.lk-tbl td{padding:7px 10px;border:1px solid rgba(255,255,255,.05);text-align:right;vertical-align:middle}\n.lk-tbl td:first-child{text-align:left;color:rgba(255,255,255,.65);font-size:12px}\n.lk-tbl tr:nth-child(even) td{background:rgba(255,255,255,.02)}\n.td-hits{font-size:18px;font-weight:900;color:#fff}\n.td-time{font-size:17px;font-weight:800;color:#ffe082}\n.td-pct{font-size:14px;font-weight:700;color:#80cbc4}\n.td-avg{font-size:13px;font-weight:600;color:rgba(255,255,255,.55)}\n</style>\n\n<div class='lk' id='root'>\n  <div class='lk-title'>📊 部位時長統計（累計至當幀）</div>\n  <div class='lk-best' id='best-row' style='display:none'></div>\n  <div class='lk-grid' id='grid'></div>\n  <div class='lk-detail-title'>ZONE DETAIL</div>\n  <table class='lk-tbl'>\n    <thead>\n      <tr>\n        <th>部位</th><th>進入次數</th><th>舔舐時長 (s)</th><th>偏好佔比 (%)</th><th>每次平均 (s)</th>\n      </tr>\n    </thead>\n    <tbody id='tbody'></tbody>\n  </table>\n</div>\n\n<script>\n(function(scope){\n  var ZONE_LIST=[\n    {key:'BODY',label:'身體中心',ico:'🐈',cls:'body',span:3},\n    {key:'FL',  label:'前左腳',  ico:'🐾',cls:'fl',  span:3},\n    {key:'FR',  label:'前右腳',  ico:'🐾',cls:'fr',  span:2},\n    {key:'HL',  label:'後左腳',  ico:'🐾',cls:'hl',  span:2},\n    {key:'HR',  label:'後右腳',  ico:'🐾',cls:'hr',  span:2}\n  ];\n  var CN={BODY:'身體中心',FL:'前左腳',FR:'前右腳',HL:'後左腳',HR:'後右腳'};\n  function fmtSec(s){if(!s||isNaN(s))return'0s';s=parseFloat(s);var m=Math.floor(s/60),sec=parseFloat((s%60).toFixed(1));return m?m+'m '+sec+'s':sec+'s';}\n  function fmtPct(v){return(!isNaN(v)&&isFinite(v)&&v>=0)?parseFloat(v).toFixed(1):'—';}\n  function isNum(v){return!isNaN(v)&&isFinite(v)&&v>=0;}\n\n  function render(data){\n    var bz=data.best_zone;\n    var bestRow=document.getElementById('best-row');\n    if(bz&&bz!=='NO_TARGET'){\n      bestRow.style.display='';\n      bestRow.innerHTML='<span class=\"lk-best-lbl\">⭐ 最高偏好部位</span>'\n        +'<span class=\"lk-best-zone\">'+CN[bz]+'</span>'\n        +'<span class=\"lk-best-pct\">佔 '+fmtPct(data.best_pct)+'% 舔舐時間</span>';\n    }else{bestRow.style.display='none';}\n\n    var grid=document.getElementById('grid');\n    grid.innerHTML=ZONE_LIST.map(function(z){\n      var d=(data.zones&&data.zones[z.key])||{hits:0,time_sec:0,pref_pct:NaN,sec_per_hit:NaN};\n      var pct=isNum(d.pref_pct)?fmtPct(d.pref_pct)+'%':'N/A';\n      return '<div class=\"lk-card '+z.cls+'\" style=\"grid-column:span '+z.span+'\">'\n        +'<div class=\"lk-ico\">'+z.ico+'</div>'\n        +'<div class=\"lk-zone-name\">'+z.label+'</div>'\n        +'<div class=\"lk-count\">'+d.hits+'</div>'\n        +'<div class=\"lk-count-lbl\">進入次數</div>'\n        +'<div class=\"lk-bar\"><div class=\"lk-bar-fill\" style=\"width:'+fmtPct(d.pref_pct)+'%\"></div></div>'\n        +'<div class=\"lk-time\">'+fmtSec(d.time_sec)+'</div>'\n        +'<div class=\"lk-time-lbl\">舔舐時長</div>'\n        +'<div class=\"lk-sph\">偏好 '+pct+'</div>'\n        +'</div>';\n    }).join('');\n\n    var tbody=document.getElementById('tbody');\n    tbody.innerHTML=ZONE_LIST.map(function(z){\n      var d=(data.zones&&data.zones[z.key])||{hits:0,time_sec:0,pref_pct:NaN,sec_per_hit:NaN};\n      return '<tr>'\n        +'<td>'+z.ico+' '+z.label+'</td>'\n        +'<td class=\"td-hits\">'+d.hits+'</td>'\n        +'<td class=\"td-time\">'+fmtSec(d.time_sec)+'</td>'\n        +'<td class=\"td-pct\">'+(isNum(d.pref_pct)?fmtPct(d.pref_pct)+'%':'—')+'</td>'\n        +'<td class=\"td-avg\">'+(isNum(d.sec_per_hit)?fmtSec(d.sec_per_hit):'—')+'</td>'\n        +'</tr>';\n    }).join('');\n  }\n\n  scope.$watch('msg', function(msg){\n    if(msg&&msg.payload) render(msg.payload);\n  });\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 360,
+    "y": 480,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "28287d1dcb8711e6",
+    "type": "link in",
+    "z": "889faede23dd76c6",
+    "name": "→ P3入口",
+    "links": [
+      "1429b8d4c0739470"
+    ],
+    "x": 100,
+    "y": 600,
+    "wires": [
+      [
+        "8bbb6f3b2f018d17"
+      ]
+    ]
+  },
+  {
+    "id": "8bbb6f3b2f018d17",
+    "type": "ui_template",
+    "z": "889faede23dd76c6",
+    "group": "lk_g1",
+    "name": "P3 耳距與頭部方向",
+    "order": 1,
+    "width": "0",
+    "height": "9",
+    "format": "<style>\n.lk3{font-family:'Microsoft JhengHei',sans-serif;padding:10px 12px;background:#0d1117;border-radius:14px;height:100%;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box}\n.lk3-sec-title{font-size:9px;font-weight:700;color:rgba(255,255,255,.3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px}\n.lk3-hdiv{height:1px;background:rgba(255,255,255,.07);flex-shrink:0}\n.lk3-angle-row{display:flex;align-items:center;gap:10px;padding:6px 10px;background:rgba(0,188,212,.07);border:1px solid rgba(0,188,212,.2);border-radius:10px}\n.lk3-angle-num{font-size:32px;font-weight:900;color:#fff;line-height:1;font-variant-numeric:tabular-nums;flex-shrink:0}\n.lk3-angle-deg{font-size:13px;color:rgba(0,188,212,.8);font-weight:700}\n.lk3-angle-lbl{font-size:9px;color:rgba(255,255,255,.28);letter-spacing:.4px}\n.lk3-gaze-row{display:flex;align-items:center;gap:8px}\n.lk3-gaze-lbl{font-size:10px;color:rgba(255,255,255,.38);width:44px;flex-shrink:0}\n.lk3-gaze-val{font-size:13px;font-weight:700;width:48px;flex-shrink:0;text-align:right}\n.lk3-track{flex:1;height:8px;background:rgba(255,255,255,.06);border-radius:99px;overflow:visible;position:relative}\n.lk3-fill{position:absolute;height:100%;border-radius:99px;top:0;transition:all .4s}\n.lk3-fill-pos{background:linear-gradient(90deg,#43a047,#66bb6a)}\n.lk3-fill-neg{background:linear-gradient(90deg,#e53935,#ef9a9a)}\n.lk3-vline{position:absolute;top:-2px;left:50%;width:2px;height:12px;background:rgba(255,255,255,.18);transform:translateX(-50%)}\n.lk3-dist-row{display:flex;gap:8px}\n.lk3-dist-card{flex:1;padding:7px 10px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07)}\n.lk3-dist-lbl{font-size:9px;color:rgba(255,255,255,.35);letter-spacing:.5px;margin-bottom:4px}\n.lk3-dist-val{font-size:18px;font-weight:800;color:#fff;line-height:1}\n.lk3-dist-unit{font-size:9px;color:rgba(255,255,255,.3);margin-left:2px}\n.lk3-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;margin-top:4px}\n.lk3-ok{background:rgba(76,175,80,.18);color:#81c784}\n.lk3-no{background:rgba(244,67,54,.18);color:#ef9a9a}\n</style>\n<div class='lk3'>\n  <div class='lk3-sec-title'>注視角</div>\n  <div class='lk3-angle-row'>\n    <div class='lk3-angle-num'>{{fmtDeg()}}<span class='lk3-angle-deg'>°</span></div>\n    <div class='lk3-angle-lbl'>gaze_angle_deg</div>\n  </div>\n  <div class='lk3-hdiv'></div>\n  <div class='lk3-sec-title'>頭部方向向量</div>\n  <div class='lk3-gaze-row'>\n    <span class='lk3-gaze-lbl'>前後</span>\n    <span class='lk3-gaze-val' ng-style=\"{color:sc(p().gaze_forward_norm)}\">{{f3(p().gaze_forward_norm)}}</span>\n    <div class='lk3-track'>\n      <div class='lk3-vline'></div>\n      <div class='lk3-fill' ng-class=\"p().gaze_forward_norm>=0?'lk3-fill-pos':'lk3-fill-neg'\" ng-style='barStyle(p().gaze_forward_norm)'></div>\n    </div>\n  </div>\n  <div class='lk3-gaze-row'>\n    <span class='lk3-gaze-lbl'>左右</span>\n    <span class='lk3-gaze-val' ng-style=\"{color:sc(p().gaze_lateral_norm)}\">{{f3(p().gaze_lateral_norm)}}</span>\n    <div class='lk3-track'>\n      <div class='lk3-vline'></div>\n      <div class='lk3-fill' ng-class=\"p().gaze_lateral_norm>=0?'lk3-fill-pos':'lk3-fill-neg'\" ng-style='barStyle(p().gaze_lateral_norm)'></div>\n    </div>\n  </div>\n  <div class='lk3-hdiv'></div>\n  <div class='lk3-sec-title'>耳距</div>\n  <div class='lk3-dist-row'>\n    <div class='lk3-dist-card'>\n      <div class='lk3-dist-lbl'>PIXEL</div>\n      <div><span class='lk3-dist-val'>{{f1(p().distance_px)}}</span><span class='lk3-dist-unit'>px</span></div>\n      <span class='lk3-badge' ng-class=\"p().valid?'lk3-ok':'lk3-no'\">{{p().valid?'✓ 有效':'✗ 無效'}}</span>\n    </div>\n    <div class='lk3-dist-card'>\n      <div class='lk3-dist-lbl'>NORMALIZED</div>\n      <div><span class='lk3-dist-val' style='font-size:15px'>{{f4(p().distance_norm)}}</span></div>\n    </div>\n  </div>\n</div>\n<script>\n(function(scope){\n  function p(){return scope.msg&&scope.msg.payload||{};}\n  scope.p=p;\n  var fn=function(v,d){return (v==null||isNaN(v)||!isFinite(v))?'N/A':parseFloat(v).toFixed(d);};\n  scope.f1=function(v){return fn(v,1);};  scope.f3=function(v){return fn(v,3);};  scope.f4=function(v){return fn(v,5);};\n  scope.fmtDeg=function(){return fn(p().gaze_angle_deg,1);};\n  scope.sc=function(v){return (!v||isNaN(v))?'#888':v>=0?'#81c784':'#ef9a9a';};\n  scope.barStyle=function(v){\n    if(!v||isNaN(v))return {width:'0%',left:'50%'};\n    var pct=Math.min(50,Math.abs(parseFloat(v))/1.5*50);\n    return v>=0?{width:pct+'%',left:'50%'}:{width:pct+'%',left:(50-pct)+'%'};\n  };\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 360,
+    "y": 600,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "a3248cc75a722219",
+    "type": "http in",
+    "z": "889faede23dd76c6",
+    "name": "lick_python_online",
+    "url": "/lick_python_online",
+    "method": "post",
+    "upload": false,
+    "skipBodyParsing": false,
+    "x": 130,
+    "y": 720,
+    "wires": [
+      [
+        "7ed14c59da4fa700"
+      ]
+    ]
+  },
+  {
+    "id": "7ed14c59da4fa700",
+    "type": "json",
+    "z": "889faede23dd76c6",
+    "name": "",
+    "property": "payload",
+    "action": "obj",
+    "pretty": false,
+    "x": 330,
+    "y": 720,
+    "wires": [
+      [
+        "7a5d0b77e2700907"
+      ]
+    ]
+  },
+  {
+    "id": "d0024af2f208b150",
+    "type": "http response",
+    "z": "889faede23dd76c6",
+    "name": "200 OK",
+    "statusCode": "200",
+    "headers": {},
+    "x": 760,
+    "y": 780,
+    "wires": []
+  },
+  {
+    "id": "7a5d0b77e2700907",
+    "type": "function",
+    "z": "889faede23dd76c6",
+    "name": "build_lick_stream_response",
+    "func": "let ip = null;\ntry {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get('lick_python_ip', 'file') || global.get('lick_python_ip') || null);\n} catch (e) {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get('lick_python_ip') || null);\n}\nif (ip) {\n    try {\n        global.set('lick_python_ip', ip, 'file');\n    } catch (e) {\n        global.set('lick_python_ip', ip);\n    }\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = ip ? `http://${ip}:5000/stream` : '';\nnode.warn('lick_python_online received IP: ' + (ip || 'null'));\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 540,
+    "y": 720,
+    "wires": [
+      [
+        "d0024af2f208b150",
+        "2ea58ea3828048d8"
+      ]
+    ]
+  },
+  {
+    "id": "5109db33c66df549",
+    "type": "inject",
+    "z": "889faede23dd76c6",
+    "name": "啟動時恢復串流",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 2,
+    "topic": "",
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 820,
+    "wires": [
+      [
+        "3faa10af8087de54"
+      ]
+    ]
+  },
+  {
+    "id": "3faa10af8087de54",
+    "type": "function",
+    "z": "889faede23dd76c6",
+    "name": "從持久化context恢復串流",
+    "func": "let ip = null;\ntry {\n    ip = global.get('lick_python_ip', 'file') || global.get('lick_python_ip') || null;\n} catch (e) {\n    ip = global.get('lick_python_ip') || null;\n}\nif (!ip) return null;\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 360,
+    "y": 820,
+    "wires": [
+      [
+        "2ea58ea3828048d8"
+      ]
+    ]
+  },
+  {
+    "id": "2ea58ea3828048d8",
+    "type": "ui_template",
+    "z": "889faede23dd76c6",
+    "group": "dcca388fe152f327",
+    "name": "影像串流（含切換按鈕）",
+    "order": 1,
+    "width": "0",
+    "height": "9",
+    "format": "<style>\n.sv-wrap{height:100%;display:flex;flex-direction:column;background:#060a0f;border-radius:10px;overflow:hidden;}\n.sv-bar{height:42px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;background:linear-gradient(135deg,rgba(0,14,8,.96),rgba(2,20,12,.96));border-bottom:1px solid rgba(0,255,136,.12);}\n.sv-dot{width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0;transition:background .4s,box-shadow .4s;}\n.sv-label{flex:1;font-size:11px;font-weight:700;color:rgba(0,255,136,.72);letter-spacing:.6px;}\n.sv-ib{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.18);color:#fff;transition:all .18s;flex-shrink:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-size:16px;}\n.sv-ib:hover{background:rgba(0,255,136,.22);border-color:rgba(0,255,136,.6);transform:scale(1.1);}\n.sv-ib.sv-dis{opacity:.28;cursor:default;pointer-events:none;}\n.sv-ib.sv-on{background:rgba(0,255,136,.18)!important;color:#00ff88!important;border-color:rgba(0,255,136,.42)!important;}\n.sv-ib.sv-vc{background:rgba(66,165,245,.07);border-color:rgba(66,165,245,.22);}\n.sv-ib.sv-vc:not(.sv-dis):hover{background:rgba(66,165,245,.25);border-color:rgba(66,165,245,.7);transform:scale(1.1);}\n.sv-ib.sv-vc.sv-flash{background:rgba(66,165,245,.45)!important;border-color:#42a5f5!important;}\n.sv-body{flex:1;position:relative;background:#000;min-height:0;overflow:hidden;}\n.sv-offline{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.22);font-size:12px;pointer-events:none;}\n.sv-off-ico{font-size:36px;opacity:.28;}\n.sv-rh{position:absolute;z-index:10001;display:none;}\n.sv-wrap.sv-floating .sv-rh{display:block;}\n.sv-rh-n{top:0;left:10px;right:10px;height:7px;cursor:n-resize;}\n.sv-rh-s{bottom:0;left:10px;right:10px;height:7px;cursor:s-resize;}\n.sv-rh-w{left:0;top:10px;bottom:10px;width:7px;cursor:w-resize;}\n.sv-rh-e{right:0;top:10px;bottom:10px;width:7px;cursor:e-resize;}\n.sv-rh-nw{top:0;left:0;width:12px;height:12px;cursor:nw-resize;}\n.sv-rh-ne{top:0;right:0;width:12px;height:12px;cursor:ne-resize;}\n.sv-rh-sw{bottom:0;left:0;width:12px;height:12px;cursor:sw-resize;}\n.sv-rh-se{bottom:0;right:0;width:12px;height:12px;cursor:se-resize;}\n</style>\n<div class=\"sv-wrap\" id=\"lksv_wrap\">\n  <div class=\"sv-rh sv-rh-n\" data-dir=\"n\"></div>\n  <div class=\"sv-rh sv-rh-s\" data-dir=\"s\"></div>\n  <div class=\"sv-rh sv-rh-w\" data-dir=\"w\"></div>\n  <div class=\"sv-rh sv-rh-e\" data-dir=\"e\"></div>\n  <div class=\"sv-rh sv-rh-nw\" data-dir=\"nw\"></div>\n  <div class=\"sv-rh sv-rh-ne\" data-dir=\"ne\"></div>\n  <div class=\"sv-rh sv-rh-sw\" data-dir=\"sw\"></div>\n  <div class=\"sv-rh sv-rh-se\" data-dir=\"se\"></div>\n  <div class=\"sv-bar\">\n    <div class=\"sv-dot\" id=\"lksv_dot\"></div>\n    <span class=\"sv-label\">📷 LICK ANALYSIS CAM</span>\n    <div class=\"sv-ib sv-vc sv-dis\" id=\"lksv_btn_prev\" title=\"上一支影片\">⏮</div>\n    <div class=\"sv-ib sv-vc sv-dis\" id=\"lksv_btn_next\" title=\"下一支影片\">⏭</div>\n    <div class=\"sv-ib\" id=\"lksv_btn_play\" title=\"啟動串流\">▶</div>\n    <div class=\"sv-ib\" id=\"lksv_btn_float\" title=\"浮動視窗\">⧉</div>\n  </div>\n  <div class=\"sv-body\" id=\"lksv_body\">\n    <div class=\"sv-offline\" id=\"lksv_offline\">\n      <div class=\"sv-off-ico\">📹</div>\n      <div id=\"lksv_status\">按下 ▶ 啟動串流</div>\n    </div>\n  </div>\n</div>\n<script>\n(function(scope){\n  var _url='',_baseUrl='',_stream=false,_powered=false,_svTimer=null,_retryTimer=null;\n  var PFX='lksv';\n  function g(id){return document.getElementById(PFX+'_'+id);}\n\n  function videoControl(action){\n    if(!_baseUrl)return;\n    var btn=action==='prev'?g('btn_prev'):g('btn_next');\n    if(btn){btn.classList.add('sv-flash');setTimeout(function(){btn.classList.remove('sv-flash');},200);}\n    fetch(_baseUrl+'/video_control',{\n      method:'POST',\n      headers:{'Content-Type':'application/json'},\n      body:JSON.stringify({action:action})\n    }).catch(function(){});\n  }\n\n  function svOn(){\n    if(!_url||_stream)return;\n    _stream=true;\n    if(_retryTimer){clearTimeout(_retryTimer);_retryTimer=null;}\n    var body=g('body'),off=g('offline'),dot=g('dot'),btn=g('btn_play');\n    if(!body)return;\n    if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    var old=body.querySelector('img.sv-img');if(old)body.removeChild(old);\n    var img=document.createElement('img');\n    img.className='sv-img';\n    img.style.cssText='width:100%;height:100%;object-fit:contain;display:block;opacity:0;transition:opacity .3s;pointer-events:none;';\n    img.onload=function(){\n      this.style.opacity=1;\n      if(off)off.style.display='none';\n      if(dot){dot.style.background='#00ff88';dot.style.boxShadow='0 0 6px #00ff88';}\n      if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    };\n    img.onerror=function(){\n      if(!_powered)return;\n      svOff(true);\n      var st=g('status');if(st)st.textContent='串流中斷，3秒後重試...';\n      _retryTimer=setTimeout(function(){if(_powered&&!_stream)svOn();},3000);\n    };\n    if(off)off.style.display='none';\n    body.insertBefore(img,off);\n    img.src=_url;\n    if(btn){btn.textContent='⏹';btn.title='停止串流';btn.classList.add('sv-on');}\n    _svTimer=setTimeout(function(){\n      var ci=body&&body.querySelector('img.sv-img');\n      if(ci&&!ci.naturalWidth){\n        if(!_powered)return;\n        svOff(true);\n        var st=g('status');if(st)st.textContent='連線逾時，3秒後重試...';\n        _retryTimer=setTimeout(function(){if(_powered&&!_stream)svOn();},3000);\n      }\n    },10000);\n  }\n\n  function svOff(internal){\n    _stream=false;\n    if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    var body=g('body'),off=g('offline'),dot=g('dot'),btn=g('btn_play');\n    var old=body&&body.querySelector('img.sv-img');if(old)body.removeChild(old);\n    if(off)off.style.display='flex';\n    if(dot){dot.style.background=_url?'#f5a623':'#444';dot.style.boxShadow=_url?'0 0 4px rgba(245,166,35,.5)':'none';}\n    if(!internal){\n      _powered=false;\n      if(_retryTimer){clearTimeout(_retryTimer);_retryTimer=null;}\n      if(btn){btn.textContent='▶';btn.title='啟動串流';btn.classList.remove('sv-on');}\n      var st=g('status');if(st)st.textContent='按下 ▶ 啟動串流';\n    }\n  }\n\n  var _btn=g('btn_play');\n  if(_btn&&!_btn._bound){\n    _btn._bound=true;\n    _btn.addEventListener('click',function(e){\n      e.stopPropagation();\n      if(_powered){\n        svOff(false);\n      }else{\n        _powered=true;\n        if(_url){svOn();}else{\n          var st=g('status'),dot=g('dot'),btn=g('btn_play');\n          if(st)st.textContent='等待串流服務器...';\n          if(dot){dot.style.background='#aaa';dot.style.boxShadow='0 0 4px rgba(170,170,170,.4)';}\n          if(btn){btn.textContent='⏹';btn.title='停止串流';btn.classList.add('sv-on');}\n        }\n      }\n    });\n  }\n\n  function urlReady(url){\n    _url=url;\n    var m=url.match(/^(https?:\\/\\/[^\\/]+)/);\n    if(m)_baseUrl=m[1];\n    var dot=g('dot');\n    if(dot&&!_stream){dot.style.background='#f5a623';dot.style.boxShadow='0 0 4px rgba(245,166,35,.5)';}\n    var prev=g('btn_prev'),next=g('btn_next');\n    if(prev&&!prev._bound){prev._bound=true;prev.classList.remove('sv-dis');prev.addEventListener('click',function(e){e.stopPropagation();videoControl('prev');});}\n    if(next&&!next._bound){next._bound=true;next.classList.remove('sv-dis');next.addEventListener('click',function(e){e.stopPropagation();videoControl('next');});}\n    if(_powered&&!_stream)svOn();\n  }\n\n  var _floating=false,_origCS='';\n  function _dragBar(e){\n    var wrap=document.getElementById('lksv_wrap');\n    if(!wrap||!_floating)return;\n    var r=wrap.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,sl=r.left,st=r.top;\n    function mv(e){wrap.style.left=(sl+e.clientX-sx)+'px';wrap.style.top=(st+e.clientY-sy)+'px';}\n    function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}\n    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);e.preventDefault();\n  }\n  function _startResize(e,dir){\n    var wrap=document.getElementById('lksv_wrap');\n    if(!wrap||!_floating)return;\n    e.preventDefault();e.stopPropagation();\n    var r=wrap.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,oL=r.left,oT=r.top,oW=r.width,oH=r.height,minW=240,minH=160;\n    function mv(e){\n      var dx=e.clientX-sx,dy=e.clientY-sy,l=oL,t=oT,w=oW,h=oH;\n      if(dir.indexOf('e')>=0)w=Math.max(minW,oW+dx);\n      if(dir.indexOf('s')>=0)h=Math.max(minH,oH+dy);\n      if(dir.indexOf('w')>=0){w=Math.max(minW,oW-dx);if(w>minW)l=oL+dx;}\n      if(dir.indexOf('n')>=0){h=Math.max(minH,oH-dy);if(h>minH)t=oT+dy;}\n      wrap.style.left=l+'px';wrap.style.top=t+'px';wrap.style.width=w+'px';wrap.style.height=h+'px';\n    }\n    function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}\n    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);\n  }\n  function toggleFloat(){\n    var wrap=document.getElementById('lksv_wrap');\n    var bar=wrap&&wrap.querySelector('.sv-bar');\n    var btn=g('btn_float');\n    if(!wrap)return;\n    if(!_floating){\n      _floating=true;\n      _origCS=wrap.getAttribute('style')||'';\n      var r=wrap.getBoundingClientRect();\n      wrap.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;z-index:9999;border-radius:10px;box-shadow:0 12px 48px rgba(0,0,0,.85);overflow:hidden;min-width:240px;min-height:160px;';\n      wrap.classList.add('sv-floating');\n      if(bar){bar.style.cursor='move';bar.addEventListener('mousedown',_dragBar);}\n      if(btn){btn.textContent='⊞';btn.title='返回原位';btn.classList.add('sv-on');}\n    }else{\n      _floating=false;\n      if(bar){bar.style.cursor='';bar.removeEventListener('mousedown',_dragBar);}\n      wrap.classList.remove('sv-floating');\n      wrap.setAttribute('style',_origCS);\n      if(btn){btn.textContent='⧉';btn.title='浮動視窗';btn.classList.remove('sv-on');}\n    }\n  }\n  var floatBtn=g('btn_float');\n  if(floatBtn)floatBtn.addEventListener('click',function(e){e.stopPropagation();toggleFloat();});\n  [].forEach.call(document.querySelectorAll('#lksv_wrap .sv-rh'),function(rh){\n    rh.addEventListener('mousedown',function(e){_startResize(e,this.getAttribute('data-dir'));});\n  });\n\n  scope.$watch('msg',function(msg){\n    if(!msg)return;\n    var ip=(msg.payload&&msg.payload.ip)?msg.payload.ip:null;\n    var url='';\n    if(ip){url='http://'+ip+':5000/stream';}\n    else if(msg.stream_url){url=msg.stream_url;}\n    if(!url||url===_url)return;\n    urlReady(url);\n  });\n})(scope);\n</script>",
+    "storeOutMessages": false,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 810,
+    "y": 700,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "lk_g3",
+    "type": "ui_group",
+    "name": "即時接觸狀態",
+    "tab": "lk_uitab",
+    "order": 2,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "lk_g2",
+    "type": "ui_group",
+    "name": "部位時長統計",
+    "tab": "lk_uitab",
+    "order": 3,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "lk_g1",
+    "type": "ui_group",
+    "name": "耳距與朝向",
+    "tab": "lk_uitab",
+    "order": 1,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "dcca388fe152f327",
+    "type": "ui_group",
+    "name": "即時影像串流",
+    "tab": "lk_uitab",
+    "order": 4,
+    "disp": true,
+    "width": "18",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "lk_uitab",
+    "type": "ui_tab",
+    "name": "🐾 舔舐部位分析",
+    "icon": "pets",
+    "order": 5,
+    "disabled": false,
+    "hidden": false
+  },
+  {
+    "id": "06bb1e7840b04780",
+    "type": "global-config",
+    "env": [],
+    "modules": {
+      "node-red-dashboard": "3.6.6"
+    }
+  }
+]

@@ -153,13 +153,14 @@ def compute_bone_motion_feature(sequence):
     return bone_motion
 
 
-# 四種特徵模式，名稱直接反映所含特徵標籤：
+# 五種特徵模式，名稱直接反映所含特徵標籤：
 #   xy=位置, conf=信心值, v=速度, bone=骨架向量, bmotion=骨架位移
 FEATURE_MODE_CHANNELS = {
-    "xy_v":               4,   # x, y, vx, vy
-    "xy_conf_v":          5,   # x, y, conf, vx, vy
-    "xy_conf_v_bone":     7,   # x, y, conf, vx, vy, bone_x, bone_y
-    "xy_conf_v_bone_bmotion": 9,  # x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my
+    "xy":                     2,   # x, y
+    "xy_conf":                3,   # x, y, conf
+    "xy_conf_v":              5,   # x, y, conf, vx, vy
+    "xy_conf_v_bone":         7,   # x, y, conf, vx, vy, bone_x, bone_y
+    "xy_conf_v_bone_bmotion": 9,   # x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my
 }
 
 
@@ -178,7 +179,7 @@ def build_feature_tensor(sequence_xy, conf_seq, feature_mode):
     Args:
         sequence_xy:  (T, V, 2) 已正規化的關鍵點座標
         conf_seq:     (T, V)   信心值序列
-        feature_mode: "xy_v" | "xy_conf_v" | "xy_conf_v_bone" | "xy_conf_v_bone_bmotion"
+        feature_mode: "xy" | "xy_conf" | "xy_conf_v" | "xy_conf_v_bone" | "xy_conf_v_bone_bmotion"
 
     Returns:
         (T, V, C) 特徵張量，通道順序依模式而定；
@@ -193,9 +194,13 @@ def build_feature_tensor(sequence_xy, conf_seq, feature_mode):
     bone_xy        = compute_bone_feature(sequence_xy).astype(sequence_xy.dtype, copy=False)       # (T,V,2)
     bone_motion_xy = compute_bone_motion_feature(sequence_xy).astype(sequence_xy.dtype, copy=False) # (T,V,2)
 
-    if mode == "xy_v":
-        # 4ch: x, y, vx, vy
-        return np.concatenate([sequence_xy, velocity], axis=-1)
+    if mode == "xy":
+        # 2ch: x, y
+        return sequence_xy.copy()
+
+    elif mode == "xy_conf":
+        # 3ch: x, y, conf
+        return np.concatenate([sequence_xy, conf_channel], axis=-1)
 
     elif mode == "xy_conf_v":
         # 5ch: x, y, conf, vx, vy
@@ -389,7 +394,7 @@ class STGCN(nn.Module):
 
 # 包裝器
 class CatBehaviorSTGCN:
-    def __init__(self, model_path, device='cuda', sequence_length=32, num_classes=5, normalize=True, feature_mode='xy_v', in_channels=None, use_attention=None):
+    def __init__(self, model_path, device='cuda', sequence_length=32, num_classes=5, normalize=True, feature_mode='xy', in_channels=None, use_attention=None):
         self.device = torch.device(device)
         self.sequence_length = sequence_length
         self.num_classes = num_classes
@@ -418,7 +423,7 @@ class CatBehaviorSTGCN:
         if self.in_channels is None and state_dict is not None and 'bn_input.weight' in state_dict:
             self.in_channels = int(state_dict['bn_input.weight'].shape[0])
         if self.in_channels is None:
-            self.in_channels = 4
+            self.in_channels = get_in_channels_for_mode(self.feature_mode)
 
         # 從 checkpoint 自動偵測 num_classes，避免模型預設值與訓練 checkpoint 不符
         if state_dict is not None and 'fc.weight' in state_dict:
@@ -430,10 +435,17 @@ class CatBehaviorSTGCN:
 
         expected_channels = get_in_channels_for_mode(self.feature_mode)
         if self.in_channels != expected_channels:
-            raise ValueError(
-                f"feature_mode={self.feature_mode} 對應 {expected_channels} channels，但目前 in_channels={self.in_channels}; "
-                "請確認訓練與推論設定一致"
-            )
+            _ch_to_mode = {v: k for k, v in FEATURE_MODE_CHANNELS.items()}
+            if self.in_channels in _ch_to_mode:
+                auto_mode = _ch_to_mode[self.in_channels]
+                print(f"⚠ feature_mode={self.feature_mode} 對應 {expected_channels} channels，"
+                      f"但 checkpoint in_channels={self.in_channels}，自動調整為 {auto_mode}")
+                self.feature_mode = auto_mode
+            else:
+                raise ValueError(
+                    f"feature_mode={self.feature_mode} 對應 {expected_channels} channels，但目前 in_channels={self.in_channels}; "
+                    "請確認訓練與推論設定一致"
+                )
 
         if use_attention is None:
             if state_dict is not None:

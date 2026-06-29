@@ -44,31 +44,36 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 
 # ── Channel → feature mode ────────────────────────────────────────────────
 CH_TO_FEATURE = {
-    4: 'xy_v',
+    2: 'xy',
+    3: 'xy_conf',
     5: 'xy_conf_v',
     7: 'xy_conf_v_bone',
     9: 'xy_conf_v_bone_bmotion',
 }
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
-DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_94.pt"
+DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_106.pt"
 DEFAULT_IMGSZ   = 640
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16
 DEFAULT_STRIDE  = 2
-EVENT_MIN_WINDOWS = 3   # 事件偵測門檻：一部影片中 ≥ N 個 window 預測正確即視為偵測到該行為
+EVENT_MIN_WINDOWS = 3   # 保留作備用下限；實際以比例門檻為主
+EVENT_MIN_RATIO   = 0.30  # 事件偵測（比例門檻）：正確 window 數 / 總 window 數 ≥ 此值即視為偵測成功
+PROB_EVENT_THRESHOLD = 0.40  # 機率門檻型事件偵測：true-class prob ≥ 此值的 window 達 EVENT_MIN_WINDOWS 即算偵測
 DEFAULT_DEVICE  = 'cuda'
 
-HARD_MODEL_A    = r"C:\Users\homec\Downloads\stgcn_best_033_xy_v_att_on.pth"
-HARD_MODEL_B    = r"C:\Users\homec\Downloads\stgcn_best_032_xy_v_att_on.pth"
+HARD_MODEL_A    = r"C:\Users\homec\Downloads\stgcn_results\run_061_models_att_off\xy_conf_v_bone_att_off.pth"
+HARD_MODEL_B    = r"C:\Users\homec\Downloads\stgcn_results\run_062_xy_conf_v_bone_att_on\best_model.pth"
 HARD_NAME_A     = None   # None → auto-derived from filename
 HARD_NAME_B     = None
-HARD_VIDEO_WALK    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk\walk1.mp4"
-HARD_VIDEO_LICK    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick\lick_9.mp4"
-HARD_VIDEO_SCRATCH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch\scratch_33.mp4"
-HARD_VIDEO_SHAKE   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\shake\shake_15.mp4"
-HARD_VIDEO_STOP    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\stop\stop_35.mp4"   # 留空表示跳過 stop 類別評估
-HARD_OUTPUT_DIR    = r"C:\ai_project\paper\cat_monitoring_system\eval_results"
+HARD_EMA_ALPHA_A = 1.0   # 1.0 = 不平滑；< 1.0 = EMA 平滑（例如 0.5）
+HARD_EMA_ALPHA_B = 1.0
+HARD_VIDEO_WALK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk"
+HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick"
+HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch"
+HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\shake"
+HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\stop"
+HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_results"
 
 # ── Visual style ──────────────────────────────────────────────────────────
 _COL_A = '#2196F3'   # blue   — model A
@@ -120,10 +125,34 @@ def infer_bn_input_channels(model_path: str):
 # ═══════════════════════════════════════════════════════════════════════════
 # Inference
 # ═══════════════════════════════════════════════════════════════════════════
+def _apply_ema(preds: list, alpha: float) -> list:
+    """
+    對 preds 序列的 probs 套用 EMA 平滑。
+    alpha=1.0 → 不平滑（原始值）；alpha=0.5 → 半衰期平滑。
+    pred/conf 會從平滑後的 probs 重新計算。
+    """
+    if alpha >= 1.0 or not preds:
+        return preds
+    smoothed = []
+    ema = None
+    for p in preds:
+        raw = np.array(p['probs'], dtype=np.float32)
+        ema = raw if ema is None else alpha * raw + (1.0 - alpha) * ema
+        new_pred = int(np.argmax(ema))
+        smoothed.append({
+            **p,
+            'probs': ema.tolist(),
+            'pred':  new_pred,
+            'conf':  float(ema[new_pred]),
+        })
+    return smoothed
+
+
 def evaluate_video(video_path, kp_detector, classifier, feature_mode,
-                   sequence_length=16, classify_stride=2):
+                   sequence_length=16, classify_stride=2, ema_alpha=1.0):
     """
     對單一影片執行逐幀推論。
+    ema_alpha: EMA 平滑係數，1.0 = 不平滑，0.5 = 半衰期平滑。
     回傳 list of dicts: {frame, time, pred, conf, probs}
     """
     import cv2
@@ -161,7 +190,7 @@ def evaluate_video(video_path, kp_detector, classifier, feature_mode,
         seq = normalize_skeleton_coords(seq)
         feats = build_feature_tensor(seq, conf_arr, feature_mode)
 
-        pred_id, pred_conf, pred_probs = classifier.classify(feats, precomputed=True)
+        pred_id, pred_conf, pred_probs = classifier.model.predict(feats, precomputed=True)
         if pred_id is None:
             pred_id, pred_conf, pred_probs = -1, 0.0, [0.0] * len(BEHAVIOR_CLASSES)
 
@@ -174,35 +203,64 @@ def evaluate_video(video_path, kp_detector, classifier, feature_mode,
         })
 
     cap.release()
-    return preds
+    return _apply_ema(preds, ema_alpha)
+
+
+_VIDEO_EXTS = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.m4v', '.mpg', '.mpeg', '.webm'}
+
+
+def evaluate_folder(folder_path, kp_detector, classifier, feature_mode,
+                    sequence_length=16, classify_stride=2, ema_alpha=1.0):
+    """
+    對資料夾內所有影片執行推論。
+    回傳 list of (filename, preds_list)，每部影片一個元素。
+    """
+    folder = Path(folder_path)
+    videos = sorted(f for f in folder.iterdir() if f.suffix.lower() in _VIDEO_EXTS)
+    if not videos:
+        print(f"    ⚠ No videos found in: {folder}")
+        return []
+    results = []
+    for vid in videos:
+        print(f"    {vid.name} ...", end=' ', flush=True)
+        preds = evaluate_video(vid, kp_detector, classifier, feature_mode,
+                               sequence_length, classify_stride, ema_alpha)
+        print(f"{len(preds)} windows")
+        results.append((vid.name, preds))
+    return results
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Metrics
 # ═══════════════════════════════════════════════════════════════════════════
 def compute_metrics(preds_by_class: dict,
-                    event_min_windows: int = EVENT_MIN_WINDOWS) -> dict:
+                    event_min_windows: int = EVENT_MIN_WINDOWS,
+                    event_min_ratio: float = EVENT_MIN_RATIO,
+                    prob_event_threshold: float = PROB_EVENT_THRESHOLD) -> dict:
     """
-    preds_by_class: {class_idx: [pred_dict, ...]}
+    preds_by_class: {class_idx: [[pred_dict, ...], ...]}
+      外層 list = 每部影片；內層 list = 該影片的每個 window。
 
-    Per-class metrics:
-      accuracy        — discrete accuracy (argmax == true label)
-      avg_true_prob   — mean predicted probability for the true class
-      max_true_prob   — peak predicted probability for the true class
-      event_detected  — True if n_correct >= event_min_windows
-      n_correct       — number of windows correctly predicted
-      n_windows       — total inference windows used
-
-    Overall metrics:
-      accuracy, macro_f1, event_detection_rate, confusion_matrix
+    Per-class metrics（window 層級指標跨所有影片合併計算）：
+      accuracy, top2_accuracy, avg_true_prob, max_true_prob
+    Per-class 事件偵測（逐影片判斷，回傳偵測率）：
+      event_rate          — 比例門檻：各影片獨立判斷後取平均（偵測成功影片數 / 總影片數）
+      prob_event_rate     — 機率門檻：同上
+      n_videos, n_videos_detected, n_videos_prob_detected
     """
     n_cls = len(BEHAVIOR_CLASSES)
     all_true, all_pred = [], []
-    per_class = {i: {'accuracy': 0.0, 'avg_true_prob': 0.0, 'max_true_prob': 0.0,
-                     'event_detected': False, 'n_correct': 0, 'n_windows': 0}
+    per_class = {i: {'accuracy': 0.0, 'top2_accuracy': 0.0,
+                     'avg_true_prob': 0.0, 'max_true_prob': 0.0,
+                     'event_detected': False, 'prob_event_detected': False,
+                     'event_rate': 0.0, 'prob_event_rate': 0.0,
+                     'n_correct': 0, 'n_prob_hit': 0, 'n_windows': 0,
+                     'n_videos': 0, 'n_videos_detected': 0, 'n_videos_prob_detected': 0}
                  for i in range(n_cls)}
 
-    for cls_idx, preds in preds_by_class.items():
+    for cls_idx, vid_preds_list in preds_by_class.items():
+        # 合併所有影片 windows 用於 window 層級指標
+        preds = [p for vid_preds in vid_preds_list for p in vid_preds]
         if not preds:
             continue
 
@@ -210,17 +268,47 @@ def compute_metrics(preds_by_class: dict,
         actual_cls = probs.shape[1]
         pred_ids   = np.clip(np.array([p['pred'] for p in preds], dtype=int),
                              0, actual_cls - 1)
+        probs_cls  = probs[:, cls_idx] if cls_idx < actual_cls else np.zeros(len(preds))
+        n_correct  = int((pred_ids == cls_idx).sum())
 
-        probs_cls = probs[:, cls_idx] if cls_idx < actual_cls else np.zeros(len(preds))
-        n_correct = int((pred_ids == cls_idx).sum())
+        top2_ids = np.argsort(probs, axis=1)[:, -2:]
+        n_top2   = int(np.any(top2_ids == cls_idx, axis=1).sum())
+
+        # 逐影片事件偵測
+        n_videos = len(vid_preds_list)
+        n_vid_detected = 0
+        n_vid_prob_detected = 0
+        for vid_preds in vid_preds_list:
+            if not vid_preds:
+                continue
+            vp = np.clip(np.array([p['pred'] for p in vid_preds], dtype=int), 0, actual_cls - 1)
+            vc = int((vp == cls_idx).sum())
+            vn = len(vid_preds)
+            if (vc / vn) >= event_min_ratio or vc >= event_min_windows:
+                n_vid_detected += 1
+            vpc = np.array([p['probs'][cls_idx] for p in vid_preds if cls_idx < len(p['probs'])])
+            if len(vpc) > 0 and int((vpc >= prob_event_threshold).sum()) >= event_min_windows:
+                n_vid_prob_detected += 1
+
+        event_rate      = n_vid_detected / n_videos if n_videos > 0 else 0.0
+        prob_event_rate = n_vid_prob_detected / n_videos if n_videos > 0 else 0.0
+        n_prob_hit      = int((probs_cls >= prob_event_threshold).sum())
 
         per_class[cls_idx] = {
-            'accuracy':       float(n_correct / len(preds)),
-            'avg_true_prob':  float(probs_cls.mean()),
-            'max_true_prob':  float(probs_cls.max()),
-            'event_detected': n_correct >= event_min_windows,
-            'n_correct':      n_correct,
-            'n_windows':      len(preds),
+            'accuracy':               float(n_correct / len(preds)),
+            'top2_accuracy':          float(n_top2 / len(preds)),
+            'avg_true_prob':          float(probs_cls.mean()),
+            'max_true_prob':          float(probs_cls.max()),
+            'event_detected':         n_vid_detected > 0,
+            'prob_event_detected':    n_vid_prob_detected > 0,
+            'event_rate':             float(event_rate),
+            'prob_event_rate':        float(prob_event_rate),
+            'n_correct':              n_correct,
+            'n_prob_hit':             n_prob_hit,
+            'n_windows':              len(preds),
+            'n_videos':               n_videos,
+            'n_videos_detected':      n_vid_detected,
+            'n_videos_prob_detected': n_vid_prob_detected,
         }
         all_true.extend([cls_idx] * len(preds))
         all_pred.extend(pred_ids.tolist())
@@ -228,19 +316,24 @@ def compute_metrics(preds_by_class: dict,
     y_true = np.array(all_true)
     y_pred = np.array(all_pred)
 
-    evaluated = [i for i in range(n_cls) if per_class[i]['n_windows'] > 0]
-    event_rate = float(np.mean([per_class[i]['event_detected'] for i in evaluated])) \
-                 if evaluated else 0.0
+    evaluated       = [i for i in range(n_cls) if per_class[i]['n_windows'] > 0]
+    event_rate      = float(np.mean([per_class[i]['event_rate']      for i in evaluated])) if evaluated else 0.0
+    prob_event_rate = float(np.mean([per_class[i]['prob_event_rate'] for i in evaluated])) if evaluated else 0.0
+    top2_acc        = float(np.mean([per_class[i]['top2_accuracy']   for i in evaluated])) if evaluated else 0.0
 
     return {
         'per_class': per_class,
         'overall': {
-            'accuracy':             float(accuracy_score(y_true, y_pred)),
-            'macro_f1':             float(f1_score(y_true, y_pred, average='macro', zero_division=0)),
-            'event_detection_rate': event_rate,
+            'accuracy':                 float(accuracy_score(y_true, y_pred)),
+            'top2_accuracy':            top2_acc,
+            'macro_f1':                 float(f1_score(y_true, y_pred, average='macro', zero_division=0)),
+            'event_detection_rate':     event_rate,
+            'prob_event_detection_rate': prob_event_rate,
         },
-        'confusion_matrix':  confusion_matrix(y_true, y_pred, labels=list(range(n_cls))),
-        'event_min_windows': event_min_windows,
+        'confusion_matrix':      confusion_matrix(y_true, y_pred, labels=list(range(n_cls))),
+        'event_min_windows':     event_min_windows,
+        'event_min_ratio':       event_min_ratio,
+        'prob_event_threshold':  prob_event_threshold,
     }
 
 
@@ -398,6 +491,45 @@ def plot_confusion_matrices(cm_a, cm_b, name_a, name_b, classes, out_path):
     print(f"  ✓ {out_path.name}")
 
 
+def plot_prob_histograms(preds_a, preds_b, name_a, name_b, classes, out_path):
+    """
+    ⑦ True-class probability histogram（每個類別一列，A/B 並排）
+    橫軸：true-class prob 0~1，縱軸：window 數量。
+    可立即看出 Softmax collapse（機率全堆在同一處）或分布健康與否。
+    """
+    n_cls = len(classes)
+    fig, axes = plt.subplots(n_cls, 2, figsize=(11, 2.8 * n_cls), constrained_layout=True)
+    fig.suptitle('True-Class Probability Histogram\n(each row = one behavior class)',
+                 fontsize=12, fontweight='bold')
+    if n_cls == 1:
+        axes = [axes]
+
+    bins = np.linspace(0, 1, 21)
+    for i, cls in enumerate(classes):
+        for j, (preds, name, col) in enumerate(
+            [(preds_a, name_a, _COL_A), (preds_b, name_b, _COL_B)]
+        ):
+            ax = axes[i][j]
+            if i not in preds or not preds[i]:
+                ax.set_visible(False)
+                continue
+            probs_cls = np.array([p['probs'][i] for p in preds[i]
+                                  if i < len(p['probs'])])
+            ax.hist(probs_cls, bins=bins, color=col, alpha=0.85, edgecolor='white')
+            ax.axvline(float(probs_cls.mean()), color='k', linestyle='--',
+                       linewidth=1.2, label=f'mean={probs_cls.mean():.2f}')
+            ax.set_xlim(0, 1)
+            ax.set_title(f'[{cls}]  {name}', fontsize=9, fontweight='bold')
+            ax.set_xlabel('True-class probability', fontsize=8)
+            ax.set_ylabel('Windows', fontsize=8)
+            ax.legend(fontsize=8)
+            ax.grid(axis='y', alpha=0.3, linestyle='--')
+
+    plt.savefig(out_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  ✓ {out_path.name}")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # CSV outputs
 # ═══════════════════════════════════════════════════════════════════════════
@@ -410,18 +542,28 @@ def save_summary_csv(metrics_a, metrics_b, name_a, name_b, classes, out_path):
         winner = '=' if delta < 0.001 else (name_a if va >= vb else name_b)
         rows.append([label, f'{va:.4f}', f'{vb:.4f}', winner, f'{delta:.4f}'])
 
-    _row('overall_accuracy',             metrics_a['overall']['accuracy'],             metrics_b['overall']['accuracy'])
-    _row('overall_macro_f1',             metrics_a['overall']['macro_f1'],             metrics_b['overall']['macro_f1'])
-    _row('overall_event_detection_rate', metrics_a['overall']['event_detection_rate'], metrics_b['overall']['event_detection_rate'])
+    _row('overall_accuracy',                  metrics_a['overall']['accuracy'],                  metrics_b['overall']['accuracy'])
+    _row('overall_top2_accuracy',             metrics_a['overall']['top2_accuracy'],             metrics_b['overall']['top2_accuracy'])
+    _row('overall_macro_f1',                  metrics_a['overall']['macro_f1'],                  metrics_b['overall']['macro_f1'])
+    _row('overall_event_det_rate_ratio',      metrics_a['overall']['event_detection_rate'],      metrics_b['overall']['event_detection_rate'])
+    _row('overall_event_det_rate_prob',       metrics_a['overall']['prob_event_detection_rate'], metrics_b['overall']['prob_event_detection_rate'])
     rows.append([])   # blank separator
 
     for i, cls in enumerate(classes):
         pa = metrics_a['per_class'][i]
         pb = metrics_b['per_class'][i]
-        _row(f'{cls}_accuracy',       pa['accuracy'],      pb['accuracy'])
-        _row(f'{cls}_avg_true_prob',  pa['avg_true_prob'], pb['avg_true_prob'])
-        _row(f'{cls}_max_true_prob',  pa['max_true_prob'], pb['max_true_prob'])
-        rows.append([f'{cls}_event_detected', str(pa['event_detected']), str(pb['event_detected']), '-', '-'])
+        _row(f'{cls}_accuracy',           pa['accuracy'],      pb['accuracy'])
+        _row(f'{cls}_top2_accuracy',      pa['top2_accuracy'], pb['top2_accuracy'])
+        _row(f'{cls}_avg_true_prob',      pa['avg_true_prob'], pb['avg_true_prob'])
+        _row(f'{cls}_max_true_prob',      pa['max_true_prob'], pb['max_true_prob'])
+        _row(f'{cls}_event_rate',         pa['event_rate'],      pb['event_rate'])
+        _row(f'{cls}_prob_event_rate',    pa['prob_event_rate'], pb['prob_event_rate'])
+        rows.append([f'{cls}_n_videos_detected',
+                     f"{pa['n_videos_detected']}/{pa['n_videos']}",
+                     f"{pb['n_videos_detected']}/{pb['n_videos']}", '-', '-'])
+        rows.append([f'{cls}_prob_videos_detected',
+                     f"{pa['n_videos_prob_detected']}/{pa['n_videos']}",
+                     f"{pb['n_videos_prob_detected']}/{pb['n_videos']}", '-', '-'])
         rows.append([f'{cls}_n_correct',  pa['n_correct'],  pb['n_correct'],  '-', '-'])
         rows.append([f'{cls}_n_windows',  pa['n_windows'],  pb['n_windows'],  '-', '-'])
         rows.append([])
@@ -621,21 +763,22 @@ def print_final_summary(metrics_a, metrics_b, name_a, name_b):
     edr_a  = metrics_a['overall']['event_detection_rate']
     edr_b  = metrics_b['overall']['event_detection_rate']
     lines += [
-        f'● Event Detection  (≥{ev_min} correct windows per clip = detected)',
+        f'● Event Detection  (per-clip: ratio≥{EVENT_MIN_RATIO:.0%} or ≥{ev_min} windows)',
         f'  {SEP}',
+        f'  {"Class":<10}  {"A clips":>12}  {"A win%":>7}  {"B clips":>12}  {"B win%":>7}',
     ]
     for i, cls in enumerate(classes):
         pa, pb = per_a[i], per_b[i]
         if pa['n_windows'] == 0 and pb['n_windows'] == 0:
             continue
-        da = '✓' if pa.get('event_detected', False) else '✗'
-        db = '✓' if pb.get('event_detected', False) else '✗'
-        nc_a, nc_b = pa.get('n_correct', 0), pb.get('n_correct', 0)
+        da = f"{pa.get('n_videos_detected', 0)}/{pa.get('n_videos', 0)}"
+        db = f"{pb.get('n_videos_detected', 0)}/{pb.get('n_videos', 0)}"
+        ra = pa.get('event_rate', 0.0)
+        rb = pb.get('event_rate', 0.0)
         lines.append(
-            f'  {cls:<10}  A={da} ({nc_a:3d}/{pa["n_windows"]:3d})  '
-            f'B={db} ({nc_b:3d}/{pb["n_windows"]:3d})'
+            f'  {cls:<10}  {da:>12}  {ra:>7.0%}  {db:>12}  {rb:>7.0%}'
         )
-    lines.append(f'  Detection rate → A={edr_a:.0%}  B={edr_b:.0%}  '
+    lines.append(f'  {"(avg rate)":<10}  {"":>12}  {edr_a:>7.0%}  {"":>12}  {edr_b:>7.0%}  '
                  f'{_winner_str(edr_a, edr_b, name_a, name_b)}')
     lines.append(NL)
 
@@ -731,42 +874,50 @@ def print_final_summary(metrics_a, metrics_b, name_a, name_b):
 # ═══════════════════════════════════════════════════════════════════════════
 def main():
     parser = argparse.ArgumentParser(
-        description='Compare two ST-GCN models on four labeled videos.'
+        description='Compare two ST-GCN models on behavior video folders.'
     )
-    parser.add_argument('--model_a',         default=HARD_MODEL_A)
-    parser.add_argument('--model_b',         default=HARD_MODEL_B)
-    parser.add_argument('--name_a',          default=HARD_NAME_A)
-    parser.add_argument('--name_b',          default=HARD_NAME_B)
-    parser.add_argument('--video_walk',      default=HARD_VIDEO_WALK)
-    parser.add_argument('--video_lick',      default=HARD_VIDEO_LICK)
-    parser.add_argument('--video_scratch',   default=HARD_VIDEO_SCRATCH)
-    parser.add_argument('--video_shake',     default=HARD_VIDEO_SHAKE)
-    parser.add_argument('--video_stop',      default=HARD_VIDEO_STOP,
-                        help='stop 類別影片路徑（留空則跳過此類別）')
-    parser.add_argument('--yolo',            default=DEFAULT_YOLO)
-    parser.add_argument('--imgsz',           type=int,   default=DEFAULT_IMGSZ)
-    parser.add_argument('--conf',            type=float, default=DEFAULT_CONF)
-    parser.add_argument('--output',          default=HARD_OUTPUT_DIR)
-    parser.add_argument('--sequence_length', type=int,   default=DEFAULT_SEQ_LEN)
-    parser.add_argument('--classify_stride', type=int,   default=DEFAULT_STRIDE)
-    parser.add_argument('--device',          default=DEFAULT_DEVICE)
+    parser.add_argument('--model_a',             default=HARD_MODEL_A)
+    parser.add_argument('--model_b',             default=HARD_MODEL_B)
+    parser.add_argument('--name_a',              default=HARD_NAME_A)
+    parser.add_argument('--name_b',              default=HARD_NAME_B)
+    parser.add_argument('--video_walk_dir',      default=HARD_VIDEO_WALK_DIR)
+    parser.add_argument('--video_lick_dir',      default=HARD_VIDEO_LICK_DIR)
+    parser.add_argument('--video_scratch_dir',   default=HARD_VIDEO_SCRATCH_DIR)
+    parser.add_argument('--video_shake_dir',     default=HARD_VIDEO_SHAKE_DIR)
+    parser.add_argument('--video_stop_dir',      default=HARD_VIDEO_STOP_DIR,
+                        help='stop 類別資料夾（留空則跳過）')
+    parser.add_argument('--yolo',                default=DEFAULT_YOLO)
+    parser.add_argument('--imgsz',               type=int,   default=DEFAULT_IMGSZ)
+    parser.add_argument('--conf',                type=float, default=DEFAULT_CONF)
+    parser.add_argument('--output',              default=HARD_OUTPUT_DIR)
+    parser.add_argument('--sequence_length',     type=int,   default=DEFAULT_SEQ_LEN)
+    parser.add_argument('--classify_stride',     type=int,   default=DEFAULT_STRIDE)
+    parser.add_argument('--device',              default=DEFAULT_DEVICE)
     args = parser.parse_args()
+
+    # EMA alpha 直接從硬編碼常數讀取
+    ema_a = HARD_EMA_ALPHA_A
+    ema_b = HARD_EMA_ALPHA_B
 
     name_a = args.name_a or _short_name(args.model_a)
     name_b = args.name_b or _short_name(args.model_b)
+
+    # 若 alpha 不同，名稱後附加 EMA 標記，讓圖表/CSV 一眼看出差異
+    label_a = f"{name_a}[ema={ema_a}]" if ema_a < 1.0 else name_a
+    label_b = f"{name_b}[ema={ema_b}]" if ema_b < 1.0 else name_b
 
     # Sequential output directory
     out_root = Path(args.output)
     run_num  = _next_comparison_number(str(out_root))
     run_tag  = f"{run_num:03d}"
-    out_dir  = out_root / f"comparison_{run_tag}_{name_a}_vs_{name_b}"
+    out_dir  = out_root / f"comparison_{run_tag}_{label_a}_vs_{label_b}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     sep = '=' * 62
     print(f"\n{sep}")
     print(f"  Comparison #{run_tag}")
-    print(f"  Model A : {name_a}")
-    print(f"  Model B : {name_b}")
+    print(f"  Model A : {label_a}  (EMA α={ema_a})")
+    print(f"  Model B : {label_b}  (EMA α={ema_b})")
     print(f"  Output  : {out_dir}")
     print(f"{sep}")
 
@@ -777,10 +928,10 @@ def main():
 
     def _load_classifier(model_path, device):
         bn_ch = infer_bn_input_channels(model_path)
-        fm    = CH_TO_FEATURE.get(bn_ch, 'xy_v')
+        fm    = CH_TO_FEATURE.get(bn_ch, 'xy')
         if bn_ch not in CH_TO_FEATURE:
             print(f"  ⚠ {Path(model_path).name}: cannot infer feature_mode "
-                  f"(bn_ch={bn_ch}), defaulting to 'xy_v'")
+                  f"(bn_ch={bn_ch}), defaulting to 'xy'")
         else:
             print(f"  ✓ {Path(model_path).name} → {fm} ({bn_ch} ch)")
         clf = BehaviorClassifier(
@@ -794,94 +945,117 @@ def main():
     clf_a, fm_a = _load_classifier(args.model_a, args.device)
     clf_b, fm_b = _load_classifier(args.model_b, args.device)
 
-    _all_videos = [
-        (args.video_walk,    0),
-        (args.video_lick,    1),
-        (args.video_scratch, 2),
-        (args.video_shake,   3),
-        (args.video_stop,    4),
+    _all_dirs = [
+        (args.video_walk_dir,    0),
+        (args.video_lick_dir,    1),
+        (args.video_scratch_dir, 2),
+        (args.video_shake_dir,   3),
+        (args.video_stop_dir,    4),
     ]
-    # 路徑為空或檔案不存在時跳過，避免 KeyError 也支援尚無 stop 資料的情況
-    videos = [(p, idx) for p, idx in _all_videos if p and Path(p).exists()]
-    skipped = [(BEHAVIOR_CLASSES[idx], p) for p, idx in _all_videos
-               if not p or not Path(p).exists()]
+    # 資料夾不存在或未設定時跳過
+    dirs = [(p, idx) for p, idx in _all_dirs if p and Path(p).is_dir()]
+    skipped = [(BEHAVIOR_CLASSES[idx], p) for p, idx in _all_dirs
+               if not p or not Path(p).is_dir()]
     if skipped:
         for cls_name, p in skipped:
-            reason = '（路徑未設定）' if not p else f'（找不到檔案: {p}）'
+            reason = '（路徑未設定）' if not p else f'（找不到資料夾: {p}）'
             print(f"  ⚠ 跳過 [{cls_name}] {reason}")
 
     # ── Inference ──────────────────────────────────────────────────────────
+    # preds_*[cls_idx] = [[pred_dict, ...], ...]  （外層 = 每部影片）
     preds_a: dict = {}
     preds_b: dict = {}
 
-    for vid_path, cls_idx in videos:
+    for dir_path, cls_idx in dirs:
         cls_name = BEHAVIOR_CLASSES[cls_idx]
-        print(f"\n[{cls_name.upper()}]  {Path(vid_path).name}")
-        print(f"  A ({name_a}) ...", end=' ', flush=True)
-        preds_a[cls_idx] = evaluate_video(
-            vid_path, kp_det, clf_a, fm_a,
-            args.sequence_length, args.classify_stride
-        )
-        print(f"{len(preds_a[cls_idx])} windows")
+        print(f"\n[{cls_name.upper()}]  {Path(dir_path).name}/")
 
-        print(f"  B ({name_b}) ...", end=' ', flush=True)
-        preds_b[cls_idx] = evaluate_video(
-            vid_path, kp_det, clf_b, fm_b,
-            args.sequence_length, args.classify_stride
-        )
-        print(f"{len(preds_b[cls_idx])} windows")
+        print(f"  ▶ A ({label_a})")
+        preds_a[cls_idx] = [p for _, p in evaluate_folder(
+            dir_path, kp_det, clf_a, fm_a,
+            args.sequence_length, args.classify_stride, ema_alpha=ema_a
+        )]
+
+        print(f"  ▶ B ({label_b})")
+        preds_b[cls_idx] = [p for _, p in evaluate_folder(
+            dir_path, kp_det, clf_b, fm_b,
+            args.sequence_length, args.classify_stride, ema_alpha=ema_b
+        )]
+
+        na = sum(len(v) for v in preds_a[cls_idx])
+        nb = sum(len(v) for v in preds_b[cls_idx])
+        nv = len(preds_a[cls_idx])
+        print(f"  → {nv} videos  |  A={na} windows  B={nb} windows")
 
     # ── Compute metrics ─────────────────────────────────────────────────────
     metrics_a = compute_metrics(preds_a)
     metrics_b = compute_metrics(preds_b)
 
     # ── Console summary ─────────────────────────────────────────────────────
-    col_w = max(len(name_a), len(name_b), 10)
-    hdr = f"  {'Metric':<30}  {name_a:>{col_w}}  {name_b:>{col_w}}  Winner"
+    col_w = max(len(label_a), len(label_b), 10)
+    hdr = f"  {'Metric':<30}  {label_a:>{col_w}}  {label_b:>{col_w}}  Winner"
     print(f"\n{sep}\n{hdr}\n  {'-' * (len(hdr) - 2)}")
 
     def _row(label, va, vb):
         diff = abs(va - vb)
-        if diff < 0.001:
-            winner = '='
-        else:
-            winner = f'+A Δ{diff:.1%}' if va > vb else f'+B Δ{diff:.1%}'
+        winner = '=' if diff < 0.001 else (f'+A Δ{diff:.1%}' if va > vb else f'+B Δ{diff:.1%}')
         print(f"  {label:<30}  {va:>{col_w}.4f}  {vb:>{col_w}.4f}  {winner}")
 
-    _row('Overall Accuracy',    metrics_a['overall']['accuracy'],  metrics_b['overall']['accuracy'])
-    _row('Overall Macro-F1',    metrics_a['overall']['macro_f1'],  metrics_b['overall']['macro_f1'])
+    _row('Overall Accuracy',           metrics_a['overall']['accuracy'],                 metrics_b['overall']['accuracy'])
+    _row('Overall Top-2 Accuracy',     metrics_a['overall']['top2_accuracy'],            metrics_b['overall']['top2_accuracy'])
+    _row('Overall Macro-F1',           metrics_a['overall']['macro_f1'],                 metrics_b['overall']['macro_f1'])
+    _row('Event Det. Rate (ratio)',    metrics_a['overall']['event_detection_rate'],      metrics_b['overall']['event_detection_rate'])
+    _row('Event Det. Rate (prob thr)', metrics_a['overall']['prob_event_detection_rate'], metrics_b['overall']['prob_event_detection_rate'])
     print()
-    evaluated_cls = {idx for _, idx in videos}
+    evaluated_cls = {idx for _, idx in dirs}
     for i, cls in enumerate(BEHAVIOR_CLASSES):
         if i not in evaluated_cls:
             continue
         pa, pb = metrics_a['per_class'][i], metrics_b['per_class'][i]
         _row(f'{cls:<8} accuracy',      pa['accuracy'],      pb['accuracy'])
+        _row(f'{cls:<8} top2_accuracy', pa['top2_accuracy'], pb['top2_accuracy'])
         _row(f'{cls:<8} avg_true_prob', pa['avg_true_prob'], pb['avg_true_prob'])
+        _row(f'{cls:<8} event_rate',    pa['event_rate'],    pb['event_rate'])
+        print(f"  {cls:<8} clips detected  "
+              f"A={pa['n_videos_detected']}/{pa['n_videos']}  "
+              f"B={pb['n_videos_detected']}/{pb['n_videos']}  "
+              f"(prob≥{PROB_EVENT_THRESHOLD:.2f}: "
+              f"A={pa['n_videos_prob_detected']}/{pa['n_videos']}  "
+              f"B={pb['n_videos_prob_detected']}/{pb['n_videos']})")
 
     print(sep)
 
     # ── Save outputs ─────────────────────────────────────────────────────────
+    # plot_prob_histograms / save_preds_csv 需要 flat list，先在此展開
+    flat_a = {cls_idx: [p for vid in vids for p in vid]
+              for cls_idx, vids in preds_a.items()}
+    flat_b = {cls_idx: [p for vid in vids for p in vid]
+              for cls_idx, vids in preds_b.items()}
+
     print('\n[Saving]')
-    save_preds_csv(preds_a, name_a, BEHAVIOR_CLASSES, out_dir)
-    save_preds_csv(preds_b, name_b, BEHAVIOR_CLASSES, out_dir)
+    save_preds_csv(flat_a, label_a, BEHAVIOR_CLASSES, out_dir)
+    save_preds_csv(flat_b, label_b, BEHAVIOR_CLASSES, out_dir)
     save_summary_csv(
-        metrics_a, metrics_b, name_a, name_b,
+        metrics_a, metrics_b, label_a, label_b,
         BEHAVIOR_CLASSES, out_dir / 'comparison_summary.csv'
     )
     plot_accuracy_comparison(
-        metrics_a, metrics_b, name_a, name_b,
+        metrics_a, metrics_b, label_a, label_b,
         BEHAVIOR_CLASSES, out_dir / 'accuracy_comparison.png'
     )
     plot_confusion_matrices(
         metrics_a['confusion_matrix'], metrics_b['confusion_matrix'],
-        name_a, name_b, BEHAVIOR_CLASSES,
+        label_a, label_b, BEHAVIOR_CLASSES,
         out_dir / 'confusion_matrices.png'
+    )
+    plot_prob_histograms(
+        flat_a, flat_b, label_a, label_b,
+        BEHAVIOR_CLASSES, out_dir / 'prob_histograms.png'
     )
 
     print(f'\n✓ All results saved to: {out_dir}')
 
-    print_final_summary(metrics_a, metrics_b, name_a, name_b)
+    print_final_summary(metrics_a, metrics_b, label_a, label_b)
 
 
 if __name__ == '__main__':

@@ -13,24 +13,27 @@ from config import BehaviorTrackingConfig, LoggingConfig
 
 class ImprovedBehaviorTracker:
     def __init__(self):
+        _behaviors = list(BehaviorTrackingConfig.BEHAVIOR_CATEGORIES.values())
         self._lock = threading.RLock()
-        self.behavior_time = {"walk": 0.0, "scratch": 0.0, "lick": 0.0, "shake": 0.0, "stop": 0.0}
-        self.behavior_count = {"walk": 0, "scratch": 0, "lick": 0, "shake": 0, "stop": 0}
+        self.behavior_time = {b: 0.0 for b in _behaviors}
+        self.behavior_count = {b: 0 for b in _behaviors}
         self.rest_time = 0.0          # YOLO 有偵測到貓但 ST-GCN 信心不足
         self.not_detected_time = 0.0  # YOLO 未偵測到貓（貓不在畫面中）
         self.behavior_history = deque(maxlen=BehaviorTrackingConfig.MAX_HISTORY_SIZE)
         self.current_behavior = None
         self.current_gcn_id = None  # 正在進行的行為對應的 GCN ID
         self.behavior_start_time = time.time()
+        self.current_event_start_time = time.time()  # 真實事件開始時間，只在行為切換時重置
         self.last_update_time = time.time()  # 用於計算逐幀時間差
         self.last_reset = datetime.now().date()
         self.activity_window = deque(maxlen=BehaviorTrackingConfig.ACTIVITY_WINDOW_SIZE)
-        self.alerts = deque(maxlen=BehaviorTrackingConfig.MAX_ALERTS_SIZE)
         self.transition_matrix = {}   # {"walk->lick": 3, ...}
         self.hourly_distribution = {} # {"08": {"walk": 120.0, ...}, ...}
         self.monitoring_seconds = 0.0
         self._last_valid_behavior = None
         self._last_save_time = 0.0
+        self.behavior_min_duration = {b: None for b in _behaviors}
+        self.behavior_max_duration = {b: None for b in _behaviors}
         self.load_state()
     def save_state(self):
         try:
@@ -45,6 +48,8 @@ class ImprovedBehaviorTracker:
                     "hourly_distribution": {h: dict(v) for h, v in self.hourly_distribution.items()},
                     "monitoring_seconds":  self.monitoring_seconds,
                     "_last_valid_behavior": self._last_valid_behavior,
+                    "behavior_min_duration": dict(self.behavior_min_duration),
+                    "behavior_max_duration": dict(self.behavior_max_duration),
                 }
             path = LoggingConfig.TRACKER_STATE_PATH
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -72,6 +77,14 @@ class ImprovedBehaviorTracker:
                                             for h, v in state.get("hourly_distribution", {}).items()}
                 self.monitoring_seconds  = float(state.get("monitoring_seconds", 0.0))
                 self._last_valid_behavior = state.get("_last_valid_behavior", None)
+                for b in self.behavior_min_duration:
+                    v = state.get("behavior_min_duration", {}).get(b)
+                    if v is not None:
+                        self.behavior_min_duration[b] = float(v)
+                for b in self.behavior_max_duration:
+                    v = state.get("behavior_max_duration", {}).get(b)
+                    if v is not None:
+                        self.behavior_max_duration[b] = float(v)
             logging.info("TrackerState restored from %s", path)
         except Exception as e:
             logging.warning("TrackerState load failed: %s", e)
@@ -89,10 +102,13 @@ class ImprovedBehaviorTracker:
             self.hourly_distribution = {}
             self.monitoring_seconds = 0.0
             self._last_valid_behavior = None
+            self.behavior_min_duration = {k: None for k in self.behavior_min_duration}
+            self.behavior_max_duration = {k: None for k in self.behavior_max_duration}
     def map_gcn_to_tracker(self, behavior_id):
         mapping = BehaviorTrackingConfig.BEHAVIOR_CATEGORIES
         return mapping.get(behavior_id, "walk")
     def update(self, behavior_id, activity_value):
+        _event_completed = False
         with self._lock:
             self.check_daily_reset()
             now = time.time()
@@ -102,7 +118,7 @@ class ImprovedBehaviorTracker:
             # 每小時監控時間（所有狀態都累積，用於判斷時段是否有被監控）
             hour_key = datetime.now().strftime("%H")
             if hour_key not in self.hourly_distribution:
-                self.hourly_distribution[hour_key] = {b: 0.0 for b in ["walk", "lick", "scratch", "shake", "stop"]}
+                self.hourly_distribution[hour_key] = {b: 0.0 for b in BehaviorTrackingConfig.BEHAVIOR_CATEGORIES.values()}
             self.hourly_distribution[hour_key]["monitoring_sec"] = (
                 self.hourly_distribution[hour_key].get("monitoring_sec", 0.0) + dt
             )
@@ -124,7 +140,7 @@ class ImprovedBehaviorTracker:
             # 每小時分布（dt 為幀間隔，即時累積）
             hour_key = datetime.now().strftime("%H")
             if hour_key not in self.hourly_distribution:
-                self.hourly_distribution[hour_key] = {b: 0.0 for b in ["walk", "lick", "scratch", "shake", "stop"]}
+                self.hourly_distribution[hour_key] = {b: 0.0 for b in BehaviorTrackingConfig.BEHAVIOR_CATEGORIES.values()}
             self.hourly_distribution[hour_key][behavior] = self.hourly_distribution[hour_key].get(behavior, 0.0) + dt
 
             # 轉移矩陣（只在行為切換時記錄）
@@ -133,36 +149,44 @@ class ImprovedBehaviorTracker:
                 self.transition_matrix[key] = self.transition_matrix.get(key, 0) + 1
             self._last_valid_behavior = behavior
 
-            duration = now - self.behavior_start_time
-            record_this = False
+            duration = now - self.behavior_start_time  # 距上次累積時間點的間隔
+
             if behavior != self.current_behavior:
-                record_this = True
+                # ── 行為切換：結算完整事件，開始新事件 ──
+                if self.current_behavior is not None:
+                    total_event_duration = now - self.current_event_start_time
+                    if self.current_behavior in self.behavior_time:
+                        self.behavior_time[self.current_behavior] += duration  # 補上最後一段
+                    if self.current_behavior in self.behavior_count:
+                        self.behavior_count[self.current_behavior] += 1        # 每個完整事件只算 1 次
+                    beh = self.current_behavior
+                    dur_r = round(total_event_duration, 1)                     # 完整事件時長
+                    if beh in self.behavior_min_duration:
+                        if self.behavior_min_duration[beh] is None or dur_r < self.behavior_min_duration[beh]:
+                            self.behavior_min_duration[beh] = dur_r
+                        if self.behavior_max_duration[beh] is None or dur_r > self.behavior_max_duration[beh]:
+                            self.behavior_max_duration[beh] = dur_r
+                    self.behavior_history.append({
+                        "behavior": self.current_behavior,
+                        "gcn_behavior_id": self.current_gcn_id,
+                        "timestamp": datetime.now(),
+                        "duration": dur_r,
+                        "activity": activity_value,
+                    })
+                self.current_behavior = behavior
+                self.current_gcn_id = behavior_id
+                self.behavior_start_time = now
+                self.current_event_start_time = now  # 真實事件起點重置
+                _event_completed = True
             elif self.current_behavior is not None and duration >= BehaviorTrackingConfig.MIN_RECORD_DURATION_SECONDS:
-                record_this = True
-            if record_this and self.current_behavior is not None:
+                # ── 相同行為的定期累積：只更新時間，不建立新事件 ──
                 if self.current_behavior in self.behavior_time:
                     self.behavior_time[self.current_behavior] += duration
-                if self.current_behavior in self.behavior_count:
-                    self.behavior_count[self.current_behavior] += 1
-                record = {
-                    "behavior": self.current_behavior,
-                    "gcn_behavior_id": self.current_gcn_id,  # 記錄剛結束的舊行為 ID
-                    "timestamp": datetime.now(),
-                    "duration": round(duration, 1),
-                    "activity": activity_value
-                }
-                self.behavior_history.append(record)
-                self.current_behavior = behavior
-                self.current_gcn_id = behavior_id
-                self.behavior_start_time = now
-            elif behavior != self.current_behavior:
-                self.current_behavior = behavior
-                self.current_gcn_id = behavior_id
-                self.behavior_start_time = now
+                self.behavior_start_time = now  # 重置部分計時器；current_event_start_time 保持不動
             # 均勻權重：每幀貢獻相等，使 get_activity_score() 為純粹的時間視窗平均
             self.activity_window.append({"time": now, "activity": activity_value, "weight": 1.0})
         now_t = time.time()
-        if now_t - self._last_save_time >= 30.0:
+        if _event_completed or now_t - self._last_save_time >= 30.0:
             self._last_save_time = now_t
             self.save_state()
     def get_activity_score(self):
@@ -199,15 +223,13 @@ class ImprovedBehaviorTracker:
                 "monitoring_seconds": round(self.monitoring_seconds, 1),
                 "transition_matrix": dict(self.transition_matrix),
                 "hourly_distribution": {h: dict(v) for h, v in self.hourly_distribution.items()},
+                "behavior_min_duration": dict(self.behavior_min_duration),
+                "behavior_max_duration": dict(self.behavior_max_duration),
             }
         return stats
     def add_monitoring_seconds(self, seconds: float) -> None:
         with self._lock:
             self.monitoring_seconds += seconds
-
-    def add_alert(self, alert_type, message):
-        with self._lock:
-            self.alerts.append({"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "type": alert_type, "message": message})
 
     def get_alerts(self):
         with self._lock:

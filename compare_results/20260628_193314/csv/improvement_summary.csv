@@ -1,0 +1,8 @@
+﻿Metric,Old,New,Change,Improvement
+Mean Confidence,0.985,0.983,-0.002,-0.18%
+Mean Jitter (px),4.29,4.25,-0.038,+0.89%
+Missing Ratio,0.0%,0.0%,+0.0%,+0.00%
+Nose Missing,1.7%,1.9%,+0.2%,-12.27%
+Paw Missing,0.9%,0.3%,-0.7%,+72.58%
+Tail Missing,0.2%,0.4%,+0.2%,-91.62%
+Tail Tip Missing,0.7%,1.3%,+0.6%,-91.62%

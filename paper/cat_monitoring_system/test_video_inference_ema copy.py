@@ -8,6 +8,7 @@ import csv
 import cv2
 import numpy as np
 import time
+from functools import lru_cache
 from pathlib import Path
 from collections import deque
 from collections import defaultdict
@@ -43,8 +44,8 @@ from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
 # ── 五個行為資料夾（按 z/x/c/v/b 切換）────────────────────────────────
-_BASE = r"C:\Users\homec\Downloads"
-FOLDER_WALK    = rf"{_BASE}\50"
+_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存"
+FOLDER_WALK    = rf"{_BASE}\walk"
 FOLDER_LICK    = rf"{_BASE}\lick"
 FOLDER_SCRATCH = rf"{_BASE}\scratch"
 FOLDER_SHAKE   = rf"{_BASE}\shake"
@@ -60,29 +61,35 @@ FOLDER_MAP = {
 }
 DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 
+# 測試資料夾模式
+# 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
+# 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
+FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\lick_標記區2"  # 'single' 模式使用的扁平資料夾
+
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_92.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_best_022_xy_v_att_on.pth"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_107.pt"
+STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_064_models_att_on\064_xy_conf_v_bone_att_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 YOLO_CONF_THRESHOLD = 0.5
 STGCN_NORMALIZE = True
 SEQUENCE_LENGTH = 16
-_raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy_v")
+_raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy")
 STGCN_FEATURE_MODE = str(_raw_stgcn_mode).strip().lower()
 # Normalize legacy/variant feature-mode names to canonical names used by the STGCN module
-# Canonical names: "xy_v", "xy_conf_v", "xy_conf_v_bone", "xy_conf_v_bone_bmotion"
+# Canonical names: "xy", "xy_conf", "xy_conf_v", "xy_conf_v_bone", "xy_conf_v_bone_bmotion"
 _FEATURE_MODE_MAP = {
-    "xyv": "xy_v",
-    "xyv_conf": "xy_conf_v",
-    "xyv_conf_bone": "xy_conf_v_bone",
+    # compact / legacy variants → canonical
+    "xyconf":                    "xy_conf",
+    "xyv_conf":                  "xy_conf_v",
+    "xyv_conf_bone":             "xy_conf_v_bone",
     "xyv_conf_bone_bone_motion": "xy_conf_v_bone_bmotion",
-    "xyv_conf_bone_bmotion": "xy_conf_v_bone_bmotion",
-    # Some possible compact variants
-    "xyvconf": "xy_conf_v",
-    "xyvconfbone": "xy_conf_v_bone",
-    "xyvconfbonebmotion": "xy_conf_v_bone_bmotion",
+    "xyv_conf_bone_bmotion":     "xy_conf_v_bone_bmotion",
+    "xyvconf":                   "xy_conf_v",
+    "xyvconfbone":               "xy_conf_v_bone",
+    "xyvconfbonebmotion":        "xy_conf_v_bone_bmotion",
 }
 STGCN_FEATURE_MODE = _FEATURE_MODE_MAP.get(STGCN_FEATURE_MODE, STGCN_FEATURE_MODE)
 # Use centralized config for behavior label confidence threshold
@@ -229,12 +236,16 @@ def resolve_video_paths(video_sources: Iterable[str]):
             continue
 
         if p.is_dir():
-            matched = sorted(
-                [
-                    f for f in p.rglob("*")
-                    if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS
-                ]
-            )
+            try:
+                matched = sorted(
+                    [
+                        f for f in p.rglob("*")
+                        if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS
+                    ]
+                )
+            except Exception as e:
+                print(f"⚠ 掃描資料夾出錯，已略過: {p} ({e})")
+                matched = []
             if not matched:
                 print(f"⚠ 資料夾內未找到影片，略過: {p}")
             for f in matched:
@@ -249,6 +260,7 @@ def resolve_video_paths(video_sources: Iterable[str]):
     return resolved
 
 
+@lru_cache(maxsize=16)
 def compute_ui_scale(width, height, base_width=1920.0, base_height=1080.0):
     """依影像對角線估算 UI 縮放，讓不同解析度下 overlay 視覺一致。"""
     diag = float(np.hypot(max(1.0, float(width)), max(1.0, float(height))))
@@ -263,24 +275,27 @@ def scale_px(value, ui_scale, min_px=1):
 
 
 def resize_with_letterbox(image, target_size):
-    """等比例縮放並裁切成目標尺寸（無黑邊）。"""
+    """等比例縮放至目標尺寸（保留完整畫面，四周補黑邊）。"""
     target_w, target_h = target_size
     src_h, src_w = image.shape[:2]
 
     if src_w <= 0 or src_h <= 0 or target_w <= 0 or target_h <= 0:
         return cv2.resize(image, target_size), 1.0, 0, 0
 
-    scale = max(target_w / float(src_w), target_h / float(src_h))
+    scale = min(target_w / float(src_w), target_h / float(src_h))
     new_w = max(1, int(round(src_w * scale)))
     new_h = max(1, int(round(src_h * scale)))
 
     interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
     resized = cv2.resize(image, (new_w, new_h), interpolation=interpolation)
 
-    crop_x = max(0, (new_w - target_w) // 2)
-    crop_y = max(0, (new_h - target_h) // 2)
-    cropped = resized[crop_y:crop_y + target_h, crop_x:crop_x + target_w]
-    return cropped, scale, crop_x, crop_y
+    pad_x = (target_w - new_w) // 2
+    pad_y = (target_h - new_h) // 2
+    canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+    canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = resized
+
+    # 回傳負值讓 scale_kpts_and_bbox_for_letterbox 的 "- crop" 等效於 "+ pad"
+    return canvas, scale, -pad_x, -pad_y
 
 
 def scale_kpts_and_bbox_for_letterbox(kpts, bbox, scale, crop_x, crop_y):
@@ -312,86 +327,131 @@ def draw_no_cat_overlay(frame, text="No cat detected"):
     return frame
 
 
-def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, behavior_current_confidences=None):
-    """高對比行為信心值面板：顯示四類行為的當下信心值百分比。"""
-    h, w = frame.shape[:2]
-    ui_scale = compute_ui_scale(w, h) * 1.10
+_PANEL_LAYOUT_CACHE: dict = {}
 
-    left = scale_px(8, ui_scale, min_px=4)
-    right = scale_px(8, ui_scale, min_px=4)
-    bottom = scale_px(6, ui_scale, min_px=3)
+
+def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, behavior_current_confidences=None, behavior_occurrence_counts=None):
+    """行為面板：每列顯示行為名稱、信心長條（一個）、累積持續秒數、發生次數。"""
+    h, w = frame.shape[:2]
+    cache_key = (w, h)
+    layout = _PANEL_LAYOUT_CACHE.get(cache_key)
+    if layout is None:
+        ui_scale = compute_ui_scale(w, h) * 1.10
+        left = scale_px(8, ui_scale, min_px=4)
+        right = scale_px(8, ui_scale, min_px=4)
+        bottom = scale_px(6, ui_scale, min_px=3)
+        title_fs = 0.60 * ui_scale
+        meta_fs = 0.56 * ui_scale
+        row_fs = 0.52 * ui_scale
+        pct_fs = 0.46 * ui_scale
+        text_th = scale_px(2, ui_scale, min_px=1)
+        shadow_th = scale_px(2, ui_scale, min_px=2)
+        row_h = scale_px(28, ui_scale, min_px=18)
+        base_header_h = scale_px(42, ui_scale, min_px=26)
+        header_extra_pad = scale_px(18, ui_scale, min_px=12)
+        header_h = base_header_h + header_extra_pad
+        row_count = len(BEHAVIOR_PANEL_LABELS)
+        panel_h = header_h + row_h * row_count
+        panel_top = max(scale_px(2, ui_scale, min_px=1), h - panel_h - bottom)
+        tx = left
+        ty = panel_top + scale_px(16, ui_scale, min_px=12)
+        timer_y = ty + scale_px(16, ui_scale, min_px=10)
+        label_w = 0
+        for lbl in BEHAVIOR_PANEL_LABELS:
+            tw, _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0]
+            label_w = max(label_w, tw)
+        conf_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0][0]
+        col_gap = scale_px(8, ui_scale, min_px=4)
+        conf_x = tx + label_w + col_gap
+        bar_x = conf_x + conf_w + col_gap
+        bar_h = scale_px(12, ui_scale, min_px=8)
+        # 長條後顯示持續秒數（e.g. "999.9s"）和次數（e.g. "99次"），各保留一個欄位
+        dur_w = cv2.getTextSize("999.9s", cv2.FONT_HERSHEY_SIMPLEX, pct_fs, text_th)[0][0]
+        cnt_w = cv2.getTextSize("x99", cv2.FONT_HERSHEY_SIMPLEX, pct_fs, text_th)[0][0]
+        available_space = max(0, w - right - dur_w - col_gap - cnt_w - col_gap - bar_x)
+        max_bar_w = scale_px(180, ui_scale, min_px=80)
+        min_bar_w = scale_px(50, ui_scale, min_px=40)
+        bar_w = max(min_bar_w, min(available_space, max_bar_w))
+        row_y0 = panel_top + header_h
+        baseline_off = scale_px(14, ui_scale, min_px=9)
+        bar_top_off = scale_px(1, ui_scale, min_px=0)
+        dur_x = bar_x + bar_w + col_gap
+        cnt_x = dur_x + dur_w + col_gap
+        bar_border_th = scale_px(1, ui_scale, min_px=1)
+        layout = dict(
+            title_fs=title_fs, meta_fs=meta_fs, row_fs=row_fs, pct_fs=pct_fs,
+            text_th=text_th, shadow_th=shadow_th, row_h=row_h, bar_h=bar_h,
+            bar_w=bar_w, bar_border_th=bar_border_th, tx=tx, ty=ty, timer_y=timer_y,
+            conf_x=conf_x, bar_x=bar_x, dur_x=dur_x, cnt_x=cnt_x, row_y0=row_y0,
+            baseline_off=baseline_off, bar_top_off=bar_top_off,
+        )
+        _PANEL_LAYOUT_CACHE[cache_key] = layout
+
+    title_fs      = layout['title_fs']
+    meta_fs       = layout['meta_fs']
+    row_fs        = layout['row_fs']
+    pct_fs        = layout['pct_fs']
+    text_th       = layout['text_th']
+    shadow_th     = layout['shadow_th']
+    row_h         = layout['row_h']
+    bar_h         = layout['bar_h']
+    bar_w         = layout['bar_w']
+    bar_border_th = layout['bar_border_th']
+    tx            = layout['tx']
+    ty            = layout['ty']
+    timer_y       = layout['timer_y']
+    conf_x        = layout['conf_x']
+    bar_x         = layout['bar_x']
+    dur_x         = layout['dur_x']
+    cnt_x         = layout['cnt_x']
+    row_y0        = layout['row_y0']
+    baseline_off  = layout['baseline_off']
+    bar_top_off   = layout['bar_top_off']
 
     title = "ST-GCN Behavior Confidence"
-    timer = f"TIMER {float(elapsed_sec):7.2f}s"
-    title_fs = 0.60 * ui_scale
-    meta_fs = 0.56 * ui_scale
-    row_fs = 0.52 * ui_scale
-    pct_fs = 0.46 * ui_scale
-    text_th = scale_px(2, ui_scale, min_px=1)
-    shadow_th = scale_px(2, ui_scale, min_px=2)
-
-    row_h = scale_px(28, ui_scale, min_px=18)
-    header_h = scale_px(42, ui_scale, min_px=26)
-    row_count = len(BEHAVIOR_PANEL_LABELS)
-    panel_h = header_h + row_h * row_count
-    panel_top = max(scale_px(2, ui_scale, min_px=1), h - panel_h - bottom)
-
-    tx = left
-    ty = panel_top + scale_px(16, ui_scale, min_px=12)
     cv2.putText(frame, title, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, title_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
     cv2.putText(frame, title, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, title_fs, (255, 245, 180), text_th, cv2.LINE_AA)
 
-    timer_y = ty + scale_px(16, ui_scale, min_px=10)
+    timer = f"TIMER {float(elapsed_sec):7.2f}s"
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (170, 250, 255), text_th, cv2.LINE_AA)
 
-    label_w = 0
-    for label in BEHAVIOR_PANEL_LABELS:
-        tw, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0]
-        label_w = max(label_w, tw)
-
-    conf_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, row_fs, text_th)[0][0]
-    pct_w = cv2.getTextSize("100.0%", cv2.FONT_HERSHEY_SIMPLEX, pct_fs, text_th)[0][0]
-
-    col_gap = scale_px(8, ui_scale, min_px=4)
-    conf_x = tx + label_w + col_gap
-    bar_x = conf_x + conf_w + col_gap
-    bar_h = scale_px(12, ui_scale, min_px=8)
-    bar_w = max(scale_px(60, ui_scale, min_px=48), w - right - pct_w - col_gap - bar_x)
-
-    row_y0 = panel_top + header_h
-
     for bid, label in enumerate(BEHAVIOR_PANEL_LABELS):
-        # 取得當下信心值
-        if behavior_current_confidences is not None and bid < len(behavior_current_confidences):
-            pct = float(np.clip(behavior_current_confidences[bid], 0.0, 1.0))  # 已是 0-1 範圍
-        else:
-            pct = 0.0
-        
+        pct = float(np.clip(behavior_current_confidences[bid], 0.0, 1.0)) \
+            if behavior_current_confidences is not None and bid < len(behavior_current_confidences) else 0.0
         color = BEHAVIOR_COLORS.get(bid, (130, 230, 255))
-
         line_top = row_y0 + bid * row_h
-        baseline_y = line_top + scale_px(14, ui_scale, min_px=9)
+        baseline_y = line_top + baseline_off
 
+        # 行為標籤
         cv2.putText(frame, label, (tx, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
         cv2.putText(frame, label, (tx, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, color, text_th, cv2.LINE_AA)
 
+        # 信心百分比（只顯示一次，在長條左側）
         conf_text = f"{pct * 100.0:5.1f}%"
         cv2.putText(frame, conf_text, (conf_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
         cv2.putText(frame, conf_text, (conf_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, row_fs, (235, 235, 235), text_th, cv2.LINE_AA)
 
-        bar_top = line_top + scale_px(1, ui_scale, min_px=0)
+        # 信心長條
+        bar_top = line_top + bar_top_off
         cv2.rectangle(frame, (bar_x, bar_top), (bar_x + bar_w, bar_top + bar_h), (78, 78, 78), -1)
-        fill_w = int(round(bar_w * float(np.clip(pct, 0.0, 1.0))))
+        fill_w = int(round(bar_w * pct))
         if fill_w > 0:
             cv2.rectangle(frame, (bar_x, bar_top), (bar_x + fill_w, bar_top + bar_h), color, -1)
-        cv2.rectangle(frame, (bar_x, bar_top), (bar_x + bar_w, bar_top + bar_h), (120, 120, 120), scale_px(1, ui_scale, min_px=1))
+        cv2.rectangle(frame, (bar_x, bar_top), (bar_x + bar_w, bar_top + bar_h), (120, 120, 120), bar_border_th)
 
-        pct_text = f"{pct * 100.0:5.1f}%"
-        pct_x = bar_x + bar_w + col_gap
-        pct_y = baseline_y
-        cv2.putText(frame, pct_text, (pct_x, pct_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
-        cv2.putText(frame, pct_text, (pct_x, pct_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (220, 220, 220), text_th, cv2.LINE_AA)
+        # 持續秒數
+        dur_val = behavior_duration_sec[bid] if behavior_duration_sec is not None and bid < len(behavior_duration_sec) else 0.0
+        dur_text = f"{dur_val:.1f}s"
+        cv2.putText(frame, dur_text, (dur_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
+        cv2.putText(frame, dur_text, (dur_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (180, 255, 180), text_th, cv2.LINE_AA)
+
+        # 發生次數
+        occ_val = int(behavior_occurrence_counts[bid]) \
+            if behavior_occurrence_counts is not None and bid < len(behavior_occurrence_counts) else 0
+        cnt_text = f"x{occ_val}"
+        cv2.putText(frame, cnt_text, (cnt_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
+        cv2.putText(frame, cnt_text, (cnt_x, baseline_y), cv2.FONT_HERSHEY_SIMPLEX, pct_fs, (255, 240, 160), text_th, cv2.LINE_AA)
 
     return frame
 
@@ -449,16 +509,19 @@ def draw_test2_style_overlay(
     if is_display_normal:
         visualizer.draw_prediction_on_frame(
             frame,
-            'Normal',
-            0.0,
+            'LOW_CONF',
+            float(confidence),
             (200, 200, 200),
             show_confidence=True,
             emphasize_label=False,
             label_background=False,
             font_scale_override=0.86,
         )
-        if SHOW_PROBABILITY_BARS and probs is not None and any(float(p) > 0 for p in probs):
-            visualizer.draw_probability_bars(frame, probs, BEHAVIOR_CLASSES)
+        # Always render the probability bars when enabled to avoid missing
+        # bars after replaying a video even if values are temporarily 0.
+        if SHOW_PROBABILITY_BARS and probs is not None:
+            pb = probs if (hasattr(probs, '__len__') and len(probs) == len(BEHAVIOR_CLASSES)) else np.zeros(len(BEHAVIOR_CLASSES), dtype=np.float32)
+            visualizer.draw_probability_bars(frame, pb, BEHAVIOR_CLASSES)
     elif behavior_id is not None and confidence > 0:
         behavior_name = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
         visualizer.draw_prediction_on_frame(
@@ -554,6 +617,11 @@ def generate_report_file(report_path, recorded_video_stats):
         "jitter_mean_px",
         "jitter_p95_px",
         "jitter_max_px",
+        "occ_walk",
+        "occ_lick",
+        "occ_scratch",
+        "occ_shake",
+        "occ_stop",
     ]
 
     with out_path.open("w", newline="", encoding="utf-8-sig") as f:
@@ -562,8 +630,9 @@ def generate_report_file(report_path, recorded_video_stats):
 
         for vid_idx in sorted(recorded_video_stats.keys()):
             s = recorded_video_stats[vid_idx]
-            behavior_counts = np.asarray(s.get("behavior_counts", np.zeros(4, dtype=np.int64)), dtype=np.int64)
-            behavior_duration_sec = np.asarray(s.get("behavior_duration_sec", np.zeros(4, dtype=np.float64)), dtype=np.float64)
+            behavior_counts = np.asarray(s.get("behavior_counts", np.zeros(5, dtype=np.int64)), dtype=np.int64)
+            behavior_duration_sec = np.asarray(s.get("behavior_duration_sec", np.zeros(5, dtype=np.float64)), dtype=np.float64)
+            behavior_occurrence_counts = np.asarray(s.get("behavior_occurrence_counts", np.zeros(5, dtype=np.int64)), dtype=np.int64)
             confidences = s.get("behavior_confidences", [])
             jp = s.get("jitter_px", [[] for _ in range(17)])
             all_jitter = [v for arr in jp for v in arr]
@@ -594,6 +663,11 @@ def generate_report_file(report_path, recorded_video_stats):
                 float(np.mean(all_jitter)) if all_jitter else 0.0,
                 float(np.percentile(all_jitter, 95)) if all_jitter else 0.0,
                 float(np.max(all_jitter)) if all_jitter else 0.0,
+                int(behavior_occurrence_counts[0]) if len(behavior_occurrence_counts) > 0 else 0,
+                int(behavior_occurrence_counts[1]) if len(behavior_occurrence_counts) > 1 else 0,
+                int(behavior_occurrence_counts[2]) if len(behavior_occurrence_counts) > 2 else 0,
+                int(behavior_occurrence_counts[3]) if len(behavior_occurrence_counts) > 3 else 0,
+                int(behavior_occurrence_counts[4]) if len(behavior_occurrence_counts) > 4 else 0,
             ])
 
     return out_path
@@ -603,10 +677,19 @@ def resolve_run_mode():
     if RUN_MODE in (1, 2):
         return RUN_MODE
 
+    if not sys.stdin.isatty():
+        print("\n偵測到非互動式輸入環境，預設使用模式 2（只測試模型效果，開視窗）")
+        return 2
+
     print("\n請選擇執行模式:")
     print("  1) 只生成統計結果（不開視窗）")
     print("  2) 只測試模型效果（開視窗）")
-    choice = input("輸入模式 (1/2, 預設=2): ").strip()
+    try:
+        choice = input("輸入模式 (1/2, 預設=2): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\n未輸入模式，預設使用模式 2（只測試模型效果，開視窗）")
+        return 2
+
     if choice == "1":
         return 1
     return 2
@@ -626,20 +709,43 @@ def main():
         folder_videos[fkey] = vids
         print(f"  [{fkey}] {fname}: {len(vids)} 部影片  ({fpath})")
 
-    # 若指定了 VIDEO_PATHS 就用那個；否則從 DEFAULT_FOLDER_KEY 資料夾開始
+    # 若指定了 VIDEO_PATHS 就用那個；否則依 FOLDER_TEST_MODE 決定播放清單
+    folder_range: dict = {}   # all 模式下：fkey -> (start_idx, end_idx) in merged video_paths
     if VIDEO_PATHS:
         video_paths = resolve_video_paths(VIDEO_PATHS)
         current_folder_key = DEFAULT_FOLDER_KEY
-    else:
+        is_all_mode = False
+    elif FOLDER_TEST_MODE == 'all':
+        # 所有行為子資料夾依 FOLDER_MAP 順序合併，並記錄各資料夾的索引分區
+        video_paths = []
+        _offset = 0
+        for fkey in FOLDER_MAP:
+            _n = len(folder_videos[fkey])
+            folder_range[fkey] = (_offset, _offset + _n)
+            video_paths.extend(folder_videos[fkey])
+            _offset += _n
         current_folder_key = DEFAULT_FOLDER_KEY
-        video_paths = folder_videos[current_folder_key]
+        is_all_mode = True
+        print(f"[FOLDER_TEST_MODE=all] 已合併全部 {len(video_paths)} 部影片")
+        for _fk, (_s, _e) in folder_range.items():
+            print(f"  [{_fk}] {FOLDER_MAP[_fk][1]}: 索引 {_s}~{_e-1} ({_e-_s} 部)")
+    else:
+        # 'single'：掃描 SINGLE_FOLDER_PATH 扁平資料夾，影片直接放在該目錄
+        video_paths = resolve_video_paths([SINGLE_FOLDER_PATH])
+        current_folder_key = DEFAULT_FOLDER_KEY
+        is_all_mode = False
+        print(f"[FOLDER_TEST_MODE=single] {SINGLE_FOLDER_PATH}  共 {len(video_paths)} 部影片")
 
     if not video_paths:
         print("❌ 找不到可用影片，請確認 FOLDER_MAP / VIDEO_PATHS 的路徑")
         return
 
     # 記住每個資料夾上次的播放位置（切回去時能續播）
-    folder_positions: dict = {k: 0 for k in FOLDER_MAP}
+    # all 模式下存的是 merged video_paths 的全域索引；single/VIDEO_PATHS 存的是各自清單索引
+    if is_all_mode:
+        folder_positions: dict = {k: folder_range[k][0] for k in FOLDER_MAP}
+    else:
+        folder_positions: dict = {k: 0 for k in FOLDER_MAP}
     switch_folder_key: str = ""   # 非空時代表要切換資料夾
 
     display_window = DISPLAY_WINDOW and is_test_mode
@@ -664,11 +770,14 @@ def main():
     # 盡量自動將 feature mode 換成與 checkpoint 通道數相對應的 canonical 模式。
     in_channels = None
     try:
-        ck_channel_map = {4: 'xy_v', 5: 'xy_conf_v', 7: 'xy_conf_v_bone', 9: 'xy_conf_v_bone_bmotion'}
+        ck_channel_map = {2: 'xy', 3: 'xy_conf', 5: 'xy_conf_v', 7: 'xy_conf_v_bone', 9: 'xy_conf_v_bone_bmotion'}
         import torch
         if os.path.exists(STGCN_MODEL_PATH):
             try:
-                ck = torch.load(STGCN_MODEL_PATH, map_location='cpu')
+                try:
+                    ck = torch.load(STGCN_MODEL_PATH, map_location='cpu', weights_only=True)
+                except Exception:
+                    ck = torch.load(STGCN_MODEL_PATH, map_location='cpu')
                 state_dict = ck.get('model_state_dict', ck) if isinstance(ck, dict) else ck
                 if isinstance(state_dict, dict) and 'bn_input.weight' in state_dict:
                     ck_in_ch = int(state_dict['bn_input.weight'].shape[0])
@@ -694,20 +803,29 @@ def main():
     if in_channels is None:
         in_channels = get_in_channels_for_mode(feature_mode)
     
-    keypoint_detector = KeypointDetector(
-        YOLO_MODEL_PATH,
-        device=INFERENCE_DEVICE,
-        imgsz=YOLO_IMGSZ,
-        conf_thres=YOLO_CONF_THRESHOLD,
-    )
-    behavior_classifier = BehaviorClassifier(
-        STGCN_MODEL_PATH,
-        device=INFERENCE_DEVICE,
-        sequence_length=SEQUENCE_LENGTH,
-        normalize=STGCN_NORMALIZE,
-        feature_mode=feature_mode,
-        in_channels=in_channels,
-    )
+    try:
+        keypoint_detector = KeypointDetector(
+            YOLO_MODEL_PATH,
+            device=INFERENCE_DEVICE,
+            imgsz=YOLO_IMGSZ,
+            conf_thres=YOLO_CONF_THRESHOLD,
+        )
+    except Exception as e:
+        print(f"❌ 無法載入 YOLO 模型（{YOLO_MODEL_PATH}）：{e}")
+        return
+
+    try:
+        behavior_classifier = BehaviorClassifier(
+            STGCN_MODEL_PATH,
+            device=INFERENCE_DEVICE,
+            sequence_length=SEQUENCE_LENGTH,
+            normalize=STGCN_NORMALIZE,
+            feature_mode=feature_mode,
+            in_channels=in_channels,
+        )
+    except Exception as e:
+        print(f"❌ 無法載入 ST-GCN 模型（{STGCN_MODEL_PATH}）：{e}")
+        return
     visualizer = Visualizer()
 
     # 統計累計（僅計入完整播放完成的影片）
@@ -761,6 +879,7 @@ def main():
         nonlocal local_frames_with_cat, local_frames_without_cat
         nonlocal local_jitter_px, local_jitter_norm, local_valid_counts, local_pair_counts
         nonlocal local_behavior_duration_sec, local_behavior_current_confidences
+        nonlocal local_behavior_occurrence_counts, local_last_behavior_for_occurrence
 
         keypoints_buffer.clear()
         prev_kpts = None
@@ -780,6 +899,8 @@ def main():
         local_pair_counts = np.zeros(17, dtype=np.int64)
         local_behavior_duration_sec = np.zeros(5, dtype=np.float64)
         local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
+        local_behavior_occurrence_counts = np.zeros(5, dtype=np.int64)
+        local_last_behavior_for_occurrence = LOW_CONF_ID
         reset_behavior_display_state()
 
     if display_window:
@@ -790,6 +911,12 @@ def main():
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_AUTOSIZE)
 
     while not stop_requested:
+        # all 模式：依目前索引同步更新 current_folder_key
+        if is_all_mode:
+            for _fk, (_s, _e) in folder_range.items():
+                if _s <= current_video_idx < _e:
+                    current_folder_key = _fk
+                    break
         video_path = video_paths[current_video_idx]
         is_stream_url = _is_stream_url(video_path)
         if not is_stream_url and not Path(video_path).exists():
@@ -889,6 +1016,8 @@ def main():
         local_pair_counts = np.zeros(17, dtype=np.int64)
         local_behavior_duration_sec = np.zeros(5, dtype=np.float64)
         local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
+        local_behavior_occurrence_counts = np.zeros(5, dtype=np.int64)
+        local_last_behavior_for_occurrence = LOW_CONF_ID
 
         while True:
             ret, frame = cap.read()
@@ -947,35 +1076,31 @@ def main():
                 if is_first_pass:
                     local_frames_with_cat += 1
 
-                # 統計有效關鍵點幀數
-                valid_mask = (kpt_conf > JITTER_CONF_THRESHOLD)
-                if is_first_pass:
-                    local_valid_counts += valid_mask.astype(np.int64)
+                # 統計有效關鍵點幀數與抖動（僅統計模式需要，視覺模式跳過）
+                if is_stats_mode:
+                    valid_mask = (kpt_conf > JITTER_CONF_THRESHOLD)
+                    if is_first_pass:
+                        local_valid_counts += valid_mask.astype(np.int64)
 
-                # 計算 bbox 對角線供正規化抖動使用
-                bbox_diag = None
-                if bbox is not None:
-                    x1, y1, x2, y2 = bbox
-                    w_box = max(1.0, float(x2 - x1))
-                    h_box = max(1.0, float(y2 - y1))
-                    bbox_diag = float(np.sqrt(w_box * w_box + h_box * h_box))
-
-                # 計算逐點抖動（EMA 平滑後的座標，反映模型實際接收到的穩定度）
-                if prev_kpts is not None and prev_kpt_conf is not None:
-                    pair_mask = (kpt_conf > JITTER_CONF_THRESHOLD) & (prev_kpt_conf > JITTER_CONF_THRESHOLD)
-                    for kp_idx in range(17):
-                        if not pair_mask[kp_idx]:
-                            continue
-
-                        jitter_px = float(np.linalg.norm(kpts[kp_idx] - prev_kpts[kp_idx]))
-                        if is_first_pass:
-                            local_jitter_px[kp_idx].append(jitter_px)
-                            local_pair_counts[kp_idx] += 1
-
-                        if bbox_diag is not None and bbox_diag > 0:
-                            jitter_norm = jitter_px / bbox_diag
+                    if prev_kpts is not None and prev_kpt_conf is not None:
+                        bbox_diag = None
+                        if bbox is not None:
+                            x1, y1, x2, y2 = bbox
+                            w_box = max(1.0, float(x2 - x1))
+                            h_box = max(1.0, float(y2 - y1))
+                            bbox_diag = float(np.sqrt(w_box * w_box + h_box * h_box))
+                        pair_mask = (kpt_conf > JITTER_CONF_THRESHOLD) & (prev_kpt_conf > JITTER_CONF_THRESHOLD)
+                        for kp_idx in range(17):
+                            if not pair_mask[kp_idx]:
+                                continue
+                            jitter_px = float(np.linalg.norm(kpts[kp_idx] - prev_kpts[kp_idx]))
                             if is_first_pass:
-                                local_jitter_norm[kp_idx].append(jitter_norm)
+                                local_jitter_px[kp_idx].append(jitter_px)
+                                local_pair_counts[kp_idx] += 1
+                            if bbox_diag is not None and bbox_diag > 0:
+                                jitter_norm = jitter_px / bbox_diag
+                                if is_first_pass:
+                                    local_jitter_norm[kp_idx].append(jitter_norm)
 
                 prev_kpts = kpts.copy()
                 prev_kpt_conf = kpt_conf.copy()
@@ -992,14 +1117,29 @@ def main():
                     conf_arr = np.array([item[1] for item in keypoints_buffer])  # (32, 17)
 
                     # 插值補全
-                    seq_array = interpolate_missing(kpts_arr, conf_arr, threshold=0.1)
+                    # threshold=0.0：只要 YOLO 偵測到座標（conf>0）就保留，避免低信心時整骨架歸零
+                    # 若用 0.1，貓咪關節信心偏低時全部被清零 → 模型輸入全 0 → softmax 均等
+                    seq_array = interpolate_missing(kpts_arr, conf_arr, threshold=0.0)
                     if STGCN_NORMALIZE:
                         seq_array = flip_normalize(seq_array)
                         seq_array = orientation_normalize(seq_array)
                         seq_array = normalize_skeleton_coords(seq_array)
                     seq_features = build_feature_tensor(seq_array, conf_arr, feature_mode)
-                    pred_id, pred_conf, pred_probs = behavior_classifier.classify(seq_features, precomputed=True)
-                    
+                    pred_id, pred_conf, pred_probs = behavior_classifier.model.predict(seq_features, precomputed=True)
+
+                    # ── 診斷：每 60 幀列印一次，確認輸入信心與模型輸出是否正常 ──
+                    _dbg_every = 60
+                    if local_sampled_frames % _dbg_every < CLASSIFY_STRIDE:
+                        _cmean = float(conf_arr.mean())
+                        _czero = int((conf_arr < 0.05).sum())
+                        _ctot  = int(conf_arr.size)
+                        _pstr  = ' '.join(f'{p*100:.1f}' for p in (pred_probs or []))
+                        print(f"[STGCN DBG] frame={local_frames_processed:5d} "
+                              f"kpt_conf mean={_cmean:.3f} zeros<0.05={_czero}/{_ctot} "
+                              f"num_classes={len(pred_probs) if pred_probs else '?'} "
+                              f"probs=[{_pstr}]%")
+                    # ─────────────────────────────────────────────────────────
+
                     if pred_id is None:
                         behavior_id = LOW_CONF_ID
                         confidence = 0.0
@@ -1009,16 +1149,34 @@ def main():
                         confidence = float(pred_conf)
                         probs = pred_probs.copy()
 
+                    # Update the per-class current confidences for the bottom panel
+                    # so the UI shows the latest probabilities for all classes.
+                    # Always update (not just first pass) so bars refresh on replay.
+                    # 若模型為 4-class，把 probs 補齊到 5 元素，避免 STOP bar 永遠為 0
+                    _probs_padded = list(probs) if probs is not None else [0.0]
+                    while len(_probs_padded) < len(BEHAVIOR_PANEL_LABELS):
+                        _probs_padded.append(0.0)
+                    local_behavior_current_confidences = _probs_padded
+
                     # 與主系統一致：低信心顯示「目前正常」
                     if confidence < BEHAVIOR_MIN_CONFIDENCE:
                         behavior_id_for_display = LOW_CONF_ID
                     else:
                         behavior_id_for_display = behavior_id
 
+                    # 計算行為發生次數：切換到「不同的有效行為」時計為一次新發生
+                    # 貓消失或低信心 (LOW_CONF_ID) 期間會重置 local_last_behavior_for_occurrence，
+                    # 所以中斷後再次出現同一行為也會被計為新的一次。
+                    if is_first_pass:
+                        if (behavior_id_for_display != LOW_CONF_ID
+                                and behavior_id_for_display != local_last_behavior_for_occurrence):
+                            local_behavior_occurrence_counts[int(behavior_id_for_display)] += 1
+                        local_last_behavior_for_occurrence = behavior_id_for_display
+
                     # 只統計高信心預測
                     if behavior_id_for_display != LOW_CONF_ID:
                         behavior_text = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
-                        if is_first_pass:
+                        if is_stats_mode and is_first_pass:
                             local_predictions.append({
                                 'video_idx': current_video_idx,
                                 'video_path': video_path,
@@ -1042,8 +1200,9 @@ def main():
                     else:
                         behavior_id = LOW_CONF_ID
 
-                if is_first_pass and behavior_id != LOW_CONF_ID and 0 <= int(behavior_id) < 5 and float(confidence) >= BEHAVIOR_MIN_CONFIDENCE:
-                    local_behavior_duration_sec[int(behavior_id)] += frame_dt
+                if behavior_id != LOW_CONF_ID and 0 <= int(behavior_id) < 5 and float(confidence) >= BEHAVIOR_MIN_CONFIDENCE:
+                    if is_first_pass:
+                        local_behavior_duration_sec[int(behavior_id)] += frame_dt
                     local_behavior_current_confidences[int(behavior_id)] = float(confidence)
             else:
                 if is_first_pass:
@@ -1051,6 +1210,8 @@ def main():
                 prev_kpts = None
                 prev_kpt_conf = None
                 ema_kpts = None  # 貓消失時重置 EMA，避免下次出現時使用過時的平均值
+                if is_first_pass:
+                    local_last_behavior_for_occurrence = LOW_CONF_ID
 
             if display_window:
                 if DISPLAY_SIZE is not None:
@@ -1070,14 +1231,14 @@ def main():
                             scaled_bbox,
                             behavior_id,
                             confidence,
-                            probs if len(probs) == 5 else np.zeros(5, dtype=np.float32),
+                            np.array((list(probs) + [0.0] * 5)[:5], dtype=np.float32),
                             visualizer,
                             show_info=show_overlay_info,
                         )
                     else:
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
-                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences)
+                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts)
                 else:
                     show_frame = frame.copy()
                     if kpts is not None:
@@ -1088,14 +1249,14 @@ def main():
                             bbox,
                             behavior_id,
                             confidence,
-                            probs if len(probs) == 5 else np.zeros(5, dtype=np.float32),
+                            np.array((list(probs) + [0.0] * 5)[:5], dtype=np.float32),
                             visualizer,
                             show_info=show_overlay_info,
                         )
                     else:
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
-                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences)
+                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts)
                 # 資料夾名稱 + 影片進度條（左上角）
                 _fn  = FOLDER_MAP.get(current_folder_key, ("", "?"))[1]
                 _nav = (f"[{current_folder_key.upper()}]{_fn}  "
@@ -1105,8 +1266,16 @@ def main():
                 _ui = compute_ui_scale(_w, _h)
                 _fs = 0.42 * _ui
                 _th = max(1, int(_ui))
-                cv2.rectangle(show_frame, (0, 0), (_w, int(22 * _ui)), (10, 16, 30), -1)
-                cv2.putText(show_frame, _nav, (6, int(15 * _ui)),
+                # Compute text size to ensure background rectangle fully covers label
+                txt_size = cv2.getTextSize(_nav, cv2.FONT_HERSHEY_SIMPLEX, _fs, _th)[0]
+                rect_h = max(int(txt_size[1] * 1.6), int(22 * _ui))
+                # Place the nav panel at the top-right without a background to avoid
+                # overlapping the prediction label at the top-left.
+                text_w = txt_size[0]
+                right_margin = scale_px(8, _ui, min_px=6)
+                x_pos = max(6, _w - right_margin - text_w)
+                text_y = int(max(rect_h * 0.7, scale_px(20, _ui, min_px=14)))
+                cv2.putText(show_frame, _nav, (x_pos, text_y),
                             cv2.FONT_HERSHEY_SIMPLEX, _fs, (160, 210, 255), _th, cv2.LINE_AA)
                 cv2.imshow(WINDOW_NAME, show_frame)
 
@@ -1237,6 +1406,7 @@ def main():
                 "behavior_counts": behavior_counts,
                 "behavior_confidences": behavior_confidences,
                 "behavior_duration_sec": local_behavior_duration_sec.copy(),
+                "behavior_occurrence_counts": local_behavior_occurrence_counts.copy(),
                 "jitter_px": local_jitter_px,
                 "jitter_norm": local_jitter_norm,
                 "valid_counts": local_valid_counts,
@@ -1264,6 +1434,15 @@ def main():
                 "pair_counts": local_pair_counts,
             }
             print(f"✓ 影片[{current_video_idx}] 已完整播放，統計已記錄")
+            print(f"  ┌─{'─'*10}─┬─{'─'*6}─┬─{'─'*9}─┐")
+            print(f"  │ {'行為':<10} │ {'次數':>6} │ {'持續(秒)':>9} │")
+            print(f"  ├─{'─'*10}─┼─{'─'*6}─┼─{'─'*9}─┤")
+            for _bid in range(5):
+                _bname = BEHAVIOR_CLASSES[_bid] if _bid < len(BEHAVIOR_CLASSES) else str(_bid)
+                _occ = int(local_behavior_occurrence_counts[_bid])
+                _dur = local_behavior_duration_sec[_bid]
+                print(f"  │ {_bname:<10} │ {_occ:>6} │ {_dur:>9.2f} │")
+            print(f"  └─{'─'*10}─┴─{'─'*6}─┴─{'─'*9}─┘")
         else:
             if switched_before_first_pass_complete:
                 print(f"⚠ 影片[{current_video_idx}] 中途切換，該影片統計不記錄")
@@ -1276,10 +1455,16 @@ def main():
         # 資料夾切換（z/x/c/v/b）：儲存目前位置後切換到新資料夾
         if switch_folder_key:
             folder_positions[current_folder_key] = current_video_idx
+            if is_all_mode:
+                # all 模式：video_paths 不替換，只在合併清單內跳到目標資料夾分區
+                _ts, _te = folder_range[switch_folder_key]
+                _saved = folder_positions.get(switch_folder_key, _ts)
+                current_video_idx = max(_ts, min(_saved, _te - 1)) if _te > _ts else _ts
+            else:
+                video_paths = folder_videos[switch_folder_key]
+                current_video_idx = folder_positions.get(switch_folder_key, 0)
             current_folder_key = switch_folder_key
             switch_folder_key = ""
-            video_paths = folder_videos[current_folder_key]
-            current_video_idx = folder_positions.get(current_folder_key, 0)
             switch_delta = 0
             continue
 
@@ -1289,7 +1474,14 @@ def main():
                 break
         else:
             if switch_delta != 0:
-                current_video_idx = (current_video_idx + switch_delta) % len(video_paths)
+                if is_all_mode:
+                    # all 模式：1/2 只在目前資料夾分區內循環，不跨越分區
+                    _s, _e = folder_range[current_folder_key]
+                    _count = _e - _s
+                    if _count > 0:
+                        current_video_idx = _s + (current_video_idx - _s + switch_delta) % _count
+                else:
+                    current_video_idx = (current_video_idx + switch_delta) % len(video_paths)
             elif is_stream_url:
                 # 串流不做循環播放，結束後維持在當前來源即可
                 break
@@ -1336,8 +1528,11 @@ def main():
         )
 
     # 產出文檔報告
-    report_path = generate_report_file(REPORT_OUTPUT_PATH, recorded_video_stats)
-    print(f"\n✓ 分析報告已輸出: {report_path}")
+    try:
+        report_path = generate_report_file(REPORT_OUTPUT_PATH, recorded_video_stats)
+        print(f"\n✓ 分析報告已輸出: {report_path}")
+    except Exception as e:
+        print(f"⚠ 無法輸出報告（{REPORT_OUTPUT_PATH}）：{e}")
 
     # 統計分析
     if predictions:
