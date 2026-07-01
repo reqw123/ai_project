@@ -64,13 +64,13 @@ DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 # 測試資料夾模式
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
-FOLDER_TEST_MODE = 'all'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試"  # 'single' 模式使用的扁平資料夾
+FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
+SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\walk"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_110.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_064_models_att_on\064_xy_conf_v_bone_att_on.pth"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\aug_8_2.pt"
+STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_076_ema_ablation_att_on\076_xy_conf_v_bone_att_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 YOLO_CONF_THRESHOLD = 0.5
@@ -1113,8 +1113,14 @@ def main():
                 # 有足夠序列時做行為分類
                 if len(keypoints_buffer) >= SEQUENCE_LENGTH and (local_sampled_frames % CLASSIFY_STRIDE == 0):
                     # 解包緩衝區
-                    kpts_arr = np.array([item[0] for item in keypoints_buffer])  # (32, 17, 2)
-                    conf_arr = np.array([item[1] for item in keypoints_buffer])  # (32, 17)
+                    kpts_arr = np.array([item[0] for item in keypoints_buffer])  # (T, 17, 2)
+                    conf_arr = np.array([item[1] for item in keypoints_buffer])  # (T, 17)
+
+                    # 14-joint 消融模型：切掉尾巴三點（tail_base/tail_mid/tail_tip）
+                    _model_joints = getattr(behavior_classifier.model, 'num_joints', 17)
+                    if _model_joints < 17:
+                        kpts_arr = kpts_arr[:, :_model_joints, :]
+                        conf_arr = conf_arr[:, :_model_joints]
 
                     # 插值補全
                     # threshold=0.0：只要 YOLO 偵測到座標（conf>0）就保留，避免低信心時整骨架歸零

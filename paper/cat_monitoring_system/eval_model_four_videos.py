@@ -52,7 +52,7 @@ CH_TO_FEATURE = {
 }
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
-DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_106.pt"
+DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\aug_8.pt"
 DEFAULT_IMGSZ   = 640
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16
@@ -62,18 +62,20 @@ EVENT_MIN_RATIO   = 0.30  # 事件偵測（比例門檻）：正確 window 數 /
 PROB_EVENT_THRESHOLD = 0.40  # 機率門檻型事件偵測：true-class prob ≥ 此值的 window 達 EVENT_MIN_WINDOWS 即算偵測
 DEFAULT_DEVICE  = 'cuda'
 
-HARD_MODEL_A    = r"C:\Users\homec\Downloads\stgcn_results\run_061_models_att_off\xy_conf_v_bone_att_off.pth"
-HARD_MODEL_B    = r"C:\Users\homec\Downloads\stgcn_results\run_062_xy_conf_v_bone_att_on\best_model.pth"
+HARD_MODEL_A    = r"C:\Users\homec\Downloads\stgcn_results\run_066_models_att_on\066_xy_conf_v_bone_att_on.pth"
+HARD_MODEL_B    = r"C:\Users\homec\Downloads\stgcn_results\run_068_models_att_on\068_xy_conf_v_bone_att_on.pth"
 HARD_NAME_A     = None   # None → auto-derived from filename
 HARD_NAME_B     = None
 HARD_EMA_ALPHA_A = 1.0   # 1.0 = 不平滑；< 1.0 = EMA 平滑（例如 0.5）
 HARD_EMA_ALPHA_B = 1.0
-HARD_VIDEO_WALK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\walk"
-HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\lick"
-HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\scratch"
-HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\shake"
-HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\stop"
-HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_results"
+HARD_SEQ_LEN_A   = 16    # 模型 A 訓練時使用的序列長度（影響 ring buffer 大小）
+HARD_SEQ_LEN_B   = 16    # 模型 B 訓練時使用的序列長度；seqlen 消融時改為 32
+HARD_VIDEO_WALK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\walk"
+HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\lick"
+HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
+HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake"
+HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
+HARD_OUTPUT_DIR        = r"C:\paper\cat_monitoring_system\eval_results"
 
 # ── Visual style ──────────────────────────────────────────────────────────
 _COL_A = '#2196F3'   # blue   — model A
@@ -184,6 +186,12 @@ def evaluate_video(video_path, kp_detector, classifier, feature_mode,
             item[1] if item[1] is not None else np.zeros((17,), np.float32)
             for item in buf
         ])
+
+        _model_joints = getattr(classifier.model, 'num_joints', 17)
+        if _model_joints < 17:
+            kpts_arr = kpts_arr[:, :_model_joints, :]
+            conf_arr = conf_arr[:, :_model_joints]
+
         seq = interpolate_missing(kpts_arr, conf_arr, threshold=0.1)
         seq = flip_normalize(seq)
         seq = orientation_normalize(seq)
@@ -270,6 +278,14 @@ def compute_metrics(preds_by_class: dict,
                              0, actual_cls - 1)
         probs_cls  = probs[:, cls_idx] if cls_idx < actual_cls else np.zeros(len(preds))
         n_correct  = int((pred_ids == cls_idx).sum())
+        # NOTE (shake / scratch): Discrete accuracy and avg true-class probability are
+        # artificially deflated for impulsive behaviors such as "shake" (head shake),
+        # which typically lasts only 0.5–1 s and accounts for roughly 1/10 of the
+        # clip duration; the remaining ~90 % of windows contain "stop" and are counted
+        # as misclassifications even though the model predicts them correctly.
+        # Use max_true_prob and event_detected as the primary validity metrics for
+        # these classes — they reflect whether the model fires during the event peak,
+        # regardless of how many non-event windows surround it.
 
         top2_ids = np.argsort(probs, axis=1)[:, -2:]
         n_top2   = int(np.any(top2_ids == cls_idx, axis=1).sum())
@@ -890,7 +906,12 @@ def main():
     parser.add_argument('--imgsz',               type=int,   default=DEFAULT_IMGSZ)
     parser.add_argument('--conf',                type=float, default=DEFAULT_CONF)
     parser.add_argument('--output',              default=HARD_OUTPUT_DIR)
-    parser.add_argument('--sequence_length',     type=int,   default=DEFAULT_SEQ_LEN)
+    parser.add_argument('--sequence_length',     type=int,   default=DEFAULT_SEQ_LEN,
+                        help='共用序列長度（當兩模型相同時使用）')
+    parser.add_argument('--seq_len_a',           type=int,   default=None,
+                        help='模型 A 的序列長度（覆蓋 --sequence_length；None → 讀 HARD_SEQ_LEN_A）')
+    parser.add_argument('--seq_len_b',           type=int,   default=None,
+                        help='模型 B 的序列長度（覆蓋 --sequence_length；None → 讀 HARD_SEQ_LEN_B）')
     parser.add_argument('--classify_stride',     type=int,   default=DEFAULT_STRIDE)
     parser.add_argument('--device',              default=DEFAULT_DEVICE)
     args = parser.parse_args()
@@ -899,12 +920,20 @@ def main():
     ema_a = HARD_EMA_ALPHA_A
     ema_b = HARD_EMA_ALPHA_B
 
+    # 序列長度：CLI 明確指定 > 硬編碼常數 > --sequence_length 全域值
+    seq_len_a = args.seq_len_a if args.seq_len_a is not None else HARD_SEQ_LEN_A
+    seq_len_b = args.seq_len_b if args.seq_len_b is not None else HARD_SEQ_LEN_B
+
     name_a = args.name_a or _short_name(args.model_a)
     name_b = args.name_b or _short_name(args.model_b)
 
     # 若 alpha 不同，名稱後附加 EMA 標記，讓圖表/CSV 一眼看出差異
     label_a = f"{name_a}[ema={ema_a}]" if ema_a < 1.0 else name_a
     label_b = f"{name_b}[ema={ema_b}]" if ema_b < 1.0 else name_b
+    # 序列長度不同時也附加 T 標記
+    if seq_len_a != seq_len_b:
+        label_a = f"{label_a}[T{seq_len_a}]"
+        label_b = f"{label_b}[T{seq_len_b}]"
 
     # Sequential output directory
     out_root = Path(args.output)
@@ -916,8 +945,8 @@ def main():
     sep = '=' * 62
     print(f"\n{sep}")
     print(f"  Comparison #{run_tag}")
-    print(f"  Model A : {label_a}  (EMA α={ema_a})")
-    print(f"  Model B : {label_b}  (EMA α={ema_b})")
+    print(f"  Model A : {label_a}  (EMA α={ema_a}  T={seq_len_a})")
+    print(f"  Model B : {label_b}  (EMA α={ema_b}  T={seq_len_b})")
     print(f"  Output  : {out_dir}")
     print(f"{sep}")
 
@@ -926,24 +955,24 @@ def main():
     kp_det = KeypointDetector(args.yolo, device=args.device,
                                imgsz=args.imgsz, conf_thres=args.conf)
 
-    def _load_classifier(model_path, device):
+    def _load_classifier(model_path, device, seq_len):
         bn_ch = infer_bn_input_channels(model_path)
         fm    = CH_TO_FEATURE.get(bn_ch, 'xy')
         if bn_ch not in CH_TO_FEATURE:
             print(f"  ⚠ {Path(model_path).name}: cannot infer feature_mode "
                   f"(bn_ch={bn_ch}), defaulting to 'xy'")
         else:
-            print(f"  ✓ {Path(model_path).name} → {fm} ({bn_ch} ch)")
+            print(f"  ✓ {Path(model_path).name} → {fm} ({bn_ch} ch)  T={seq_len}")
         clf = BehaviorClassifier(
             model_path, device=device,
-            sequence_length=args.sequence_length,
+            sequence_length=seq_len,
             normalize=True, feature_mode=fm, in_channels=bn_ch,
         )
         return clf, fm
 
     print('\n[Loading ST-GCN models]')
-    clf_a, fm_a = _load_classifier(args.model_a, args.device)
-    clf_b, fm_b = _load_classifier(args.model_b, args.device)
+    clf_a, fm_a = _load_classifier(args.model_a, args.device, seq_len_a)
+    clf_b, fm_b = _load_classifier(args.model_b, args.device, seq_len_b)
 
     _all_dirs = [
         (args.video_walk_dir,    0),
@@ -973,13 +1002,13 @@ def main():
         print(f"  ▶ A ({label_a})")
         preds_a[cls_idx] = [p for _, p in evaluate_folder(
             dir_path, kp_det, clf_a, fm_a,
-            args.sequence_length, args.classify_stride, ema_alpha=ema_a
+            seq_len_a, args.classify_stride, ema_alpha=ema_a
         )]
 
         print(f"  ▶ B ({label_b})")
         preds_b[cls_idx] = [p for _, p in evaluate_folder(
             dir_path, kp_det, clf_b, fm_b,
-            args.sequence_length, args.classify_stride, ema_alpha=ema_b
+            seq_len_b, args.classify_stride, ema_alpha=ema_b
         )]
 
         na = sum(len(v) for v in preds_a[cls_idx])

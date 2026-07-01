@@ -96,7 +96,7 @@ class ModelEMA:
 # the script will raise RuntimeError if it is missing or unreadable.
 # To use a custom path, set the STGCN_CONFIG_PATH environment variable.
 def _load_external_config():
-    config_path = os.getenv('STGCN_CONFIG_PATH', r'C:\ai_project\paper\cat_monitoring_system\stgcn_config.yaml')
+    config_path = os.getenv('STGCN_CONFIG_PATH', r'C:\paper\cat_monitoring_system\stgcn_config.yaml')
     if not os.path.exists(config_path):
         # allow config placed next to this script
         local_path = Path(__file__).parent / 'stgcn_config.yaml'
@@ -166,6 +166,12 @@ KP_EMA_ALPHA = CONFIG['KP_EMA_ALPHA']
 NUM_CLASSES = CONFIG['NUM_CLASSES']
 BEHAVIOR_PREFIXES = CONFIG['BEHAVIOR_PREFIXES']
 NUM_JOINTS = CONFIG['NUM_JOINTS']
+# JSON 骨架檔永遠有 17 個關節；NUM_JOINTS 控制實際送入模型的關節數
+# 支援兩種模式：17（完整）或 14（忽略 tail_base/tail_mid/tail_tip）
+_JSON_NUM_JOINTS = 17
+assert NUM_JOINTS in (14, 17), (
+    f"NUM_JOINTS 僅支援 17（完整骨架）或 14（忽略尾巴三點），目前值：{NUM_JOINTS}"
+)
 SEQUENCE_LENGTH = CONFIG['SEQUENCE_LENGTH']
 WINDOW_STRIDE   = CONFIG['WINDOW_STRIDE']
 SPATIAL_KERNEL_SIZE = CONFIG['SPATIAL_KERNEL_SIZE']
@@ -177,6 +183,8 @@ FINAL_DROPOUT = CONFIG['FINAL_DROPOUT']
 FEATURE_MODE = CONFIG['FEATURE_MODE']
 RUN_ABLATION_STUDY = CONFIG['RUN_ABLATION_STUDY']
 ABLATION_MODES = CONFIG['ABLATION_MODES']
+RUN_SEQLEN_ABLATION = CONFIG.get('RUN_SEQLEN_ABLATION', False)
+ABLATION_SEQLENS    = CONFIG.get('ABLATION_SEQLENS', [16, 32])
 SPATIAL_ROTATE_DEG = CONFIG['SPATIAL_ROTATE_DEG']
 SPATIAL_SCALE_MIN = CONFIG['SPATIAL_SCALE_MIN']
 SPATIAL_SCALE_MAX = CONFIG['SPATIAL_SCALE_MAX']
@@ -395,12 +403,12 @@ class CatSkeletonDataset(Dataset):
             frame_detected    = []   # True = 該幀有 bbox（YOLO 偵測到貓）
             for frame in frames:
                 kpts_list = frame.get('keypoints', [])
-                if len(kpts_list) == self.num_joints:
+                if len(kpts_list) == _JSON_NUM_JOINTS:
                     coords = np.array([[kpt['x'], kpt['y']] for kpt in kpts_list])
                     conf   = np.array([kpt.get('conf', 1.0) for kpt in kpts_list])
                 else:
-                    coords = np.zeros((self.num_joints, 2), dtype=np.float32)
-                    conf   = np.zeros((self.num_joints,),  dtype=np.float32)
+                    coords = np.zeros((_JSON_NUM_JOINTS, 2), dtype=np.float32)
+                    conf   = np.zeros((_JSON_NUM_JOINTS,),   dtype=np.float32)
                 keypoint_frames.append(coords)
                 frame_labels_list.append(frame.get('label', 'unannotated'))
                 frame_detected.append(frame.get('bbox') is not None)
@@ -408,8 +416,8 @@ class CatSkeletonDataset(Dataset):
             keypoint_frames = np.array(keypoint_frames)
             confs = np.array([
                 np.array([kpt.get('conf', 1.0) for kpt in frame.get('keypoints', [])])
-                if len(frame.get('keypoints', [])) == self.num_joints
-                else np.zeros((self.num_joints,))
+                if len(frame.get('keypoints', [])) == _JSON_NUM_JOINTS
+                else np.zeros((_JSON_NUM_JOINTS,))
                 for frame in frames
             ])
             keypoint_frames = interpolate_missing(keypoint_frames, confs)
@@ -487,10 +495,15 @@ class CatSkeletonDataset(Dataset):
                 label: Class index
         """
         item = self.sequences[idx]
-        sequence = item['sequence']  # Shape: (T, V, C)
-        conf_seq = item['conf_sequence']  # Shape: (T, V)
+        sequence = item['sequence']      # Shape: (T, 17, 2)
+        conf_seq = item['conf_sequence'] # Shape: (T, 17)
         label = item['label']
-        
+
+        # 消融：忽略尾巴三點時，切掉 joint 14/15/16（tail_base/tail_mid/tail_tip）
+        if self.num_joints < _JSON_NUM_JOINTS:
+            sequence = sequence[:, :self.num_joints, :]
+            conf_seq = conf_seq[:, :self.num_joints]
+
         # Normalize: flip → orientation → center/scale (shared with inference)
         # flip 先於 orientation：原始座標下 walk 貓的 nose_x/tail_x 差距最大，翻轉決策穩定
         sequence = flip_normalize(sequence)
@@ -623,11 +636,18 @@ def validate(model, dataloader, criterion, device):
 
 # ==================== Main Training Loop ====================
 def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
-                shared_models_dir=None, kp_ema_alpha=None):
+                shared_models_dir=None, kp_ema_alpha=None, seq_len=None):
     """Main training function"""
     in_channels = get_in_channels_for_mode(feature_mode)
     eff_alpha = kp_ema_alpha if kp_ema_alpha is not None else KP_EMA_ALPHA
     alpha_tag = f"_ema{eff_alpha:.2f}" if (eff_alpha is not None and eff_alpha < 1.0) else ""
+
+    # Sequence-length–dependent parameters (auto-adjusted when seq_len differs from config)
+    eff_seq_len       = int(seq_len) if seq_len is not None else SEQUENCE_LENGTH
+    stride_ratio      = WINDOW_STRIDE / SEQUENCE_LENGTH          # preserve configured overlap ratio
+    eff_window_stride = max(1, int(eff_seq_len * stride_ratio))
+    eff_batch_size    = BATCH_SIZE
+    seq_tag           = f"_T{eff_seq_len}" if eff_seq_len != SEQUENCE_LENGTH else ""
 
     # Fix random seeds for more stable runs (does not guarantee identical across GPUs)
     np.random.seed(RANDOM_SEED)
@@ -647,8 +667,8 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     if run_name:
         run_suffix = f"{run_tag}_{run_name}{alpha_tag}_{att_suffix}"
     else:
-        run_suffix = f"{run_tag}_{feature_mode}{alpha_tag}_{att_suffix}"
-    print(f"✓ Run #{run_tag}  ({run_suffix})  KP_EMA_ALPHA={eff_alpha}")
+        run_suffix = f"{run_tag}_{feature_mode}{alpha_tag}{seq_tag}_{att_suffix}"
+    print(f"✓ Run #{run_tag}  ({run_suffix})  KP_EMA_ALPHA={eff_alpha}  T={eff_seq_len}  stride={eff_window_stride}  batch={eff_batch_size}")
 
     run_results_dir = os.path.join(RESULTS_FOLDER, f"run_{run_suffix}")
 
@@ -658,7 +678,12 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     # 消融研究：模型權重統一存至共用資料夾，以特徵名區分檔名
     # 單次訓練：存在自己的 run 資料夾內
     if shared_models_dir:
-        model_filename = f"{run_tag}_{feature_mode}{alpha_tag}_{att_suffix}.pth"
+        # seqlen/feature ablation: use run_name when it differs from feature_mode (e.g. "xy_conf_v_bone_T16")
+        if run_name and run_name != feature_mode:
+            name_part = f"{run_name}{alpha_tag}"
+        else:
+            name_part = f"{feature_mode}{alpha_tag}{seq_tag}"
+        model_filename = f"{run_tag}_{name_part}_{att_suffix}.pth"
         run_model_path = str(get_unique_path(Path(shared_models_dir) / model_filename))
     else:
         run_model_path = str(get_unique_path(Path(run_results_dir) / "best_model.pth"))
@@ -667,11 +692,11 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     print("\nLoading dataset...")
     full_dataset = CatSkeletonDataset(
         SKELETON_DATA_FOLDER,
-        sequence_length=SEQUENCE_LENGTH,
+        sequence_length=eff_seq_len,
         num_joints=NUM_JOINTS,
         augment=False,
         feature_mode=feature_mode,
-        window_stride=WINDOW_STRIDE,
+        window_stride=eff_window_stride,
         kp_ema_alpha=eff_alpha,
     )
 
@@ -693,7 +718,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'use_ema_for_eval': bool(USE_EMA_FOR_EVAL),
         'kp_ema_alpha': eff_alpha,
         'training_params': {
-            'batch_size': BATCH_SIZE,
+            'batch_size': eff_batch_size,
             'num_epochs': NUM_EPOCHS,
             'learning_rate': LEARNING_RATE,
             'optimizer': OPTIMIZER,
@@ -861,7 +886,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=eff_batch_size,
         shuffle=True,
         num_workers=num_workers,
         pin_memory=True if DEVICE.type == 'cuda' else False
@@ -869,7 +894,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=eff_batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True if DEVICE.type == 'cuda' else False
@@ -887,7 +912,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         )
         train_loader = DataLoader(
             train_dataset,
-            batch_size=BATCH_SIZE,
+            batch_size=eff_batch_size,
             sampler=sampler,
             num_workers=num_workers,
             pin_memory=True if DEVICE.type == 'cuda' else False
@@ -1089,10 +1114,10 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'feature_mode': feature_mode,
         'kp_ema_alpha': eff_alpha,
         'in_channels': in_channels,
-        'sequence_length': SEQUENCE_LENGTH,
-        'window_stride': WINDOW_STRIDE,
+        'sequence_length': eff_seq_len,
+        'window_stride': eff_window_stride,
         'use_attention': use_attention,
-        'batch_size': BATCH_SIZE,
+        'batch_size': eff_batch_size,
         'learning_rate': LEARNING_RATE,
         'optimizer': OPTIMIZER,
         'label_smoothing': float(CONFIG.get('LABEL_SMOOTHING', 0.0)),
@@ -1483,6 +1508,212 @@ def run_kp_ema_ablation(alphas=None):
     except Exception as e:
         print(f"⚠ Failed to plot KP EMA ablation: {e}")
 
+    # Plot B：kp_ema_ablation_convergence（val_loss + val_acc vs epoch, one line per alpha）
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        fig.suptitle(f'KP EMA Alpha Ablation — Convergence  [{FEATURE_MODE}]',
+                     fontsize=13, fontweight='bold')
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        for ci, rec in enumerate(summary):
+            label = f"α={rec['kp_ema_alpha']:.2f}"
+            col   = colors[ci % len(colors)]
+            vl    = rec.get('val_losses', [])
+            va    = rec.get('val_accs',   [])
+            if vl:
+                ax1.plot(range(1, len(vl) + 1), vl, '-o', linewidth=2,
+                         markersize=4, color=col, label=label)
+            if va:
+                ax2.plot(range(1, len(va) + 1), va, '-o', linewidth=2,
+                         markersize=4, color=col, label=label)
+
+        ax1.set_xlabel('Epoch', fontsize=12)
+        ax1.set_ylabel('Val Loss', fontsize=12)
+        ax1.set_title('Validation Loss Convergence', fontsize=13, fontweight='bold')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+
+        ax2.set_xlabel('Epoch', fontsize=12)
+        ax2.set_ylabel('Val Accuracy', fontsize=12)
+        ax2.set_title('Validation Accuracy Convergence', fontsize=13, fontweight='bold')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        conv_path = str(get_unique_path(
+            Path(RESULTS_FOLDER) / f'kp_ema_ablation_convergence_{ts}.png'
+        ))
+        plt.savefig(conv_path, dpi=150, bbox_inches='tight')
+        print(f"✓ Convergence comparison saved to: {conv_path}")
+        plt.close()
+    except Exception as e:
+        print(f"⚠ Failed to plot KP EMA convergence: {e}")
+
+
+# ==================== Sequence Length Ablation ====================
+def run_seqlen_ablation(seq_lens=None):
+    """對不同 SEQUENCE_LENGTH 做消融實驗，固定使用 FEATURE_MODE。
+    Window stride 與 batch size 依序列長度比例自動調整。
+    """
+    seq_lens = list(seq_lens or ABLATION_SEQLENS)
+    shared_run_num = _next_run_number(RESULTS_FOLDER)
+    shared_tag     = f"{shared_run_num:03d}"
+    att_suffix     = "att_on" if USE_ATTENTION else "att_off"
+    shared_models_dir = Path(RESULTS_FOLDER) / f"run_{shared_tag}_seqlen_ablation_{att_suffix}"
+    shared_models_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n✓ Sequence Length 消融研究 #{shared_tag}  ({len(seq_lens)} 種序列長度: {seq_lens})")
+    print(f"  特徵模式: {FEATURE_MODE}  基準設定: T={SEQUENCE_LENGTH}, stride={WINDOW_STRIDE}, batch={BATCH_SIZE}")
+    print(f"  模型權重目錄: {shared_models_dir}")
+
+    summary = []
+    print("\n" + "=" * 70)
+    print("Sequence Length Ablation Study")
+    print("=" * 70)
+    for sl in seq_lens:
+        stride_ratio  = WINDOW_STRIDE / SEQUENCE_LENGTH
+        eff_stride    = max(1, int(sl * stride_ratio))
+        eff_batch     = BATCH_SIZE
+        run_label     = f"{FEATURE_MODE}_T{sl}"
+        print(f"\n{'─'*70}")
+        print(f"T={sl}  stride={eff_stride}  batch={eff_batch}  (label: {run_label})")
+        print(f"{'─'*70}")
+        result = train_model(
+            feature_mode=FEATURE_MODE,
+            run_name=run_label,
+            run_number=shared_run_num,
+            shared_models_dir=str(shared_models_dir),
+            seq_len=sl,
+        )
+        if result is not None:
+            result['seq_len'] = sl
+            result['window_stride'] = eff_stride
+            result['eff_batch_size'] = eff_batch
+            summary.append(result)
+
+    if not summary:
+        print("✗ No sequence length ablation results generated.")
+        return
+
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # Summary CSV
+    import csv
+    summary_csv = str(get_unique_path(
+        Path(RESULTS_FOLDER) / f'seqlen_ablation_summary_{ts}.csv'
+    ))
+    csv_fields = [
+        'seq_len', 'window_stride', 'eff_batch_size', 'feature_mode',
+        'best_val_acc', 'best_val_macro_f1', 'best_val_loss',
+        'total_epochs_run', 'model_path', 'results_dir',
+    ]
+    with open(summary_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=csv_fields, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(summary)
+
+    print(f"\n{'='*70}")
+    print("Sequence Length Ablation Summary")
+    print(f"{'='*70}")
+    for rec in summary:
+        print(
+            f"  T={rec['seq_len']}  stride={rec['window_stride']}  batch={rec['eff_batch_size']} | "
+            f"Acc={rec['best_val_acc']:.4f} | "
+            f"Macro-F1={rec['best_val_macro_f1']:.4f} | "
+            f"Loss={rec['best_val_loss']:.4f}"
+        )
+    print(f"\n✓ Summary CSV: {summary_csv}")
+
+    # Plot: T vs acc/f1 (bar) + convergence curves
+    try:
+        seq_lens_run = [r['seq_len']           for r in summary]
+        accs         = [r['best_val_acc']      for r in summary]
+        f1s          = [r['best_val_macro_f1'] for r in summary]
+        label_names  = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+
+        fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+        fig.suptitle(f'Sequence Length Ablation  [{FEATURE_MODE}]',
+                     fontsize=13, fontweight='bold')
+
+        # Left: grouped bar Acc / Macro-F1
+        ax1 = axes[0]
+        x   = np.arange(len(seq_lens_run))
+        w   = 0.35
+        bars_acc = ax1.bar(x - w/2, accs, w, label='Val Accuracy', color='steelblue')
+        bars_f1  = ax1.bar(x + w/2, f1s,  w, label='Macro-F1',    color='darkorange')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels([f'T={sl}' for sl in seq_lens_run])
+        ax1.set_ylim(0, 1.08)
+        ax1.set_ylabel('Score', fontsize=11)
+        ax1.set_title('Accuracy & Macro-F1 by Sequence Length', fontsize=12, fontweight='bold')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3, axis='y')
+        for bar, v in zip(bars_acc, accs):
+            ax1.text(bar.get_x() + bar.get_width()/2, v + 0.01, f'{v:.3f}',
+                     ha='center', va='bottom', fontsize=9)
+        for bar, v in zip(bars_f1, f1s):
+            ax1.text(bar.get_x() + bar.get_width()/2, v + 0.01, f'{v:.3f}',
+                     ha='center', va='bottom', fontsize=9)
+
+        # Right: per-class F1 grouped bar
+        ax2 = axes[1]
+        has_per_class = any(r.get('best_val_per_class_f1') for r in summary)
+        if has_per_class:
+            n_modes   = len(summary)
+            n_classes = len(label_names)
+            bar_w     = 0.8 / n_modes
+            colors    = plt.rcParams['axes.prop_cycle'].by_key()['color']
+            for mi, rec in enumerate(summary):
+                pcf1 = rec.get('best_val_per_class_f1') or [0.0] * n_classes
+                xs   = np.arange(n_classes) + mi * bar_w - (n_modes - 1) * bar_w / 2
+                ax2.bar(xs, pcf1, width=bar_w, color=colors[mi % len(colors)],
+                        label=f"T={rec['seq_len']}")
+            ax2.set_xticks(np.arange(n_classes))
+            ax2.set_xticklabels(label_names, rotation=20, ha='right')
+            ax2.set_ylim(0, 1.08)
+            ax2.set_ylabel('F1 Score', fontsize=11)
+            ax2.set_title('Per-Class F1 by Sequence Length', fontsize=12, fontweight='bold')
+            ax2.legend(fontsize=9)
+            ax2.grid(True, alpha=0.3, axis='y')
+        else:
+            ax2.text(0.5, 0.5, 'Per-class F1 not available',
+                     transform=ax2.transAxes, ha='center', va='center', fontsize=12)
+
+        plt.tight_layout()
+        plot_path = str(get_unique_path(
+            Path(RESULTS_FOLDER) / f'seqlen_ablation_comparison_{ts}.png'
+        ))
+        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        print(f"✓ Ablation plot: {plot_path}")
+        plt.close()
+
+        # Convergence curves (val_acc per epoch for each T)
+        fig2, (ax3, ax4) = plt.subplots(1, 2, figsize=(15, 5))
+        fig2.suptitle(f'Convergence  [{FEATURE_MODE}]', fontsize=13, fontweight='bold')
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        for ci, rec in enumerate(summary):
+            c = colors[ci % len(colors)]
+            lbl = f"T={rec['seq_len']}"
+            ax3.plot(rec.get('val_losses', []),  color=c, linewidth=2, label=lbl)
+            ax4.plot(rec.get('val_accs',   []),  color=c, linewidth=2, label=lbl)
+        for ax, title, ylabel in [
+            (ax3, 'Val Loss',     'Loss'),
+            (ax4, 'Val Accuracy', 'Accuracy'),
+        ]:
+            ax.set_xlabel('Epoch', fontsize=11)
+            ax.set_ylabel(ylabel, fontsize=11)
+            ax.set_title(title, fontsize=12, fontweight='bold')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        conv_path = str(get_unique_path(
+            Path(RESULTS_FOLDER) / f'seqlen_ablation_convergence_{ts}.png'
+        ))
+        plt.savefig(conv_path, dpi=150, bbox_inches='tight')
+        print(f"✓ Convergence plot: {conv_path}")
+        plt.close()
+    except Exception as e:
+        print(f"⚠ Failed to plot sequence length ablation: {e}")
+
 
 # ==================== Main Entry Point ====================
 if __name__ == "__main__":
@@ -1492,6 +1723,9 @@ if __name__ == "__main__":
         ran = True
     if RUN_ABLATION_STUDY:
         run_ablation_study()
+        ran = True
+    if RUN_SEQLEN_ABLATION:
+        run_seqlen_ablation()
         ran = True
     if not ran:
         train_model(feature_mode=FEATURE_MODE)

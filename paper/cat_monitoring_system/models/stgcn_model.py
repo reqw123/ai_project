@@ -30,13 +30,42 @@ def get_adjacency_matrix():
     return adj_matrix
 
 def get_stgcn_partition_adjacency(num_joints=17):
-    # Partition: root (self), close (1-hop), further (2-hop)
-    A = get_adjacency_matrix()
-    A_root = np.eye(num_joints, dtype=np.float32)
-    A_close = (A > 0).astype(np.float32) - A_root
-    A2 = np.linalg.matrix_power(A, 2)
-    A_further = np.clip((A2 > 0).astype(np.float32) - (A > 0).astype(np.float32), 0, 1)
-    return [A_root, A_close, A_further]
+    # Directional partition (PYSKL-style): center = mid_back (node 4).
+    # BFS hop distances from center determine whether each neighbor is
+    # centripetal (toward trunk) or centrifugal (toward extremities).
+    # Normalization is applied by the caller (normalize_adjacency_matrix).
+    center_node = 4
+
+    A_full = get_adjacency_matrix()[:num_joints, :num_joints]
+    A_edges = A_full.copy()
+    np.fill_diagonal(A_edges, 0)  # remove self-loops for BFS
+
+    # BFS from center_node
+    dist = np.full(num_joints, np.inf)
+    dist[center_node] = 0.0
+    queue = [center_node]
+    while queue:
+        node = queue.pop(0)
+        for nb in np.where(A_edges[node] > 0)[0]:
+            if np.isinf(dist[nb]):
+                dist[nb] = dist[node] + 1
+                queue.append(nb)
+
+    A_self = np.eye(num_joints, dtype=np.float32)
+    A_centripetal = np.zeros((num_joints, num_joints), dtype=np.float32)
+    A_centrifugal = np.zeros((num_joints, num_joints), dtype=np.float32)
+
+    for i in range(num_joints):
+        for j in range(num_joints):
+            if i == j or A_edges[i, j] == 0:
+                continue
+            # For edge (i→j): j is centripetal to i when j is closer to center
+            if dist[j] < dist[i]:
+                A_centripetal[j, i] = 1.0
+            else:  # dist[j] >= dist[i]: same distance counts as centrifugal (per PYSKL)
+                A_centrifugal[j, i] = 1.0
+
+    return [A_self, A_centripetal, A_centrifugal]
 
 def normalize_adjacency_matrix(adj_matrix):
     degree = np.sum(adj_matrix, axis=1)
@@ -137,7 +166,8 @@ def compute_bone_feature(sequence):
     """sequence: (T, V, 2) -> bone_xy: (T, V, 2)
     骨架拓撲（COCO 17點貓骨架）：父節點索引
     """
-    parents = np.array([0, 0, 0, 0, 3, 4, 3, 6, 3, 8, 5, 10, 5, 12, 5, 14, 15], dtype=np.int64)
+    _parents_17 = np.array([0, 0, 0, 0, 3, 4, 3, 6, 3, 8, 5, 10, 5, 12, 5, 14, 15], dtype=np.int64)
+    parents = _parents_17[:sequence.shape[1]]
     bone = sequence - sequence[:, parents, :]
     bone[:, 0, :] = 0.0
     return bone
@@ -287,7 +317,6 @@ class MultiScaleTemporalConv(nn.Module):
             for kernel_size in self.kernel_sizes
         ])
         self.branch_logits = nn.Parameter(torch.zeros(len(self.branches), dtype=torch.float32))
-        self.out_relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
         branch_outputs = [branch(x) for branch in self.branches]
@@ -295,7 +324,7 @@ class MultiScaleTemporalConv(nn.Module):
         x = torch.zeros_like(branch_outputs[0])
         for weight, branch_output in zip(branch_weights, branch_outputs):
             x = x + weight * branch_output
-        return self.out_relu(x)
+        return x
 
 class STGCNBlock(nn.Module):
     def __init__(self, in_channels, out_channels, adjacency_matrix,
@@ -327,7 +356,7 @@ class STGCNBlock(nn.Module):
 
 class STGCN(nn.Module):
     def __init__(self, num_classes=5, in_channels=4, num_joints=17,
-                 spatial_kernel_size=3, temporal_kernel_size=9, num_layers=3,
+                 spatial_kernel_size=3, temporal_kernel_size=(3, 5, 9), num_layers=3,
                  input_dropout=0.05, block_dropout=0.15, final_dropout=0.5,
                  use_attention=True):
         super().__init__()
@@ -336,10 +365,8 @@ class STGCN(nn.Module):
         self.bn_input = nn.BatchNorm2d(in_channels)
         self.input_dropout = nn.Dropout2d(input_dropout) if input_dropout and input_dropout > 0 else nn.Identity()
         # 可學習的 per-sample per-frame joint attention 模組（模組層級定義）
-        self.joint_attention = JointAttention(in_channels)
-        # Attention is controlled explicitly by the caller/config, not by env vars.
-        if not bool(use_attention):
-            self.joint_attention = nn.Identity()
+        self.use_attention = bool(use_attention)
+        self.joint_attention = JointAttention(in_channels) if self.use_attention else nn.Identity()
 
         # No per-class head or bias terms here — all classes treated equally.
         self.stgcn_layers = nn.ModuleList()
@@ -371,12 +398,10 @@ class STGCN(nn.Module):
     def forward(self, x):
         bn_x = self.bn_input(x)
         # 由 JointAttention 決定每個樣本、每個關節的縮放係數並套用
-        try:
+        if self.use_attention:
             attn = self.joint_attention(bn_x)
             x = bn_x * attn
-        except (RuntimeError, ValueError):
-            # 僅捕獲形狀/設備不符的例外，跳過 attention 繼續推論。
-            # 其他例外（如 CUDA OOM）應向上傳播以利除錯。
+        else:
             x = bn_x
 
         x = self.input_dropout(x)
@@ -455,12 +480,39 @@ class CatBehaviorSTGCN:
             else:
                 use_attention = True
 
+        # 從 checkpoint 自動偵測 num_joints（adjacency buffer shape：K × V × V）
+        _adj_key = 'stgcn_layers.0.sgc.A'
+        if state_dict is not None and _adj_key in state_dict:
+            self.num_joints = int(state_dict[_adj_key].shape[-1])
+            if self.num_joints != 17:
+                print(f"✓ 依 checkpoint 自動調整 num_joints: 17 → {self.num_joints}")
+        else:
+            self.num_joints = 17
+
+        # 從 checkpoint 偵測 TCN 分支數，避免新預設 (3,5,9) 與舊單分支 checkpoint 架構不符
+        _tcn_branch_key = 'stgcn_layers.0.tcn.branches.{}.conv.weight'
+        if state_dict is not None:
+            num_tcn_branches = sum(
+                1 for i in range(10) if _tcn_branch_key.format(i) in state_dict
+            )
+            if num_tcn_branches == 0:
+                num_tcn_branches = 1
+            _default_kernels = (3, 5, 9)
+            if num_tcn_branches != len(_default_kernels):
+                _ckpt_kernels = tuple(9 for _ in range(num_tcn_branches))
+                print(f"✓ 依 checkpoint 自動調整 TCN 分支數: {num_tcn_branches}（kernel={_ckpt_kernels}）")
+                temporal_kernel_size_ckpt = _ckpt_kernels
+            else:
+                temporal_kernel_size_ckpt = _default_kernels
+        else:
+            temporal_kernel_size_ckpt = (3, 5, 9)
+
         self.model = STGCN(
             num_classes=num_classes,
             in_channels=self.in_channels,
-            num_joints=17,
+            num_joints=self.num_joints,
             spatial_kernel_size=3,
-            temporal_kernel_size=9,
+            temporal_kernel_size=temporal_kernel_size_ckpt,
             num_layers=3,
             use_attention=use_attention,
         ).to(self.device)

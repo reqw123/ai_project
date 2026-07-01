@@ -137,10 +137,10 @@ class ModelPaths:
     """模型和資料檔案路徑"""
     
     # YOLO 模型
-    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_101.pt")
+    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_111.pt")
     
     # ST-GCN 模型
-    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_results\stgcn_best_047_xy_conf_v_att_on.pth")
+    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_results\run_076_ema_ablation_att_on\076_xy_conf_v_bone_att_on.pth")
     
     # 測試視頻
     VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\5月5日(1).mp4")
@@ -197,7 +197,7 @@ class YOLOConfig:
     IMAGE_SIZE = _env_int("CAT_MONITORING_YOLO_IMAGE_SIZE", 640)
     CONFIDENCE_THRESHOLD = _env_float("CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD", 0.50)
     KEYPOINT_CONFIDENCE_THRESHOLD = _env_float("CAT_MONITORING_YOLO_KEYPOINT_CONFIDENCE_THRESHOLD", 0.50)
-    TOTAL_KEYPOINTS = 17
+    TOTAL_KEYPOINTS = 14
     
     # 硬體
     DEVICE = _env_str("CAT_MONITORING_YOLO_DEVICE", "cuda")  # 改為 "cpu" 如果無 GPU
@@ -209,7 +209,7 @@ class STGCNConfig:
     # 模型超參數
     SEQUENCE_LENGTH = _env_int("CAT_MONITORING_STGCN_SEQUENCE_LENGTH", 16)          # 時間窗長度（幀數）
     NUM_CLASSES = 5               # 行為類別數
-    NUM_JOINTS = 17               # 關鍵點數
+    NUM_JOINTS = _env_int("CAT_MONITORING_STGCN_NUM_JOINTS", 14)  # 須與訓練時 stgcn_config.yaml 的 NUM_JOINTS 一致
     NUM_LAYERS = 3                # ST-GCN 層數
 
     # 特徵模式（與 train_gcn.py / 推論腳本共用概念）
@@ -419,10 +419,10 @@ def get_config_summary():
       - 關鍵點總數        : {YOLOConfig.TOTAL_KEYPOINTS}  ← 硬編碼 L194
       - 設備              : {YOLOConfig.DEVICE}
 
-    🧠 ST-GCN 參數  (硬編碼: L205 NUM_CLASSES=5, L206 NUM_JOINTS=17, L207 NUM_LAYERS=3, L238 CLASS_NAMES)
+    🧠 ST-GCN 參數  (硬編碼: L205 NUM_CLASSES=5, L207 NUM_LAYERS=3, L238 CLASS_NAMES)
       - 時間窗長度 (T)    : {STGCNConfig.SEQUENCE_LENGTH} 幀
       - 行為類別數        : {STGCNConfig.NUM_CLASSES}  ← 硬編碼 L205
-      - 關節點數          : {STGCNConfig.NUM_JOINTS}  ← 硬編碼 L206
+      - 關節點數          : {STGCNConfig.NUM_JOINTS}  (env: CAT_MONITORING_STGCN_NUM_JOINTS, 須與訓練 NUM_JOINTS 一致)
       - ST-GCN 層數       : {STGCNConfig.NUM_LAYERS}  ← 硬編碼 L207
       - 特徵模式          : {STGCNConfig.FEATURE_MODE}  ({STGCNConfig.FEATURE_DESCRIPTION})
       - 輸入通道數        : {STGCNConfig.IN_CHANNELS}

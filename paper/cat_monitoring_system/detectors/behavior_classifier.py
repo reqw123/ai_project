@@ -51,6 +51,14 @@ class BehaviorClassifier:
         if seq_xy is None:
             return None, 0.0, None
 
+        # YOLO 輸出固定 17 點，但模型可能以較少關節（例如 14，排除尾巴）訓練。
+        # 從模型 checkpoint 自動偵測的 num_joints 截斷多餘關節，避免 einsum 維度不符。
+        n_joints = getattr(self.model, 'num_joints', seq_xy.shape[1])
+        if seq_xy.shape[1] > n_joints:
+            seq_xy = seq_xy[:, :n_joints, :]
+            if conf_seq is not None:
+                conf_seq = conf_seq[:, :n_joints]
+
         if self._is_legacy_4ch:
             # 舊路徑：CatBehaviorSTGCN.predict() 內部自行做 flip+orient+normalize+velocity
             return self.model.predict(seq_xy, precomputed=False)

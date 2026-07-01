@@ -115,6 +115,16 @@ SHOW_PROBABILITY_BARS = False  # 關閉機率條可減少每幀繪圖負載
 # alpha 越小 → 越平滑（延遲多、噪音少）
 EMA_ALPHA = 1.0  # 須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致
 
+# ===== 正規化消融開關（初始值；執行中可用 f/o/n 按鍵動態切換）=====
+# 三個步驟均只在 STGCN_NORMALIZE=True 時生效
+NORM_FLIP   = False  # f 鍵：flip_normalize       翻轉統一方向
+NORM_ORIENT = False  # o 鍵：orientation_normalize 旋轉至 y 軸正向
+NORM_COORD  = False  # n 鍵：normalize_skeleton_coords 中心化＋體型縮放
+# ===== Overlay 模式（p 鍵切換）=====
+# False = 黑底 + 正規化骨架（檢視正規化效果）
+# True  = 原始影像 + 原始骨架（檢視 YOLO 偵測結果）
+OVERLAY_RAW = False
+
 # 17 關鍵點名稱映射（根據 YOLO-Pose v11 cat skeleton）
 KEYPOINT_NAMES = [
     "Nose",           # 0: 鼻尖
@@ -919,6 +929,13 @@ def main():
     current_video_idx = 0
     show_overlay_info = True
     show_all_panels   = True   # u 鍵切換：關閉/開啟所有分析面板
+    # 正規化消融 + overlay 模式（可於播放中即時切換）
+    norm_state = {
+        'flip':        NORM_FLIP,
+        'orient':      NORM_ORIENT,
+        'coord':       NORM_COORD,
+        'overlay_raw': OVERLAY_RAW,
+    }
 
     # 即時顯示狀態
     behavior_id = LOW_CONF_ID
@@ -933,6 +950,7 @@ def main():
 
     def reset_video_runtime_state():
         nonlocal prev_kpts, prev_kpt_conf, ema_kpts, _last_norm_kpts, _last_norm_kconf
+        nonlocal _last_raw_kpts, _last_raw_kconf, _last_prenorm_kpts
         nonlocal local_predictions, local_behavior_change_count, local_last_behavior
         nonlocal raw_frames_read, local_frames_processed, local_sampled_frames
         nonlocal local_frames_with_cat, local_frames_without_cat
@@ -946,6 +964,9 @@ def main():
         ema_kpts = None
         _last_norm_kpts = None
         _last_norm_kconf = None
+        _last_raw_kpts = None
+        _last_raw_kconf = None
+        _last_prenorm_kpts = None
         _norm_history.clear()
         local_predictions = []
         local_behavior_change_count = 0
@@ -1040,6 +1061,7 @@ def main():
         print(f"時長: {duration:.1f} 秒")
         if is_test_mode:
             print("控制: q=退出  space=暫停  r=重置  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  u=全部面板")
+            print("消融: f=flip  o=orient  n=coord  p=raw/norm overlay")
         if loop_playback:
             print("🔁 循環播放模式（當前影片播完會重播）")
         print("-" * 60)
@@ -1056,8 +1078,11 @@ def main():
 
         # EMA 狀態：跨幀累積，切影片或貓消失時重置
         ema_kpts = None  # shape (17, 2)，儲存上一幀的 EMA 平滑座標
-        _last_norm_kpts = None   # shape (17, 2)，最近一次正規化後的骨架座標（供顯示用）
-        _last_norm_kconf = None  # shape (17,)，對應信心值
+        _last_norm_kpts = None   # shape (V, 2)，最近一次正規化後的骨架座標（供顯示用）
+        _last_norm_kconf = None  # shape (V,)，對應信心值
+        _last_raw_kpts   = None   # shape (17, 2)，原始像素座標（overlay_raw 模式顯示用）
+        _last_raw_kconf  = None   # shape (17,)
+        _last_prenorm_kpts = None # shape (V, 2)，flip+orient 後、coord 正規化前的像素座標（n=OFF 時顯示用）
         _norm_history = deque(maxlen=1)  # (frame_num, norm_kpts) 供右下角座標面板使用；只保留最新一幀
 
         # 本次影片臨時統計（只有完整第一輪才會被提交）
@@ -1164,30 +1189,45 @@ def main():
                 prev_kpts = kpts.copy()
                 prev_kpt_conf = kpt_conf.copy()
 
+                # 儲存原始像素座標供 overlay_raw 模式顯示
+                _last_raw_kpts  = kpts.copy()
+                _last_raw_kconf = kpt_conf.copy()
+
                 # 加入緩衝區
                 keypoints_buffer.append((kpts, kpt_conf))
 
-                # velocity overlay removed (erroneous edit)
-
                 # 有足夠序列時做行為分類
                 if len(keypoints_buffer) >= SEQUENCE_LENGTH and (local_sampled_frames % CLASSIFY_STRIDE == 0):
-                    # 解包緩衝區
-                    kpts_arr = np.array([item[0] for item in keypoints_buffer])  # (32, 17, 2)
-                    conf_arr = np.array([item[1] for item in keypoints_buffer])  # (32, 17)
+                    kpts_arr = np.array([item[0] for item in keypoints_buffer])  # (T, 17, 2)
+                    conf_arr = np.array([item[1] for item in keypoints_buffer])  # (T, 17)
 
-                    # 插值補全（threshold=0.1 與訓練端 interpolate_missing 預設值一致）
-                    # conf < 0.1 的關節視為遺失，以時間線性插值填入鄰幀座標；
-                    # 若整段序列該關節均低於門檻，才歸零（不影響高信心點）
+                    # 截斷至模型關節數（14 節點模型忽略尾巴三點 14-16）
+                    _model_nj = getattr(behavior_classifier.model, 'num_joints', 17)
+                    if _model_nj < kpts_arr.shape[1]:
+                        kpts_arr = kpts_arr[:, :_model_nj, :]
+                        conf_arr = conf_arr[:, :_model_nj]
+
+                    # 插值補全（threshold=0.1 與訓練端一致）
                     seq_array = interpolate_missing(kpts_arr, conf_arr)
                     if STGCN_NORMALIZE:
-                        seq_array = flip_normalize(seq_array)
-                        seq_array = orientation_normalize(seq_array)
-                        seq_array = normalize_skeleton_coords(seq_array)
+                        # 正規化消融：各步驟獨立可關閉（f/o/n 鍵動態切換）
+                        if norm_state['flip']:
+                            seq_array = flip_normalize(seq_array)
+                        if norm_state['orient']:
+                            seq_array = orientation_normalize(seq_array)
+                        # flip+orient 後、coord 前的像素座標：n=OFF 時用來在黑底上
+                        # 顯示骨架的真實位置與大小，讓教授直觀看見正規化的效果
+                        _last_prenorm_kpts = seq_array[-1].copy()
+                        if norm_state['coord']:
+                            seq_array = normalize_skeleton_coords(seq_array)
+                    else:
+                        _last_prenorm_kpts = seq_array[-1].copy()
                     _last_norm_kpts = seq_array[-1].copy()
                     _last_norm_kconf = conf_arr[-1].copy()
                     _norm_history.append((local_frames_processed, seq_array[-1].copy()))
                     seq_features = build_feature_tensor(seq_array, conf_arr, feature_mode)
-                    pred_id, pred_conf, pred_probs = behavior_classifier.classify(seq_features, precomputed=True)
+                    # 外部已完成正規化，直接呼叫 model.predict(precomputed=True) 避免雙重正規化
+                    pred_id, pred_conf, pred_probs = behavior_classifier.model.predict(seq_features, precomputed=True)
 
                     # ── 診斷：每 60 幀列印一次，確認輸入信心與模型輸出是否正常 ──
                     _dbg_every = 60
@@ -1274,20 +1314,43 @@ def main():
                 ema_kpts = None  # 貓消失時重置 EMA，避免下次出現時使用過時的平均值
                 _last_norm_kpts = None
                 _last_norm_kconf = None
+                _last_raw_kpts = None
+                _last_raw_kconf = None
+                _last_prenorm_kpts = None
                 if is_first_pass:
                     local_last_behavior_for_occurrence = LOW_CONF_ID
 
             if display_window:
+                # ── overlay_raw 模式：原始影像＋原始骨架；False：黑底＋正規化骨架 ──
+                _use_raw = norm_state['overlay_raw']
                 if DISPLAY_SIZE is not None:
-                    show_frame, _, _, _ = resize_with_letterbox(frame, DISPLAY_SIZE)
-                    show_frame[:] = 0
-                    if _last_norm_kpts is not None:
+                    show_frame, _lb_scale, _lb_cx, _lb_cy = resize_with_letterbox(frame, DISPLAY_SIZE)
+                    if not _use_raw:
+                        show_frame[:] = 0   # 黑底
+                    if _use_raw and _last_raw_kpts is not None:
+                        _disp_kpts, _disp_bbox = scale_kpts_and_bbox_for_letterbox(
+                            _last_raw_kpts, bbox, _lb_scale, _lb_cx, _lb_cy)
+                        _disp_conf = _last_raw_kconf
+                    elif not _use_raw and not norm_state['coord'] and _last_prenorm_kpts is not None:
+                        # n=OFF：用 flip+orient 後的像素座標（隨貓移動，大小反映距離）
+                        _disp_kpts, _disp_bbox = scale_kpts_and_bbox_for_letterbox(
+                            _last_prenorm_kpts, None, _lb_scale, _lb_cx, _lb_cy)
+                        _disp_conf = _last_norm_kconf
+                        _disp_bbox = None
+                    elif not _use_raw and _last_norm_kpts is not None:
                         _disp_kpts = _norm_kpts_to_display(_last_norm_kpts, show_frame.shape[0], show_frame.shape[1])
+                        _disp_bbox = None
+                        _disp_conf = _last_norm_kconf
+                    else:
+                        _disp_kpts = None
+                        _disp_bbox = None
+                        _disp_conf = None
+                    if _disp_kpts is not None:
                         show_frame = draw_test2_style_overlay(
                             show_frame,
                             _disp_kpts,
-                            _last_norm_kconf,
-                            None,
+                            _disp_conf,
+                            _disp_bbox if _use_raw else None,
                             behavior_id,
                             confidence,
                             np.array((list(probs) + [0.0] * 5)[:5], dtype=np.float32),
@@ -1299,13 +1362,22 @@ def main():
                     if show_overlay_info and show_all_panels:
                         draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts)
                 else:
-                    show_frame = np.zeros_like(frame)
-                    if _last_norm_kpts is not None:
+                    _lb_scale, _lb_cx, _lb_cy = 1.0, 0, 0
+                    show_frame = frame.copy() if _use_raw else np.zeros_like(frame)
+                    if _use_raw and _last_raw_kpts is not None:
+                        _disp_kpts = _last_raw_kpts
+                        _disp_conf = _last_raw_kconf
+                    elif not _use_raw and _last_norm_kpts is not None:
                         _disp_kpts = _norm_kpts_to_display(_last_norm_kpts, show_frame.shape[0], show_frame.shape[1])
+                        _disp_conf = _last_norm_kconf
+                    else:
+                        _disp_kpts = None
+                        _disp_conf = None
+                    if _disp_kpts is not None:
                         show_frame = draw_test2_style_overlay(
                             show_frame,
                             _disp_kpts,
-                            _last_norm_kconf,
+                            _disp_conf,
                             None,
                             behavior_id,
                             confidence,
@@ -1357,9 +1429,24 @@ def main():
                 if _tx_t >= 0 and _vn_y < _h:
                     cv2.putText(show_frame, _vname_disp, (_tx_t, _vn_y),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (160, 200, 255), 1, cv2.LINE_AA)
-                # 左下角標示正規化視圖
-                cv2.putText(show_frame, "NORMALIZED", (6, _h - 8),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.4 * _ui, (70, 100, 70), 1, cv2.LINE_AA)
+                # 左下角：模式標示 + 正規化消融狀態
+                _mode_label = "RAW OVERLAY" if norm_state['overlay_raw'] else "NORMALIZED"
+                _mode_col   = (80, 200, 200) if norm_state['overlay_raw'] else (70, 100, 70)
+                cv2.putText(show_frame, _mode_label, (6, _h - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4 * _ui, _mode_col, 1, cv2.LINE_AA)
+                # 正規化各步驟開關（僅在 STGCN_NORMALIZE=True 時有意義）
+                _ns = norm_state
+                _norm_hud = (
+                    f"[f]flip:{'ON' if _ns['flip'] else 'OFF'}  "
+                    f"[o]orient:{'ON' if _ns['orient'] else 'OFF'}  "
+                    f"[n]coord:{'ON' if _ns['coord'] else 'OFF'}  "
+                    f"[p]raw:{'ON' if _ns['overlay_raw'] else 'OFF'}"
+                )
+                _nhud_y = _h - 8 - max(13, int(16 * _ui))
+                cv2.putText(show_frame, _norm_hud, (6, _nhud_y),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.35 * _ui, (0, 0, 0), 2, cv2.LINE_AA)
+                cv2.putText(show_frame, _norm_hud, (6, _nhud_y),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.35 * _ui, (200, 200, 100), 1, cv2.LINE_AA)
                 # 右下角正規化座標面板
                 if show_all_panels:
                     draw_norm_coords_panel(show_frame, _norm_history)
@@ -1384,6 +1471,22 @@ def main():
                 if key == ord('u'):
                     show_all_panels = not show_all_panels
                     print(f"\n所有面板: {'顯示' if show_all_panels else '隱藏'}")
+                    continue
+                if key == ord('f'):
+                    norm_state['flip'] = not norm_state['flip']
+                    print(f"\n[消融] flip_normalize: {'ON' if norm_state['flip'] else 'OFF'}")
+                    continue
+                if key == ord('o'):
+                    norm_state['orient'] = not norm_state['orient']
+                    print(f"\n[消融] orientation_normalize: {'ON' if norm_state['orient'] else 'OFF'}")
+                    continue
+                if key == ord('n'):
+                    norm_state['coord'] = not norm_state['coord']
+                    print(f"\n[消融] normalize_skeleton_coords: {'ON' if norm_state['coord'] else 'OFF'}")
+                    continue
+                if key == ord('p'):
+                    norm_state['overlay_raw'] = not norm_state['overlay_raw']
+                    print(f"\n[Overlay] {'原始影像 + 原始骨架' if norm_state['overlay_raw'] else '黑底 + 正規化骨架'}")
                     continue
                 if _go_next:
                     switch_delta = 1
@@ -1435,6 +1538,18 @@ def main():
                         elif k2 == ord('u'):
                             show_all_panels = not show_all_panels
                             print(f"\n所有面板: {'顯示' if show_all_panels else '隱藏'}")
+                        elif k2 == ord('f'):
+                            norm_state['flip'] = not norm_state['flip']
+                            print(f"\n[消融] flip_normalize: {'ON' if norm_state['flip'] else 'OFF'}")
+                        elif k2 == ord('o'):
+                            norm_state['orient'] = not norm_state['orient']
+                            print(f"\n[消融] orientation_normalize: {'ON' if norm_state['orient'] else 'OFF'}")
+                        elif k2 == ord('n'):
+                            norm_state['coord'] = not norm_state['coord']
+                            print(f"\n[消融] normalize_skeleton_coords: {'ON' if norm_state['coord'] else 'OFF'}")
+                        elif k2 == ord('p'):
+                            norm_state['overlay_raw'] = not norm_state['overlay_raw']
+                            print(f"\n[Overlay] {'原始影像 + 原始骨架' if norm_state['overlay_raw'] else '黑底 + 正規化骨架'}")
                         elif _p_next:
                             paused = False
                             switch_delta = 1

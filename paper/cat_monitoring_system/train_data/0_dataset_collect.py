@@ -51,6 +51,11 @@ TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5
 KP_CONF_THRESHOLD = 0.5
+
+# 永久排除清單：列出不想再被模式 1 重新提取的影片檔名（不含副檔名）
+# 範例：EXCLUDED_STEMS = {"lick_bad_001", "walk_noise_003"}
+EXCLUDED_STEMS: set = set()
+
 # ==================== Main Processing Function ====================
 
 # 恢復批次推論多資料夾影片功能
@@ -84,10 +89,15 @@ def process_all_videos():
         print(f"  Supported formats: {', '.join(video_extensions)}")
         return
 
-    skip_list = [v for v in video_files if v.stem in existing_stems]
-    todo_list = [v for v in video_files if v.stem not in existing_stems]
+    skip_list     = [v for v in video_files if v.stem in existing_stems]
+    excluded_list = [v for v in video_files if v.stem in EXCLUDED_STEMS]
+    todo_list     = [v for v in video_files
+                     if v.stem not in existing_stems and v.stem not in EXCLUDED_STEMS]
 
-    print(f"\n影片總數：{len(video_files)}   已存在（跳過）：{len(skip_list)}   待提取：{len(todo_list)}")
+    print(f"\n影片總數：{len(video_files)}   已存在（跳過）：{len(skip_list)}"
+          f"   永久排除：{len(excluded_list)}   待提取：{len(todo_list)}")
+    if excluded_list:
+        print("  [Excluded]", "  ".join(v.name for v in excluded_list))
     if skip_list:
         print("  [Skip]", "  ".join(v.name for v in skip_list))
     if todo_list:

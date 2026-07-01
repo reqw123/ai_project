@@ -66,8 +66,8 @@ def _vrj(s: str, w: int) -> str:
 # ═══════════════════════════════════════════════════════
 #  設定區  ── 修改這裡，不需要命令列參數
 # ═══════════════════════════════════════════════════════
-OLD_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_107.pt"
-NEW_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_110.pt"
+OLD_MODEL_PATH   = r"C:\ai_project\cat_pose\aug_8.pt"
+NEW_MODEL_PATH   = r"C:\ai_project\cat_pose\aug_8_2.pt"
 BENCHMARK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試"
 OUTPUT_DIR       = r"C:\ai_project\compare_results"
 INFERENCE_DEVICE = "cuda"   # "cuda" 或 "cpu"
