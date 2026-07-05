@@ -1,0 +1,42 @@
+=================================================
+FINAL SUMMARY
+=================================================
+
+Videos Processed:
+27
+
+[PRIMARY] P95 Jitter Improvement:
++8.69%
+
+[PRIMARY] Decision:
+NEW MODEL WINS
+
+[Reference] Old Model Composite Score:
+93.96
+
+[Reference] New Model Composite Score:
+94.08
+
+[Reference] Overall Improvement:
+-20.54%
+
+[Reference] Decision:
+OLD MODEL WINS
+
+Confidence:
+-0.84%
+
+Jitter (mean):
++8.82%
+
+Missing Ratio:
+-77.78%
+
+Largest Improvement:
+Stop
+
+Largest Regression:
+Walk
+
+Finished Successfully.
+=================================================

@@ -962,6 +962,7 @@ def main():
         prev_kpts = None
         prev_kpt_conf = None
         ema_kpts = None
+        keypoint_detector.reset_track()  # 避免上一段影片鎖定的貓誤帶到新的一段
         _last_norm_kpts = None
         _last_norm_kconf = None
         _last_raw_kpts = None
@@ -1078,6 +1079,7 @@ def main():
 
         # EMA 狀態：跨幀累積，切影片或貓消失時重置
         ema_kpts = None  # shape (17, 2)，儲存上一幀的 EMA 平滑座標
+        keypoint_detector.reset_track()  # 新影片開始，避免延續上一支影片鎖定的貓
         _last_norm_kpts = None   # shape (V, 2)，最近一次正規化後的骨架座標（供顯示用）
         _last_norm_kconf = None  # shape (V,)，對應信心值
         _last_raw_kpts   = None   # shape (17, 2)，原始像素座標（overlay_raw 模式顯示用）

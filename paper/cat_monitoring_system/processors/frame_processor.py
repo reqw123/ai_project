@@ -2,9 +2,11 @@
 """
 幀處理管道（整合 Node-RED、CSV、異常檢測、overlay 控制）
 """
+import os
 import numpy as np
 import cv2
 import time
+import threading
 from collections import deque
 from detectors.keypoint_detector import KeypointDetector
 from detectors.behavior_classifier import BehaviorClassifier
@@ -13,10 +15,87 @@ from processors.anomaly_detector import AnomalyDetector
 from processors.visualizer import Visualizer
 from communication.nodered_client import NodeRedClient
 from logutils.csv_logger import CSVLogger, BehaviorSegmentLogger
-from utils.helpers import get_ip, get_behavior_name
+from utils.helpers import get_ip, get_behavior_name, resolve_video_source, is_stream_url
 from utils.constants import *
 from models.stgcn_model import interpolate_missing
 from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig, SystemInfo, VisualizationConfig
+
+
+class _LatestFrameGrabber:
+    """背景執行緒持續讀取 cv2.VideoCapture，只保留最新一幀。
+
+    即時網路串流（RTSP/HLS 等）若推論速度跟不上來源幀率，ffmpeg/OS 內部
+    緩衝區會持續堆積未消化的舊幀，導致畫面隨執行時間拉長越來越落後
+    real-time（延遲會一直累積，不是固定值）。這裡用一個獨立執行緒盡快
+    把緩衝區「抽乾」，永遠只保留最新一幀給主處理迴圈使用，讓延遲鎖定在
+    串流協定本身的固定延遲，不會再疊加我們自己的處理耗時。
+
+    本機影片檔案沒有這個問題（檔案沒有「即時」概念，讀取本身不會累積
+    延遲），因此只在偵測到網路串流來源時才由 FrameProcessor 啟用。
+    """
+
+    # 連續讀取失敗次數門檻：超過此值才嘗試重新開啟連線。單次或偶發幾次
+    # read() 失敗多半是暫時性的封包延遲，靠 FFmpeg 內部重試就會恢復；
+    # 若持續失敗代表底層連線已經斷開，純粹重試 read() 不會自己好，
+    # 需要 release() + open() 重新建立連線才能接回。門檻抓約 3 秒
+    # （失敗時每次 sleep 0.05s）避免對單幀失敗過度敏感而誤觸重連。
+    RECONNECT_FAILURE_THRESHOLD = 60
+
+    def __init__(self, cap, video_url=None):
+        self._cap = cap
+        self._video_url = video_url
+        self._lock = threading.Lock()
+        self._latest_ret = False
+        self._latest_frame = None
+        self._running = True
+        self._thread = threading.Thread(target=self._grab_loop, daemon=True)
+        self._thread.start()
+
+    def _grab_loop(self):
+        # 讀取成功時完全不節流會讓這個執行緒盡可能快地連續解碼（HLS 緩衝到
+        # 一段之後常常可以遠快於即時速度解碼），持續佔用一整個 CPU 核心跟
+        # GIL，跟主執行緒（YOLO/ST-GCN/畫面繪製）搶執行時間；偵測到貓時主
+        # 執行緒單幀工作量變重（骨架/機率條/plugin overlay），搶輸的機率
+        # 更高，感覺就像「畫框瞬間卡住」。這裡把讀取步調限制在來源幀率
+        # 附近，讓這個執行緒平常有空檔可以釋出 GIL，不會這麼容易搶到。
+        frame_interval = 1.0 / 30.0
+        try:
+            src_fps = self._cap.get(cv2.CAP_PROP_FPS)
+            if src_fps and src_fps > 1:
+                frame_interval = 1.0 / src_fps
+        except Exception:
+            pass
+
+        consecutive_failures = 0
+        while self._running:
+            loop_start = time.time()
+            ret, frame = self._cap.read()
+            consecutive_failures = 0 if ret else consecutive_failures + 1
+            with self._lock:
+                self._latest_ret = ret
+                self._latest_frame = frame
+            if not ret:
+                if self._video_url is not None and consecutive_failures >= self.RECONNECT_FAILURE_THRESHOLD:
+                    try:
+                        self._cap.release()
+                        self._cap.open(self._video_url)
+                    except Exception:
+                        pass
+                    consecutive_failures = 0
+                time.sleep(0.05)  # 讀取失敗（斷線/暫時中斷）時避免忙迴圈佔滿 CPU
+                continue
+            remaining = frame_interval - (time.time() - loop_start)
+            if remaining > 0:
+                time.sleep(remaining)
+
+    def read(self):
+        with self._lock:
+            return self._latest_ret, self._latest_frame
+
+    def stop(self):
+        self._running = False
+        self._thread.join(timeout=2.0)
+
 
 class FrameProcessor:
     def __init__(self, yolo_model_path, stgcn_model_path, video_path,
@@ -24,12 +103,38 @@ class FrameProcessor:
                  overlay=True, width=None, height=None, normalize=True, kp_ema_alpha=STGCNConfig.KP_EMA_ALPHA,
                  feature_mode=None, window_stride=None, plugins=None):
         self.local_ip = get_ip()
-        self.cap = cv2.VideoCapture(video_path)
+        # YouTube 網頁網址無法直接餵給 cv2.VideoCapture，先用 yt_dlp 解析出
+        # 實際的串流網址；非 YouTube 來源（檔案/攝影機 index/RTSP）原樣不變。
+        resolved_video_path = resolve_video_source(video_path)
+        if is_stream_url(resolved_video_path):
+            # 網路串流（YouTube HLS/DASH 等）偶爾會遇到 CDN 切換或短暫封包延遲，
+            # 讓 FFmpeg 底層的 read() 卡住甚至回傳失敗；預設不會自動重試連線。
+            # 這裡透過 FFmpeg 的 AVOption 開啟自動重連，讓多數短暫斷線在
+            # libavformat 內部就恢復，不會表現成畫面卡頓。setdefault 避免
+            # 覆蓋使用者已自行設定的值。
+            os.environ.setdefault(
+                "OPENCV_FFMPEG_CAPTURE_OPTIONS",
+                "reconnect;1|reconnect_streamed;1|reconnect_delay_max;5",
+            )
+        self.cap = cv2.VideoCapture(resolved_video_path)
+        # 攝影機（尤其 USB webcam）驅動列舉/協商常比檔案或串流來源慢，
+        # 短暫重試幾次再放棄，避免第一個 /stream 請求就直接 500。
+        _open_retries = 5
+        _open_retry_delay = 0.5
+        for _ in range(_open_retries):
+            if self.cap.isOpened():
+                break
+            time.sleep(_open_retry_delay)
+            self.cap = cv2.VideoCapture(resolved_video_path)
         if not self.cap.isOpened():
             raise RuntimeError(f"Cannot open video source: {video_path}")
         if width and height:
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        # 即時網路串流才啟用「只保留最新幀」的背景讀取，避免推論跟不上時
+        # 延遲隨執行時間持續累積；本機檔案維持原本同步讀取行為不變。放在
+        # width/height 設定之後才啟動背景執行緒，避免和 cap.set() 競態。
+        self._grabber = _LatestFrameGrabber(self.cap, video_url=resolved_video_path) if is_stream_url(resolved_video_path) else None
         try:
             self.keypoint_detector = KeypointDetector(yolo_model_path, device=device, imgsz=imgsz, conf_thres=conf_thres)
             self.behavior_classifier = BehaviorClassifier(
@@ -37,6 +142,8 @@ class FrameProcessor:
                 normalize=normalize, feature_mode=feature_mode,
             )
         except Exception:
+            if self._grabber is not None:
+                self._grabber.stop()
             self.cap.release()
             raise
         self.tracker = ImprovedBehaviorTracker()
@@ -74,9 +181,14 @@ class FrameProcessor:
         return fps if fps > 1 else STGCNConfig.TARGET_MODEL_FPS
 
     def read_raw_frame(self):
-        """讀取下一幀；影片結尾時自動 loop 並重置 EMA。
+        """讀取下一幀。
+        即時串流來源：由背景執行緒（_LatestFrameGrabber）持續抽乾緩衝區，
+        這裡只取最新一幀，不做 loop/seek（串流沒有「結尾」的概念）。
+        本機檔案來源：維持原本行為——結尾時自動 loop 並重置 EMA。
         Returns: (ret: bool, frame | None)
         """
+        if self._grabber is not None:
+            return self._grabber.read()
         ret, frame = self.cap.read()
         if not ret:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -216,6 +328,11 @@ class FrameProcessor:
             self._last_behavior_id = LOW_CONF_ID
             self._last_confidence = 0.0
             self._last_class_probs = [0.0] * STGCNConfig.NUM_CLASSES
+            # 同步更新本幀的區域變數，否則本幀回傳的 behavior_id/confidence 仍
+            # 沿用上一幀（cat1 還在畫面時）的結果，慢一幀才變成「未偵測到」
+            behavior_id = self._last_behavior_id
+            confidence = self._last_confidence
+            class_probs = self._last_class_probs
             self.tracker.update(NOT_VISIBLE_ID, 0.0)
             # Node-RED 推送：通知貓咪不在畫面
             now = time.time()
@@ -291,6 +408,8 @@ class FrameProcessor:
         }
 
     def cleanup(self):
+        if self._grabber is not None:
+            self._grabber.stop()
         self.cap.release()
         if self.csv_logger:
             self.csv_logger.close()

@@ -35,6 +35,9 @@ from processors.frame_processor import FrameProcessor
 from trackers.behavior_tracker import ImprovedBehaviorTracker
 from utils.constants import *
 from utils.helpers import get_ip
+from analytics.baseline import DailyRecord, compute_baseline, InsufficientDataError
+from analytics.deviation import compute_deviation
+from analytics.fusion import compute_fusion
 
 
 frame_streamer = None
@@ -53,13 +56,47 @@ def _resolve_runtime_device(preferred='cuda'):
         return 'cpu'
 
 
-def _build_frame_processor():
+def _daily_record_from_dict(d):
+    """解析 /api/deviation 請求 body 裡的一筆每日紀錄。
+
+    ``date`` 欄位僅接受 ISO 格式（YYYY-MM-DD）。呼叫端（目前是
+    cat_health_v3_flow.json 的 v2_daily_history）若使用其他日期格式
+    （例如 toLocaleDateString('zh-TW') 產生的 2026/7/2），需自行正規化
+    後再送進來——這個端點刻意不嘗試猜測/相容多種日期格式，因為
+    behavior_segments_log.csv 已知有 ISO 與本地格式混用的 bug，此處
+    寧可讓格式錯誤在這裡就明確報錯，而不是靜默解析錯誤造成基線算錯。
+    """
+    raw_date = d.get('date')
+    try:
+        day = datetime.date.fromisoformat(str(raw_date)[:10])
+    except (TypeError, ValueError):
+        raise ValueError(f"date 必須是 ISO 格式 (YYYY-MM-DD)，收到: {raw_date!r}")
+
+    kwargs = {'day': day}
+    for field_name in (
+        'monitoring_seconds', 'walk_time', 'walk_count', 'stop_time', 'stop_count',
+        'lick_time', 'lick_count', 'scratch_time', 'scratch_count', 'shake_count',
+        'active_time', 'rest_time',
+    ):
+        if field_name in d:
+            kwargs[field_name] = d[field_name]
+    return DailyRecord(**kwargs)
+
+
+def _dataclass_to_jsonable(obj):
+    import dataclasses
+    return dataclasses.asdict(obj)
+
+
+def _build_frame_processor(enable_nodered=True):
+    """建立 FrameProcessor。enable_nodered=False 供本地 GUI 模式使用，
+    避免在沒有 Node-RED/Flask 伺服器的情況下仍嘗試推送資料。"""
     runtime_device = _resolve_runtime_device('cuda')
     return FrameProcessor(
         yolo_model_path=_YOLO_MODEL_PATH,
         stgcn_model_path=_STGCN_MODEL_PATH,
         video_path=_VIDEO_PATH,
-        nodered_url=_NODERED_RESULT_URL,
+        nodered_url=_NODERED_RESULT_URL if enable_nodered else None,
         device=runtime_device,
         imgsz=_IMAGE_SIZE,
         conf_thres=_CONF_THRES,
@@ -83,6 +120,15 @@ def _try_register_lick_stage(processor) -> None:
         pass
 
 
+def _try_register_ext_body_zone(processor) -> None:
+    """Optionally attach the extended 7-zone body plugin. Silently skipped if plugin is absent."""
+    try:
+        from plugins.lick_stage.ext_body_zones import ExtBodyZonePlugin as _ExtBodyZonePlugin
+        processor.register_plugin(_ExtBodyZonePlugin())
+    except ImportError:
+        pass
+
+
 def _ensure_processor_started():
     """在首次請求時啟動處理管線（double-checked locking，避免多執行緒重複建立）。"""
     global frame_streamer, frame_processor
@@ -92,6 +138,7 @@ def _ensure_processor_started():
         if frame_processor is None:
             frame_processor = _build_frame_processor()
             _try_register_lick_stage(frame_processor)
+            _try_register_ext_body_zone(frame_processor)
         if frame_streamer is None:
             frame_streamer = SharedFrameStreamer(frame_processor)
 
@@ -210,6 +257,72 @@ def register_routes(app):
         return jsonify({
             "count": len(segments),
             "segments": segments,
+        })
+
+    @app.route('/api/deviation', methods=['POST'])
+    def api_deviation():
+        """個體化基線 + 行為偏差評分橋接端點。
+
+        取代 cat_health_v3_flow.json 內「偏差分析引擎」與「行為偏差融合
+        引擎」兩個 function node 的統計邏輯（見 analytics/README.md）。
+        與攝影機/YOLO pipeline 無關，不會觸發 _ensure_processor_started()。
+
+        請求 body：
+            {
+              "daily_history": [{"date": "2026-06-01", "monitoring_seconds": 7200,
+                                  "walk_time": ..., "lick_count": ..., ...}, ...],
+              "today": {"walk_time": ..., "lick_count": ..., ...},
+              "excluded_dates": ["2026-06-05", ...],   // 可省略
+              "min_baseline_days": 7,                   // 可省略，預設 7
+              "class_c_score": 0                        // 可省略；節律/轉移分數暫由
+                                                          // Node-RED 自行計算後傳入
+            }
+
+        回應：
+            成功 → {"status":"ok", "baseline":{...}, "deviation":{...}, "fusion":{...}}
+            基線資料不足 → {"status":"insufficient_data", "current_days":N, "required_days":M}
+            請求格式錯誤 → 400 {"error": "..."}
+        """
+        body = request.get_json(silent=True) or {}
+        raw_history = body.get('daily_history')
+        today = body.get('today')
+        if not isinstance(raw_history, list) or not isinstance(today, dict):
+            return jsonify({"error": "需要 daily_history(list) 與 today(dict)"}), 400
+
+        try:
+            daily_records = [_daily_record_from_dict(d) for d in raw_history]
+        except (ValueError, TypeError, AttributeError) as e:
+            return jsonify({"error": str(e)}), 400
+
+        excluded_dates = body.get('excluded_dates') or []
+        try:
+            min_baseline_days = int(body.get('min_baseline_days', 7))
+        except (TypeError, ValueError):
+            return jsonify({"error": "min_baseline_days 必須是整數"}), 400
+        try:
+            class_c_score = float(body.get('class_c_score', 0.0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "class_c_score 必須是數字"}), 400
+
+        try:
+            baseline = compute_baseline(
+                daily_records, min_days=min_baseline_days, excluded_dates=excluded_dates,
+            )
+        except InsufficientDataError as e:
+            return jsonify({
+                "status": "insufficient_data",
+                "current_days": e.current_days,
+                "required_days": e.required_days,
+            })
+
+        deviation = compute_deviation(today=today, baseline=baseline)
+        fusion = compute_fusion(deviation, class_c_score=class_c_score)
+
+        return jsonify({
+            "status": "ok",
+            "baseline": _dataclass_to_jsonable(baseline),
+            "deviation": _dataclass_to_jsonable(deviation),
+            "fusion": _dataclass_to_jsonable(fusion),
         })
 
     def _cors(resp, status=200):

@@ -427,23 +427,20 @@ class CatBehaviorSTGCN:
         self.feature_mode = feature_mode.strip().lower()
         self.in_channels = int(in_channels) if in_channels is not None else None
 
-        checkpoint = None
-        state_dict = None
-        if Path(model_path).exists():
-            # Use safe loading when available (PyTorch experimental 'weights_only' flag).
-            try:
-                sig = inspect.signature(torch.load)
-                if 'weights_only' in sig.parameters:
-                    checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
-                else:
-                    checkpoint = torch.load(model_path, map_location=self.device)
-            except Exception as _e:
-                logging.debug("weights_only load failed (%s), retrying without flag", _e)
-                checkpoint = torch.load(model_path, map_location=self.device)
-            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-                state_dict = checkpoint['model_state_dict']
+        if not Path(model_path).exists():
+            raise FileNotFoundError(f"ST-GCN 模型檔案不存在: {model_path}")
+
+        # Use safe loading when available (PyTorch experimental 'weights_only' flag).
+        try:
+            sig = inspect.signature(torch.load)
+            if 'weights_only' in sig.parameters:
+                checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
             else:
-                state_dict = checkpoint
+                checkpoint = torch.load(model_path, map_location=self.device)
+        except Exception as _e:
+            logging.debug("weights_only load failed (%s), retrying without flag", _e)
+            checkpoint = torch.load(model_path, map_location=self.device)
+        state_dict = checkpoint.get('model_state_dict', checkpoint) if isinstance(checkpoint, dict) else checkpoint
 
         if self.in_channels is None and state_dict is not None and 'bn_input.weight' in state_dict:
             self.in_channels = int(state_dict['bn_input.weight'].shape[0])
@@ -516,17 +513,16 @@ class CatBehaviorSTGCN:
             num_layers=3,
             use_attention=use_attention,
         ).to(self.device)
-        if state_dict is not None:
-            load_result = self.model.load_state_dict(state_dict, strict=False)
-            print(f"✓ ST-GCN 模型已載入: {model_path}")
-            print(f"  in_channels={self.in_channels}, feature_mode={self.feature_mode}")
-            non_attn_missing = [k for k in load_result.missing_keys if 'joint_attention' not in k]
-            if non_attn_missing:
-                print(f"  ⚠ checkpoint 缺少非 attention 層的 key: {non_attn_missing}")
-            if load_result.unexpected_keys:
-                print(f"  ⚠ checkpoint 含有未預期的 key: {load_result.unexpected_keys}")
-        else:
-            print(f"⚠ 警告：模型檔案未找到 {model_path}")
+        if state_dict is None:
+            raise ValueError(f"ST-GCN checkpoint 內容為空或格式無效: {model_path}")
+        load_result = self.model.load_state_dict(state_dict, strict=False)
+        print(f"✓ ST-GCN 模型已載入: {model_path}")
+        print(f"  in_channels={self.in_channels}, feature_mode={self.feature_mode}")
+        non_attn_missing = [k for k in load_result.missing_keys if 'joint_attention' not in k]
+        if non_attn_missing:
+            print(f"  ⚠ checkpoint 缺少非 attention 層的 key: {non_attn_missing}")
+        if load_result.unexpected_keys:
+            print(f"  ⚠ checkpoint 含有未預期的 key: {load_result.unexpected_keys}")
         self.model.eval()
     def normalize_keypoints(self, keypoints_sequence):
         # flip 必須在 orientation 之前：原始座標下使用 mid_back(4) 與 hip(5) 的 x 差距做多數決，翻轉決策穩定

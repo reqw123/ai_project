@@ -67,9 +67,9 @@ def draw_skeleton(vis, kpts_xy, kpts_conf, box_thickness):
 # -------------------------
 # 你要改的部分
 # -------------------------
-MODEL_PATH = r"C:\cat_pose\11s_2.pt"  # 換成你的模型
-FOLDER = r"C:\cat_pose\test\images"            # 換成你的資料夾
-OUTPUT_DIR = r"C:\cat_pose\cat_size_report"  # 預設輸出資料夾，請自行修改
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_114.pt"  # 換成你的模型
+FOLDER = r"C:\Users\homec\OneDrive\圖片\Screenshots\screen_cat"            # 換成你的資料夾
+OUTPUT_DIR = r"C:\Users\homec\OneDrive\圖片\Screenshots\screen_cat\class"  # 預設輸出資料夾，請自行修改
 # 視覺化與判定設定
 MIN_RATIO = 0.50  # 門檻：低於此值視為 small，高於此值分層 5 級 (50% ~ 100%)
 DIR_NO = os.path.join(OUTPUT_DIR, "no")

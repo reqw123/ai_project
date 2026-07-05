@@ -1,10 +1,55 @@
 """
 工具函數
 """
+import re
 import socket
 
 from utils.constants import BEHAVIOR_CLASSES, BEHAVIOR_TEXT_MAP, LOW_CONF_ID, LOW_CONF_TEXT
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
+
+_YOUTUBE_URL_RE = re.compile(
+    r'^https?://(www\.)?(youtube\.com/(watch\?|live/)|youtu\.be/)', re.IGNORECASE
+)
+_STREAM_URL_RE = re.compile(r'^(https?|rtsp|rtsps|rtmp)://', re.IGNORECASE)
+
+
+def is_stream_url(video_path) -> bool:
+    """是否為即時網路串流來源（HTTP(S)/RTSP/RTMP），而非本機檔案或攝影機 index。
+    用來決定 FrameProcessor 要不要啟用「只保留最新幀」的背景讀取機制。
+    """
+    return isinstance(video_path, str) and bool(_STREAM_URL_RE.match(video_path))
+
+
+def resolve_video_source(video_path):
+    """cv2.VideoCapture 無法直接開啟 YouTube 網頁網址（watch?v=... / youtu.be/...），
+    需要先用 yt_dlp 解析出實際可讀取的串流網址。非 YouTube 網址（本機檔案、
+    攝影機 index、RTSP 等）原樣傳回，不受影響。
+
+    Raises:
+        RuntimeError: 解析失敗時（例如影片下架、網路不通），給出比
+                      「Cannot open video source」更明確的錯誤原因。
+    """
+    if not isinstance(video_path, str) or not _YOUTUBE_URL_RE.match(video_path):
+        return video_path
+
+    try:
+        import yt_dlp
+    except ImportError as e:
+        raise RuntimeError(
+            "偵測到 YouTube 網址，但未安裝 yt_dlp（pip install yt-dlp）"
+        ) from e
+
+    ydl_opts = {
+        "format": "best[ext=mp4]/best",
+        "quiet": True,
+        "no_warnings": True,
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_path, download=False)
+            return info["url"]
+    except Exception as e:
+        raise RuntimeError(f"無法解析 YouTube 串流網址 {video_path}：{e}") from e
 
 def get_ip():
     # 優先取 WiFi 介面的 IP（當乙太網路與 WiFi 同時連線時，OS 路由預設走 Ethernet）

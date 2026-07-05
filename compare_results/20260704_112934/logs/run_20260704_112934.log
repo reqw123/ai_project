@@ -1,0 +1,18 @@
+[INFO] ====================================================
+[INFO] YOLO Pose Model Comparison  [20260704_112934]
+[INFO]   Old : C:\ai_project\cat_pose\v11s_115.pt
+[INFO]   New : C:\ai_project\cat_pose\v11s_116.pt
+[INFO]   Data: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試
+[INFO]   Out : C:\ai_project\compare_results\20260704_112934  Device: cuda
+[INFO] ====================================================
+[WARNING] New model not found, skipping: C:\ai_project\cat_pose\v11s_116.pt
+[INFO] Loading old model...
+[INFO] Benchmark videos: 27
+[INFO]   walk: 4
+[INFO]   lick: 5
+[INFO]   scratch: 5
+[INFO]   shake: 6
+[INFO]   stop: 7
+[INFO] 
+--- OLD MODEL: v11s_115.pt  (EMA α=1.0) ---
+[INFO] Processing: walk/walk_12.mp4

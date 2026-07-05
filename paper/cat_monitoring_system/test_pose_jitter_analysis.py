@@ -1372,7 +1372,7 @@ def _detect_on_crop(frame, bbox, pad_ratio, detector):
     crop = frame[y1i:y2i, x1i:x2i]
     results = detector.model.predict(
         crop, imgsz=detector.imgsz, conf=detector.conf_thres,
-        half=detector._use_half, verbose=False,
+        quantize=16 if detector._use_half else None, verbose=False,
     )[0]
     if results.keypoints is None or len(results.keypoints.xy) == 0:
         return None, None

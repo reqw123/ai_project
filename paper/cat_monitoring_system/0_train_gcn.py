@@ -34,11 +34,13 @@ from models.stgcn_model import (
     orientation_normalize,
     flip_normalize,
     normalize_skeleton_coords,
-    add_velocity_feature,
-    compute_bone_feature,
     get_in_channels_for_mode,
     build_feature_tensor as shared_build_feature_tensor,
 )
+
+# ==================== Path Config（絕對路徑統一於此管理） ====================
+# 設定檔絕對路徑集中在此常數；可用 STGCN_CONFIG_PATH 環境變數覆寫
+DEFAULT_CONFIG_PATH = r'C:\ai_project\paper\cat_monitoring_system\stgcn_config.yaml'
 
 # ==================== EMA Helper ====================
 class ModelEMA:
@@ -96,7 +98,7 @@ class ModelEMA:
 # the script will raise RuntimeError if it is missing or unreadable.
 # To use a custom path, set the STGCN_CONFIG_PATH environment variable.
 def _load_external_config():
-    config_path = os.getenv('STGCN_CONFIG_PATH', r'C:\paper\cat_monitoring_system\stgcn_config.yaml')
+    config_path = os.getenv('STGCN_CONFIG_PATH', DEFAULT_CONFIG_PATH)
     if not os.path.exists(config_path):
         # allow config placed next to this script
         local_path = Path(__file__).parent / 'stgcn_config.yaml'
@@ -204,6 +206,22 @@ USE_EMA_FOR_EVAL = CONFIG.get('USE_EMA_FOR_EVAL', False)
 OPTIMIZER = CONFIG.get('OPTIMIZER', 'adam')
 RUN_KP_EMA_ABLATION    = CONFIG.get('RUN_KP_EMA_ABLATION', False)
 ABLATION_KP_EMA_ALPHAS = CONFIG.get('ABLATION_KP_EMA_ALPHAS', [1.0, 0.9, 0.7, 0.5])
+RUN_REG_ABLATION       = CONFIG.get('RUN_REG_ABLATION', False)
+REG_ABLATION_CONFIGS   = CONFIG.get('REG_ABLATION_CONFIGS', None)
+
+# 預設的 dropout / label smoothing / batch / learning rate 消融網格：
+#   baseline_no_reg — 目前 yaml 的設定（全部關閉，用來對照現況）
+#   light_reg       — yaml 裡 "# init:" 註解建議的原始預設值
+#   recommended     — 針對小資料集 + WeightedRandomSampler 高變異梯度的建議組合
+# 可在 yaml 用 REG_ABLATION_CONFIGS 覆寫（同樣格式的 list of dict）。
+DEFAULT_REG_ABLATION_CONFIGS = [
+    {'name': 'baseline_no_reg', 'batch_size': 8,  'learning_rate': 0.00005,
+     'input_dropout': 0.0,  'block_dropout': 0.0, 'final_dropout': 0.0, 'label_smoothing': 0.0},
+    {'name': 'light_reg',       'batch_size': 8,  'learning_rate': 0.00005,
+     'input_dropout': 0.02, 'block_dropout': 0.1, 'final_dropout': 0.2, 'label_smoothing': 0.01},
+    {'name': 'recommended',     'batch_size': 16, 'learning_rate': 0.0001,
+     'input_dropout': 0.02, 'block_dropout': 0.1, 'final_dropout': 0.3, 'label_smoothing': 0.05},
+]
 
 # Device configuration (runtime detection remains)
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -361,7 +379,7 @@ class CatSkeletonDataset(Dataset):
     """
     
     def __init__(self, skeleton_folder, sequence_length=32,
-                 num_joints=17, augment=False, feature_mode="xyv",
+                 num_joints=17, augment=False, feature_mode="xy_conf_v_bone",
                  window_stride=0, kp_ema_alpha=None):
         self.skeleton_folder = Path(skeleton_folder)
         self.sequence_length = sequence_length
@@ -388,6 +406,11 @@ class CatSkeletonDataset(Dataset):
         # Use centralized behavior prefixes mapping from CONFIG
         name_to_idx = BEHAVIOR_PREFIXES
 
+        # 診斷用：記錄各種「靜默跳過」的情況，避免資料悄悄漏掉卻毫無提示
+        skipped_no_label = []      # 影片缺少逐幀 label
+        skipped_too_short = []     # 影片總幀數 < sequence_length
+        unknown_label_counter = Counter()  # best_label 不在 BEHAVIOR_PREFIXES 的視窗
+
         for json_file in tqdm(json_files, desc="Loading sequences"):
             video_id = json_file.stem
 
@@ -396,6 +419,7 @@ class CatSkeletonDataset(Dataset):
             frames = data['frames']
 
             if not (bool(frames) and 'label' in frames[0]):
+                skipped_no_label.append(video_id)
                 continue  # 無逐幀標籤，略過
 
             keypoint_frames   = []
@@ -433,6 +457,7 @@ class CatSkeletonDataset(Dataset):
                     )
 
             if len(keypoint_frames) < self.sequence_length:
+                skipped_too_short.append((video_id, len(keypoint_frames)))
                 continue
 
             stride = self.window_stride
@@ -459,6 +484,7 @@ class CatSkeletonDataset(Dataset):
 
                 label_idx = name_to_idx.get(best_label)
                 if label_idx is None:
+                    unknown_label_counter[best_label] += 1
                     continue
 
                 sequences.append({
@@ -467,6 +493,26 @@ class CatSkeletonDataset(Dataset):
                     'conf_sequence': np.array(confs[start_idx:start_idx + self.sequence_length]),
                     'label':    label_idx,
                 })
+
+        # ── 資料載入診斷：把靜默跳過的情況印出來，才能核對「有幾支 json → 實際用了幾支」 ──
+        contributing_videos = {s['video_id'] for s in sequences}
+        all_video_ids = {jf.stem for jf in json_files}
+        zero_seq_videos = sorted(
+            all_video_ids - set(skipped_no_label) - {v for v, _ in skipped_too_short} - contributing_videos
+        )
+
+        print(f"\n[資料載入診斷] JSON 檔案總數: {len(json_files)}，實際貢獻序列的影片數: {len(contributing_videos)}")
+        if skipped_no_label:
+            print(f"  ⚠ {len(skipped_no_label)} 支影片缺少逐幀 label，已跳過: {', '.join(skipped_no_label)}")
+        if skipped_too_short:
+            detail = ', '.join(f"{vid}({n}幀)" for vid, n in skipped_too_short)
+            print(f"  ⚠ {len(skipped_too_short)} 支影片總幀數 < sequence_length={self.sequence_length}，已跳過: {detail}")
+        if unknown_label_counter:
+            detail = ', '.join(f"{lbl}x{cnt}" for lbl, cnt in unknown_label_counter.items())
+            print(f"  ⚠ {sum(unknown_label_counter.values())} 個視窗因 best_label 不在 BEHAVIOR_PREFIXES 而跳過: {detail}")
+        if zero_seq_videos:
+            print(f"  ⚠ {len(zero_seq_videos)} 支影片有逐幀 label 但切窗後 0 個有效序列"
+                  f"（可能整支都是 unannotated、bbox 缺失過多，或標註區間短於 sequence_length）: {', '.join(zero_seq_videos)}")
 
         return sequences
     
@@ -566,21 +612,25 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
     return avg_loss, accuracy
 
 
-def validate(model, dataloader, criterion, device):
+def validate(model, dataloader, criterion, device, desc="Val"):
     """
     Validate the model
+
+    Args:
+        desc: 純顯示用標籤（例如 "Val" 或 "Train(eval)"），用來在同一個 epoch 內
+              區分驗證集跟「未加權訓練集」的印出訊息，避免混淆兩者的 per-class 統計。
 
     Returns:
         tuple: (average_loss, accuracy, predictions, labels)
     """
     model.eval()
-    
+
     running_loss = 0.0
     all_preds = []
     all_labels = []
-    
+
     with torch.no_grad():
-        for sequences, labels in tqdm(dataloader, desc="Validating"):
+        for sequences, labels in tqdm(dataloader, desc=f"Validating [{desc}]"):
             sequences = sequences.to(device)
             labels = labels.to(device)
             
@@ -614,13 +664,13 @@ def validate(model, dataloader, criterion, device):
         if per_class_total[c] > 0 else "N/A"
         for c in range(NUM_CLASSES)
     }
-    print(f"  Per-class acc: {per_class_acc}")
+    print(f"  [{desc}] Per-class acc: {per_class_acc}")
     # Predicted distribution for debugging class collapse
     try:
         from collections import Counter
         pred_counts = Counter(all_preds)
         distrib = {int(k): int(pred_counts.get(k, 0)) for k in range(NUM_CLASSES)}
-        print(f"  Predicted distribution: {distrib}")
+        print(f"  [{desc}] Predicted distribution: {distrib}")
     except Exception:
         pass
 
@@ -636,8 +686,16 @@ def validate(model, dataloader, criterion, device):
 
 # ==================== Main Training Loop ====================
 def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
-                shared_models_dir=None, kp_ema_alpha=None, seq_len=None):
-    """Main training function"""
+                shared_models_dir=None, kp_ema_alpha=None, seq_len=None,
+                batch_size=None, learning_rate=None,
+                input_dropout=None, block_dropout=None, final_dropout=None,
+                label_smoothing=None):
+    """Main training function.
+
+    batch_size / learning_rate / input_dropout / block_dropout / final_dropout /
+    label_smoothing 皆可覆寫 CONFIG 預設值（None 則沿用 yaml 設定），供
+    run_regularization_ablation() 做網格消融比較用，不影響單次訓練的既有行為。
+    """
     in_channels = get_in_channels_for_mode(feature_mode)
     eff_alpha = kp_ema_alpha if kp_ema_alpha is not None else KP_EMA_ALPHA
     alpha_tag = f"_ema{eff_alpha:.2f}" if (eff_alpha is not None and eff_alpha < 1.0) else ""
@@ -646,8 +704,15 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     eff_seq_len       = int(seq_len) if seq_len is not None else SEQUENCE_LENGTH
     stride_ratio      = WINDOW_STRIDE / SEQUENCE_LENGTH          # preserve configured overlap ratio
     eff_window_stride = max(1, int(eff_seq_len * stride_ratio))
-    eff_batch_size    = BATCH_SIZE
+    eff_batch_size    = int(batch_size) if batch_size is not None else BATCH_SIZE
     seq_tag           = f"_T{eff_seq_len}" if eff_seq_len != SEQUENCE_LENGTH else ""
+
+    # Regularization / optimizer overrides（用於 run_regularization_ablation）
+    eff_lr              = float(learning_rate)   if learning_rate   is not None else LEARNING_RATE
+    eff_input_dropout    = float(input_dropout)   if input_dropout   is not None else INPUT_DROPOUT
+    eff_block_dropout    = float(block_dropout)   if block_dropout   is not None else BLOCK_DROPOUT
+    eff_final_dropout    = float(final_dropout)   if final_dropout   is not None else FINAL_DROPOUT
+    eff_label_smoothing  = float(label_smoothing) if label_smoothing is not None else float(CONFIG.get('LABEL_SMOOTHING', 0.0))
 
     # Fix random seeds for more stable runs (does not guarantee identical across GPUs)
     np.random.seed(RANDOM_SEED)
@@ -668,13 +733,60 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         run_suffix = f"{run_tag}_{run_name}{alpha_tag}_{att_suffix}"
     else:
         run_suffix = f"{run_tag}_{feature_mode}{alpha_tag}{seq_tag}_{att_suffix}"
-    print(f"✓ Run #{run_tag}  ({run_suffix})  KP_EMA_ALPHA={eff_alpha}  T={eff_seq_len}  stride={eff_window_stride}  batch={eff_batch_size}")
+    print(f"✓ Run #{run_tag}  ({run_suffix})  KP_EMA_ALPHA={eff_alpha}  T={eff_seq_len}  stride={eff_window_stride}  batch={eff_batch_size}  "
+          f"lr={eff_lr}  input_dropout={eff_input_dropout}  block_dropout={eff_block_dropout}  final_dropout={eff_final_dropout}  "
+          f"label_smoothing={eff_label_smoothing}")
 
     run_results_dir = os.path.join(RESULTS_FOLDER, f"run_{run_suffix}")
 
     # Setup directories
     setup_directories()
     Path(run_results_dir).mkdir(parents=True, exist_ok=True)
+
+    # 每次訓練輸出資料夾都放一份參數設定檔（有效值 + 完整原始 yaml），
+    # 之後回頭比較不同 run 時不用再去猜當時到底用了什麼設定。
+    # 寫在最前面（資料載入/訓練開始前），即使中途失敗也留得下這份記錄。
+    params_snapshot_path = os.path.join(run_results_dir, 'params_snapshot.json')
+    params_snapshot = {
+        'run_suffix': run_suffix,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'effective_params': {
+            'feature_mode': feature_mode,
+            'in_channels': in_channels,
+            'num_classes': NUM_CLASSES,
+            'num_joints': NUM_JOINTS,
+            'use_attention': use_attention,
+            'kp_ema_alpha': eff_alpha,
+            'sequence_length': eff_seq_len,
+            'window_stride': eff_window_stride,
+            'batch_size': eff_batch_size,
+            'num_epochs': NUM_EPOCHS,
+            'learning_rate': eff_lr,
+            'optimizer': OPTIMIZER,
+            'weight_decay': WEIGHT_DECAY,
+            'input_dropout': eff_input_dropout,
+            'block_dropout': eff_block_dropout,
+            'final_dropout': eff_final_dropout,
+            'label_smoothing': eff_label_smoothing,
+            'early_stop_patience': EARLY_STOP_PATIENCE,
+            'train_test_split': TRAIN_TEST_SPLIT,
+            'random_seed': RANDOM_SEED,
+            'use_ema_for_eval': bool(USE_EMA_FOR_EVAL),
+            'use_weighted_sampler': bool(CONFIG.get('USE_WEIGHTED_SAMPLER', True)),
+            'strict_window_filter': bool(STRICT_WINDOW_FILTER),
+            'max_no_detect_frames': int(CONFIG.get('MAX_NO_DETECT_FRAMES', 2)),
+        },
+        # 完整原始 yaml 快照：含所有沒被上面 effective_params 覆寫的欄位
+        # （spatial augmentation、model topology 等），確保可完整還原這次跑的設定。
+        'full_config_snapshot': CONFIG,
+    }
+    try:
+        with open(params_snapshot_path, 'w', encoding='utf-8') as pf:
+            json.dump(params_snapshot, pf, ensure_ascii=False, indent=2)
+        print(f"✓ Params snapshot saved to: {params_snapshot_path}")
+    except Exception as e:
+        print(f"⚠ Failed to write params snapshot: {e}")
+
     # 消融研究：模型權重統一存至共用資料夾，以特徵名區分檔名
     # 單次訓練：存在自己的 run 資料夾內
     if shared_models_dir:
@@ -686,7 +798,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         model_filename = f"{run_tag}_{name_part}_{att_suffix}.pth"
         run_model_path = str(get_unique_path(Path(shared_models_dir) / model_filename))
     else:
-        run_model_path = str(get_unique_path(Path(run_results_dir) / "best_model.pth"))
+        run_model_path = str(get_unique_path(Path(run_results_dir) / f"{run_tag}_best_model.pth"))
 
     # Load dataset (no augmentation)
     print("\nLoading dataset...")
@@ -720,12 +832,13 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'training_params': {
             'batch_size': eff_batch_size,
             'num_epochs': NUM_EPOCHS,
-            'learning_rate': LEARNING_RATE,
+            'learning_rate': eff_lr,
             'optimizer': OPTIMIZER,
             'weight_decay': WEIGHT_DECAY,
-            'input_dropout': INPUT_DROPOUT,
-            'block_dropout': BLOCK_DROPOUT,
-            'final_dropout': FINAL_DROPOUT,
+            'input_dropout': eff_input_dropout,
+            'block_dropout': eff_block_dropout,
+            'final_dropout': eff_final_dropout,
+            'label_smoothing': eff_label_smoothing,
         },
         'class_prefixes': BEHAVIOR_PREFIXES,
     }
@@ -900,6 +1013,17 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         pin_memory=True if DEVICE.type == 'cuda' else False
     )
 
+    # 未加權版本的 train_loader（自然類別分布，no WeightedRandomSampler）：
+    # 只用來在每個 epoch 結束後跑一次 validate()，取得跟 val_acc 口徑一致的
+    # 「unweighted train acc」，藉此拆穿 train_acc/val_acc 落差有多少是取樣權重造成的假象。
+    train_eval_loader = DataLoader(
+        train_dataset,
+        batch_size=eff_batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True if DEVICE.type == 'cuda' else False
+    )
+
     # If dataset is small and imbalanced, optionally use a WeightedRandomSampler
     use_weighted_sampler = CONFIG.get('USE_WEIGHTED_SAMPLER', True)
     if use_weighted_sampler and len(train_dataset) > 0:
@@ -927,9 +1051,9 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'spatial_kernel_size': SPATIAL_KERNEL_SIZE,
         'temporal_kernel_size': TEMPORAL_KERNEL_SIZE,
         'num_layers': NUM_STGCN_LAYERS,
-        'input_dropout': INPUT_DROPOUT,
-        'block_dropout': BLOCK_DROPOUT,
-        'final_dropout': FINAL_DROPOUT,
+        'input_dropout': eff_input_dropout,
+        'block_dropout': eff_block_dropout,
+        'final_dropout': eff_final_dropout,
         'use_attention': use_attention,
     }
     model = STGCN(
@@ -939,9 +1063,9 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         spatial_kernel_size=SPATIAL_KERNEL_SIZE,
         temporal_kernel_size=TEMPORAL_KERNEL_SIZE,
         num_layers=NUM_STGCN_LAYERS,
-        input_dropout=INPUT_DROPOUT,
-        block_dropout=BLOCK_DROPOUT,
-        final_dropout=FINAL_DROPOUT,
+        input_dropout=eff_input_dropout,
+        block_dropout=eff_block_dropout,
+        final_dropout=eff_final_dropout,
         use_attention=use_attention,
     ).to(DEVICE)
 
@@ -954,22 +1078,21 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     print(f"✓ Model created with {num_params:,} trainable parameters")
 
     # Loss function and optimizer
-    label_smoothing = float(CONFIG.get('LABEL_SMOOTHING', 0.0))
-    if label_smoothing and label_smoothing > 0.0:
-        criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=label_smoothing)
+    if eff_label_smoothing and eff_label_smoothing > 0.0:
+        criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=eff_label_smoothing)
     else:
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     opt_name = str(OPTIMIZER).strip().lower()
     if opt_name == 'adamw':
         optimizer = optim.AdamW(
             model.parameters(),
-            lr=LEARNING_RATE,
+            lr=eff_lr,
             weight_decay=WEIGHT_DECAY
         )
     elif opt_name == 'sgd':
         optimizer = optim.SGD(
             model.parameters(),
-            lr=LEARNING_RATE,
+            lr=eff_lr,
             momentum=0.9,
             weight_decay=WEIGHT_DECAY
         )
@@ -977,7 +1100,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         # default to Adam for backward compatibility
         optimizer = optim.Adam(
             model.parameters(),
-            lr=LEARNING_RATE,
+            lr=eff_lr,
             weight_decay=WEIGHT_DECAY
         )
 
@@ -1008,7 +1131,11 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     train_accs = []
     val_losses = []
     val_accs = []
+    train_eval_losses = []          # 未加權（自然分布）train loss，跟 val 同口徑
+    train_eval_accs = []            # 未加權（自然分布）train acc，跟 val 同口徑
+    val_per_class_f1_history = []   # 每個 epoch 的 val per-class F1，用來看各類別是否同步進步
 
+    epoch = -1  # NUM_EPOCHS=0 時迴圈完全不執行，避免下方 epoch+1 出現 UnboundLocalError
     for epoch in range(NUM_EPOCHS):
         print(f"\nEpoch [{epoch+1}/{NUM_EPOCHS}]")
 
@@ -1021,18 +1148,26 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         ema.update(model)
 
         # Validate: optionally use EMA shadow weights for evaluation/saving
-        if USE_EMA_FOR_EVAL:
-            # ema.ema is the cloned EMA model kept on the same device
-            val_loss, val_acc, val_macro_f1, val_preds, val_labels, val_per_class_f1 = validate(ema.ema, val_loader, criterion, DEVICE)
-        else:
-            val_loss, val_acc, val_macro_f1, val_preds, val_labels, val_per_class_f1 = validate(model, val_loader, criterion, DEVICE)
+        # (ema.ema is the cloned EMA model kept on the same device)
+        eval_model = ema.ema if USE_EMA_FOR_EVAL else model
+        val_loss, val_acc, val_macro_f1, val_preds, val_labels, val_per_class_f1 = validate(eval_model, val_loader, criterion, DEVICE, desc="Val")
         val_losses.append(val_loss)
         val_accs.append(val_acc)
+        val_per_class_f1_history.append(val_per_class_f1.tolist())
+
+        # 未加權 train acc：同一份 train_dataset，但不透過 WeightedRandomSampler，
+        # 拿來跟 val_acc 對齊比較，拆解 train_acc/val_acc 落差有多少是取樣權重造成的假象
+        # （見上一輪討論：WeightedRandomSampler 只套用在訓練，會把稀少類別大量重抽樣，
+        # 拉低訓練時回報的 accuracy，跟自然分布的 val_acc 不是同一個口徑）。
+        train_eval_loss, train_eval_acc, _, _, _, _ = validate(eval_model, train_eval_loader, criterion, DEVICE, desc="Train(eval)")
+        train_eval_losses.append(train_eval_loss)
+        train_eval_accs.append(train_eval_acc)
 
         # Scheduler step (monitor validation loss)
         scheduler.step(val_loss)
 
-        print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
+        print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}  (weighted-sampler 口徑)")
+        print(f"Train Loss (eval,未加權): {train_eval_loss:.4f} | Train Acc (eval,未加權): {train_eval_acc:.4f}")
         print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f} | Val Macro-F1: {val_macro_f1:.4f}")
 
         # Append epoch metrics to run log
@@ -1041,9 +1176,12 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
             'epoch': epoch + 1,
             'train_loss': float(train_loss),
             'train_acc': float(train_acc),
+            'train_eval_loss': float(train_eval_loss),
+            'train_eval_acc': float(train_eval_acc),
             'val_loss': float(val_loss),
             'val_acc': float(val_acc),
             'val_macro_f1': float(val_macro_f1),
+            'val_per_class_f1': val_per_class_f1.tolist(),
             'lr': float(optimizer.param_groups[0]['lr']) if optimizer.param_groups else None,
         }
         # Append epoch metrics to in-memory log and flush full JSON to disk
@@ -1118,9 +1256,12 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'window_stride': eff_window_stride,
         'use_attention': use_attention,
         'batch_size': eff_batch_size,
-        'learning_rate': LEARNING_RATE,
+        'learning_rate': eff_lr,
         'optimizer': OPTIMIZER,
-        'label_smoothing': float(CONFIG.get('LABEL_SMOOTHING', 0.0)),
+        'input_dropout': eff_input_dropout,
+        'block_dropout': eff_block_dropout,
+        'final_dropout': eff_final_dropout,
+        'label_smoothing': eff_label_smoothing,
         'train_videos': len(train_vids),
         'val_videos': len(val_vids),
         'train_sequences': len(train_indices),
@@ -1142,23 +1283,34 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         print(f"⚠ Failed to append training history: {e}")
 
     # Plot training curves
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 5))
     # Loss curves
-    ax1.plot(train_losses, label='Train Loss', linewidth=2)
+    ax1.plot(train_losses, label='Train Loss (weighted-sampler)', linewidth=2)
+    ax1.plot(train_eval_losses, label='Train Loss (eval,未加權)', linewidth=2, linestyle='--')
     ax1.plot(val_losses, label='Val Loss', linewidth=2)
     ax1.set_xlabel('Epoch', fontsize=12)
     ax1.set_ylabel('Loss', fontsize=12)
     ax1.set_title('Training and Validation Loss', fontsize=14, fontweight='bold')
-    ax1.legend()
+    ax1.legend(fontsize=8)
     ax1.grid(True, alpha=0.3)
     # Accuracy curves
-    ax2.plot(train_accs, label='Train Acc', linewidth=2)
+    ax2.plot(train_accs, label='Train Acc (weighted-sampler)', linewidth=2)
+    ax2.plot(train_eval_accs, label='Train Acc (eval,未加權，跟 val 同口徑)', linewidth=2, linestyle='--')
     ax2.plot(val_accs, label='Val Acc', linewidth=2)
     ax2.set_xlabel('Epoch', fontsize=12)
     ax2.set_ylabel('Accuracy', fontsize=12)
     ax2.set_title('Training and Validation Accuracy', fontsize=14, fontweight='bold')
-    ax2.legend()
+    ax2.legend(fontsize=8)
     ax2.grid(True, alpha=0.3)
+    # Per-class Val F1 curves（拆解整體 acc 掩蓋掉的類別落差，尤其 shake/scratch 這類稀少類別）
+    label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+    for c, cname in enumerate(label_names):
+        ax3.plot([f1s[c] for f1s in val_per_class_f1_history], label=cname, linewidth=2)
+    ax3.set_xlabel('Epoch', fontsize=12)
+    ax3.set_ylabel('Val F1', fontsize=12)
+    ax3.set_title('Per-Class Validation F1', fontsize=14, fontweight='bold')
+    ax3.legend(fontsize=8)
+    ax3.grid(True, alpha=0.3)
     plt.tight_layout()
     save_path = os.path.join(run_results_dir, 'training_curves.png')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -1179,6 +1331,9 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'val_losses': val_losses,
         'train_accs': train_accs,
         'val_accs': val_accs,
+        'train_eval_losses': train_eval_losses,
+        'train_eval_accs': train_eval_accs,
+        'val_per_class_f1_history': val_per_class_f1_history,
         'total_epochs_run': total_epochs_run,
     }
 
@@ -1715,6 +1870,186 @@ def run_seqlen_ablation(seq_lens=None):
         print(f"⚠ Failed to plot sequence length ablation: {e}")
 
 
+# ==================== Regularization / Optimizer Ablation ====================
+def run_regularization_ablation(configs=None):
+    """
+    對 dropout（input/block/final）、label smoothing、batch size、learning rate
+    做小型網格消融，固定 FEATURE_MODE、SEQUENCE_LENGTH 不變。
+
+    動機：train/val loss 出現裂口（train loss 持續下降、val loss 打平）是過擬合訊號，
+    但 dropout=0 時到底該調多少、batch/LR 要不要一起動，光憑感覺猜不如直接跑幾組
+    候選值比較。這裡用 train_eval_losses（未加權、跟 val 同口徑的 train loss，
+    見 CatSkeletonDataset/train_eval_loader）算出 final_train_val_loss_gap，
+    直接量化「過擬合有沒有變輕」，而不是只看 best_val_acc 一個數字。
+    """
+    configs = list(configs or REG_ABLATION_CONFIGS or DEFAULT_REG_ABLATION_CONFIGS)
+    shared_run_num = _next_run_number(RESULTS_FOLDER)
+    shared_tag     = f"{shared_run_num:03d}"
+    att_suffix     = "att_on" if USE_ATTENTION else "att_off"
+    shared_models_dir = Path(RESULTS_FOLDER) / f"run_{shared_tag}_reg_ablation_{att_suffix}"
+    shared_models_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n✓ Regularization/Optimizer 消融研究 #{shared_tag}  ({len(configs)} 組候選設定)")
+    print(f"  特徵模式: {FEATURE_MODE}  T={SEQUENCE_LENGTH}  stride={WINDOW_STRIDE}")
+    print(f"  模型權重目錄: {shared_models_dir}")
+
+    summary = []
+    print("\n" + "=" * 70)
+    print("Regularization / Optimizer Ablation Study")
+    print("=" * 70)
+    for cfg in configs:
+        run_label = f"{FEATURE_MODE}_{cfg['name']}"
+        print(f"\n{'─'*70}")
+        print(f"[{cfg['name']}]  batch={cfg['batch_size']}  lr={cfg['learning_rate']}  "
+              f"input_dropout={cfg.get('input_dropout', 0.0)}  block_dropout={cfg.get('block_dropout', 0.0)}  "
+              f"final_dropout={cfg.get('final_dropout', 0.0)}  label_smoothing={cfg.get('label_smoothing', 0.0)}")
+        print(f"{'─'*70}")
+        result = train_model(
+            feature_mode=FEATURE_MODE,
+            run_name=run_label,
+            run_number=shared_run_num,
+            shared_models_dir=str(shared_models_dir),
+            batch_size=cfg['batch_size'],
+            learning_rate=cfg['learning_rate'],
+            input_dropout=cfg.get('input_dropout'),
+            block_dropout=cfg.get('block_dropout'),
+            final_dropout=cfg.get('final_dropout'),
+            label_smoothing=cfg.get('label_smoothing'),
+        )
+        if result is not None:
+            result['config_name']     = cfg['name']
+            result['batch_size']      = cfg['batch_size']
+            result['learning_rate']   = cfg['learning_rate']
+            result['input_dropout']   = cfg.get('input_dropout', 0.0)
+            result['block_dropout']   = cfg.get('block_dropout', 0.0)
+            result['final_dropout']   = cfg.get('final_dropout', 0.0)
+            result['label_smoothing'] = cfg.get('label_smoothing', 0.0)
+            # 過擬合幅度：最後一個 epoch 的 val loss 減掉「未加權 train loss」，越接近 0 越健康
+            train_eval_losses = result.get('train_eval_losses') or []
+            val_losses_hist   = result.get('val_losses') or []
+            if train_eval_losses and val_losses_hist:
+                result['final_train_val_loss_gap'] = float(val_losses_hist[-1] - train_eval_losses[-1])
+            else:
+                result['final_train_val_loss_gap'] = None
+            summary.append(result)
+
+    if not summary:
+        print("✗ No regularization ablation results generated.")
+        return
+
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # Summary CSV
+    import csv
+    summary_csv = str(get_unique_path(
+        Path(RESULTS_FOLDER) / f'reg_ablation_summary_{ts}.csv'
+    ))
+    csv_fields = [
+        'config_name', 'batch_size', 'learning_rate',
+        'input_dropout', 'block_dropout', 'final_dropout', 'label_smoothing',
+        'best_val_acc', 'best_val_macro_f1', 'best_val_loss',
+        'final_train_val_loss_gap', 'total_epochs_run', 'model_path', 'results_dir',
+    ]
+    with open(summary_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=csv_fields, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(summary)
+
+    print(f"\n{'='*70}")
+    print("Regularization Ablation Summary")
+    print(f"{'='*70}")
+    for rec in summary:
+        gap = rec.get('final_train_val_loss_gap')
+        gap_str = f"{gap:+.4f}" if gap is not None else "N/A"
+        print(
+            f"  [{rec['config_name']:<16}]  batch={rec['batch_size']:<3} lr={rec['learning_rate']:<8} | "
+            f"Acc={rec['best_val_acc']:.4f} | Macro-F1={rec['best_val_macro_f1']:.4f} | "
+            f"Loss={rec['best_val_loss']:.4f} | TrainValGap={gap_str}"
+        )
+    print(f"\n✓ Summary CSV: {summary_csv}")
+
+    # Plot: config vs acc/f1 + train/val loss gap 條狀圖，以及逐 epoch 收斂曲線
+    try:
+        names       = [r['config_name']        for r in summary]
+        accs        = [r['best_val_acc']       for r in summary]
+        f1s         = [r['best_val_macro_f1']  for r in summary]
+
+        fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+        fig.suptitle(f'Regularization / Optimizer Ablation  [{FEATURE_MODE}]',
+                     fontsize=13, fontweight='bold')
+
+        ax1 = axes[0]
+        x   = np.arange(len(names))
+        w   = 0.35
+        bars_acc = ax1.bar(x - w/2, accs, w, label='Val Accuracy', color='steelblue')
+        bars_f1  = ax1.bar(x + w/2, f1s,  w, label='Macro-F1',    color='darkorange')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(names, rotation=15, ha='right')
+        ax1.set_ylim(0, 1.08)
+        ax1.set_ylabel('Score', fontsize=11)
+        ax1.set_title('Accuracy & Macro-F1 by Config', fontsize=12, fontweight='bold')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3, axis='y')
+        for bar, v in zip(bars_acc, accs):
+            ax1.text(bar.get_x() + bar.get_width()/2, v + 0.01, f'{v:.3f}',
+                     ha='center', va='bottom', fontsize=9)
+        for bar, v in zip(bars_f1, f1s):
+            ax1.text(bar.get_x() + bar.get_width()/2, v + 0.01, f'{v:.3f}',
+                     ha='center', va='bottom', fontsize=9)
+
+        ax2  = axes[1]
+        gaps = [r.get('final_train_val_loss_gap') or 0.0 for r in summary]
+        colors_gap = ['#C44E52' if g > 0 else '#55A868' for g in gaps]
+        bars_gap = ax2.bar(x, gaps, color=colors_gap)
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(names, rotation=15, ha='right')
+        ax2.axhline(0, color='black', lw=0.8)
+        ax2.set_ylabel('Val Loss − Train(eval,未加權) Loss', fontsize=11)
+        ax2.set_title('Final Train/Val Loss Gap（越接近 0 代表過擬合越輕）', fontsize=12, fontweight='bold')
+        ax2.grid(True, alpha=0.3, axis='y')
+        for bar, v in zip(bars_gap, gaps):
+            ax2.text(bar.get_x() + bar.get_width()/2, v + (0.01 if v >= 0 else -0.03),
+                      f'{v:+.3f}', ha='center', va='bottom' if v >= 0 else 'top', fontsize=9)
+
+        plt.tight_layout()
+        plot_path = str(get_unique_path(
+            Path(RESULTS_FOLDER) / f'reg_ablation_comparison_{ts}.png'
+        ))
+        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        print(f"✓ Ablation plot: {plot_path}")
+        plt.close()
+
+        # Convergence curves：val loss（實線）vs train(eval,未加權) loss（虛線），每組設定一個顏色
+        fig2, (ax3, ax4) = plt.subplots(1, 2, figsize=(15, 5))
+        fig2.suptitle(f'Convergence  [{FEATURE_MODE}]', fontsize=13, fontweight='bold')
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        for ci, rec in enumerate(summary):
+            c   = colors[ci % len(colors)]
+            lbl = rec['config_name']
+            ax3.plot(rec.get('val_losses', []), color=c, linewidth=2, label=f'{lbl} (val)')
+            ax3.plot(rec.get('train_eval_losses', []), color=c, linewidth=1,
+                     linestyle='--', label=f'{lbl} (train,未加權)')
+            ax4.plot(rec.get('val_accs', []), color=c, linewidth=2, label=lbl)
+        for ax, title, ylabel in [
+            (ax3, 'Val vs Train(eval,未加權) Loss', 'Loss'),
+            (ax4, 'Val Accuracy',                    'Accuracy'),
+        ]:
+            ax.set_xlabel('Epoch', fontsize=11)
+            ax.set_ylabel(ylabel, fontsize=11)
+            ax.set_title(title, fontsize=12, fontweight='bold')
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        conv_path = str(get_unique_path(
+            Path(RESULTS_FOLDER) / f'reg_ablation_convergence_{ts}.png'
+        ))
+        plt.savefig(conv_path, dpi=150, bbox_inches='tight')
+        print(f"✓ Convergence plot: {conv_path}")
+        plt.close()
+    except Exception as e:
+        print(f"⚠ Failed to plot regularization ablation: {e}")
+
+
 # ==================== Main Entry Point ====================
 if __name__ == "__main__":
     ran = False
@@ -1726,6 +2061,9 @@ if __name__ == "__main__":
         ran = True
     if RUN_SEQLEN_ABLATION:
         run_seqlen_ablation()
+        ran = True
+    if RUN_REG_ABLATION:
+        run_regularization_ablation()
         ran = True
     if not ran:
         train_model(feature_mode=FEATURE_MODE)

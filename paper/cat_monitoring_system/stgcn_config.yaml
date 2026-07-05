@@ -19,7 +19,7 @@ KP_EMA_ALPHA: 1.0
 
 # KP EMA Alpha Ablation
 # 是否對不同的 KP_EMA_ALPHA 做消融實驗（true 時使用下方列表，忽略 KP_EMA_ALPHA 單值）
-RUN_KP_EMA_ABLATION: true
+RUN_KP_EMA_ABLATION: false
 # 要依序比較的 EMA alpha 值（1.0 = 不平滑，值愈小平滑愈強）
 ABLATION_KP_EMA_ALPHAS:
   - 1.0
@@ -36,6 +36,24 @@ RUN_SEQLEN_ABLATION: false
 ABLATION_SEQLENS:
   - 16
   - 32
+
+# Regularization / Optimizer Ablation
+# 是否對 dropout(input/block/final)/label smoothing/batch size/learning rate
+# 做小型網格消融（true 時忽略上方 BATCH_SIZE/LEARNING_RATE/*_DROPOUT/LABEL_SMOOTHING
+# 單值設定，改跑 REG_ABLATION_CONFIGS 裡列出的每一組候選；不設定此欄位則使用程式
+# 內建的 3 組預設：baseline_no_reg / light_reg / recommended）
+RUN_REG_ABLATION: false
+REG_ABLATION_CONFIGS:
+  - {name: baseline_no_reg, batch_size: 8,  learning_rate: 0.00005,
+     input_dropout: 0.0,  block_dropout: 0.0, final_dropout: 0.0, label_smoothing: 0.0}
+  - {name: light_reg,       batch_size: 8,  learning_rate: 0.00005,
+     input_dropout: 0.02, block_dropout: 0.1, final_dropout: 0.2, label_smoothing: 0.01}
+  - {name: recommended,     batch_size: 16, learning_rate: 0.0001,
+     input_dropout: 0.02, block_dropout: 0.1, final_dropout: 0.3, label_smoothing: 0.05}
+  - {name: my_manual_tuning, batch_size: 32, learning_rate: 0.00005,
+     input_dropout: 0.05, block_dropout: 0.15, final_dropout: 0.5, label_smoothing: 0.1}
+  - {name: manual_tuning_scaled_lr, batch_size: 32, learning_rate: 0.0002,
+     input_dropout: 0.05, block_dropout: 0.15, final_dropout: 0.5, label_smoothing: 0.1}
 
 # Topology
 # 模型預測的行為類別數（例如 walk, lick, scratch, shake, stop）
@@ -66,13 +84,13 @@ NUM_STGCN_LAYERS: 3
 
 # Dropout
 # 應用於輸入 embedding 的 dropout（正則化輸入）
-INPUT_DROPOUT:  0.02    # init: 0.02
+INPUT_DROPOUT:  0.05    # init: 0.02
 # 應用於 STGCN block 內的 dropout（中間層正則化）
-BLOCK_DROPOUT:  0.1     # init: 0.1
+BLOCK_DROPOUT:  0.15     # init: 0.1
 # 最後分類器前的 dropout（控制頂層過擬合）
-FINAL_DROPOUT:  0.2     # init: 0.2
+FINAL_DROPOUT:  0.5     # init: 0.2
 # Label smoothing factor for CrossEntropy (use 0.0 to disable)
-LABEL_SMOOTHING: 0.01   # init: 0.01
+LABEL_SMOOTHING: 0.1   # init: 0.01
 
 # Feature mode
 # 特徵模式，名稱直接反映所含特徵標籤（xy=位置, conf=信心值, v=速度, bone=骨架向量, bmotion=骨架位移）：
@@ -97,7 +115,7 @@ ABLATION_MODES:
 SPATIAL_ROTATE_DEG: 5          # init: 5
 # 空間增強時的最小與最大縮放比例     # ← 縮放比例 1.0 = 不縮放，不是 0
 SPATIAL_SCALE_MIN: 0.9         # init: 0.9
-SPATIAL_SCALE_MAX: 1.1         # init: 1.1
+SPATIAL_SCALE_MAX: 1.1        # init: 1.1
  # 應用於位移噪聲的標準差（座標已正規化）
 SPATIAL_TRANSLATE_STD: 0.02    # init: 0.02
  # 隨機裁切的機率，會遮擋掉邊緣點
@@ -109,7 +127,7 @@ SPATIAL_OCCLUSION_MAX_JOINTS: 2  # init: 2
 
 # Training
 # DataLoader 的 batch size（每個裝置）
-BATCH_SIZE: 16
+BATCH_SIZE: 32
 # 訓練的 epoch 數
 NUM_EPOCHS: 100
 # 初始學習率
@@ -121,9 +139,8 @@ OPTIMIZER: "adamw"
 # 早停判定的 patience（以驗證集表現計算）
 EARLY_STOP_PATIENCE: 10
 # 保留做驗證集的影片比例（以影片為單位切分）
-TRAIN_TEST_SPLIT: 0.2
+TRAIN_TEST_SPLIT: 0.15
 # 隨機種子，用於固定資料切分與增強
-
 RANDOM_SEED: 42
 
 # EMA Evaluation

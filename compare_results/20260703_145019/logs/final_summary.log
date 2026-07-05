@@ -1,0 +1,36 @@
+=================================================
+FINAL SUMMARY
+=================================================
+
+Videos Processed:
+26
+
+Old Model Score:
+94.74
+
+New Model Score:
+94.74
+
+Overall Improvement:
++0.78%
+
+Decision:
+NEW MODEL WINS
+
+Confidence:
+-0.35%
+
+Jitter:
++2.59%
+
+Missing Ratio:
++0.00%
+
+Largest Improvement:
+Stop
+
+Largest Regression:
+Lick
+
+Finished Successfully.
+=================================================

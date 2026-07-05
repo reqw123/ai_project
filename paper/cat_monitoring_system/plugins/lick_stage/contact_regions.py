@@ -129,6 +129,38 @@ def _polygons_intersect(poly_a, poly_b) -> bool:
     return False
 
 
+def trap_dir_from_perp(trap_perp):
+    """梯形延伸方向：永遠垂直於 trap_perp，且強制指向影像座標系「下方」（y 遞增方向）。
+
+    貓咪不會倒著走路/理毛，鼻子（窄邊）在畫面上方、身體端（寬邊）在畫面下方
+    是可以無條件成立的物理假設，不需要依賴「朝向 body_center」這種容易被雜訊
+    干擾的判斷。這也讓 trap_dir 完全由 trap_perp 決定，不再是獨立的雜訊來源
+    ——只要 trap_perp 穩定，trap_dir 就保證穩定，且短邊（nose 端）保證在上面。
+    """
+    trap_perp = np.asarray(trap_perp, dtype=np.float64)
+    d = np.array([-float(trap_perp[1]), float(trap_perp[0])], dtype=np.float64)
+    if d[1] < 0.0:
+        d = -d
+    return d
+
+
+def build_nose_trapezoid(nose, trap_perp, trap_dir, trap_top_half, trap_bot_half, trap_height):
+    """Pure helper: rebuild the 4 trapezoid corners from already-decided direction
+    vectors. Exposed so callers (e.g. LickAnalyzer) can recompute the trapezoid
+    after temporally stabilizing trap_perp/trap_dir, without duplicating the
+    corner-layout math."""
+    nose      = np.asarray(nose,      dtype=np.float64)
+    trap_perp = np.asarray(trap_perp, dtype=np.float64)
+    trap_dir  = np.asarray(trap_dir,  dtype=np.float64)
+    trap_bottom = nose + trap_dir * trap_height
+    return np.asarray([
+        nose        - trap_perp * trap_top_half,
+        nose        + trap_perp * trap_top_half,
+        trap_bottom + trap_perp * trap_bot_half,
+        trap_bottom - trap_perp * trap_bot_half,
+    ], dtype=np.float64)
+
+
 def _polygon_aabb(poly) -> Tuple[float, float, float, float]:
     p = np.asarray(poly, dtype=np.float64)
     if p.ndim != 2 or p.shape[0] < 1:
@@ -307,21 +339,9 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
         bn = math.hypot(float(body_normal[0]), float(body_normal[1]))
         trap_perp = body_normal / bn if bn > 1e-9 else np.array([1.0, 0.0], dtype=np.float64)
 
-    trap_dir = np.array([-float(trap_perp[1]), float(trap_perp[0])], dtype=np.float64)
-    if float(np.dot(trap_dir, body_center - nose)) < 0.0:
-        trap_dir = -trap_dir
+    trap_dir = trap_dir_from_perp(trap_perp)
 
-    trap_bottom = nose + trap_dir * trap_height
-    if not math.isfinite(float(trap_bottom[1])) or float(trap_bottom[1]) <= float(nose[1]):
-        trap_dir    = -trap_dir
-        trap_bottom = nose + trap_dir * trap_height
-
-    nose_trap = np.asarray([
-        nose        - trap_perp * trap_top_half,
-        nose        + trap_perp * trap_top_half,
-        trap_bottom + trap_perp * trap_bot_half,
-        trap_bottom - trap_perp * trap_bot_half,
-    ], dtype=np.float64)
+    nose_trap = build_nose_trapezoid(nose, trap_perp, trap_dir, trap_top_half, trap_bot_half, trap_height)
 
     limb_targets       = _build_limb_joint_targets(kpts, kpt_conf, body_len)
     limb_strip_targets = _build_limb_strip_targets(kpts, kpt_conf, body_len)
@@ -338,6 +358,13 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
         "nose_contact_trapezoid": nose_trap,
         "limb_targets":           limb_targets,
         "limb_strip_targets":     limb_strip_targets,
+        # 未經時序穩定的原始方向向量/尺寸，供 LickAnalyzer 做跨幀翻轉感知平滑後
+        # 用 build_nose_trapezoid() 重建梯形（避免這裡的 pure function 持有狀態）
+        "trap_perp":              trap_perp,
+        "trap_dir":               trap_dir,
+        "trap_top_half":          trap_top_half,
+        "trap_bot_half":          trap_bot_half,
+        "trap_height":            trap_height,
     }
 
 

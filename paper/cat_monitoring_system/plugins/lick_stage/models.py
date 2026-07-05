@@ -35,6 +35,10 @@ class LickResult:
     gaze_fwd: float = float("nan")
     gaze_lat: float = float("nan")
     gaze_angle: float = float("nan")
+    # Raw geometry for client-side (Node-RED) visualization only — never
+    # consumed by the core pipeline itself.
+    trap_pts: list = field(default_factory=list)   # [[x,y]*4] or [] when no cat
+    nose_xy: list = field(default_factory=list)    # [x, y] or []
 
     def to_payload(self) -> dict:
         return {
@@ -61,4 +65,7 @@ class LickResult:
             "gaze_fwd":   _jf(self.gaze_fwd,   3),
             "gaze_lat":   _jf(self.gaze_lat,   3),
             "gaze_angle": _jf(self.gaze_angle, 1),
+            # Visualization-only geometry (Node-RED draws this; core never reads it)
+            "trap_pts": self.trap_pts,
+            "nose_xy":  self.nose_xy,
         }

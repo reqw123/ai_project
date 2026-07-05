@@ -36,6 +36,11 @@ def _parse_behavior(name: str):
     m = _BEHAVIOR_RE.search(name)
     return m.group(1).lower() if m else None
 
+
+def _natural_sort_key(path):
+    """依檔名做自然排序（數字部分視為整數比較，例如 walk_2 排在 walk_10 之前）。"""
+    return [int(t) if t.isdigit() else t for t in re.split(r'(\d+)', path.name.lower())]
+
 # ==================== Configuration ====================
 # ==================== Configuration ====================
 VIDEO_FOLDERS = [
@@ -46,7 +51,7 @@ VIDEO_FOLDERS = [
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\stop",
 ]
 OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_106.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_116.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
 TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5
@@ -81,7 +86,10 @@ def process_all_videos():
         if not video_folder.exists():
             print(f"[Warning] Video folder not found: {folder}")
             continue
-        found = [f for f in video_folder.iterdir() if f.suffix.lower() in video_extensions]
+        found = sorted(
+            (f for f in video_folder.iterdir() if f.suffix.lower() in video_extensions),
+            key=_natural_sort_key,
+        )
         video_files.extend(found)
 
     if not video_files:
@@ -162,7 +170,8 @@ def process_all_videos():
             "video_filename": video_path.name,
             "video_path": str(video_path),
             "target_fps": TARGET_FPS,
-            "actual_fps": actual_fps,   # 記錄實際來源 FPS，供訓練腳本做時基補償
+            "actual_fps": actual_fps,   # 記錄實際來源 FPS（補償前）
+            "fps_compensated": True,    # frames 已經 resample_to_target_fps 補償到等距 target_fps 網格
             "model_used": MODEL_PATH,
             "imgsz": IMGSZ,
             "conf_threshold": CONF_THRESHOLD,
@@ -219,22 +228,136 @@ def get_video_fps(cap):
 def should_process_frame(frame_count, video_fps, target_fps):
     """
     Determine if a frame should be processed based on target FPS
-    
+
     Args:
         frame_count: Current frame number
         video_fps: Original video FPS
         target_fps: Target FPS for extraction
-    
+
     Returns:
         bool: True if frame should be processed
     """
     if video_fps <= target_fps:
         return True
-    
+
     # Calculate frame interval (use max to prevent division by zero)
     interval = video_fps / target_fps
     interval_int = max(1, round(interval))  # Use round instead of int, ensure >= 1
     return frame_count % interval_int == 0
+
+
+def resample_to_target_fps(skeleton_data, source_fps, target_fps, max_gap_frames=2):
+    """
+    以每幀真實 timestamp 為基準，把骨架序列重新取樣到嚴格等距的 target_fps 時間網格。
+
+    背景問題：should_process_frame 只在來源 fps > target_fps 時用跳幀降採樣；
+    來源 fps < target_fps 時完全不處理（保留全部原始幀）。這會導致同一個模型
+    在不同來源幀率的影片上，「差一幀」代表的真實時間長短不一致，使 velocity/
+    bone_motion 等逐幀差分特徵的物理尺度隨來源 fps 系統性偏移，汙染訓練資料。
+
+    這裡統一用線性內插把整段影片重新取樣到 target_fps 網格（不論來源比目標
+    快或慢皆適用），確保輸出序列裡每一幀間隔都精確等於 1/target_fps 秒。
+
+    連續偵測不到貓的時間超過 max_gap_frames 個「來源取樣間隔」時，視為真實
+    空窗，輸出幀標記為 detected=False、keypoints=[]，不會跨越空窗憑空內插出
+    假的關鍵點。
+
+    Args:
+        skeleton_data: extract_skeleton_from_video 產生的原始逐幀 list[dict]
+        source_fps: 來源影片實際 FPS
+        target_fps: 目標取樣頻率（訓練時基）
+        max_gap_frames: 允許跨越內插的最大空窗（以「來源取樣間隔」為單位）
+
+    Returns:
+        list[dict]: 重新取樣後、frame_id 從 0 開始且時間間隔均勻的骨架序列
+    """
+    if not skeleton_data:
+        return skeleton_data
+
+    n_joints = 17
+    timestamps = np.array([f['timestamp'] for f in skeleton_data], dtype=np.float64)
+    detected = np.array([bool(f.get('detected')) for f in skeleton_data])
+    duration = float(timestamps[-1])
+    n_out = max(1, int(round(duration * target_fps)) + 1)
+    out_t = np.arange(n_out) / float(target_fps)
+
+    def _carry_over(nearest_i):
+        extra = {}
+        if 'label' in skeleton_data[nearest_i]:
+            extra['label'] = skeleton_data[nearest_i]['label']
+        return extra
+
+    det_idx = np.where(detected)[0]
+    if len(det_idx) == 0:
+        # 全片未偵測到任何貓，輸出等距但全空的骨架序列
+        return [
+            {
+                "frame_id": k,
+                "original_frame_id": skeleton_data[int(np.argmin(np.abs(timestamps - t)))].get('original_frame_id', 0),
+                "timestamp": float(t),
+                "detected": False,
+                "keypoints": [],
+                "bbox": None,
+                "num_keypoints": 0,
+                **_carry_over(int(np.argmin(np.abs(timestamps - t)))),
+            }
+            for k, t in enumerate(out_t)
+        ]
+
+    det_t = timestamps[det_idx]
+    xs = np.zeros((len(det_idx), n_joints))
+    ys = np.zeros((len(det_idx), n_joints))
+    cs = np.zeros((len(det_idx), n_joints))
+    for row, i in enumerate(det_idx):
+        for kpt in skeleton_data[i].get('keypoints', []):
+            j = kpt['joint_id']
+            xs[row, j] = kpt['x']
+            ys[row, j] = kpt['y']
+            cs[row, j] = kpt['conf']
+
+    native_dt = 1.0 / max(source_fps, 1e-6)
+    max_gap = max_gap_frames * native_dt
+
+    out = []
+    for k, t in enumerate(out_t):
+        nearest_i = int(np.argmin(np.abs(timestamps - t)))
+        frame_out = {
+            "frame_id": k,
+            "original_frame_id": skeleton_data[nearest_i].get('original_frame_id', nearest_i),
+            "timestamp": float(t),
+            **_carry_over(nearest_i),
+        }
+
+        pos = int(np.searchsorted(det_t, t))
+        lo = max(0, min(pos - 1, len(det_t) - 1))
+        hi = max(0, min(pos, len(det_t) - 1))
+        gap = det_t[hi] - det_t[lo]
+        out_of_range = (t < det_t[0] - max_gap) or (t > det_t[-1] + max_gap)
+
+        if out_of_range or (lo != hi and gap > max_gap):
+            frame_out.update({"detected": False, "keypoints": [], "bbox": None, "num_keypoints": 0})
+            out.append(frame_out)
+            continue
+
+        keypoints = [
+            {
+                "joint_id": j,
+                "x": float(np.interp(t, det_t, xs[:, j])),
+                "y": float(np.interp(t, det_t, ys[:, j])),
+                "conf": float(np.interp(t, det_t, cs[:, j])),
+            }
+            for j in range(n_joints)
+        ]
+        nearer = lo if abs(t - det_t[lo]) <= abs(t - det_t[hi]) else hi
+        frame_out.update({
+            "detected": True,
+            "keypoints": keypoints,
+            "bbox": skeleton_data[det_idx[nearer]].get('bbox'),
+            "num_keypoints": len(keypoints),
+        })
+        out.append(frame_out)
+
+    return out
 
 
 # ==================== YOLO-Pose Inference ====================
@@ -280,7 +403,7 @@ class PoseExtractor:
             frame,
             imgsz=self.imgsz,
             conf=self.conf_threshold,
-            half=self.use_half,
+            quantize=16 if self.use_half else None,
             verbose=False
         )[0]
         
@@ -348,11 +471,11 @@ def extract_skeleton_from_video(video_path, pose_extractor, target_fps=30, label
         print(f"  ⚠ Cannot read FPS from video, assuming {target_fps:.0f}fps")
         video_fps = float(target_fps)
 
-    # 低 FPS 警告：ST-GCN velocity 特徵是逐幀差分，時基不同會讓幅度與訓練資料不一致
+    # 低 FPS 提示：實際的時基補償由下方 resample_to_target_fps() 處理，
+    # 這裡僅提示來源幀率偏低，內插填補的比例會較高（非真實偵測，動作細節較粗略）
     if video_fps < 24:
-        print(f"  ⚠ Source FPS={video_fps:.1f} < 24fps — 16 frames will cover "
-              f"{16/video_fps:.2f}s instead of {16/target_fps:.2f}s; "
-              f"velocity magnitude will differ from {target_fps:.0f}fps training data")
+        print(f"  ⚠ Source FPS={video_fps:.1f} < 24fps — 將以內插方式補償到 {target_fps:.0f}fps，"
+              f"內插比例較高，動作細節解析度低於原生 {target_fps:.0f}fps 影片")
 
     print(f"  Source FPS: {video_fps:.2f} → target {target_fps}fps  |  Total frames: {total_frames}")
     print(f"  Extracting at {target_fps} FPS...")
@@ -400,8 +523,15 @@ def extract_skeleton_from_video(video_path, pose_extractor, target_fps=30, label
     
     pbar.close()
     cap.release()
-    
-    print(f"  ✓ Extracted {processed_count} frames with skeleton data")
+
+    print(f"  ✓ Extracted {processed_count} raw frames with skeleton data")
+
+    # 時基補償：不論來源 fps 比 target_fps 快或慢，統一重新取樣到等距的
+    # target_fps 網格，確保 velocity/bone_motion 等逐幀差分特徵的物理時間
+    # 尺度在整個資料集中一致（詳見 resample_to_target_fps 說明）
+    skeleton_data = resample_to_target_fps(skeleton_data, video_fps, target_fps)
+    print(f"  ✓ 時基補償後: {len(skeleton_data)} 幀 @ {target_fps}fps（均勻時間網格）")
+
     return skeleton_data, float(video_fps)
 
 
@@ -468,6 +598,7 @@ def process_single_video():
         "video_path": str(video_path),
         "target_fps": TARGET_FPS,
         "actual_fps": actual_fps,
+        "fps_compensated": True,
         "model_used": MODEL_PATH,
         "imgsz": IMGSZ,
         "conf_threshold": CONF_THRESHOLD,
@@ -559,9 +690,7 @@ def _list_json_files_menu(folder: str, last_annotated: str = None):
         print(f"[Error] 資料夾不存在: {folder}")
         return None
 
-    json_files = sorted(p.glob("*.json"),
-                        key=lambda f: [int(t) if t.isdigit() else t
-                                       for t in re.split(r'(\d+)', f.name.lower())])
+    json_files = sorted(p.glob("*.json"), key=_natural_sort_key)
     if not json_files:
         print(f"[Error] 找不到任何 JSON 檔案: {folder}")
         return None
@@ -725,6 +854,7 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
     print("  q 儲存並離開    [未標記片段訓練時自動捨棄]\n")
 
     marking           = False
+    intervals_touched = False   # 本次工作階段是否曾新增或撤銷過區間（區分「真的沒動」vs「主動清空」）
     start_idx         = None
     cur_idx           = 0
     cap               = None
@@ -1023,6 +1153,7 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
                 if end_idx < start_idx:
                     start_idx, end_idx = end_idx, start_idx
                 intervals.append((start_idx, end_idx, current_action))
+                intervals_touched = True
                 s_ts = frames[start_idx].get('timestamp', 0) or 0
                 e_ts = frames[end_idx].get('timestamp', 0) or 0
                 dur  = abs(e_ts - s_ts)
@@ -1037,6 +1168,7 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
                 flash_msg = 'MARK CANCELLED'
             elif intervals:
                 removed   = intervals.pop()
+                intervals_touched = True
                 flash_msg = f"UNDO  [{removed[2].upper()}]  frames {removed[0]+1}~{removed[1]+1}"
                 print(f"  ↩ 撤銷: {removed}")
             else:
@@ -1080,8 +1212,10 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
     #         → 每幀 label = 資料夾名稱（walk/lick/…），全段有效，無需處理
     # 狀態 2：開啟標注模式並標記了至少一個區間後儲存
     #         → 區間內 = 行為標籤，其餘幀 = 'unannotated'（訓練時自動過濾）
-    # 狀態 3：開啟標注模式但未標記任何區間直接儲存（保護機制）
-    #         → 偵測到 action_intervals 為空，保留原有 frame label 不覆寫
+    # 狀態 3：開啟標注模式但本次工作階段完全未按過 s/u 直接儲存（保護機制）
+    #         → 保留原有 frame label 與 action_intervals 皆不覆寫
+    # 狀態 4：開啟標注模式、按過 s/u 但最終撤銷到剩下 0 個區間
+    #         → 視為主動清空，frame label 全部設為 unannotated、action_intervals 清空
     # ────────────────────────────────────────────────────────────────────────────
 
     # 依行為類別分組並合併各自重疊區段
@@ -1112,7 +1246,17 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
     all_intervals = sorted(action_intervals, key=lambda x: x['start'])
 
     if not action_intervals:
-        print("  [保護] 未標記任何區間，保留原有 frame label（不覆寫）")
+        if not intervals_touched:
+            # 本次工作階段完全沒按過 s/u，純粹開啟又關閉：frame label 與
+            # action_intervals 欄位都保留原狀，避免誤觸 q 就清空既有標記進度
+            print("  [保護] 本次未變更任何標記，保留原有 frame label 與 action_intervals（不覆寫）")
+            all_intervals = data.get('action_intervals', [])
+        else:
+            # 使用者主動撤銷到剩下 0 個區間：視為有意清空，frame label 一併
+            # 重設為 unannotated，避免 label 與（已清空的）action_intervals 不一致
+            print("  [清空] 已撤銷所有標記區間，frame label 全部設為 unannotated")
+            for frame in frames:
+                frame['label'] = 'unannotated'
     else:
         frame_labels = ['unannotated'] * total_frames
         for iv in action_intervals:
@@ -1147,7 +1291,7 @@ def manual_action_labeling():
 
         # 計算在整個 JSON 列表中的位置，供視窗標題顯示進度
         try:
-            all_jsons   = sorted(Path(OUTPUT_FOLDER).glob("*.json"))
+            all_jsons   = sorted(Path(OUTPUT_FOLDER).glob("*.json"), key=_natural_sort_key)
             file_index  = next((i + 1 for i, jf in enumerate(all_jsons)
                                 if str(jf) == json_path), None)
             total_files = len(all_jsons)
@@ -1189,8 +1333,9 @@ def manual_action_labeling():
 
 def reextract_preserve_labels():
     """
-    以新 YOLO 模型重新推論骨架，但保留既有 JSON 的 action_intervals 與 frame label。
-    前提：TARGET_FPS 不變，則抽幀順序相同，區間 index 可直接重用。
+    以新 YOLO 模型重新推論骨架，並依「時間」（而非幀 index）還原既有 JSON 的
+    frame label／action_intervals，因此不論新舊抽取的 TARGET_FPS、補償邏輯或
+    總幀數是否一致，標注都能正確對應到新的時間網格。
     """
     print("="*60)
     print("Skeleton Re-extraction (preserve annotations)")
@@ -1205,14 +1350,21 @@ def reextract_preserve_labels():
         if not vp.exists():
             print(f"[Warning] 資料夾不存在: {folder}")
             continue
-        video_files.extend(f for f in vp.iterdir() if f.suffix.lower() in video_extensions)
+        video_files.extend(sorted(
+            (f for f in vp.iterdir() if f.suffix.lower() in video_extensions),
+            key=_natural_sort_key,
+        ))
 
     if not video_files:
         print("✗ 找不到任何影片。")
         return
 
-    # 讀取所有既有 JSON 的 action_intervals
+    # 讀取所有既有 JSON 的 action_intervals，連同每一幀的真實 timestamp。
+    # 用 timestamp（而非 frame index）還原標注，這樣即使新舊抽取的總幀數不同
+    # （例如舊資料在補償邏輯上線前抽取、非 30fps 來源），標注依然能正確對應。
     saved_intervals: dict[str, list] = {}
+    saved_frame_labels: dict[str, list] = {}   # video_id -> 舊逐幀 label（依 old timestamp 順序）
+    saved_timestamps: dict[str, list] = {}     # video_id -> 舊逐幀 timestamp
     for vf in video_files:
         jp = Path(OUTPUT_FOLDER) / f"{vf.stem}.json"
         if jp.exists():
@@ -1221,6 +1373,19 @@ def reextract_preserve_labels():
                     d = json.load(f)
                 ivs = d.get('action_intervals', [])
                 saved_intervals[vf.stem] = ivs
+                old_frames = d.get('frames', [])
+                old_total_f = d.get('total_frames', len(old_frames))
+                old_fps = (d.get('video_metadata', {}) or {}).get('actual_fps') or TARGET_FPS
+                labels = ['unannotated'] * old_total_f
+                for iv in ivs:
+                    for i in range(iv['start'], iv['end'] + 1):
+                        if 0 <= i < old_total_f:
+                            labels[i] = iv['action']
+                timestamps = [
+                    fr.get('timestamp', i / old_fps) for i, fr in enumerate(old_frames)
+                ] or [i / old_fps for i in range(old_total_f)]
+                saved_frame_labels[vf.stem] = labels
+                saved_timestamps[vf.stem] = timestamps
             except Exception as e:
                 print(f"  [Warning] 無法讀取 {jp.name}: {e}")
 
@@ -1261,19 +1426,47 @@ def reextract_preserve_labels():
             continue
         skeleton_data, actual_fps = result
 
-        # 還原既有標注
-        ivs = saved_intervals.get(video_id, [])
-        if ivs:
-            total_f = len(skeleton_data)
-            frame_labels = ['unannotated'] * total_f
-            for iv in ivs:
-                for i in range(iv['start'], iv['end'] + 1):
-                    if 0 <= i < total_f:
-                        frame_labels[i] = iv['action']
-            for i, fd in enumerate(skeleton_data):
-                fd['label'] = frame_labels[i]
-            print(f"  ✓ 還原 {len(ivs)} 個 action_intervals，frame label 已重新套用")
+        # 還原既有標注：用「時間」而非「幀 index」對應。
+        # resample_to_target_fps 補償後的幀數只取決於(影片時長, target_fps)，
+        # 與舊版「來源 fps<=target 時 1:1 保留全部原始幀」的抽幀結果不一定相同，
+        # 直接沿用舊 index 對應會錯位；改用每幀真實 timestamp 找最近的舊幀取其
+        # label，不論新舊總幀數是否相同都能正確對應，資料不會因此報廢。
+        old_labels = saved_frame_labels.get(video_id)
+        old_ts = saved_timestamps.get(video_id)
+        if old_labels and old_ts:
+            old_ts_arr = np.asarray(old_ts, dtype=np.float64)
+            # 舊資料的取樣間隔，超過這個間隔找不到對應舊幀就視為原本就沒標注的空窗
+            old_gap = float(np.median(np.diff(old_ts_arr))) if len(old_ts_arr) > 1 else (1.0 / TARGET_FPS)
+            max_gap = max(old_gap, 1.0 / TARGET_FPS) * 2
+            frame_labels = []
+            for fd in skeleton_data:
+                t = fd.get('timestamp', 0.0)
+                nearest = int(np.argmin(np.abs(old_ts_arr - t)))
+                if abs(old_ts_arr[nearest] - t) <= max_gap:
+                    frame_labels.append(old_labels[nearest])
+                else:
+                    frame_labels.append('unannotated')
+            for fd, lbl in zip(skeleton_data, frame_labels):
+                fd['label'] = lbl
+
+            # 從還原後的逐幀 label 重新產生 action_intervals（合併連續同標籤區段）
+            new_intervals = []
+            run_start, run_label = None, None
+            for i, lbl in enumerate(frame_labels):
+                if lbl != run_label:
+                    if run_label not in (None, 'unannotated'):
+                        new_intervals.append({"action": run_label, "start": run_start, "end": i - 1})
+                    run_start, run_label = i, lbl
+            if run_label not in (None, 'unannotated'):
+                new_intervals.append({"action": run_label, "start": run_start, "end": len(frame_labels) - 1})
+
+            if new_intervals:
+                print(f"  ✓ 依 timestamp 還原標注：{len(new_intervals)} 個 action_intervals"
+                      f"（舊 {len(old_labels)} 幀 → 新 {len(skeleton_data)} 幀）")
+            else:
+                print("  → 舊標注時間範圍與新抽取對不上，frame label 保持資料夾名稱")
         else:
+            new_intervals = []
             print("  → 無既有標注，frame label 保持資料夾名稱")
 
         video_metadata = {
@@ -1282,6 +1475,7 @@ def reextract_preserve_labels():
             "video_path": str(video_path),
             "target_fps": TARGET_FPS,
             "actual_fps": actual_fps,
+            "fps_compensated": True,
             "model_used": MODEL_PATH,
             "imgsz": IMGSZ,
             "conf_threshold": CONF_THRESHOLD,
@@ -1291,7 +1485,7 @@ def reextract_preserve_labels():
             "video_metadata": video_metadata,
             "frames": skeleton_data,
             "total_frames": len(skeleton_data),
-            "action_intervals": ivs,
+            "action_intervals": new_intervals,
         }
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(out_data, f, indent=2, ensure_ascii=False)
@@ -1300,20 +1494,335 @@ def reextract_preserve_labels():
     print("\n✓ 全部重新推論完成。")
 
 
+# ==================== Window-level Discard Report ====================
+# 以下三個輔助函式複製 0_train_gcn.py CatSkeletonDataset._load_sequences() 的
+# 逐視窗捨棄判斷邏輯，讀取同一份 stgcn_config.yaml，確保報告跟實際訓練切窗
+# 行為不脫鉤。捨棄決策只取決於 frame label 與 bbox 有無，跟座標數值/插值/EMA
+# 平滑無關，所以這裡不需要重做 interpolate_missing 等前處理。
+
+def _find_stgcn_config_path():
+    """依 0_train_gcn.py 相同規則尋找 stgcn_config.yaml，可用 STGCN_CONFIG_PATH 環境變數覆寫。"""
+    env_path = os.getenv('STGCN_CONFIG_PATH')
+    if env_path and Path(env_path).exists():
+        return Path(env_path)
+    default_path = Path(r"C:\ai_project\paper\cat_monitoring_system\stgcn_config.yaml")
+    if default_path.exists():
+        return default_path
+    local_path = Path(__file__).resolve().parent.parent / 'stgcn_config.yaml'
+    if local_path.exists():
+        return local_path
+    return None
+
+
+def _load_window_filter_config():
+    """讀取切窗相關參數：SEQUENCE_LENGTH / WINDOW_STRIDE / STRICT_WINDOW_FILTER /
+    MAX_NO_DETECT_FRAMES / BEHAVIOR_PREFIXES。找不到設定檔或缺欄位時回傳 None
+    （呼叫端應改印警告並略過視窗層級報告，不影響既有幀層級報告）。"""
+    config_path = _find_stgcn_config_path()
+    if config_path is None:
+        print("  ⚠ 找不到 stgcn_config.yaml，略過視窗層級報告。")
+        return None
+    try:
+        import yaml
+    except ImportError:
+        print("  ⚠ 未安裝 PyYAML（pip install pyyaml），略過視窗層級報告。")
+        return None
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"  ⚠ 無法讀取 {config_path}：{e}")
+        return None
+
+    required = ['SEQUENCE_LENGTH', 'WINDOW_STRIDE', 'STRICT_WINDOW_FILTER', 'BEHAVIOR_PREFIXES']
+    missing = [k for k in required if k not in cfg]
+    if missing:
+        print(f"  ⚠ {config_path.name} 缺少必要欄位 {missing}，略過視窗層級報告。")
+        return None
+
+    return {
+        'sequence_length':   int(cfg['SEQUENCE_LENGTH']),
+        'window_stride':     int(cfg['WINDOW_STRIDE']),
+        'strict_filter':     bool(cfg['STRICT_WINDOW_FILTER']),
+        'max_no_detect':     int(cfg.get('MAX_NO_DETECT_FRAMES', 2)),
+        'behavior_prefixes': cfg['BEHAVIOR_PREFIXES'],
+        'path':              config_path,
+    }
+
+
+def _classify_windows(frames, wcfg):
+    """
+    對單支影片的 frames 重演訓練時的滑動切窗，回傳每個 start_idx 的
+    (start_idx, kept, reason)。reason 為 None 表示保留；否則為
+    'unannotated' / 'no_detect' / 'unknown_label:<label>'。
+    幀數 < sequence_length 時回傳 None（訓練時整支影片會被跳過，不計入視窗統計）。
+    """
+    from collections import Counter
+
+    seq_len = wcfg['sequence_length']
+    stride  = wcfg['window_stride']
+    strict  = wcfg['strict_filter']
+    max_no_detect = wcfg['max_no_detect']
+    name_to_idx   = wcfg['behavior_prefixes']
+
+    if len(frames) < seq_len:
+        return None
+
+    labels   = [fr.get('label', 'unannotated') for fr in frames]
+    detected = [fr.get('bbox') is not None for fr in frames]
+
+    windows = []
+    for start_idx in range(0, len(frames) - seq_len + 1, stride):
+        window_labels   = labels[start_idx:start_idx + seq_len]
+        window_detected = detected[start_idx:start_idx + seq_len]
+
+        if strict:
+            if 'unannotated' in window_labels:
+                windows.append((start_idx, False, 'unannotated'))
+                continue
+            best_label = Counter(window_labels).most_common(1)[0][0]
+        else:
+            annotated = [lbl for lbl in window_labels if lbl != 'unannotated']
+            if not annotated:
+                windows.append((start_idx, False, 'unannotated'))
+                continue
+            best_label = Counter(annotated).most_common(1)[0][0]
+
+        if window_detected.count(False) > max_no_detect:
+            windows.append((start_idx, False, 'no_detect'))
+            continue
+
+        if best_label not in name_to_idx:
+            windows.append((start_idx, False, f'unknown_label:{best_label}'))
+            continue
+
+        windows.append((start_idx, True, None))
+
+    return windows
+
+
+def _merge_discarded_runs(windows, frames, seq_len):
+    """把連續（在 window 序列中相鄰）且捨棄原因相同的視窗合併成一段，
+    標記出該段對應原始影片的 frame 範圍與秒數，方便回頭在影片裡定位。"""
+    runs = []
+    i, n = 0, len(windows)
+    while i < n:
+        start_idx, kept, reason = windows[i]
+        if kept:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and (not windows[j + 1][1]) and windows[j + 1][2] == reason:
+            j += 1
+        first_start = windows[i][0]
+        last_start  = windows[j][0]
+        last_end    = min(last_start + seq_len - 1, len(frames) - 1)
+        runs.append({
+            'reason':          reason,
+            'n_windows':       j - i + 1,
+            'start_frame_idx': first_start,
+            'end_frame_idx':   last_end,
+            'start_orig_fid':  frames[first_start].get('original_frame_id', first_start),
+            'end_orig_fid':    frames[last_end].get('original_frame_id', last_end),
+            'start_ts':        frames[first_start].get('timestamp'),
+            'end_ts':          frames[last_end].get('timestamp'),
+        })
+        i = j + 1
+    return runs
+
+
+def check_discarded_files():
+    """
+    檢查有哪些影片／幀是被捨棄或過濾掉、不會進入訓練的資料。
+    純粹讀取並印出報告，不修改任何檔案，可安全重複執行。
+
+    涵蓋兩個層級：
+      1. 影片層級：EXCLUDED_STEMS 永久排除清單，以及來源資料夾裡
+         尚未提取成 JSON（不在 skip 也不在 excluded）的影片。
+      2. 幀層級：每個 skeleton JSON 內 label == 'unannotated' 的幀
+         （手動標注模式下未標記的片段，訓練時自動過濾，見本檔頂部
+         「frame label 三種狀態」說明）以及 detected == False（YOLO
+         未偵測到貓、keypoints 為空）的幀數與比例；全部幀都被過濾掉
+         的檔案，代表整份 JSON 對訓練沒有任何貢獻。
+      3. 視窗層級：讀取 stgcn_config.yaml 的 SEQUENCE_LENGTH/WINDOW_STRIDE/
+         STRICT_WINDOW_FILTER/MAX_NO_DETECT_FRAMES，重演 0_train_gcn.py
+         CatSkeletonDataset._load_sequences() 的滑動切窗判斷，標出每支
+         影片裡「哪些訓練視窗被丟棄、原因為何、對應原始影片的第幾幀/
+         第幾秒」（連續同原因的視窗會合併成一段顯示）。
+    """
+    print("="*60)
+    print("Discarded / Filtered Data Report")
+    print("="*60)
+
+    video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv']
+
+    # ── 影片層級 ──────────────────────────────────────────────
+    existing_stems = {p.stem for p in Path(OUTPUT_FOLDER).glob("*.json")}
+    video_files = []
+    for folder in VIDEO_FOLDERS:
+        video_folder = Path(folder)
+        if not video_folder.exists():
+            print(f"[Warning] Video folder not found: {folder}")
+            continue
+        video_files.extend(sorted(
+            (f for f in video_folder.iterdir() if f.suffix.lower() in video_extensions),
+            key=_natural_sort_key,
+        ))
+
+    excluded_list = [v for v in video_files if v.stem in EXCLUDED_STEMS]
+    not_extracted = [v for v in video_files
+                      if v.stem not in existing_stems and v.stem not in EXCLUDED_STEMS]
+
+    print(f"\n【影片層級】來源影片總數：{len(video_files)}")
+    print(f"  永久排除 (EXCLUDED_STEMS)：{len(excluded_list)} 支")
+    for v in excluded_list:
+        print(f"    - {v.name}")
+    print(f"  尚未提取成 JSON（不在排除清單，也還沒跑過模式 1/3）：{len(not_extracted)} 支")
+    for v in not_extracted:
+        print(f"    - {v.name}")
+
+    # ── 幀層級 ──────────────────────────────────────────────
+    json_files = sorted(Path(OUTPUT_FOLDER).glob("*.json"), key=_natural_sort_key)
+    if not json_files:
+        print(f"\n[Warning] {OUTPUT_FOLDER} 底下沒有任何 skeleton JSON，略過幀層級檢查。")
+        return
+
+    print(f"\n【幀層級】掃描 {len(json_files)} 個 skeleton JSON ...")
+    sep = "─" * 72
+    print(sep)
+
+    # 視窗層級所需的切窗設定（找不到就跳過，不影響幀層級報告）
+    wcfg = _load_window_filter_config()
+    if wcfg:
+        print(f"  ✓ 視窗設定來源: {wcfg['path']}"
+              f"  T={wcfg['sequence_length']}  stride={wcfg['window_stride']}"
+              f"  strict={wcfg['strict_filter']}  max_no_detect={wcfg['max_no_detect']}")
+        print(sep)
+
+    total_frames_all = 0
+    total_unannotated_all = 0
+    total_undetected_all = 0
+    fully_discarded_files = []   # 全部幀都是 unannotated，對訓練完全沒貢獻
+    per_file_rows = []
+
+    from collections import Counter as _Counter
+    window_too_short_videos = []      # 幀數 < sequence_length，訓練時整支跳過
+    total_windows_all       = 0
+    kept_windows_all        = 0
+    discard_reason_totals   = _Counter()
+    per_video_window_runs   = []      # [(video_name, runs, n_total, n_kept, n_discarded), ...]
+
+    for jf in json_files:
+        try:
+            with open(jf, 'r', encoding='utf-8') as f:
+                d = json.load(f)
+        except Exception as e:
+            print(f"  ⚠ 無法讀取 {jf.name}：{e}")
+            continue
+
+        frames = d.get('frames', [])
+        n_total = len(frames)
+        if n_total == 0:
+            continue
+
+        n_unannotated = sum(1 for fr in frames if fr.get('label', 'unannotated') == 'unannotated')
+        n_undetected  = sum(1 for fr in frames if not fr.get('detected', False))
+
+        total_frames_all      += n_total
+        total_unannotated_all += n_unannotated
+        total_undetected_all  += n_undetected
+
+        if n_unannotated == n_total:
+            fully_discarded_files.append(jf.name)
+
+        per_file_rows.append({
+            "name": jf.name,
+            "total": n_total,
+            "unannotated": n_unannotated,
+            "undetected": n_undetected,
+        })
+
+        if wcfg:
+            windows = _classify_windows(frames, wcfg)
+            if windows is None:
+                window_too_short_videos.append((jf.stem, n_total))
+            else:
+                n_kept = sum(1 for _, kept, _ in windows if kept)
+                n_disc = len(windows) - n_kept
+                total_windows_all += len(windows)
+                kept_windows_all  += n_kept
+                for _, kept, reason in windows:
+                    if not kept:
+                        discard_reason_totals[reason] += 1
+                if n_disc:
+                    runs = _merge_discarded_runs(windows, frames, wcfg['sequence_length'])
+                    per_video_window_runs.append((jf.stem, runs, len(windows), n_kept, n_disc))
+
+    for row in per_file_rows:
+        pct_unannotated = row["unannotated"] / row["total"] * 100 if row["total"] else 0
+        pct_undetected  = row["undetected"] / row["total"] * 100 if row["total"] else 0
+        flag = "  ⚠ 全檔未標注，對訓練無貢獻" if row["unannotated"] == row["total"] else ""
+        print(f"  {row['name']:<40}  未標註 {row['unannotated']:>5}/{row['total']:<5} ({pct_unannotated:5.1f}%)"
+              f"   未偵測 {row['undetected']:>5} ({pct_undetected:5.1f}%){flag}")
+
+    print(sep)
+    pct_unannotated_all = total_unannotated_all / total_frames_all * 100 if total_frames_all else 0
+    pct_undetected_all  = total_undetected_all / total_frames_all * 100 if total_frames_all else 0
+    print(f"  合計幀數：{total_frames_all}")
+    print(f"  未標註（訓練時自動過濾）：{total_unannotated_all} ({pct_unannotated_all:.1f}%)")
+    print(f"  未偵測到貓（keypoints 為空）：{total_undetected_all} ({pct_undetected_all:.1f}%)")
+
+    if fully_discarded_files:
+        print(f"\n  ⚠ 有 {len(fully_discarded_files)} 個檔案全部幀都是 unannotated，對訓練完全沒有貢獻：")
+        for name in fully_discarded_files:
+            print(f"    - {name}")
+
+    # ── 視窗層級：哪些訓練用滑動視窗被丟棄、從影片哪個位置切出來 ──────────────
+    if wcfg:
+        print(f"\n【視窗層級】依訓練切窗參數重演每支影片的滑動視窗判斷 ...")
+        print(sep)
+        for video_name, runs, n_win, n_kept, n_disc in per_video_window_runs:
+            pct_disc = n_disc / n_win * 100 if n_win else 0
+            print(f"  {video_name}.json  候選視窗 {n_win}  保留 {n_kept}  捨棄 {n_disc} ({pct_disc:.1f}%)")
+            for r in runs:
+                print(f"    ✗ {r['reason']:<20} "
+                      f"video frame {r['start_orig_fid']}~{r['end_orig_fid']}"
+                      f"  ({r['start_ts']:.2f}s~{r['end_ts']:.2f}s)"
+                      f"  x{r['n_windows']} window")
+        print(sep)
+        print(f"  合計候選視窗：{total_windows_all}")
+        if total_windows_all:
+            print(f"  保留：{kept_windows_all} ({kept_windows_all/total_windows_all*100:.1f}%)"
+                  f"  捨棄：{total_windows_all - kept_windows_all}"
+                  f" ({(total_windows_all - kept_windows_all)/total_windows_all*100:.1f}%)")
+            for reason, cnt in discard_reason_totals.most_common():
+                print(f"    - {reason}: {cnt}")
+        if window_too_short_videos:
+            detail = ', '.join(f"{v}({n}幀)" for v, n in window_too_short_videos)
+            print(f"  ⚠ {len(window_too_short_videos)} 支影片幀數 < sequence_length="
+                  f"{wcfg['sequence_length']}，訓練時整支跳過（未計入以上視窗統計）: {detail}")
+
+    print("\n✓ 檢查完成（純讀取，未修改任何檔案）。")
+
+
 if __name__ == "__main__":
     print("\n==== Cat Skeleton 批次推論/手動標註 ====")
     print("1. 批次推論五個資料夾影片 (YOLO-Pose)  [增量，跳過已有 JSON]")
     print("   → 影片依資料夾名稱 (walk/lick/scratch/shake/stop) 自動標記，可直接訓練")
     print("2. 連續手動標記多個 skeleton JSON")
     print("   → 適用影片含多種行為、需精確逐段標記的情況")
-    print("3. 重新推論骨架（新模型），保留既有 action_intervals 與 frame label")
-    print("   → YOLO 模型更換後使用；TARGET_FPS 不變則標注 index 可直接重用")
-    mode = input("請選擇模式 (1/2/3): ").strip()
+    print("3. 重新推論骨架（新模型），依時間還原既有 action_intervals 與 frame label")
+    print("   → YOLO 模型更換或 fps 補償邏輯更新後皆可使用，標注依 timestamp 對應不受幀數變動影響")
+    print("4. 檢查有哪些影片／幀/訓練視窗被捨棄或過濾（未進入訓練資料）")
+    print("   → 純讀取報告，不修改任何檔案；視窗層級會標出被丟棄的 window 從影片哪個 frame/秒數切出來")
+    mode = input("請選擇模式 (1/2/3/4): ").strip()
     if mode == '1':
         process_all_videos()
     elif mode == '2':
         manual_action_labeling()
     elif mode == '3':
         reextract_preserve_labels()
+    elif mode == '4':
+        check_discarded_files()
     else:
         print("✗ 未選擇正確模式，程式結束。")

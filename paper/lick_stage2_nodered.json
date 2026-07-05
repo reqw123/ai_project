@@ -56,7 +56,7 @@
     "type": "function",
     "z": "889faede23dd76c6",
     "name": "舔舐部位分析器",
-    "func": "let d = msg.payload;\nif (!d) return [null, null, null];\n\n// Compute pref% and sec/hit from plugin slim payload (new field names)\nlet times = {\n    BODY: parseFloat(d.body_time || 0),\n    FL:   parseFloat(d.fl_time   || 0),\n    FR:   parseFloat(d.fr_time   || 0),\n    HL:   parseFloat(d.hl_time   || 0),\n    HR:   parseFloat(d.hr_time   || 0)\n};\nlet hits = {\n    BODY: parseInt(d.body_hits || 0),\n    FL:   parseInt(d.fl_hits   || 0),\n    FR:   parseInt(d.fr_hits   || 0),\n    HL:   parseInt(d.hl_hits   || 0),\n    HR:   parseInt(d.hr_hits   || 0)\n};\nlet totalTime = Object.values(times).reduce(function(a,b){return a+b;},0);\n\nlet zones = {};\n['BODY','FL','FR','HL','HR'].forEach(function(k){\n    let t=times[k], h=hits[k];\n    zones[k]={\n        hits:        h,\n        time_sec:    t,\n        pref_pct:    totalTime>1e-9 ? 100*t/totalTime : NaN,\n        sec_per_hit: h>0 ? t/h : NaN\n    };\n});\n\n// best_zone from plugin is authoritative; recompute best_pct\nlet best_zone = d.best_zone || 'NO_TARGET';\nlet best_pct  = null;\nif (best_zone!=='NO_TARGET' && zones[best_zone]) {\n    let bp=zones[best_zone].pref_pct;\n    best_pct = isFinite(bp) ? parseFloat(bp.toFixed(1)) : null;\n}\n\nfunction nf(v){return (v!=null&&v!==undefined)?parseFloat(v):NaN;}\n\nlet out = {\n    zones,\n    best_zone,\n    best_pct,\n    current_zone:       d.current_zone  || 'NO_TARGET',\n    nearest_label:      d.current_zone  || 'NO_TARGET',\n    nearest_t:          NaN,\n    nose_detected:      d.valid ? 1 : 0,\n    face_state:         d.face_state    || 'UNKNOWN',\n    state_stability:    nf(d.state_stability),\n    distance_px:        nf(d.dist_px),\n    distance_norm:      nf(d.dist_norm),\n    gaze_forward_norm:  nf(d.gaze_fwd),\n    gaze_lateral_norm:  nf(d.gaze_lat),\n    gaze_angle_deg:     nf(d.gaze_angle),\n    lick_axis_score:    NaN,\n    lick_lateral_score: NaN,\n    valid:              d.valid ? 1 : 0,\n    frame:              parseInt(d.frame    || 0),\n    time_sec:           nf(d.time_sec),\n    video_path:         ''\n};\n\nglobal.set('lick_s2_latest', out);\nmsg.payload = out;\nreturn [msg, msg, msg];",
+    "func": "let d = msg.payload;\nif (!d) return [null, null, null];\n\n// Compute pref% and sec/hit from plugin slim payload (new field names)\nlet times = {\n    BODY: parseFloat(d.body_time || 0),\n    FL:   parseFloat(d.fl_time   || 0),\n    FR:   parseFloat(d.fr_time   || 0),\n    HL:   parseFloat(d.hl_time   || 0),\n    HR:   parseFloat(d.hr_time   || 0)\n};\nlet hits = {\n    BODY: parseInt(d.body_hits || 0),\n    FL:   parseInt(d.fl_hits   || 0),\n    FR:   parseInt(d.fr_hits   || 0),\n    HL:   parseInt(d.hl_hits   || 0),\n    HR:   parseInt(d.hr_hits   || 0)\n};\nlet totalTime = Object.values(times).reduce(function(a,b){return a+b;},0);\n\nlet zones = {};\n['BODY','FL','FR','HL','HR'].forEach(function(k){\n    let t=times[k], h=hits[k];\n    zones[k]={\n        hits:        h,\n        time_sec:    t,\n        pref_pct:    totalTime>1e-9 ? 100*t/totalTime : NaN,\n        sec_per_hit: h>0 ? t/h : NaN\n    };\n});\n\n// best_zone from plugin is authoritative; recompute best_pct\nlet best_zone = d.best_zone || 'NO_TARGET';\nlet best_pct  = null;\nif (best_zone!=='NO_TARGET' && zones[best_zone]) {\n    let bp=zones[best_zone].pref_pct;\n    best_pct = isFinite(bp) ? parseFloat(bp.toFixed(1)) : null;\n}\n\nfunction nf(v){return (v!=null&&v!==undefined)?parseFloat(v):NaN;}\n\nlet out = {\n    zones,\n    best_zone,\n    best_pct,\n    current_zone:       d.current_zone  || 'NO_TARGET',\n    nearest_label:      d.current_zone  || 'NO_TARGET',\n    nearest_t:          NaN,\n    nose_detected:      d.valid ? 1 : 0,\n    face_state:         d.face_state    || 'UNKNOWN',\n    state_stability:    nf(d.state_stability),\n    distance_px:        nf(d.dist_px),\n    distance_norm:      nf(d.dist_norm),\n    gaze_forward_norm:  nf(d.gaze_fwd),\n    gaze_lateral_norm:  nf(d.gaze_lat),\n    gaze_angle_deg:     nf(d.gaze_angle),\n    lick_axis_score:    NaN,\n    lick_lateral_score: NaN,\n    valid:              d.valid ? 1 : 0,\n    frame:              parseInt(d.frame    || 0),\n    time_sec:           nf(d.time_sec),\n    video_path:         '',\n    trap_pts:           d.trap_pts || [],\n    nose_xy:            d.nose_xy || []\n};\n\nglobal.set('lick_s2_latest', out);\nmsg.payload = out;\nreturn [msg, msg, msg];",
     "outputs": 3,
     "timeout": "",
     "noerr": 0,
@@ -415,5 +415,195 @@
     "modules": {
       "node-red-dashboard": "3.6.6"
     }
+  },
+  {
+    "id": "ebz_tab",
+    "type": "tab",
+    "label": "🦴 擴充身體區域 (7區)",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "ebz_httpin",
+    "type": "http in",
+    "z": "ebz_tab",
+    "name": "接收7區域分析資料",
+    "url": "/ext_zone_result",
+    "method": "post",
+    "upload": false,
+    "skipBodyParsing": false,
+    "x": 150,
+    "y": 100,
+    "wires": [
+      [
+        "ebz_json",
+        "ebz_httpres"
+      ]
+    ]
+  },
+  {
+    "id": "ebz_httpres",
+    "type": "http response",
+    "z": "ebz_tab",
+    "name": "200 OK",
+    "statusCode": "200",
+    "headers": {},
+    "x": 350,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ebz_json",
+    "type": "json",
+    "z": "ebz_tab",
+    "name": "",
+    "property": "payload",
+    "action": "obj",
+    "pretty": false,
+    "x": 350,
+    "y": 100,
+    "wires": [
+      [
+        "ebz_func"
+      ]
+    ]
+  },
+  {
+    "id": "ebz_func",
+    "type": "function",
+    "z": "ebz_tab",
+    "name": "7區域資料處理",
+    "func": "let d = msg.payload;\nif (!d) return null;\nglobal.set('ext_zone_latest', d);\nmsg.payload = d;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 560,
+    "y": 100,
+    "wires": [
+      [
+        "ebz_stats"
+      ]
+    ]
+  },
+  {
+    "id": "ebz_inject",
+    "type": "inject",
+    "z": "ebz_tab",
+    "name": "定時合併梯形+7區域",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "0.3",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 260,
+    "wires": [
+      [
+        "ebz_merge"
+      ]
+    ]
+  },
+  {
+    "id": "ebz_merge",
+    "type": "function",
+    "z": "ebz_tab",
+    "name": "合併舊梯形與新7區域",
+    "func": "let trap = global.get('lick_s2_latest') || {};\nlet ext  = global.get('ext_zone_latest') || {};\nmsg.payload = {\n    trap_pts:          trap.trap_pts || [],\n    nose_xy_trap:      trap.nose_xy || [],\n    ext_current_zone:  ext.current_zone,\n    ext_zone_name:     ext.zone_name,\n    ext_confidence:    ext.confidence,\n    nose_xy:           ext.nose_xy || [],\n    shapes:            ext.shapes || {},\n    zones:             ext.zones || {}\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 380,
+    "y": 260,
+    "wires": [
+      [
+        "ebz_viz"
+      ]
+    ]
+  },
+  {
+    "id": "ebz_stats",
+    "type": "ui_template",
+    "z": "ebz_tab",
+    "group": "ebz_g_stats",
+    "name": "7區域統計面板",
+    "order": 2,
+    "width": "0",
+    "height": "9",
+    "format": "<style>\n.eb{font-family:'Microsoft JhengHei',sans-serif;padding:12px 14px;background:#0d1117;border-radius:14px;color:#fff}\n.eb-title{font-size:11px;font-weight:700;color:rgba(255,255,255,.45);margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid rgba(255,255,255,.08);letter-spacing:.6px}\n.eb-now{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:10px;margin-bottom:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12)}\n.eb-now-lbl{font-size:11px;color:rgba(255,255,255,.5);font-weight:600}\n.eb-now-zone{font-size:20px;font-weight:900;letter-spacing:-.5px}\n.eb-now-conf{font-size:12px;color:rgba(255,255,255,.5)}\n.eb-tbl{width:100%;border-collapse:collapse}\n.eb-tbl th{padding:6px 8px;font-size:10px;font-weight:700;color:rgba(255,255,255,.4);background:rgba(255,255,255,.05);text-align:right;border:1px solid rgba(255,255,255,.06)}\n.eb-tbl th:first-child{text-align:left}\n.eb-tbl td{padding:6px 8px;border:1px solid rgba(255,255,255,.05);text-align:right;vertical-align:middle;font-size:12px}\n.eb-tbl td:first-child{text-align:left}\n.eb-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}\n.td-hits{font-weight:900;color:#fff}\n.td-time{font-weight:800;color:#ffe082}\n</style>\n<div class=\"eb\">\n  <div class=\"eb-title\">📊 七區域舔舐統計（Python 純運算，僅供顯示）</div>\n  <div class=\"eb-now\" id=\"eb-now\"></div>\n  <table class=\"eb-tbl\">\n    <thead><tr><th>部位</th><th>進入次數</th><th>累計時長 (s)</th></tr></thead>\n    <tbody id=\"eb-tbody\"></tbody>\n  </table>\n</div>\n<script>\n(function(scope){\n  var ZONES=[\n    {key:'HEAD',       label:'頭部',   color:'#f9c74f'},\n    {key:'NECK_CHEST',  label:'頸/胸',  color:'#f8961e'},\n    {key:'SIDE_BACK',   label:'側/背',  color:'#43a047'},\n    {key:'ABDOMEN',     label:'腹部',   color:'#1e88e5'},\n    {key:'FORELIMB',    label:'前肢',   color:'#26c6da'},\n    {key:'HINDLIMB',    label:'後肢',   color:'#7e57c2'},\n    {key:'TAIL',        label:'尾巴',   color:'#ec407a'}\n  ];\n  var CMAP={}; ZONES.forEach(function(z){CMAP[z.key]=z;});\n\n  function fmtSec(s){if(!s||isNaN(s))return'0s';s=parseFloat(s);var m=Math.floor(s/60),sec=parseFloat((s%60).toFixed(1));return m?m+'m '+sec+'s':sec+'s';}\n\n  function render(d){\n    if(!d) return;\n    var nowEl=document.getElementById('eb-now');\n    var z=CMAP[d.zone_name]||{label:d.zone_name||'無接觸',color:'#888'};\n    if(nowEl){\n      nowEl.innerHTML='<span class=\"eb-dot\" style=\"background:'+z.color+'\"></span>'\n        +'<span class=\"eb-now-lbl\">目前區域</span>'\n        +'<span class=\"eb-now-zone\" style=\"color:'+z.color+'\">'+(z.label||'無接觸')+'</span>'\n        +'<span class=\"eb-now-conf\">信心度 '+((d.confidence!=null)?(d.confidence*100).toFixed(0):'0')+'%</span>';\n    }\n    var tbody=document.getElementById('eb-tbody');\n    if(!tbody) return;\n    var zones=d.zones||{};\n    tbody.innerHTML=ZONES.map(function(zz){\n      var s=zones[zz.key]||{hits:0,time_sec:0};\n      return '<tr><td><span class=\"eb-dot\" style=\"background:'+zz.color+'\"></span>'+zz.label+'</td>'\n        +'<td class=\"td-hits\">'+(s.hits||0)+'</td>'\n        +'<td class=\"td-time\">'+fmtSec(s.time_sec)+'</td></tr>';\n    }).join('');\n  }\n\n  scope.$watch('msg', function(msg){\n    if(msg&&msg.payload) render(msg.payload);\n  });\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 780,
+    "y": 100,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ebz_viz",
+    "type": "ui_template",
+    "z": "ebz_tab",
+    "group": "ebz_g_viz",
+    "name": "梯形+7區域視覺化",
+    "order": 1,
+    "width": "0",
+    "height": "9",
+    "format": "<style>\n.ebv{font-family:'Microsoft JhengHei',sans-serif;padding:10px;background:#0d1117;border-radius:14px;height:100%;box-sizing:border-box;display:flex;flex-direction:column}\n.ebv-title{font-size:11px;font-weight:700;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.6px}\n.ebv-svg-wrap{flex:1;min-height:260px;background:#05070a;border-radius:10px;border:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center}\n.ebv-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font-size:10px;color:rgba(255,255,255,.5)}\n.ebv-leg-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}\n</style>\n<div class=\"ebv\">\n  <div class=\"ebv-title\">🧭 鼻部梯形（舊模組）＋ 7 區域幾何（最基礎視覺化，僅前端繪製，不影響 Python 端運算）</div>\n  <div class=\"ebv-svg-wrap\"><svg id=\"ebv-svg\" viewBox=\"0 0 360 360\" width=\"100%\" height=\"100%\" style=\"max-height:320px\"></svg></div>\n  <div class=\"ebv-legend\">\n    <span><span class=\"ebv-leg-dot\" style=\"background:#f9c74f\"></span>Head</span>\n    <span><span class=\"ebv-leg-dot\" style=\"background:#f8961e\"></span>Neck/Chest</span>\n    <span><span class=\"ebv-leg-dot\" style=\"background:#43a047\"></span>Side/Back</span>\n    <span><span class=\"ebv-leg-dot\" style=\"background:#1e88e5\"></span>Abdomen</span>\n    <span><span class=\"ebv-leg-dot\" style=\"background:#26c6da\"></span>Forelimb</span>\n    <span><span class=\"ebv-leg-dot\" style=\"background:#7e57c2\"></span>Hindlimb</span>\n    <span><span class=\"ebv-leg-dot\" style=\"background:#ec407a\"></span>Tail</span>\n    <span><span class=\"ebv-leg-dot\" style=\"background:#ffd54f;opacity:.6\"></span>舊梯形 (Nose Trapezoid)</span>\n  </div>\n</div>\n<script>\n(function(scope){\n  var NS='http://www.w3.org/2000/svg';\n  var ZCOLOR={HEAD:'#f9c74f',NECK_CHEST:'#f8961e',SIDE_BACK:'#43a047',ABDOMEN:'#1e88e5',FORELIMB:'#26c6da',HINDLIMB:'#7e57c2',TAIL:'#ec407a'};\n  var VB=360, PAD=24;\n\n  function el(tag,attrs){\n    var e=document.createElementNS(NS,tag);\n    for(var k in attrs){e.setAttribute(k,attrs[k]);}\n    return e;\n  }\n\n  function collectPts(d){\n    var pts=[];\n    (d.trap_pts||[]).forEach(function(p){pts.push(p);});\n    var s=d.shapes||{};\n    if(s.head) pts.push([s.head.cx-s.head.r,s.head.cy-s.head.r],[s.head.cx+s.head.r,s.head.cy+s.head.r]);\n    if(s.neck) pts.push([s.neck.cx-s.neck.r,s.neck.cy-s.neck.r],[s.neck.cx+s.neck.r,s.neck.cy+s.neck.r]);\n    if(s.torso){\n      var t=s.torso;\n      [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(function(sg){\n        pts.push([t.cx+sg[0]*t.ru*t.ux+sg[1]*t.rv*t.vx, t.cy+sg[0]*t.ru*t.uy+sg[1]*t.rv*t.vy]);\n      });\n    }\n    ['forelimb_segs','hindlimb_segs','tail_segs'].forEach(function(k){\n      (s[k]||[]).forEach(function(seg){pts.push(seg.p0,seg.p1);});\n    });\n    ['forelimb_paws','hindlimb_paws'].forEach(function(k){\n      (s[k]||[]).forEach(function(c){pts.push([c.cx-c.r,c.cy-c.r],[c.cx+c.r,c.cy+c.r]);});\n    });\n    if(d.nose_xy&&d.nose_xy.length===2) pts.push(d.nose_xy);\n    if(d.nose_xy_trap&&d.nose_xy_trap.length===2) pts.push(d.nose_xy_trap);\n    return pts;\n  }\n\n  function render(d){\n    var svg=document.getElementById('ebv-svg');\n    if(!svg) return;\n    while(svg.firstChild) svg.removeChild(svg.firstChild);\n    var pts=collectPts(d);\n    if(!pts.length) return;\n    var xs=pts.map(function(p){return p[0];}), ys=pts.map(function(p){return p[1];});\n    var minx=Math.min.apply(null,xs), maxx=Math.max.apply(null,xs);\n    var miny=Math.min.apply(null,ys), maxy=Math.max.apply(null,ys);\n    var dx=Math.max(1,maxx-minx), dy=Math.max(1,maxy-miny);\n    var scale=Math.min((VB-2*PAD)/dx,(VB-2*PAD)/dy);\n    function X(x){return PAD+(x-minx)*scale;}\n    function Y(y){return PAD+(y-miny)*scale;}\n\n    var s=d.shapes||{};\n    var cur=d.ext_current_zone;\n\n    // Torso ellipse (Side/Back + Abdomen share this shape)\n    if(s.torso){\n      var t=s.torso, ang=Math.atan2(t.uy,t.ux)*180/Math.PI;\n      var isTorsoActive=(cur===3||cur===4);\n      var ecol=cur===4?ZCOLOR.ABDOMEN:(cur===3?ZCOLOR.SIDE_BACK:'rgba(255,255,255,.25)');\n      svg.appendChild(el('ellipse',{\n        cx:X(t.cx),cy:Y(t.cy),rx:t.ru*scale,ry:t.rv*scale,\n        transform:'rotate('+ang+' '+X(t.cx)+' '+Y(t.cy)+')',\n        fill:'none',stroke:ecol,'stroke-width':isTorsoActive?3:1.5\n      }));\n    }\n    // Neck/Chest\n    if(s.neck){\n      svg.appendChild(el('circle',{cx:X(s.neck.cx),cy:Y(s.neck.cy),r:s.neck.r*scale,fill:'none',\n        stroke:cur===2?ZCOLOR.NECK_CHEST:'rgba(255,255,255,.25)','stroke-width':cur===2?3:1.5}));\n    }\n    // Head\n    if(s.head){\n      svg.appendChild(el('circle',{cx:X(s.head.cx),cy:Y(s.head.cy),r:s.head.r*scale,fill:'none',\n        stroke:cur===1?ZCOLOR.HEAD:'rgba(255,255,255,.25)','stroke-width':cur===1?3:1.5}));\n    }\n    // Forelimb / Hindlimb strips + paws\n    [['forelimb_segs','forelimb_paws',5,'FORELIMB'],['hindlimb_segs','hindlimb_paws',6,'HINDLIMB']].forEach(function(g){\n      var segs=s[g[0]]||[], paws=s[g[1]]||[], zid=g[2], key=g[3];\n      var active=(cur===zid);\n      segs.forEach(function(seg){\n        svg.appendChild(el('line',{x1:X(seg.p0[0]),y1:Y(seg.p0[1]),x2:X(seg.p1[0]),y2:Y(seg.p1[1]),\n          stroke:active?ZCOLOR[key]:'rgba(255,255,255,.25)','stroke-width':active?4:2,'stroke-linecap':'round'}));\n      });\n      paws.forEach(function(c){\n        svg.appendChild(el('circle',{cx:X(c.cx),cy:Y(c.cy),r:c.r*scale,fill:'none',\n          stroke:active?ZCOLOR[key]:'rgba(255,255,255,.25)','stroke-width':active?3:1.5}));\n      });\n    });\n    // Tail (shared strip, no L/R split)\n    (s.tail_segs||[]).forEach(function(seg){\n      svg.appendChild(el('line',{x1:X(seg.p0[0]),y1:Y(seg.p0[1]),x2:X(seg.p1[0]),y2:Y(seg.p1[1]),\n        stroke:cur===7?ZCOLOR.TAIL:'rgba(255,255,255,.25)','stroke-width':cur===7?4:2,'stroke-linecap':'round'}));\n    });\n    // Old lick_stage nose trapezoid (reference geometry only)\n    if(d.trap_pts&&d.trap_pts.length===4){\n      var poly=d.trap_pts.map(function(p){return X(p[0])+','+Y(p[1]);}).join(' ');\n      svg.appendChild(el('polygon',{points:poly,fill:'rgba(255,213,79,.10)',stroke:'#ffd54f','stroke-width':1.2,'stroke-dasharray':'4,3'}));\n    }\n    // Nose point\n    var nose=d.nose_xy&&d.nose_xy.length===2?d.nose_xy:d.nose_xy_trap;\n    if(nose&&nose.length===2){\n      svg.appendChild(el('circle',{cx:X(nose[0]),cy:Y(nose[1]),r:4,fill:'#ff5252'}));\n    }\n  }\n\n  scope.$watch('msg', function(msg){\n    if(msg&&msg.payload) render(msg.payload);\n  });\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 620,
+    "y": 260,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ebz_g_viz",
+    "type": "ui_group",
+    "name": "梯形+7區域幾何視覺化",
+    "tab": "ebz_uitab",
+    "order": 1,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "ebz_g_stats",
+    "type": "ui_group",
+    "name": "7區域統計",
+    "tab": "ebz_uitab",
+    "order": 2,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "ebz_uitab",
+    "type": "ui_tab",
+    "name": "🦴 擴充身體區域",
+    "icon": "pets",
+    "order": 6,
+    "disabled": false,
+    "hidden": false
   }
 ]

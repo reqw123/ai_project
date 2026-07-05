@@ -1,0 +1,248 @@
+[
+    {
+        "id": "b1a2c3d4e5f60718",
+        "type": "tab",
+        "label": "🔌 個體化基線 (Python 橋接／比對模式)",
+        "disabled": false,
+        "info": "此 tab 橋接 cat_monitoring_system/analytics 套件（POST /api/deviation）。\n\n【比對模式】目前寫入的是獨立的 v2_baseline_py / v2_deviation_py / v2_risk_py，不會覆蓋 cat_health_v3_flow.json 自己算的 v2_baseline / v2_deviation / v2_risk，兩邊可以同時跑，用「比對新舊引擎結果」節點的 debug 輸出直接比對數字，也可以在 Node-RED Dashboard 的獨立分頁「🔬 基線引擎比對」看視覺化卡片（此分頁是獨立的 ui_tab，跟 cat_health_v3_flow.json 的 Dashboard 分頁分開，不會互相干擾）。\n\n使用方式：先用「手動測試觸發」inject 節點確認能正常叫到 /api/deviation；確認 python_ip 已設定（貓咪主控.json 需已接收過 Python 的 /python_online 上線通知）、且 v2_daily_history 累積天數足夠（預設需 7 天）。\n\n驗證數字沒問題、決定要正式切換後，再考慮：(1) 把「解析回應並寫回 global」節點裡的 _py 後綴改掉，(2) 停用/移除 cat_health_v3_flow.json 裡的「個體化基線計算器」「偏差分析引擎」「行為偏差融合引擎」，(3) 把 link in 接到「行為統計累積器」的輸出。這三步都還沒做。\n\n詳細設計規則見 cat_monitoring_system/analytics/README.md。"
+    },
+    {
+        "id": "b1a2c3d4e5f6071f",
+        "type": "comment",
+        "z": "b1a2c3d4e5f60718",
+        "name": "比對模式：寫入 _py 後綴的獨立變數，不影響 cat_health_v3_flow.json 正在用的 v2_baseline/v2_risk",
+        "info": "",
+        "x": 420,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "b1a2c3d4e5f60719",
+        "type": "inject",
+        "z": "b1a2c3d4e5f60718",
+        "name": "手動測試觸發",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 180,
+        "y": 160,
+        "wires": [
+            [
+                "b1a2c3d4e5f6071b"
+            ]
+        ]
+    },
+    {
+        "id": "b1a2c3d4e5f6071a",
+        "type": "link in",
+        "z": "b1a2c3d4e5f60718",
+        "name": "來自「行為統計累積器」（需自行接線）",
+        "links": [],
+        "x": 200,
+        "y": 220,
+        "wires": [
+            [
+                "b1a2c3d4e5f6071b"
+            ]
+        ]
+    },
+    {
+        "id": "b1a2c3d4e5f6071b",
+        "type": "function",
+        "z": "b1a2c3d4e5f60718",
+        "name": "組成 /api/deviation 請求",
+        "func": "// 讀取每日歷史、今日統計、排除日期、基線設定天數，組成 /api/deviation 的請求 body。\n// 對應 Python 端：cat_monitoring_system/server/routes.py -> POST /api/deviation\n//                 cat_monitoring_system/analytics/README.md 有完整設計說明\n//\n// 可從兩個地方觸發：\n//   1. 手動測試 inject 節點（本 tab 內建）\n//   2. link in 節點——若要接到既有 cat_health_v3_flow.json 的即時流程，\n//      在該 flow 裡「行為統計累積器」之後加一個 link out，\n//      target 指到本節點對應的 link in（id 需自行對應）。\n//\n// 已知問題：v2_daily_history 裡的 date 欄位可能是 ISO（YYYY-MM-DD）或\n// toLocaleDateString('zh-TW') 產生的本地格式（例如 2026/7/2，甚至混雜\n// 「2026/6/2 下午10:30:32」這種帶時分秒的格式——對應 behavior_segments_log.csv\n// 已知的日期混用 bug）。/api/deviation 對日期格式很嚴格（只收 ISO），\n// 這裡會盡量正規化，無法辨識的直接跳過並記警告，避免一筆髒資料讓整批請求失敗。\n\nfunction toISODate(raw) {\n    if (raw == null) return null;\n    let s = String(raw).trim();\n    if (/^\\d{4}-\\d{2}-\\d{2}/.test(s)) return s.slice(0, 10);\n    let m = s.match(/^(\\d{4})\\/(\\d{1,2})\\/(\\d{1,2})/);\n    if (m) {\n        let y = m[1], mo = m[2].padStart(2, '0'), d = m[3].padStart(2, '0');\n        return y + '-' + mo + '-' + d;\n    }\n    return null;\n}\n\nlet history = global.get('v2_daily_history', 'file') || [];\nlet skipped = 0;\nlet dailyHistory = [];\nfor (let d of history) {\n    let iso = toISODate(d.date);\n    if (!iso) { skipped++; continue; }\n    dailyHistory.push({\n        date: iso,\n        monitoring_seconds: d.monitoring_seconds || 0,\n        walk_time: d.walk_time || 0, walk_count: d.walk_count || 0,\n        stop_time: d.stop_time || 0, stop_count: d.stop_count || 0,\n        lick_time: d.lick_time || 0, lick_count: d.lick_count || 0,\n        scratch_time: d.scratch_time || 0, scratch_count: d.scratch_count || 0,\n        shake_count: d.shake_count || 0,\n        active_time: d.active_time || 0, rest_time: d.rest_time || 0,\n    });\n}\nif (skipped > 0) {\n    node.warn('組成 /api/deviation 請求：略過 ' + skipped + ' 筆無法辨識日期格式的歷史紀錄（見 behavior_segments_log.csv 已知的日期混用 bug）');\n}\n\n// today：優先用 msg.payload.v2_today（若由既有 flow 的 msg 鏈接進來），\n// 否則退回 global 的 v2_today（若有另外用 global.set 存過的話）。\nlet td = (msg.payload && msg.payload.v2_today) || global.get('v2_today') || {};\nlet today = {\n    walk_time:     (td.walk     && td.walk.time)     || 0,\n    lick_time:     (td.lick     && td.lick.time)      || 0,\n    lick_count:    (td.lick     && td.lick.count)     || 0,\n    scratch_time:  (td.scratch  && td.scratch.time)   || 0,\n    scratch_count: (td.scratch  && td.scratch.count)  || 0,\n    shake_count:   (td.shake    && td.shake.count)    || 0,\n    stop_time:     (td.stop     && td.stop.time)      || 0,\n};\n\nlet cfg = global.get('v2_user_settings', 'file') || {};\nlet minBaselineDays = cfg.baseline_days != null ? +cfg.baseline_days : 7;\nlet excludedDates = (global.get('v2_excluded_dates', 'file') || []).map(toISODate).filter(Boolean);\n\nlet pythonIp = global.get('python_ip');\nif (!pythonIp) {\n    node.warn('/api/deviation 橋接：global.python_ip 尚未設定（Python 端可能還沒送過 /python_online 上線通知），中止本次請求。');\n    return null;\n}\n\nmsg.url = 'http://' + pythonIp + ':5000/api/deviation';\nmsg.payload = {\n    daily_history: dailyHistory,\n    today: today,\n    excluded_dates: excludedDates,\n    min_baseline_days: minBaselineDays,\n    // Class C（節律/轉移模式）尚未搬遷到 Python，見 analytics/README.md「還沒做的事」。\n    // 暫時預設 0；若既有 flow 已算出節律/轉移分數並存到 global.v2_class_c_score，\n    // 這裡會自動帶入。\n    class_c_score: global.get('v2_class_c_score') || 0,\n};\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 470,
+        "y": 190,
+        "wires": [
+            [
+                "b1a2c3d4e5f6071c"
+            ]
+        ]
+    },
+    {
+        "id": "b1a2c3d4e5f6071c",
+        "type": "http request",
+        "z": "b1a2c3d4e5f60718",
+        "name": "POST /api/deviation",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 700,
+        "y": 190,
+        "wires": [
+            [
+                "b1a2c3d4e5f6071d"
+            ]
+        ]
+    },
+    {
+        "id": "b1a2c3d4e5f6071d",
+        "type": "function",
+        "z": "b1a2c3d4e5f60718",
+        "name": "解析回應並寫回 global（_py 比對用）",
+        "func": "// 比對模式（安全，不覆蓋正式資料）：\n// 把 /api/deviation 的回應寫進「_py」結尾的獨立 global 變數\n// （v2_baseline_py / v2_deviation_py / v2_risk_py / v2_baseline_alert_py /\n// v2_baseline_insufficient_py），不會動到 cat_health_v3_flow.json 自己\n// 的「個體化基線計算器」「偏差分析引擎」「行為偏差融合引擎」持續在寫的\n// v2_baseline / v2_deviation / v2_risk。兩邊可以同時跑，互不干擾，方便\n// 直接比對新舊引擎的數字（見「比對新舊引擎結果」節點）。\n//\n// 等確認 Python 版數字沒問題、決定要正式切換時，再把這裡的 key 改回\n// 不帶 _py 的原始名稱，並停用/移除 cat_health_v3_flow.json 裡的舊引擎節點。\n//\n// 已知限制：analytics/fusion.py 目前只算 level / score / class_a / class_b /\n// class_c / top_contributors，沒有算舊版 JS 裡完整的 xai_explanation 解釋\n// 文字，也沒有 alerts 陣列裡逐條格式化的警報訊息——這些屬於展示邏輯，\n// 尚未搬遷（見 analytics/README.md）。color/emoji/status 文字在這裡用\n// 簡單規則補上，方便比對時直接看得懂。\n\nif (msg.statusCode !== 200 || !msg.payload) {\n    node.warn('/api/deviation 呼叫失敗，statusCode=' + msg.statusCode + '，本次不更新 _py 比對資料。');\n    return null;\n}\n\nlet body = msg.payload;\n\nif (body.status === 'insufficient_data') {\n    let alertMsg = '歷史資料不足（' + body.current_days + ' 天），尚需 ' +\n        Math.max(0, body.required_days - body.current_days) + ' 天才能建立基線。';\n    global.set('v2_baseline_alert_py', alertMsg);\n    global.set('v2_baseline_insufficient_py', true);\n    node.warn(alertMsg);\n    msg.payload = { status: 'insufficient_data', current_days: body.current_days, required_days: body.required_days };\n    return msg;\n}\n\nif (body.status !== 'ok') {\n    node.warn('/api/deviation 回傳未知狀態: ' + JSON.stringify(body).slice(0, 200));\n    return null;\n}\n\nglobal.set('v2_baseline_insufficient_py', false);\nglobal.set('v2_baseline_py', body.baseline, 'file');\nglobal.set('v2_deviation_py', body.deviation);\n\nconst LEVEL_STYLE = {\n    'Normal':                        { color: '#4caf50', emoji: '✅', status: '行為正常' },\n    'Mild Behavioral Deviation':     { color: '#ffa726', emoji: '⚠️', status: '輕度行為偏差' },\n    'Moderate Behavioral Deviation': { color: '#ff7043', emoji: '🚨', status: '中度行為偏差' },\n    'Severe Behavioral Deviation':   { color: '#f44336', emoji: '🆘', status: '重度行為偏差' },\n};\nlet style = LEVEL_STYLE[body.fusion.level] || { color: '#9e9e9e', emoji: '❔', status: body.fusion.level };\n\nlet riskPy = {\n    behavior_deviation_score: body.fusion.score,\n    behavior_status: style.status,\n    behavior_deviation_level: body.fusion.level,\n    score: body.fusion.score, level: body.fusion.level,\n    color: style.color, emoji: style.emoji,\n    components: {\n        class_a: body.fusion.class_a_score,\n        class_b: body.fusion.class_b_score,\n        class_c: body.fusion.class_c_score,\n    },\n    class_a_triggered: body.fusion.class_a_triggered,\n    class_a_override: body.fusion.class_a_override,\n    top_contributors: body.fusion.top_contributors,\n    confidence: body.baseline.confidence,\n    engine: 'python_analytics_bridge',\n    computed_at: new Date().toISOString(),\n};\nglobal.set('v2_risk_py', riskPy);\n\nmsg.payload = { status: 'ok', baseline: body.baseline, deviation: body.deviation, risk: riskPy };\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 260,
+        "wires": [
+            [
+                "b1a2c3d4e5f6071e",
+                "b1a2c3d4e5f60722"
+            ]
+        ]
+    },
+    {
+        "id": "b1a2c3d4e5f6071e",
+        "type": "debug",
+        "z": "b1a2c3d4e5f60718",
+        "name": "橋接結果（Python 原始輸出）",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 770,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "b1a2c3d4e5f60722",
+        "type": "function",
+        "z": "b1a2c3d4e5f60718",
+        "name": "比對新舊引擎結果",
+        "func": "// 比對新舊引擎：讀取 cat_health_v3_flow.json 舊引擎寫的 global.v2_risk\n// 跟本橋接流程寫的 global.v2_risk_py，整理成一份精簡對照，方便直接看\n// 兩邊算出來的 level/score 是否一致、差在哪裡——這是驗證 Python 版\n// 偏差引擎是否可信的關鍵步驟，不是可有可無的展示。\n\nlet oldRisk = global.get('v2_risk')    || null;\nlet newRisk = global.get('v2_risk_py') || null;\n\nlet comparison = {\n    old_engine: oldRisk ? {\n        level: oldRisk.level, score: oldRisk.score,\n        class_a_triggered: oldRisk.class_a_triggered,\n    } : '（尚無資料，cat_health_v3_flow.json 的行為偏差融合引擎還沒算過）',\n    new_engine: newRisk ? {\n        level: newRisk.level, score: newRisk.score,\n        class_a_triggered: newRisk.class_a_triggered,\n        top_contributors: newRisk.top_contributors,\n    } : '（尚無資料，見上方警告）',\n};\n\nif (oldRisk && newRisk) {\n    comparison.level_match = (oldRisk.level === newRisk.level);\n    comparison.score_diff  = +(newRisk.score - oldRisk.score).toFixed(1);\n    if (!comparison.level_match) {\n        node.warn('⚠ 新舊引擎判斷等級不同： 舊=' + oldRisk.level + ' 新=' + newRisk.level + '（score 差 ' + comparison.score_diff + '）');\n    }\n}\ncomparison.compared_at = new Date().toLocaleString('zh-TW');\n\nmsg.payload = comparison;\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 320,
+        "wires": [
+            [
+                "b1a2c3d4e5f60723",
+                "b1a2c3d4e5f60726"
+            ]
+        ]
+    },
+    {
+        "id": "b1a2c3d4e5f60723",
+        "type": "debug",
+        "z": "b1a2c3d4e5f60718",
+        "name": "新舊引擎對照",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 750,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "b1a2c3d4e5f60720",
+        "type": "catch",
+        "z": "b1a2c3d4e5f60718",
+        "name": "捕捉未處理的例外",
+        "scope": null,
+        "uncaught": false,
+        "x": 210,
+        "y": 400,
+        "wires": [
+            [
+                "b1a2c3d4e5f60721"
+            ]
+        ]
+    },
+    {
+        "id": "b1a2c3d4e5f60721",
+        "type": "debug",
+        "z": "b1a2c3d4e5f60718",
+        "name": "橋接錯誤",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 470,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "b1a2c3d4e5f60726",
+        "type": "ui_template",
+        "z": "b1a2c3d4e5f60718",
+        "group": "b1a2c3d4e5f60725",
+        "name": "新舊引擎比對卡片",
+        "order": 1,
+        "width": "12",
+        "height": "10",
+        "format": "<style>\n.cmp-wrap{font-family:'Microsoft JhengHei',sans-serif;padding:14px;background:#0d1117;border-radius:14px;height:100%;box-sizing:border-box}\n.cmp-title{font-size:13px;color:rgba(255,255,255,.5);margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}\n.cmp-badge-match{padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700}\n.cmp-match-yes{background:rgba(76,175,80,.2);color:#81c784;border:1px solid rgba(76,175,80,.4)}\n.cmp-match-no{background:rgba(244,67,54,.2);color:#ef9a9a;border:1px solid rgba(244,67,54,.4)}\n.cmp-match-pending{background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.15)}\n.cmp-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}\n.cmp-card{background:linear-gradient(135deg,#1a2332,#0d1b2a);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:16px}\n.cmp-card-hd{font-size:11px;color:rgba(255,255,255,.45);margin-bottom:8px;letter-spacing:.5px;text-transform:uppercase}\n.cmp-level{font-size:16px;font-weight:700;color:#fff;margin-bottom:6px}\n.cmp-score{font-size:30px;font-weight:800;color:#fff}\n.cmp-score-lbl{font-size:10px;color:rgba(255,255,255,.4);margin-top:2px}\n.cmp-risk-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:99px;font-size:12px;font-weight:700;margin-top:10px}\n.risk-normal{background:rgba(76,175,80,.2);color:#81c784;border:1px solid rgba(76,175,80,.4)}\n.risk-mild{background:rgba(255,167,38,.2);color:#ffa726;border:1px solid rgba(255,167,38,.4)}\n.risk-moderate{background:rgba(255,112,67,.2);color:#ff8a65;border:1px solid rgba(255,112,67,.4)}\n.risk-severe{background:rgba(244,67,54,.2);color:#ef9a9a;border:1px solid rgba(244,67,54,.4)}\n.cmp-empty{color:rgba(255,255,255,.35);font-size:13px;padding:30px 10px;text-align:center}\n.cmp-contrib{margin-top:10px;font-size:11px;color:rgba(255,255,255,.55)}\n.cmp-contrib-row{display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid rgba(255,255,255,.06)}\n.cmp-footer{margin-top:12px;font-size:10px;color:rgba(255,255,255,.32);line-height:1.6}\n.cmp-diff{text-align:center;margin:12px 0;font-size:12px;color:rgba(255,255,255,.55)}\n.cmp-diff b{color:#fff}\n</style>\n<div class=\"cmp-wrap\" ng-init=\"init()\">\n  <div class=\"cmp-title\">\n    <span>🔬 新舊引擎比對</span>\n    <span class=\"cmp-badge-match\" ng-class=\"matchClass()\">{{matchLabel()}}</span>\n    <span ng-if=\"compared_at\" style=\"font-size:10px;color:rgba(255,255,255,.3);margin-left:auto\">更新於 {{compared_at}}</span>\n  </div>\n\n  <div class=\"cmp-row\">\n    <div class=\"cmp-card\">\n      <div class=\"cmp-card-hd\">舊引擎（Node-RED JS・z-score）</div>\n      <div ng-if=\"old\">\n        <div class=\"cmp-level\">{{levelZh(old.level)}}</div>\n        <div class=\"cmp-score\">{{old.score}}<span class=\"cmp-score-lbl\">/100</span></div>\n        <div class=\"cmp-risk-badge\" ng-class=\"riskCls(old.level)\">{{old.class_a_triggered ? 'Class A 觸發' : '無 Class A 觸發'}}</div>\n      </div>\n      <div class=\"cmp-empty\" ng-if=\"!old\">尚無資料<br><span style=\"font-size:10px\">（cat_health_v3_flow.json 的行為偏差融合引擎還沒算過）</span></div>\n    </div>\n\n    <div class=\"cmp-card\">\n      <div class=\"cmp-card-hd\">新引擎（Python・穩健統計）</div>\n      <div ng-if=\"new_\">\n        <div class=\"cmp-level\">{{levelZh(new_.level)}}</div>\n        <div class=\"cmp-score\">{{new_.score}}<span class=\"cmp-score-lbl\">/100</span></div>\n        <div class=\"cmp-risk-badge\" ng-class=\"riskCls(new_.level)\">{{new_.class_a_triggered ? 'Class A 觸發' : '無 Class A 觸發'}}</div>\n        <div class=\"cmp-contrib\" ng-if=\"new_.top_contributors\">\n          <div ng-repeat=\"c in new_.top_contributors.slice(0,3)\" class=\"cmp-contrib-row\">\n            <span>{{c[0]}}</span><span>{{c[1].toFixed(2)}}σ</span>\n          </div>\n        </div>\n      </div>\n      <div class=\"cmp-empty\" ng-if=\"!new_\">尚無資料<br><span style=\"font-size:10px\">（去「手動測試觸發」按一次 inject）</span></div>\n    </div>\n  </div>\n\n  <div class=\"cmp-diff\" ng-if=\"old && new_\">score 差異：<b>{{scoreDiff()}}</b></div>\n\n  <div class=\"cmp-footer\">\n    研究驗證用途：比對 cat_health_v3_flow.json 舊引擎（z-score）與 cat_monitoring_system/analytics\n    Python 新引擎（MAD 穩健 z-score／Poisson-NB 尾機率）的判斷結果。兩者目前並存、互不覆蓋，\n    正式告警仍以舊引擎（v2_risk）為準；詳見 cat_monitoring_system/analytics/README.md。\n  </div>\n</div>\n\n<script>\n(function(scope){\n  scope.old = null;\n  scope.new_ = null;\n  scope.compared_at = '';\n  scope.levelZh = function(lvl){\n    return {\n      'Normal':'行為正常',\n      'Mild Behavioral Deviation':'輕度行為偏差',\n      'Moderate Behavioral Deviation':'中度行為偏差',\n      'Severe Behavioral Deviation':'重度行為偏差'\n    }[lvl] || lvl || '計算中';\n  };\n  scope.riskCls = function(lvl){\n    return lvl==='Severe Behavioral Deviation' ? 'risk-severe' :\n           lvl==='Moderate Behavioral Deviation' ? 'risk-moderate' :\n           lvl==='Mild Behavioral Deviation' ? 'risk-mild' : 'risk-normal';\n  };\n  scope.matchClass = function(){\n    if(!scope.old || !scope.new_) return 'cmp-match-pending';\n    return scope.old.level === scope.new_.level ? 'cmp-match-yes' : 'cmp-match-no';\n  };\n  scope.matchLabel = function(){\n    if(!scope.old || !scope.new_) return '等待資料';\n    return scope.old.level === scope.new_.level ? '判斷一致' : '判斷不同';\n  };\n  scope.scoreDiff = function(){\n    if(!scope.old || !scope.new_) return '';\n    var d = (scope.new_.score - scope.old.score).toFixed(1);\n    return (d>=0?'+':'') + d;\n  };\n  scope.init = function(){};\n  scope.$watch('msg', function(m){\n    if(!m || !m.payload) return;\n    var p = m.payload;\n    scope.old  = (p.old_engine  && typeof p.old_engine  === 'object') ? p.old_engine  : null;\n    scope.new_ = (p.new_engine  && typeof p.new_engine  === 'object') ? p.new_engine  : null;\n    scope.compared_at = p.compared_at || '';\n  });\n})(scope);\n</script>\n",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 760,
+        "y": 380,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "b1a2c3d4e5f60725",
+        "type": "ui_group",
+        "name": "新舊引擎比對",
+        "tab": "b1a2c3d4e5f60724",
+        "order": 1,
+        "disp": true,
+        "width": "12",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "b1a2c3d4e5f60724",
+        "type": "ui_tab",
+        "name": "🔬 基線引擎比對",
+        "icon": "compare_arrows",
+        "order": 99,
+        "disabled": false,
+        "hidden": false
+    }
+]

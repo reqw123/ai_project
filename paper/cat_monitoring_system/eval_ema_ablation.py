@@ -92,15 +92,14 @@ def _next_run_number(out_root: str) -> int:
 
 
 def infer_bn_input_channels(model_path: str):
-    try:
-        ck = torch.load(model_path, map_location='cpu')
-        sd = ck.get('model_state_dict', ck) if isinstance(ck, dict) else ck
-        if isinstance(sd, dict):
-            for k, v in sd.items():
-                if k.endswith('bn_input.weight'):
-                    return int(v.shape[0])
-    except Exception as e:
-        print(f"  ⚠ channel inference failed for {model_path}: {e}")
+    if not Path(model_path).exists():
+        raise FileNotFoundError(f"模型檔案不存在: {model_path}")
+    ck = torch.load(model_path, map_location='cpu')
+    sd = ck.get('model_state_dict', ck) if isinstance(ck, dict) else ck
+    if isinstance(sd, dict):
+        for k, v in sd.items():
+            if k.endswith('bn_input.weight'):
+                return int(v.shape[0])
     return None
 
 
@@ -127,6 +126,7 @@ def evaluate_video(video_path, kp_detector, classifier, feature_mode,
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    kp_detector.reset_track()  # 新影片開始，避免延續上一支影片鎖定的貓
     buf = deque(maxlen=sequence_length)
     preds = []
     frame_idx = -1

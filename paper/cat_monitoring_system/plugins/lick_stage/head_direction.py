@@ -91,6 +91,44 @@ def infer_face_state_user_rules(
     return _C.STATE_UNKNOWN, False
 
 
+def stabilize_direction_vector(new_vec, prev_vec, alpha: float, flip_margin: float):
+    """Flip-aware EMA for a unit direction vector across frames.
+
+    Plain EMA on a vector that can legitimately point in either of two
+    opposite directions frame-to-frame (e.g. derived from an axis with no
+    inherent sign, like the ear-to-ear line) is unsafe: if it flips ~180°,
+    naively averaging with the previous vector cancels toward zero instead
+    of tracking the true orientation, which is exactly the "梯形亂轉"
+    instability. Fix: if the new vector points roughly opposite the
+    previous one, flip it first so both point the same way, *then* blend.
+
+    flip_margin adds a deadband around the perpendicular (dot ~ 0) case so
+    per-frame keypoint jitter right at the flip boundary doesn't toggle the
+    sign back and forth — only a clearly opposite reading (dot < -flip_margin)
+    is treated as a genuine flip.
+
+    Returns a re-normalized unit vector. Pure function — caller owns state.
+    """
+    new_vec = np.asarray(new_vec, dtype=np.float64)
+    norm = math.hypot(float(new_vec[0]), float(new_vec[1]))
+    if norm < 1e-9:
+        return np.asarray(prev_vec, dtype=np.float64) if prev_vec is not None else new_vec
+    new_vec = new_vec / norm
+
+    if prev_vec is None:
+        return new_vec
+
+    prev_vec = np.asarray(prev_vec, dtype=np.float64)
+    dot = float(np.dot(new_vec, prev_vec))
+    if dot < -flip_margin:
+        new_vec = -new_vec
+        dot = -dot
+
+    blended = alpha * new_vec + (1.0 - alpha) * prev_vec
+    b_norm = math.hypot(float(blended[0]), float(blended[1]))
+    return blended / b_norm if b_norm > 1e-9 else new_vec
+
+
 def smooth_state(history: deque) -> Tuple[str, float]:
     """Majority-vote smoothing over recent history. Returns (dominant_state, stability)."""
     if not history:
