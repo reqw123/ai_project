@@ -5,6 +5,7 @@
 import sys
 import os
 import csv
+import shutil
 import cv2
 import numpy as np
 import time
@@ -44,7 +45,7 @@ from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
 # ── 五個行為資料夾（按 z/x/c/v/b 切換）────────────────────────────────
-_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存"
+_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
 FOLDER_WALK    = rf"{_BASE}\walk"
 FOLDER_LICK    = rf"{_BASE}\lick"
 FOLDER_SCRATCH = rf"{_BASE}\scratch"
@@ -61,19 +62,25 @@ FOLDER_MAP = {
 }
 DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 
+# ── 模式2 影片評分（Shift+A~E，移動目前影片到對應評分資料夾）───────────
+# 用大寫 A~E（Shift+字母）觸發，避免跟上面 z/x/c/v/b 小寫的資料夾切換鍵衝突。
+# 評分資料夾建立在「目前影片所在的來源資料夾」底下（<影片所在資料夾>\video_rating\<字母>），
+# 而非固定路徑，這樣不同輸入資料夾各自有自己的評分結果。
+RATING_FOLDER_NAME = "video_rating"
+RATING_LETTERS = ("A", "B", "C", "D", "E")
+
 # 測試資料夾模式
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
-FOLDER_TEST_MODE = 'all'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\5555"  # 'single' 模式使用的扁平資料夾
+FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\shake_標記區"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_117.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_087_xy_conf_v_bone_att_on\087_best_model.pth"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_119.pt"
+STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_104_xy_conf_v_bone_att_on\104_best_model.pth"
 INFERENCE_DEVICE = 'cuda'   
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
-YOLO_CONF_THRESHOLD = 0.5
 STGCN_NORMALIZE = True
 SEQUENCE_LENGTH = 16
 _raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy")
@@ -94,6 +101,10 @@ _FEATURE_MODE_MAP = {
 STGCN_FEATURE_MODE = _FEATURE_MODE_MAP.get(STGCN_FEATURE_MODE, STGCN_FEATURE_MODE)
 # Use centralized config for behavior label confidence threshold
 BEHAVIOR_MIN_CONFIDENCE = _BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
+# 顯示層 hysteresis：連續幾次分類視窗判同一類才真的切換畫面顯示的行為標籤（見 config.py 說明）
+DISPLAY_HYSTERESIS_WINDOWS = _BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS
+# 貓咪偵測消失容忍：連續幾幀沒偵測到貓才真的視為消失（見 config.py 說明）
+CAT_MISSING_TOLERANCE_FRAMES = _BehaviorTrackingConfig.CAT_MISSING_TOLERANCE_FRAMES
 TARGET_MODEL_FPS = 30.0  # 模型訓練/推論設計時基
 ENABLE_FPS_DOWNSAMPLE = True  # 只要不是 30fps，就把模型時基統一到 30fps（高於則降採樣，低於則用 30fps 時基）
 CLASSIFY_STRIDE = 2  # 每幾個處理幀做一次分類（1=每幀）
@@ -108,13 +119,14 @@ LOOP_PLAYBACK = True  # 是否循環播放
 ENABLE_AUDIO_PLAYBACK = False   # 是否播放外部音訊檔
 AUDIO_PATH = r"C:\Users\homec\Downloads\7月2日.mp3"  # 從影片抽出的音訊檔路徑（mp3/wav），留空則不播放
 
-JITTER_CONF_THRESHOLD = 0.3  # 抖動統計只使用高於此信心值的關鍵點
 REPORT_OUTPUT_PATH = r"C:\paper\output\inference_analysis_report_ema.csv"  # 最終 CSV 報告
 RUN_MODE = 0  # 0: 啟動時選擇, 1: 只生成統計, 2: 只做視窗測試
 JITTER_WARNING_THRESHOLD = 30.0  # 像素抖動警告閾值
 
-# ===== 關鍵點顯示/統計門檻 =====
-DRAW_KP_CONF_THRESHOLD = 0.5  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
+# ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
+YOLO_CONF_THRESHOLD = 0.5       # YOLO bbox 偵測信心門檻（KeypointDetector 內部過濾用）
+JITTER_CONF_THRESHOLD = 0.3     # 抖動統計只使用高於此信心值的關鍵點
+DRAW_KP_CONF_THRESHOLD = 0.5    # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
 SHOW_PROBABILITY_BARS = False  # 關閉率條可減少每幀繪圖負載
 
 # ===== EMA 平滑設定 =====
@@ -265,6 +277,20 @@ def resolve_video_paths(video_sources: Iterable[str]):
         print(f"⚠ 路徑不存在，略過: {p}")
 
     return resolved
+
+
+def move_video_to_rating_folder(video_path, rating_letter):
+    """把目前影片移動到 <影片所在資料夾>/video_rating/<rating_letter>，檔名重複時自動加流水號後綴。"""
+    src = Path(video_path)
+    dest_dir = src.parent / RATING_FOLDER_NAME / rating_letter
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / src.name
+    n = 1
+    while dest.exists():
+        dest = dest_dir / f"{src.stem}_{n}{src.suffix}"
+        n += 1
+    shutil.move(str(src), str(dest))
+    return dest
 
 
 @lru_cache(maxsize=16)
@@ -895,11 +921,56 @@ def main():
     confidence = 0.0
     probs = np.zeros(5, dtype=np.float32)
 
+    # 畫面上實際顯示的行為標籤（經過 hysteresis 延遲確認，跟 behavior_id/confidence/probs
+    # 這組「每個分類視窗的即時結果」分開，統計/CSV 紀錄仍用未經 hysteresis 處理的即時結果）
+    display_behavior_id = LOW_CONF_ID
+    display_confidence = 0.0
+    display_probs = np.zeros(5, dtype=np.float32)
+    _hysteresis_candidate_id = LOW_CONF_ID
+    _hysteresis_candidate_streak = 0
+
     def reset_behavior_display_state():
         nonlocal behavior_id, confidence, probs
+        nonlocal display_behavior_id, display_confidence, display_probs
+        nonlocal _hysteresis_candidate_id, _hysteresis_candidate_streak
         behavior_id = LOW_CONF_ID
         confidence = 0.0
         probs = np.zeros(5, dtype=np.float32)
+        display_behavior_id = LOW_CONF_ID
+        display_confidence = 0.0
+        display_probs = np.zeros(5, dtype=np.float32)
+        _hysteresis_candidate_id = LOW_CONF_ID
+        _hysteresis_candidate_streak = 0
+
+    def update_display_hysteresis(candidate_id, candidate_confidence, candidate_probs):
+        """依候選類別各自的門檻（DISPLAY_HYSTERESIS_WINDOWS[class_id]，見 config.py），連續達到
+        該次數的分類視窗判同一類才真的切換顯示的行為標籤，用來過濾單一視窗瞬間誤判（例如動作轉換
+        瞬間）造成的畫面閃爍。candidate_id 為 LOW_CONF_ID（低信心/正常）時立即顯示，不套用延遲，
+        避免「該說不確定時卻裝確定」。"""
+        nonlocal display_behavior_id, display_confidence, display_probs
+        nonlocal _hysteresis_candidate_id, _hysteresis_candidate_streak
+
+        threshold = DISPLAY_HYSTERESIS_WINDOWS.get(candidate_id, 1) if candidate_id != LOW_CONF_ID else 1
+
+        if threshold <= 1 or candidate_id == LOW_CONF_ID:
+            display_behavior_id = candidate_id
+            display_confidence = candidate_confidence
+            display_probs = candidate_probs
+            _hysteresis_candidate_id = LOW_CONF_ID
+            _hysteresis_candidate_streak = 0
+            return
+
+        if candidate_id == _hysteresis_candidate_id:
+            _hysteresis_candidate_streak += 1
+        else:
+            _hysteresis_candidate_id = candidate_id
+            _hysteresis_candidate_streak = 1
+
+        if _hysteresis_candidate_streak >= threshold:
+            display_behavior_id = candidate_id
+            display_confidence = candidate_confidence
+            display_probs = candidate_probs
+        # 未達門檻前維持前一次已確定顯示的類別（display_behavior_id 不變）
 
     def reset_video_runtime_state():
         nonlocal prev_kpts, prev_kpt_conf, ema_kpts
@@ -909,11 +980,18 @@ def main():
         nonlocal local_jitter_px, local_jitter_norm, local_valid_counts, local_pair_counts
         nonlocal local_behavior_duration_sec, local_behavior_current_confidences
         nonlocal local_behavior_occurrence_counts, local_last_behavior_for_occurrence
+        nonlocal _cat_missing_streak, _last_known_kpts, _last_known_kpt_conf
+        nonlocal _last_known_bbox, _last_known_bbox_conf
 
         keypoints_buffer.clear()
         prev_kpts = None
         prev_kpt_conf = None
         ema_kpts = None
+        _cat_missing_streak = 0
+        _last_known_kpts = None
+        _last_known_kpt_conf = None
+        _last_known_bbox = None
+        _last_known_bbox_conf = None
         keypoint_detector.reset_track()  # 避免上一段影片鎖定的貓誤帶到新的一段
         local_predictions = []
         local_behavior_change_count = 0
@@ -1047,7 +1125,7 @@ def main():
         print(f"模型輸入時基: {model_input_fps:.2f} fps (frame_step={frame_step})")
         print(f"時長: {duration:.1f} 秒")
         if is_test_mode:
-            print("控制: q=退出  space=暫停  r=重置  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊")
+            print("控制: q=退出  space=暫停  r=重置  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  Shift+A~E=評分並移動影片")
         if loop_playback:
             print("🔁 循環播放模式（當前影片播完會重播）")
         print("-" * 60)
@@ -1065,6 +1143,13 @@ def main():
         # EMA 狀態：跨幀累積，切影片或貓消失時重置
         ema_kpts = None  # shape (17, 2)，儲存上一幀的 EMA 平滑座標
         keypoint_detector.reset_track()  # 新影片開始，避免延續上一支影片鎖定的貓
+
+        # 貓咪偵測消失容忍狀態：切影片時重置，避免跨影片誤用上一支影片的殘留姿態
+        _cat_missing_streak = 0
+        _last_known_kpts = None
+        _last_known_kpt_conf = None
+        _last_known_bbox = None
+        _last_known_bbox_conf = None
 
         # 本次影片臨時統計（只有完整第一輪才會被提交）
         local_predictions = []
@@ -1128,6 +1213,19 @@ def main():
             # YOLO-Pose 偵測
             kpts, kpt_conf, bbox, bbox_conf = keypoint_detector.detect(frame)
             # velocity_overlay removed
+
+            # 貓咪偵測消失容忍：連續漏偵測沒超過門檻前，沿用最後一次偵測到的姿態，
+            # 避免單幀 YOLO 漏偵測就整個中斷分類/顯示（見 config.py CAT_MISSING_TOLERANCE_FRAMES）。
+            if kpts is not None:
+                _cat_missing_streak = 0
+                _last_known_kpts = kpts.copy()
+                _last_known_kpt_conf = kpt_conf.copy()
+                _last_known_bbox = bbox
+                _last_known_bbox_conf = bbox_conf
+            elif _cat_missing_streak < CAT_MISSING_TOLERANCE_FRAMES and _last_known_kpts is not None:
+                _cat_missing_streak += 1
+                kpts, kpt_conf = _last_known_kpts, _last_known_kpt_conf
+                bbox, bbox_conf = _last_known_bbox, _last_known_bbox_conf
 
             if kpts is not None:
                 # ===== EMA 平滑：對 YOLO 偵測的原始座標做指數移動平均 =====
@@ -1238,6 +1336,12 @@ def main():
                     else:
                         behavior_id_for_display = behavior_id
 
+                    # 畫面顯示套用 hysteresis：只有連續達到門檻次數才切換 display_*，
+                    # 統計/CSV 仍照舊使用上面未經延遲處理的 behavior_id/confidence/probs。
+                    _candidate_confidence = confidence if behavior_id_for_display != LOW_CONF_ID else 0.0
+                    _candidate_probs = np.array((list(probs) + [0.0] * 5)[:5], dtype=np.float32)
+                    update_display_hysteresis(behavior_id_for_display, _candidate_confidence, _candidate_probs)
+
                     # 計算行為發生次數：切換到「不同的有效行為」時計為一次新發生
                     # 貓消失或低信心 (LOW_CONF_ID) 期間會重置 local_last_behavior_for_occurrence，
                     # 所以中斷後再次出現同一行為也會被計為新的一次。
@@ -1303,9 +1407,9 @@ def main():
                             scaled_kpts,
                             kpt_conf,
                             scaled_bbox,
-                            behavior_id,
-                            confidence,
-                            np.array((list(probs) + [0.0] * 5)[:5], dtype=np.float32),
+                            display_behavior_id,
+                            display_confidence,
+                            display_probs,
                             visualizer,
                             show_info=show_overlay_info,
                             bbox_conf=bbox_conf,
@@ -1322,9 +1426,9 @@ def main():
                             kpts,
                             kpt_conf,
                             bbox,
-                            behavior_id,
-                            confidence,
-                            np.array((list(probs) + [0.0] * 5)[:5], dtype=np.float32),
+                            display_behavior_id,
+                            display_confidence,
+                            display_probs,
                             visualizer,
                             show_info=show_overlay_info,
                             bbox_conf=bbox_conf,
@@ -1337,7 +1441,7 @@ def main():
                 _fn  = FOLDER_MAP.get(current_folder_key, ("", "?"))[1]
                 _nav = (f"[{current_folder_key.upper()}]{_fn}  "
                         f"{current_video_idx + 1}/{len(video_paths)}  "
-                        f"| z WALK  x LICK  c SCRATCH  v SHAKE  b STOP")
+                        f"| z WALK  x LICK  c SCRATCH  v SHAKE  b STOP  | Shift+A~E 評分")
                 _h, _w = show_frame.shape[:2]
                 _ui = compute_ui_scale(_w, _h)
                 _fs = 0.42 * _ui
@@ -1385,6 +1489,20 @@ def main():
                         switched_before_first_pass_complete = True
                     reset_video_runtime_state()
                     print(f"\n切換資料夾 → {FOLDER_MAP[switch_folder_key][1]} [{switch_folder_key}]")
+                    break
+                # Shift+A~E 評分：把目前影片移動到 <影片所在資料夾>/video_rating/<字母> 後接著播下一部
+                if chr(key) in RATING_LETTERS:
+                    rating_letter = chr(key)
+                    cap.release()  # Windows 上檔案控制代碼未釋放會導致移動失敗，先關閉
+                    try:
+                        dest = move_video_to_rating_folder(video_path, rating_letter)
+                        print(f"\n⭐ 影片已評為 [{rating_letter}]，已移動到: {dest}")
+                    except Exception as e:
+                        print(f"⚠ 移動影片失敗（{video_path}）：{e}")
+                    switch_delta = 1
+                    if not first_pass_completed:
+                        switched_before_first_pass_complete = True
+                    reset_video_runtime_state()
                     break
                 if key == ord('r'):
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -1442,6 +1560,20 @@ def main():
                                 switched_before_first_pass_complete = True
                             reset_video_runtime_state()
                             print(f"\n切換資料夾 → {FOLDER_MAP[switch_folder_key][1]} [{switch_folder_key}]")
+                            break
+                        elif chr(k2) in RATING_LETTERS:
+                            paused = False
+                            rating_letter = chr(k2)
+                            cap.release()  # Windows 上檔案控制代碼未釋放會導致移動失敗，先關閉
+                            try:
+                                dest = move_video_to_rating_folder(video_path, rating_letter)
+                                print(f"\n⭐ 影片已評為 [{rating_letter}]，已移動到: {dest}")
+                            except Exception as e:
+                                print(f"⚠ 移動影片失敗（{video_path}）：{e}")
+                            switch_delta = 1
+                            if not first_pass_completed:
+                                switched_before_first_pass_complete = True
+                            reset_video_runtime_state()
                             break
                         elif k2 == ord('r'):
                             paused = False

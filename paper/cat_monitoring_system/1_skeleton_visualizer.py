@@ -296,7 +296,6 @@ YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_90.pt"
 
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
-YOLO_CONF_THRESHOLD = 0.8
 TARGET_MODEL_FPS = 30.0
 ENABLE_FPS_DOWNSAMPLE = True
 EMA_ALPHA = 1.0
@@ -306,7 +305,9 @@ WINDOW_NAME = "Cat Skeleton Visualizer"
 DISPLAY_SIZE = (1080, 720)
 LOOP_PLAYBACK = True
 
-DRAW_KP_CONF_THRESHOLD = 0.5
+# ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
+YOLO_CONF_THRESHOLD = 0.8      # YOLO bbox 偵測信心門檻
+DRAW_KP_CONF_THRESHOLD = 0.5   # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
 
 SCRATCH_NOSE_IDX = 0
 SCRATCH_CHEST_IDX = 3

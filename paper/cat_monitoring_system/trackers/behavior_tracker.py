@@ -107,6 +107,45 @@ class ImprovedBehaviorTracker:
     def map_gcn_to_tracker(self, behavior_id):
         mapping = BehaviorTrackingConfig.BEHAVIOR_CATEGORIES
         return mapping.get(behavior_id, "walk")
+
+    def _settle_current_behavior(self, now, next_activity_value=0.0):
+        """結算目前正在進行的行為事件到 now 這一刻，並清空 current_behavior。
+
+        無論是「切換到新行為」還是「貓消失/信心不足導致事件被迫中斷」都要呼叫
+        這支方法，確保空窗（not_detected/rest）期間的時間只會算進
+        not_detected_time/rest_time，不會被歸到消失前或恢復後的行為時長裡
+        （修正：先前貓咪消失/低信心時 behavior_start_time 不會推進，等貓咪重新
+        出現時那整段空窗時間會被灌進 behavior_time，即使剛好是同一個行為）。
+
+        呼叫端必須已持有 self._lock。回傳是否真的結算了一個事件（current_behavior
+        原本不是 None），供呼叫端決定要不要立即 save_state()。
+        """
+        if self.current_behavior is None:
+            return False
+        duration = now - self.behavior_start_time
+        total_event_duration = now - self.current_event_start_time
+        if self.current_behavior in self.behavior_time:
+            self.behavior_time[self.current_behavior] += max(0.0, duration)  # 補上最後一段
+        if self.current_behavior in self.behavior_count:
+            self.behavior_count[self.current_behavior] += 1                  # 每個完整事件只算 1 次
+        beh = self.current_behavior
+        dur_r = round(total_event_duration, 1)                               # 完整事件時長
+        if beh in self.behavior_min_duration:
+            if self.behavior_min_duration[beh] is None or dur_r < self.behavior_min_duration[beh]:
+                self.behavior_min_duration[beh] = dur_r
+            if self.behavior_max_duration[beh] is None or dur_r > self.behavior_max_duration[beh]:
+                self.behavior_max_duration[beh] = dur_r
+        self.behavior_history.append({
+            "behavior": self.current_behavior,
+            "gcn_behavior_id": self.current_gcn_id,
+            "timestamp": datetime.now(),
+            "duration": dur_r,
+            "activity": next_activity_value,
+        })
+        self.current_behavior = None
+        self.current_gcn_id = None
+        return True
+
     def update(self, behavior_id, activity_value):
         _event_completed = False
         with self._lock:
@@ -123,68 +162,49 @@ class ImprovedBehaviorTracker:
                 self.hourly_distribution[hour_key].get("monitoring_sec", 0.0) + dt
             )
 
-            # YOLO 未偵測到貓（behavior_id == -2）：累積到 not_detected_time，不算休息
             if behavior_id == -2:
+                # YOLO 未偵測到貓（behavior_id == -2）：累積到 not_detected_time，不算休息，
+                # 並結算正在進行的行為事件，避免消失期間的時間灌進行為時長
                 self.not_detected_time += dt
-                return
-
-            # 信心不足時（behavior_id == -1）：YOLO 有偵測到但 ST-GCN 信心未達門檻，累積到 rest_time
-            if behavior_id == -1:
+                if self._settle_current_behavior(now, 0.0):
+                    _event_completed = True
+            elif behavior_id == -1:
+                # 信心不足時（behavior_id == -1）：YOLO 有偵測到但 ST-GCN 信心未達門檻，
+                # 累積到 rest_time，同樣結算正在進行的行為事件
                 self.rest_time += dt
+                if self._settle_current_behavior(now, activity_value):
+                    _event_completed = True
                 self.activity_window.append({"time": now, "activity": activity_value, "weight": 1.0})
-                return
+            else:
+                # 有效行為（0~4）：累積到對應 behavior_time
+                behavior = self.map_gcn_to_tracker(behavior_id)
 
-            # 有效行為（0~4）：累積到對應 behavior_time
-            behavior = self.map_gcn_to_tracker(behavior_id)
+                # 每小時分布（dt 為幀間隔，即時累積）
+                self.hourly_distribution[hour_key][behavior] = self.hourly_distribution[hour_key].get(behavior, 0.0) + dt
 
-            # 每小時分布（dt 為幀間隔，即時累積）
-            hour_key = datetime.now().strftime("%H")
-            if hour_key not in self.hourly_distribution:
-                self.hourly_distribution[hour_key] = {b: 0.0 for b in BehaviorTrackingConfig.BEHAVIOR_CATEGORIES.values()}
-            self.hourly_distribution[hour_key][behavior] = self.hourly_distribution[hour_key].get(behavior, 0.0) + dt
+                # 轉移矩陣（只在行為切換時記錄）
+                if self._last_valid_behavior and self._last_valid_behavior != behavior:
+                    key = self._last_valid_behavior + "->" + behavior
+                    self.transition_matrix[key] = self.transition_matrix.get(key, 0) + 1
+                self._last_valid_behavior = behavior
 
-            # 轉移矩陣（只在行為切換時記錄）
-            if self._last_valid_behavior and self._last_valid_behavior != behavior:
-                key = self._last_valid_behavior + "->" + behavior
-                self.transition_matrix[key] = self.transition_matrix.get(key, 0) + 1
-            self._last_valid_behavior = behavior
+                duration = now - self.behavior_start_time  # 距上次累積時間點的間隔
 
-            duration = now - self.behavior_start_time  # 距上次累積時間點的間隔
-
-            if behavior != self.current_behavior:
-                # ── 行為切換：結算完整事件，開始新事件 ──
-                if self.current_behavior is not None:
-                    total_event_duration = now - self.current_event_start_time
+                if behavior != self.current_behavior:
+                    # ── 行為切換（或貓消失/低信心後恢復）：結算前一個事件，開始新事件 ──
+                    self._settle_current_behavior(now, activity_value)
+                    self.current_behavior = behavior
+                    self.current_gcn_id = behavior_id
+                    self.behavior_start_time = now
+                    self.current_event_start_time = now  # 真實事件起點重置
+                    _event_completed = True
+                elif self.current_behavior is not None and duration >= BehaviorTrackingConfig.MIN_RECORD_DURATION_SECONDS:
+                    # ── 相同行為的定期累積：只更新時間，不建立新事件 ──
                     if self.current_behavior in self.behavior_time:
-                        self.behavior_time[self.current_behavior] += duration  # 補上最後一段
-                    if self.current_behavior in self.behavior_count:
-                        self.behavior_count[self.current_behavior] += 1        # 每個完整事件只算 1 次
-                    beh = self.current_behavior
-                    dur_r = round(total_event_duration, 1)                     # 完整事件時長
-                    if beh in self.behavior_min_duration:
-                        if self.behavior_min_duration[beh] is None or dur_r < self.behavior_min_duration[beh]:
-                            self.behavior_min_duration[beh] = dur_r
-                        if self.behavior_max_duration[beh] is None or dur_r > self.behavior_max_duration[beh]:
-                            self.behavior_max_duration[beh] = dur_r
-                    self.behavior_history.append({
-                        "behavior": self.current_behavior,
-                        "gcn_behavior_id": self.current_gcn_id,
-                        "timestamp": datetime.now(),
-                        "duration": dur_r,
-                        "activity": activity_value,
-                    })
-                self.current_behavior = behavior
-                self.current_gcn_id = behavior_id
-                self.behavior_start_time = now
-                self.current_event_start_time = now  # 真實事件起點重置
-                _event_completed = True
-            elif self.current_behavior is not None and duration >= BehaviorTrackingConfig.MIN_RECORD_DURATION_SECONDS:
-                # ── 相同行為的定期累積：只更新時間，不建立新事件 ──
-                if self.current_behavior in self.behavior_time:
-                    self.behavior_time[self.current_behavior] += duration
-                self.behavior_start_time = now  # 重置部分計時器；current_event_start_time 保持不動
-            # 均勻權重：每幀貢獻相等，使 get_activity_score() 為純粹的時間視窗平均
-            self.activity_window.append({"time": now, "activity": activity_value, "weight": 1.0})
+                        self.behavior_time[self.current_behavior] += duration
+                    self.behavior_start_time = now  # 重置部分計時器；current_event_start_time 保持不動
+                # 均勻權重：每幀貢獻相等，使 get_activity_score() 為純粹的時間視窗平均
+                self.activity_window.append({"time": now, "activity": activity_value, "weight": 1.0})
         now_t = time.time()
         if _event_completed or now_t - self._last_save_time >= 30.0:
             self._last_save_time = now_t

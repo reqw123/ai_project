@@ -44,14 +44,14 @@ def _natural_sort_key(path):
 # ==================== Configuration ====================
 # ==================== Configuration ====================
 VIDEO_FOLDERS = [
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\walk",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\lick",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\scratch",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\shake",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\stop",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\lick",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\scratch",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\shake",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\stop",
 ]
 OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_116.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_119.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
 TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5

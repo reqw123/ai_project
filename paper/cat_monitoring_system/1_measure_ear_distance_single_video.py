@@ -70,7 +70,6 @@ OUTPUT_CSV_PATH = r"C:\Users\homec\left_right_ear_distance.csv"
 NODERED_URL = "http://127.0.0.1:1880/lick_zone_result"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
-YOLO_CONF_THRESHOLD = 0.5
 TARGET_MODEL_FPS = 30.0
 ENABLE_FPS_DOWNSAMPLE = True
 EMA_ALPHA = 1.0
@@ -83,7 +82,8 @@ MJPEG_PORT = 5000
 MJPEG_QUALITY = 75
 NODERED_ONLINE_URL = "http://127.0.0.1:1880/lick_python_online"
 _NEED_FRAME = DISPLAY_WINDOW or (STREAM_MODE == 2)
-# ===== 關鍵點信心門檻（建議集中看這區） =====
+# ===== 信心值門檻設定（bbox conf / keypoint conf，建議集中看這區） =====
+YOLO_CONF_THRESHOLD = 0.5  # YOLO bbox 偵測信心門檻
 EAR_CONF_THRESHOLD = 0.5  # 左右耳/胸/臀「幾何與耳距有效性」門檻（>此值才視為可用）
 DRAW_KP_CONF_THRESHOLD = 0.5  # 骨架與關鍵點「顯示門檻」（>此值才畫；只影響畫面，不影響耳距有效性）
 LIMB_CONF_THRESHOLD = 0.10  # 四肢區域建立門檻（膝與掌都需 > 此值）

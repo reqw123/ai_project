@@ -65,6 +65,7 @@ TARGET_MODEL_FPS = 30.0
 ENABLE_FPS_DOWNSAMPLE = True   # 來源 fps 高於 30 時跳幀降採樣，統一模型時基
 CLASSIFY_STRIDE = 2            # 每幾個處理幀分類一次
 EMA_ALPHA = 1.0                # 須與訓練時 KP_EMA_ALPHA 保持一致
+CLASSIFY_COUNT_THRESHOLD = 90  # 任一行為累計分類次數（不需連續）達此值，立刻停止推論並歸檔至該行為
 
 SUPPORTED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".m4v", ".mpg", ".mpeg", ".webm"}
 
@@ -111,7 +112,8 @@ def load_models():
 
 
 def classify_video(video_path, keypoint_detector, behavior_classifier, feature_mode):
-    """跑完整支影片，回傳 (每個行為類別的分類次數 list[len(BEHAVIOR_CLASSES)], 已分類幀數)。"""
+    """跑影片直到任一行為累計分類次數達 CLASSIFY_COUNT_THRESHOLD（提前停止）或播完整支影片，
+    回傳 (每個行為類別的分類次數 list[len(BEHAVIOR_CLASSES)], 已分類幀數, 提前達標的行為id或None)。"""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"  ✗ 無法開啟影片: {video_path.name}")
@@ -130,6 +132,7 @@ def classify_video(video_path, keypoint_detector, behavior_classifier, feature_m
     ema_kpts = None
     class_counts = [0] * len(BEHAVIOR_CLASSES)
     sampled_frames = 0
+    reached_behavior = None
 
     while True:
         ret, frame = cap.read()
@@ -163,15 +166,20 @@ def classify_video(video_path, keypoint_detector, behavior_classifier, feature_m
 
                 if pred_id is not None and pred_conf >= BEHAVIOR_MIN_CONFIDENCE:
                     class_counts[int(pred_id)] += 1
+                    if class_counts[int(pred_id)] >= CLASSIFY_COUNT_THRESHOLD:
+                        reached_behavior = int(pred_id)
         else:
             ema_kpts = None
+
+        if reached_behavior is not None:
+            break
 
         for _ in range(frame_step - 1):
             if not cap.grab():
                 break
 
     cap.release()
-    return class_counts, sampled_frames
+    return class_counts, sampled_frames, reached_behavior
 
 
 def main():
@@ -198,16 +206,18 @@ def main():
         result = classify_video(video_path, keypoint_detector, behavior_classifier, feature_mode)
         if result is None:
             continue
-        class_counts, sampled_frames = result
+        class_counts, sampled_frames, reached_behavior = result
 
         counts_str = "  ".join(f"{cls}:{cnt}" for cls, cnt in zip(BEHAVIOR_CLASSES, class_counts))
         print(f"  取樣幀數={sampled_frames}  分類次數 [{counts_str}]")
 
-        if sum(class_counts) == 0:
+        if reached_behavior is not None:
+            print(f"  ✓ 已累計達 {CLASSIFY_COUNT_THRESHOLD} 次 [{BEHAVIOR_CLASSES[reached_behavior]}]，提前停止推論")
+        elif sum(class_counts) == 0:
             print(f"  ⚠ 全片無高信心分類結果，跳過歸檔（保留於原資料夾）")
             continue
 
-        chosen = BEHAVIOR_CLASSES[int(np.argmax(class_counts))]
+        chosen = BEHAVIOR_CLASSES[reached_behavior if reached_behavior is not None else int(np.argmax(class_counts))]
         dest_path = Path(DEST_FOLDERS[chosen]) / video_path.name
         shutil.move(str(video_path), str(dest_path))
         print(f"  → 歸類為 [{chosen.upper()}]，已搬移至 {dest_path}\n")

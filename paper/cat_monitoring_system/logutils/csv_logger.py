@@ -9,16 +9,23 @@ from pathlib import Path
 from config import LoggingConfig, CatIdentityConfig
 
 class CSVLogger:
+    HEADER = ["Frame", "Timestamp", "Behavior", "GCN_Confidence", "Is_Still", "Motion_Score", "Cat_ID"]
+
     def __init__(self, csv_path=None):
         if csv_path is None:
             csv_path = LoggingConfig.CSV_PATH
         self._lock = threading.Lock()
-        Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
-        self.csv_file = open(csv_path, 'w', newline='', buffering=1)  # line-buffered
+        path = Path(csv_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # 附加模式（跟 BehaviorSegmentLogger 一致）：先前用 'w' 截斷模式，伺服器
+        # 每次重啟（crash/redeploy）都會把先前累積的逐幀記錄整個清空重寫。
+        write_header = not path.exists() or path.stat().st_size == 0
+        self.csv_file = open(path, 'a', newline='', buffering=1)  # line-buffered
         try:
             self.csv_writer = csv.writer(self.csv_file)
-            self.csv_writer.writerow(["Frame", "Timestamp", "Behavior", "GCN_Confidence", "Is_Still", "Motion_Score", "Cat_ID"])
-            self.csv_file.flush()
+            if write_header:
+                self.csv_writer.writerow(self.HEADER)
+                self.csv_file.flush()
         except Exception:
             self.csv_file.close()
             raise

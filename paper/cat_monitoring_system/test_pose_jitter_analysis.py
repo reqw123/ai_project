@@ -154,7 +154,6 @@ YOLO_MODEL_PATH  = r"C:\AI_Project\cat_pose\v11s_101.pt"
 STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\stgcn_best_047_xy_conf_v_att_on.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640
-YOLO_CONF_THRESHOLD = 0.5
 STGCN_NORMALIZE = True
 SEQUENCE_LENGTH = 16
 _raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy")
@@ -177,10 +176,11 @@ CLASSIFY_STRIDE = 2
 WINDOW_NAME = "Pose Jitter Analysis"
 DISPLAY_SIZE = (1080, 720)
 EMA_ALPHA = 1.0
-DRAW_KP_CONF_THRESHOLD = 0.25
 
-# ── Jitter analysis 輸出設定 ────────────────────────────────────────
-JITTER_CONF_THRESHOLD = 0.3
+# ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
+YOLO_CONF_THRESHOLD = 0.5      # YOLO bbox 偵測信心門檻
+DRAW_KP_CONF_THRESHOLD = 0.25  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
+JITTER_CONF_THRESHOLD = 0.3    # 抖動統計只使用高於此信心值的關鍵點
 
 # 17 關鍵點名稱
 KEYPOINT_NAMES = [

@@ -88,7 +88,6 @@ VIDEO_FOLDER_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
 YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_113.pt"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
-YOLO_CONF_THRESHOLD = 0.5
 
 OUTPUT_DIR = Path(r"C:\ai_project\paper\output\bone_length_stability")
 
@@ -116,7 +115,10 @@ OVERLAY_STRIDE = 2
 
 WINDOW_NAME = "Bone Length Stability"
 DISPLAY_SIZE = (1080, 720)
-DRAW_KP_CONF_THRESHOLD = 0.25
+
+# ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
+YOLO_CONF_THRESHOLD = 0.5      # YOLO bbox 偵測信心門檻
+DRAW_KP_CONF_THRESHOLD = 0.25  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
 
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                      以 下 無 需 修 改                           ║

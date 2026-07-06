@@ -174,6 +174,25 @@ class FrameProcessor:
         self._last_confidence = 0.0
         self._last_class_probs = [0.0] * STGCNConfig.NUM_CLASSES
 
+        # 貓咪偵測消失容忍：YOLO 連續漏偵測沒超過 CAT_MISSING_TOLERANCE_FRAMES
+        # 前，沿用最後一次偵測到的姿態，避免單幀漏偵測就整個中斷分類/顯示
+        # （與 1_run_video_inference.py 共用同一份 config.BehaviorTrackingConfig）
+        self._cat_missing_streak = 0
+        self._last_known_kpts = None
+        self._last_known_kpt_conf = None
+        self._last_known_bbox = None
+        self._last_known_bbox_conf = None
+
+        # 顯示層 hysteresis：overlay/Node-RED「目前行為」需連續多個分類視窗判
+        # 同一類才切換，過濾單一視窗瞬間誤判造成的畫面閃爍；tracker/CSV/
+        # segment_logger 一律使用未經此處理的 self._last_behavior_id 等即時
+        # 結果，統計/歷史資料不受影響（與測試腳本相同設計）
+        self._display_behavior_id = LOW_CONF_ID
+        self._display_confidence = 0.0
+        self._display_class_probs = [0.0] * STGCNConfig.NUM_CLASSES
+        self._hysteresis_candidate_id = LOW_CONF_ID
+        self._hysteresis_candidate_streak = 0
+
     @property
     def source_fps(self) -> float:
         """影片來源 FPS；無效時回傳 TARGET_MODEL_FPS。"""
@@ -205,6 +224,21 @@ class FrameProcessor:
         self.prev_time = current_time
 
         kpts, kpt_conf, bbox, conf = self.keypoint_detector.detect(frame)
+
+        # 貓咪偵測消失容忍：連續漏偵測沒超過門檻前，沿用最後一次偵測到的姿態，
+        # 避免單幀 YOLO 漏偵測就整個中斷分類/顯示（見 config.py 說明）
+        if kpts is not None:
+            self._cat_missing_streak = 0
+            self._last_known_kpts = kpts.copy()
+            self._last_known_kpt_conf = kpt_conf.copy()
+            self._last_known_bbox = bbox
+            self._last_known_bbox_conf = conf
+        elif (self._cat_missing_streak < BehaviorTrackingConfig.CAT_MISSING_TOLERANCE_FRAMES
+              and self._last_known_kpts is not None):
+            self._cat_missing_streak += 1
+            kpts, kpt_conf = self._last_known_kpts, self._last_known_kpt_conf
+            bbox, conf = self._last_known_bbox, self._last_known_bbox_conf
+
         # 沿用上次推論結果；僅在本幀推論成功時更新
         behavior_id = self._last_behavior_id
         confidence = self._last_confidence
@@ -262,6 +296,7 @@ class FrameProcessor:
                 behavior_id = self._last_behavior_id
                 confidence = self._last_confidence
                 class_probs = self._last_class_probs
+                self._update_display_hysteresis(behavior_id, confidence, class_probs)
             # 以 display_kpts 替換後續用到 kpts 的位置
             kpts = display_kpts
 
@@ -278,11 +313,12 @@ class FrameProcessor:
                         rec.get("activity", 0),
                     )
 
-            # === Node-RED 資料推送 ===
+            # === Node-RED 資料推送（顯示用「目前行為」走 hysteresis 後的結果，
+            # today_stats/behavior_log 等統計仍在 tracker 內部用未經處理的即時結果累積）===
             now = time.time()
             if self.nodered and (now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL):
                 self.tracker.add_monitoring_seconds(now - self.last_send_time)
-                self.nodered.send_data(self._build_nodered_payload(behavior_id, confidence))
+                self.nodered.send_data(self._build_nodered_payload(self._display_behavior_id, self._display_confidence))
                 self.last_send_time = now
 
             # === CSV 日誌 ===
@@ -297,10 +333,11 @@ class FrameProcessor:
                     self.anomaly_detector.last_motion_score,
                 )
 
-            # === Overlay 畫圖 ===
+            # === Overlay 畫圖（走 hysteresis 後的顯示結果，避免單一視窗誤判閃爍）===
             if self.overlay:
                 frame = self.visualizer.draw(
-                    frame, kpts, kpt_conf, bbox, conf, behavior_id, confidence, class_probs,
+                    frame, kpts, kpt_conf, bbox, conf,
+                    self._display_behavior_id, self._display_confidence, self._display_class_probs,
                     show_skeleton=self.show_skeleton,
                     show_info=self.show_label,
                     show_bbox=self.show_bbox,
@@ -319,9 +356,10 @@ class FrameProcessor:
                 except Exception:
                     pass
 
-            # 貓咪消失時重置 EMA、推論計數器、keypoints buffer 與上次推論結果
-            # _infer_frame_count 重置確保貓重新出現後推論時機從 0 對齊，不受之前計數影響
-            # keypoints_buffer 清除確保舊幀不污染下次推論窗口
+            # 超過消失容忍門檻，才真的視為貓消失：重置 EMA、推論計數器、keypoints
+            # buffer 與上次推論結果。_infer_frame_count 重置確保貓重新出現後推論
+            # 時機從 0 對齊，不受之前計數影響；keypoints_buffer 清除確保舊幀不污染
+            # 下次推論窗口
             self._ema_kpts = None
             self._infer_frame_count = 0
             self.keypoints_buffer.clear()
@@ -333,6 +371,12 @@ class FrameProcessor:
             behavior_id = self._last_behavior_id
             confidence = self._last_confidence
             class_probs = self._last_class_probs
+            # 顯示層立即切換為「不在畫面」，不套用 hysteresis 延遲
+            self._update_display_hysteresis(NOT_VISIBLE_ID, 0.0, [0.0] * STGCNConfig.NUM_CLASSES)
+            # 靜止偵測也走同一支介面：AnomalyDetector.detect(None, None) 內部有
+            # 自己的短暫遺失容忍（_MAX_MISS_FRAMES），讓它接手判斷是否仍視為靜止，
+            # 而不是在這裡硬寫死 False/0（此門檻與上面的貓消失容忍各自獨立管理）
+            is_still, activity_value = self.anomaly_detector.detect(None, None)
             self.tracker.update(NOT_VISIBLE_ID, 0.0)
             # Node-RED 推送：通知貓咪不在畫面
             now = time.time()
@@ -340,15 +384,54 @@ class FrameProcessor:
                 self.nodered.send_data(self._build_nodered_payload(NOT_VISIBLE_ID, 0.0))
                 self.last_send_time = now
 
-        return frame, behavior_id, confidence, class_probs, is_still, activity_value
+        return frame, self._display_behavior_id, self._display_confidence, self._display_class_probs, is_still, activity_value
 
     def register_plugin(self, plugin) -> None:
         """Register an optional plugin. Called before the first frame."""
         self._plugins.append(plugin)
 
     def reset_ema(self):
-        """重置 EMA 狀態（影片重播或貓咪重新出現時由外部呼叫）。"""
+        """重置 EMA 與消失容忍/顯示 hysteresis 狀態（影片重播時由外部呼叫），
+        避免上一輪播放結尾的姿態被帶到這一輪開頭做消失容忍的橋接。"""
         self._ema_kpts = None
+        self._cat_missing_streak = 0
+        self._last_known_kpts = None
+        self._last_known_kpt_conf = None
+        self._last_known_bbox = None
+        self._last_known_bbox_conf = None
+        self._hysteresis_candidate_id = LOW_CONF_ID
+        self._hysteresis_candidate_streak = 0
+
+    def _update_display_hysteresis(self, candidate_id, candidate_confidence, candidate_probs):
+        """依候選類別各自的門檻（BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS[class_id]），
+        連續達到該次數的分類視窗判同一類，才真的切換 overlay/Node-RED 顯示用的行為標籤，
+        用來過濾單一視窗瞬間誤判（例如動作轉換瞬間）造成的畫面閃爍。tracker/CSV/
+        segment_logger 走 self._last_behavior_id 等未經處理的即時結果，不受影響。
+        candidate_id 為 LOW_CONF_ID/NOT_VISIBLE_ID 時立即顯示，不套用延遲。"""
+        if candidate_id in (LOW_CONF_ID, NOT_VISIBLE_ID):
+            threshold = 1
+        else:
+            threshold = BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS.get(candidate_id, 1)
+
+        if threshold <= 1 or candidate_id in (LOW_CONF_ID, NOT_VISIBLE_ID):
+            self._display_behavior_id = candidate_id
+            self._display_confidence = candidate_confidence
+            self._display_class_probs = candidate_probs
+            self._hysteresis_candidate_id = LOW_CONF_ID
+            self._hysteresis_candidate_streak = 0
+            return
+
+        if candidate_id == self._hysteresis_candidate_id:
+            self._hysteresis_candidate_streak += 1
+        else:
+            self._hysteresis_candidate_id = candidate_id
+            self._hysteresis_candidate_streak = 1
+
+        if self._hysteresis_candidate_streak >= threshold:
+            self._display_behavior_id = candidate_id
+            self._display_confidence = candidate_confidence
+            self._display_class_probs = candidate_probs
+        # 未達門檻前維持前一次已確定顯示的類別（self._display_behavior_id 不變）
 
     def _build_nodered_payload(self, behavior_id, confidence) -> dict:
         """組裝 Node-RED 推送資料，貓咪在畫面與不在畫面共用此方法。"""

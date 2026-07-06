@@ -137,13 +137,13 @@ class ModelPaths:
     """模型和資料檔案路徑"""
     
     # YOLO 模型
-    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\aug_8_2.pt")
+    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_118.pt")
     
     # ST-GCN 模型
     STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_results\run_085_xy_conf_v_bone_att_on\085_best_model.pth")
     
     # 測試視頻
-    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"https://www.youtube.com/watch?v=rlm291pnUaU")
+    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪\自行拍攝\影片\1783259367519_0.mp4")
                                                                   # rtsp://12345678:456456123@192.168.0.46:554/stream1
     # 日誌和輸出目錄                                             # "C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\5月5日(1).mp4"
     # 日誌和輸出目錄
@@ -253,7 +253,7 @@ class RunModeConfig:
     "server"（預設）：現行行為，啟動 Flask HTTP 伺服器 + Node-RED 上線通知
     "gui"           ：不啟動 Flask/Node-RED，直接用同一套 FrameProcessor 開本地視窗顯示
     """
-    MODE = _env_str("CAT_MONITORING_RUN_MODE", "gui")
+    MODE = _env_str("CAT_MONITORING_RUN_MODE", "server")
 
 # ==================== Flask 服務參數 ====================
 class FlaskConfig:
@@ -299,6 +299,31 @@ class BehaviorTrackingConfig:
     ACTIVITY_SCORE_WINDOW_SECONDS = _env_float("CAT_MONITORING_ACTIVITY_SCORE_WINDOW_SECONDS", 1.2)  # 活動分數取樣時間窗（秒）；越短反應越快
     LOW_CONFIDENCE_ACTIVITY_WEIGHT = _env_float("CAT_MONITORING_LOW_CONFIDENCE_ACTIVITY_WEIGHT", 0.5)  # 低信心幀的活動權重
     STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD = _env_float("CAT_MONITORING_STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD", 0.80,)  # ST-GCN 行為標籤輸出門檻；低於此值視為 normal
+
+    # 顯示層 hysteresis：同一個新類別要連續達到這麼多次分類視窗（非幀數，見 STGCNConfig.WINDOW_STRIDE
+    # 對應的 CLASSIFY_STRIDE）才會真的切換畫面上顯示的行為標籤，用來過濾單一視窗瞬間誤判造成的畫面閃爍
+    # （例如動作轉換瞬間、windup 動作被誤判成別的類別）。只影響顯示，不影響底層逐視窗統計/紀錄。
+    # 五個行為各自獨立設定（key 對應 BEHAVIOR_CATEGORIES 的 id：0 walk/1 lick/2 scratch/3 shake/4 stop）；
+    # <=1 等同該行為關閉此機制，維持原本逐視窗即時顯示的行為。
+    # shake 動作本身只持續 0.5~1 秒，換算成分類視窗數不多，門檻設太高會導致整個 shake 事件
+    # 結束前都累積不到門檻次數、畫面永遠來不及切換顯示，因此預設給比其他行為低的門檻。
+    DISPLAY_HYSTERESIS_WINDOWS_WALK = _env_int("CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_WALK", 2)
+    DISPLAY_HYSTERESIS_WINDOWS_LICK = _env_int("CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_LICK", 2)
+    DISPLAY_HYSTERESIS_WINDOWS_SCRATCH = _env_int("CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_SCRATCH", 2)
+    DISPLAY_HYSTERESIS_WINDOWS_SHAKE = _env_int("CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_SHAKE", 2)
+    DISPLAY_HYSTERESIS_WINDOWS_STOP = _env_int("CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_STOP", 2)
+    DISPLAY_HYSTERESIS_WINDOWS = {
+        0: DISPLAY_HYSTERESIS_WINDOWS_WALK,
+        1: DISPLAY_HYSTERESIS_WINDOWS_LICK,
+        2: DISPLAY_HYSTERESIS_WINDOWS_SCRATCH,
+        3: DISPLAY_HYSTERESIS_WINDOWS_SHAKE,
+        4: DISPLAY_HYSTERESIS_WINDOWS_STOP,
+    }
+
+    # 貓咪偵測消失容忍：YOLO 連續幾幀沒偵測到貓，才真的視為「貓消失」並重置 EMA/緩衝區。
+    # 容忍期間內沿用最後一次偵測到的關鍵點，避免單幀漏偵測就整個中斷分類/顯示。
+    # <=0 等同關閉此機制，維持原本單幀漏偵測就立即重置的行為。
+    CAT_MISSING_TOLERANCE_FRAMES = _env_int("CAT_MONITORING_CAT_MISSING_TOLERANCE_FRAMES", 5)
 
     # 警報門檻
     SCRATCH_ALERT_TIME_SECONDS = _env_float("CAT_MONITORING_SCRATCH_ALERT_TIME_SECONDS", 10.0)  # 單日搔抓累積秒數警戒值

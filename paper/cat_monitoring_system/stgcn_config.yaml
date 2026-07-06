@@ -84,13 +84,13 @@ NUM_STGCN_LAYERS: 3
 
 # Dropout
 # 應用於輸入 embedding 的 dropout（正則化輸入）
-INPUT_DROPOUT:  0.05    # init: 0.02
+INPUT_DROPOUT:  0.02    # init: 0.02
 # 應用於 STGCN block 內的 dropout（中間層正則化）
-BLOCK_DROPOUT:  0.15     # init: 0.1
+BLOCK_DROPOUT:  0.1     # init: 0.1
 # 最後分類器前的 dropout（控制頂層過擬合）
-FINAL_DROPOUT:  0.5     # init: 0.2
+FINAL_DROPOUT:  0.2     # init: 0.2
 # Label smoothing factor for CrossEntropy (use 0.0 to disable)
-LABEL_SMOOTHING: 0.1   # init: 0.01
+LABEL_SMOOTHING: 0.01   # init: 0.01
 
 # Feature mode
 # 特徵模式，名稱直接反映所含特徵標籤（xy=位置, conf=信心值, v=速度, bone=骨架向量, bmotion=骨架位移）：
@@ -127,7 +127,7 @@ SPATIAL_OCCLUSION_MAX_JOINTS: 2  # init: 2
 
 # Training
 # DataLoader 的 batch size（每個裝置）
-BATCH_SIZE: 32
+BATCH_SIZE: 16
 # 訓練的 epoch 數
 NUM_EPOCHS: 100
 # 初始學習率

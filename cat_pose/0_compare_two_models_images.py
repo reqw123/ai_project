@@ -9,12 +9,12 @@ import shutil
 # =====================================================
 MODELS = {
     "640.1": {
-        "path": r"C:\cat_pose\v11s_50.pt",
+        "path": r"C:\ai_project\cat_pose\v11s_118.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     },
     "640.2": {
-        "path": r"C:\cat_pose\v11s_50.pt",
+        "path": r"C:\ai_project\cat_pose\v11s_118.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     }
@@ -24,12 +24,39 @@ MODELS = {
 for cfg in MODELS.values():
     cfg["label"] = Path(cfg["path"]).name
 
-INPUT_DIR = r"C:\Users\homec\Downloads\11.yolov8\train\images"
+INPUT_DIR = r"C:\Users\homec\Downloads\images"
+
+# 前處理：YOLO Pose 訓練時用 imgsz=640，這裡先把 INPUT_DIR 底下的圖片等比
+# 壓縮到最長邊 640px，直接覆寫回原檔案（不留備份，原始解析度會永久消失）；
+# 後續推論、存檔（compare_output / offset_dataset）全部沿用覆寫後的 640 版本。
+RESIZE_MAX_SIDE = 640
 
 CONF_THRES = 0.9
 KP_CONF_THRES = 0.8       # 關鍵點信心門檻：低於此值的點不列入偏移比較
 DIFF_THRES_PERCENT = 2.0  # 偏移閾值：圖片對角線的百分比
 TOTAL_KPTS = 17
+
+# 是否在輸出圖上畫骨架連線（骨架定義與配色參考主專案
+# paper/cat_monitoring_system/utils/constants.py 的 ALL_SKELETON /
+# EAR_DISTANCE_EDGE_COLORS，17 個關鍵點索引順序與主專案一致）
+DRAW_SKELETON_LINES = True
+
+# 17-kpt 骨架連線（索引對應 KEYPOINT_NAMES：nose/ear_tip*2/chest/mid_back/hip/
+# 前肢*2/後肢*2/tail_base/mid/tip），與主專案 ALL_SKELETON 相同
+SKELETON_EDGES = [
+    (0, 1), (0, 2), (1, 2),                    # 頭部
+    (0, 3), (3, 4), (4, 5),                    # 身體
+    (3, 6), (6, 7), (3, 8), (8, 9),             # 前肢
+    (5, 10), (10, 11), (5, 12), (12, 13),       # 後肢
+    (5, 14), (14, 15), (15, 16),                # 髖→尾根→尾中→尾尖
+]
+SKELETON_EDGE_COLORS = [
+    (255, 120, 60), (255, 120, 60), (255, 120, 60),
+    (220, 220, 60), (200, 220, 60), (160, 220, 60),
+    (102, 85, 255), (102, 85, 255), (255, 68, 204), (255, 68, 204),
+    (255, 170, 34), (255, 170, 34), (0, 153, 255), (0, 153, 255),
+    (80, 200, 160), (60, 170, 130), (40, 140, 100),
+]
 
 # True  = 推論前先將圖片等比縮放至最長邊 640px（模擬訓練解析度）
 # False = 直接傳原圖路徑，YOLO 內部自動 letterbox 縮放（預設行為）
@@ -83,18 +110,6 @@ print("✅ 資料夾已清空")
 print("🔄 載入模型中...")
 models = {name: YOLO(cfg["path"]) for name, cfg in MODELS.items()}
 print("✅ 模型載入成功")
-
-# =====================================================
-# 讀取圖片
-# =====================================================
-IMAGE_EXT = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp"]
-image_paths = []
-for ext in IMAGE_EXT:
-    image_paths.extend(Path(INPUT_DIR).glob(ext))
-
-if not image_paths:
-    print("⚠ 找不到任何圖片")
-    exit()
 
 # =====================================================
 # 工具函式
@@ -160,6 +175,23 @@ def compute_keypoint_diff(k_ref, k_cmp, diagonal, conf_ref=None, conf_cmp=None):
 
     max_idx = int(np.argmax(diffs_percent))
     return diffs_percent, diffs_px, max_idx
+
+
+def draw_skeleton_lines(img, keypoints, kpt_conf=None, conf_thres=KP_CONF_THRES, scale=1.0):
+    """畫骨架連線（骨架定義/配色參考主專案 utils/constants.py）。
+    任一端點信心低於 conf_thres 就跳過該條線，避免畫到不可靠的關鍵點位置。"""
+    thickness = max(1, int(2 * max(scale, 0.3)))
+    img_out = img.copy()
+    for edge_idx, (i, j) in enumerate(SKELETON_EDGES):
+        if i >= len(keypoints) or j >= len(keypoints):
+            continue
+        if kpt_conf is not None and (kpt_conf[i] < conf_thres or kpt_conf[j] < conf_thres):
+            continue
+        pt1 = tuple(keypoints[i].astype(int))
+        pt2 = tuple(keypoints[j].astype(int))
+        color = SKELETON_EDGE_COLORS[edge_idx] if edge_idx < len(SKELETON_EDGE_COLORS) else (180, 180, 180)
+        cv2.line(img_out, pt1, pt2, color, thickness, cv2.LINE_AA)
+    return img_out
 
 
 def mark_offset_points_ultra_clear(img, keypoints, diffs_percent, threshold_percent, scale=1.0, kpt_conf=None):
@@ -250,7 +282,7 @@ def mark_offset_points_ultra_clear(img, keypoints, diffs_percent, threshold_perc
 def create_side_by_side_comparison(img_ref, img_cmp, k_ref, k_cmp, diffs_percent, diffs_px,
                                    threshold_percent, model_names, conf_ref=None, conf_cmp=None):
     """
-    創建並排對比圖 - 無連線，只有清晰標記，所有文字/圖形依解析度縮放
+    創建並排對比圖 - 骨架連線 + 清晰標記，所有文字/圖形依解析度縮放
     """
     # 以參考圖短邊計算全局比例因子
     s = get_scale(img_ref.shape)
@@ -274,6 +306,11 @@ def create_side_by_side_comparison(img_ref, img_cmp, k_ref, k_cmp, diffs_percent
         "tail_tip"            # 16
     ]
     
+    # 先畫骨架連線，再疊加關鍵點標記（連線在下層，不會蓋住標記點）
+    if DRAW_SKELETON_LINES:
+        img_ref = draw_skeleton_lines(img_ref, k_ref, kpt_conf=conf_ref, scale=s)
+        img_cmp = draw_skeleton_lines(img_cmp, k_cmp, kpt_conf=conf_cmp, scale=s)
+
     # 在兩張圖上標記
     img_ref_marked = mark_offset_points_ultra_clear(img_ref, k_ref, diffs_percent, threshold_percent, scale=s, kpt_conf=conf_ref)
     img_cmp_marked = mark_offset_points_ultra_clear(img_cmp, k_cmp, diffs_percent, threshold_percent, scale=s, kpt_conf=conf_cmp)
@@ -383,6 +420,32 @@ def create_side_by_side_comparison(img_ref, img_cmp, k_ref, k_cmp, diffs_percent
 
 
 # =====================================================
+# 前處理：壓縮圖片至 640 + 讀取圖片
+# =====================================================
+IMAGE_EXT = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp"]
+
+src_paths = []
+for ext in IMAGE_EXT:
+    src_paths.extend(Path(INPUT_DIR).glob(ext))
+
+if not src_paths:
+    print("⚠ 找不到任何圖片")
+    exit()
+
+print(f"🔧 前處理：壓縮 {len(src_paths)} 張圖片至最長邊 {RESIZE_MAX_SIDE}px（直接覆寫原檔，不留備份）...")
+
+for src_path in src_paths:
+    img = cv2.imread(str(src_path))
+    if img is None:
+        print(f"  ⚠ 無法讀取，略過: {src_path.name}")
+        continue
+    cv2.imwrite(str(src_path), resize_to_fit(img, max_side=RESIZE_MAX_SIDE))
+
+print(f"✅ 前處理完成，已覆寫: {INPUT_DIR}")
+
+image_paths = list(src_paths)
+
+# =====================================================
 # 主流程
 # =====================================================
 model_names = list(MODELS.keys())
@@ -447,18 +510,20 @@ for idx, img_path in enumerate(image_paths, start=1):
 
     # 存單張標記圖
     if len(results[ref_name].keypoints) > 0 and len(results[cmp_name].keypoints) > 0:
-        yolo_img = results[ref_name].plot()
+        yolo_img = results[ref_name].plot(kpt_line=False)  # 關掉 ultralytics 內建骨架線，改用自訂的貓骨架
         _s = get_scale(yolo_img.shape)
+        if DRAW_SKELETON_LINES:
+            yolo_img = draw_skeleton_lines(yolo_img, k_ref, kpt_conf=conf_ref, scale=_s)
         yolo_img_marked = mark_offset_points_ultra_clear(yolo_img, k_ref, diffs_percent, DIFF_THRES_PERCENT, scale=_s, kpt_conf=conf_ref)
         yolo_img_marked = draw_label(yolo_img_marked, MODELS[ref_name]["label"], scale=_s)
-        
+
         yolo_out = OFFSET_DIR / f"offset_{offset_count}" / "yolo" / f"{img_path.stem}_yolo.jpg"
         cv2.imwrite(str(yolo_out), yolo_img_marked)
 
     # 創建並排對比圖
     if len(results[ref_name].keypoints) > 0 and len(results[cmp_name].keypoints) > 0:
-        img_ref = results[ref_name].plot()
-        img_cmp = results[cmp_name].plot()
+        img_ref = results[ref_name].plot(kpt_line=False)  # 關掉 ultralytics 內建骨架線，改用自訂的貓骨架
+        img_cmp = results[cmp_name].plot(kpt_line=False)
         
         comparison = create_side_by_side_comparison(
             img_ref, img_cmp, k_ref, k_cmp,
@@ -508,7 +573,7 @@ print(f"     • 編號文字帶 8 方向黑色陰影")
 print(f"     • 偏移百分比顯示")
 print(f"  🟢 正確點（簡潔）：")
 print(f"     • 綠色實心圓 + 白色外圈")
-print(f"  ✓ 無連線 - 視覺零遮擋")
+print(f"  ✓ 骨架連線（參考主專案配色，DRAW_SKELETON_LINES={DRAW_SKELETON_LINES}）")
 print(f"  ✓ 並排對比 - 直觀清晰")
 
 input("\n按 Enter 結束...")
