@@ -35,7 +35,7 @@ RIGHT_FRONT_LINKS = [(3,8),(8,9)]
 LEFT_HIND_LINKS   = [(5,10),(10,11)]
 RIGHT_HIND_LINKS  = [(5,12),(12,13)]
 
-model = YOLO(r"C:\cat_pose\v11s_59.pt")
+model = YOLO(r"C:\ai_project\cat_pose\v11s_121.pt")
 
 # ==================== 推論與繪製函式 ====================
 def run_inference(img_path: str):

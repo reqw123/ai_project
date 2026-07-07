@@ -252,13 +252,27 @@ def build_feature_tensor(sequence_xy, conf_seq, feature_mode):
 
 # Module-level JointAttention: 1x1 conv -> sigmoid producing (N,1,T,V)
 class JointAttention(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, num_joints=17, prior_weights=None):
+        """
+        prior_weights: 長度 num_joints 的固定（非學習）先驗權重，逐關節乘進 sigmoid
+        輸出的 attention gate 之後。用來測試「強制模型更重視特定關節（例如鼻子）」
+        對辨識率的影響，跟原本學出來的 attention 是相乘關係、不互相取代。
+        None 或全 1.0 時完全等同原本行為（不影響既有結果）。以 buffer（非
+        Parameter）註冊，訓練時不會被梯度更新，但會隨 state_dict 存讀，確保
+        訓練/推論用的是同一組先驗權重，不需要在推論端額外設定。
+        """
         super().__init__()
         self.conv = nn.Conv2d(in_channels, 1, kernel_size=1)
         self.sigmoid = nn.Sigmoid()
+        if prior_weights is None:
+            prior_weights = torch.ones(num_joints, dtype=torch.float32)
+        else:
+            prior_weights = torch.as_tensor(prior_weights, dtype=torch.float32)
+        self.register_buffer('prior_weights', prior_weights.view(1, 1, 1, -1))
     def forward(self, x):
         w = self.conv(x)
-        return self.sigmoid(w)
+        attn = self.sigmoid(w)
+        return attn * self.prior_weights
 
 class _ZeroResidual(nn.Module):
     """殘差分支回傳全零張量——用於 residual=False 時，可序列化且設備感知。"""
@@ -358,7 +372,7 @@ class STGCN(nn.Module):
     def __init__(self, num_classes=5, in_channels=4, num_joints=17,
                  spatial_kernel_size=3, temporal_kernel_size=(3, 5, 9), num_layers=3,
                  input_dropout=0.05, block_dropout=0.15, final_dropout=0.5,
-                 use_attention=True):
+                 use_attention=True, joint_prior_weights=None):
         super().__init__()
         adj_matrices = get_stgcn_partition_adjacency(num_joints)
         adj_matrices = [normalize_adjacency_matrix(a) for a in adj_matrices]
@@ -366,7 +380,10 @@ class STGCN(nn.Module):
         self.input_dropout = nn.Dropout2d(input_dropout) if input_dropout and input_dropout > 0 else nn.Identity()
         # 可學習的 per-sample per-frame joint attention 模組（模組層級定義）
         self.use_attention = bool(use_attention)
-        self.joint_attention = JointAttention(in_channels) if self.use_attention else nn.Identity()
+        self.joint_attention = (
+            JointAttention(in_channels, num_joints, joint_prior_weights)
+            if self.use_attention else nn.Identity()
+        )
 
         # No per-class head or bias terms here — all classes treated equally.
         self.stgcn_layers = nn.ModuleList()

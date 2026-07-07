@@ -15,10 +15,10 @@ from ultralytics import YOLO
 from pathlib import Path
 
 # ==================== 設定 ====================
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_109.pt"
-VIDEO_DIR = r"C:\Users\homec\Downloads\lick_標記區"  # 讀取資料夾下所有影片
-OUTPUT_DIR = r"C:/cat_pose/cat41"
-IMG_NAME_FORMAT = "lick19-{}.png"
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_121.pt"
+VIDEO_DIR = r"C:\Users\homec\Downloads\scratch_val"  # 讀取資料夾下所有影片
+OUTPUT_DIR = r"C:/cat_pose/cat50"
+IMG_NAME_FORMAT = "scratch_val-{}.png"
 TARGET_MODEL_FPS = 30.0
 
 # 支援影片副檔名

@@ -1,0 +1,6 @@
+﻿behavior,old_mean_confidence,new_mean_confidence,conf_change,conf_improvement_pct,old_mean_jitter,new_mean_jitter,jitter_change,jitter_improvement_pct,old_missing_ratio,new_missing_ratio,missing_change,missing_improvement_pct
+walk,0.9712,0.9740,+0.0028,+0.29%,13.909,14.509,+0.600,-4.31%,0.0138,0.0130,-0.0008,+0.08%
+lick,0.9914,0.9947,+0.0033,+0.34%,2.649,2.666,+0.017,-0.63%,0.0000,0.0000,+0.0000,+0.00%
+scratch,0.9913,0.9839,-0.0074,-0.75%,5.761,6.246,+0.485,-8.42%,0.0000,0.0000,+0.0000,+0.00%
+shake,0.9922,0.9909,-0.0013,-0.13%,4.741,5.160,+0.418,-8.82%,0.0000,0.0000,+0.0000,+0.00%
+stop,0.9657,0.9687,+0.0030,+0.31%,2.978,3.893,+0.915,-30.74%,0.0000,0.0000,+0.0000,+0.00%

@@ -1,17 +1,21 @@
 """
-測試影片推論腳本（EMA 平滑版）- 使用指數移動平均對關鍵點座標平滑，提升穩定性
-其餘功能與 test_video_inference.py 完全相同
+互動式骨架正規化視覺化 Demo——用來向教授展示三種正規化步驟
+（flip_normalize / orientation_normalize / normalize_skeleton_coords）
+各自的目的與視覺效果，可於播放中即時按鍵切換：
+    f = flip_normalize（翻轉統一朝向）
+    o = orientation_normalize（旋轉至身體朝上）
+    n = normalize_skeleton_coords（置中＋依體型縮放）
+    p = raw/正規化 overlay 切換（原始影像+原始骨架 vs 黑底+正規化骨架）
+另含 EMA 關鍵點平滑（本檔預設 EMA_ALPHA=1.0，即關閉，不影響三步驟正規化的示範）。
 """
 import sys
 import os
-import csv
 import cv2
 import numpy as np
 import time
 from functools import lru_cache
 from pathlib import Path
 from collections import deque
-from collections import defaultdict
 from typing import Iterable
 
 # 加入系統路徑
@@ -44,7 +48,7 @@ from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
 # ── 五個行為資料夾（按 z/x/c/v/b 切換）────────────────────────────────
-_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存"
+_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\暫存"
 FOLDER_WALK    = rf"{_BASE}\walk"
 FOLDER_LICK    = rf"{_BASE}\lick"
 FOLDER_SCRATCH = rf"{_BASE}\scratch"
@@ -101,12 +105,8 @@ DISPLAY_WINDOW = True
 WINDOW_NAME = "Cat Behavior Inference (EMA)"
 DISPLAY_SIZE = (1080, 720)  # 視窗顯示解析度（寬, 高），設為 None 維持原始解析度
 LOOP_PLAYBACK = True  # 是否循環播放
-JITTER_CONF_THRESHOLD = 0.3  # 抖動統計只使用高於此信心值的關鍵點
-REPORT_OUTPUT_PATH = r"C:\paper\output\inference_analysis_report_ema.csv"  # 最終 CSV 報告
-RUN_MODE = 0  # 0: 啟動時選擇, 1: 只生成統計, 2: 只做視窗測試
-JITTER_WARNING_THRESHOLD = 30.0  # 像素抖動警告閾值
 
-# ===== 關鍵點顯示/統計門檻 =====
+# ===== 關鍵點顯示門檻 =====
 DRAW_KP_CONF_THRESHOLD = 0.25  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
 SHOW_PROBABILITY_BARS = False  # 關閉機率條可減少每幀繪圖負載
 
@@ -558,161 +558,6 @@ def _norm_kpts_to_display(norm_kpts, frame_h, frame_w):
     return disp
 
 
-def print_jitter_report(title, jitter_px, jitter_norm, valid_counts, pair_counts):
-    print("\n" + "=" * 60)
-    print(title)
-    print("=" * 60)
-
-    all_px = [v for arr in jitter_px for v in arr]
-    all_norm = [v for arr in jitter_norm for v in arr]
-    total_valid = int(np.sum(valid_counts))
-    total_pairs = int(np.sum(pair_counts))
-
-    if not all_px:
-        print("無足夠資料計算抖動（可能關鍵點信心不足或連續幀不足）")
-        return
-
-    print("[全域抖動指標]")
-    print(f"  樣本數(像素): {len(all_px)}")
-    print(f"  平均: {np.mean(all_px):.3f} px")
-    print(f"  標準差: {np.std(all_px):.3f} px")
-    print(f"  P95: {np.percentile(all_px, 95):.3f} px")
-    print(f"  最大值: {np.max(all_px):.3f} px")
-    print(f"  有效關鍵點數: {total_valid}")
-    print(f"  連續可比較配對數: {total_pairs}")
-
-    if all_norm:
-        print(f"  正規化平均(除以bbox對角線): {np.mean(all_norm):.5f}")
-        print(f"  正規化P95: {np.percentile(all_norm, 95):.5f}")
-
-    print("\n[17關鍵點逐點統計]")
-    print("  idx | valid | pairs | mean_px | std_px | p95_px | max_px | mean_norm")
-    for i in range(17):
-        if jitter_px[i]:
-            mean_px = np.mean(jitter_px[i])
-            std_px = np.std(jitter_px[i])
-            p95_px = np.percentile(jitter_px[i], 95)
-            max_px = np.max(jitter_px[i])
-        else:
-            mean_px = std_px = p95_px = max_px = 0.0
-
-        mean_norm = np.mean(jitter_norm[i]) if jitter_norm[i] else 0.0
-
-        print(
-            f"  {i:>3d} | {int(valid_counts[i]):>5d} | {int(pair_counts[i]):>5d} | "
-            f"{mean_px:>7.3f} | {std_px:>6.3f} | {p95_px:>6.3f} | {max_px:>6.3f} | {mean_norm:>9.5f}"
-        )
-
-
-def generate_report_file(report_path, recorded_video_stats):
-    """輸出 CSV 統計摘要（每列一部影片）。"""
-    out_path = Path(report_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    headers = [
-        "video_idx",
-        "video_path",
-        "width",
-        "height",
-        "source_fps",
-        "model_input_fps",
-        "frame_step",
-        "total_frames",
-        "processed_frames",
-        "frames_with_cat",
-        "frames_without_cat",
-        "pred_walk",
-        "pred_lick",
-        "pred_scratch",
-        "pred_shake",
-        "pred_stop",
-        "duration_walk_sec",
-        "duration_lick_sec",
-        "duration_scratch_sec",
-        "duration_shake_sec",
-        "duration_stop_sec",
-        "mean_confidence",
-        "jitter_mean_px",
-        "jitter_p95_px",
-        "jitter_max_px",
-        "occ_walk",
-        "occ_lick",
-        "occ_scratch",
-        "occ_shake",
-        "occ_stop",
-    ]
-
-    with out_path.open("w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f)
-        writer.writerow(headers)
-
-        for vid_idx in sorted(recorded_video_stats.keys()):
-            s = recorded_video_stats[vid_idx]
-            behavior_counts = np.asarray(s.get("behavior_counts", np.zeros(5, dtype=np.int64)), dtype=np.int64)
-            behavior_duration_sec = np.asarray(s.get("behavior_duration_sec", np.zeros(5, dtype=np.float64)), dtype=np.float64)
-            behavior_occurrence_counts = np.asarray(s.get("behavior_occurrence_counts", np.zeros(5, dtype=np.int64)), dtype=np.int64)
-            confidences = s.get("behavior_confidences", [])
-            jp = s.get("jitter_px", [[] for _ in range(17)])
-            all_jitter = [v for arr in jp for v in arr]
-
-            writer.writerow([
-                int(s.get("video_idx", vid_idx)),
-                s.get("video_path", ""),
-                int(s.get("width", 0)),
-                int(s.get("height", 0)),
-                float(s.get("fps", 0.0)),
-                float(s.get("model_input_fps", 0.0)),
-                int(s.get("frame_step", 1)),
-                int(s.get("total_frames", 0)),
-                int(s.get("processed_frames", 0)),
-                int(s.get("frames_with_cat", 0)),
-                int(s.get("frames_without_cat", 0)),
-                int(behavior_counts[0]) if len(behavior_counts) > 0 else 0,
-                int(behavior_counts[1]) if len(behavior_counts) > 1 else 0,
-                int(behavior_counts[2]) if len(behavior_counts) > 2 else 0,
-                int(behavior_counts[3]) if len(behavior_counts) > 3 else 0,
-                int(behavior_counts[4]) if len(behavior_counts) > 4 else 0,
-                float(behavior_duration_sec[0]) if len(behavior_duration_sec) > 0 else 0.0,
-                float(behavior_duration_sec[1]) if len(behavior_duration_sec) > 1 else 0.0,
-                float(behavior_duration_sec[2]) if len(behavior_duration_sec) > 2 else 0.0,
-                float(behavior_duration_sec[3]) if len(behavior_duration_sec) > 3 else 0.0,
-                float(behavior_duration_sec[4]) if len(behavior_duration_sec) > 4 else 0.0,
-                float(np.mean(confidences)) if confidences else 0.0,
-                float(np.mean(all_jitter)) if all_jitter else 0.0,
-                float(np.percentile(all_jitter, 95)) if all_jitter else 0.0,
-                float(np.max(all_jitter)) if all_jitter else 0.0,
-                int(behavior_occurrence_counts[0]) if len(behavior_occurrence_counts) > 0 else 0,
-                int(behavior_occurrence_counts[1]) if len(behavior_occurrence_counts) > 1 else 0,
-                int(behavior_occurrence_counts[2]) if len(behavior_occurrence_counts) > 2 else 0,
-                int(behavior_occurrence_counts[3]) if len(behavior_occurrence_counts) > 3 else 0,
-                int(behavior_occurrence_counts[4]) if len(behavior_occurrence_counts) > 4 else 0,
-            ])
-
-    return out_path
-
-
-def resolve_run_mode():
-    if RUN_MODE in (1, 2):
-        return RUN_MODE
-
-    if not sys.stdin.isatty():
-        print("\n偵測到非互動式輸入環境，預設使用模式 2（只測試模型效果，開視窗）")
-        return 2
-
-    print("\n請選擇執行模式:")
-    print("  1) 只生成統計結果（不開視窗）")
-    print("  2) 只測試模型效果（開視窗）")
-    try:
-        choice = input("輸入模式 (1/2, 預設=2): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print("\n未輸入模式，預設使用模式 2（只測試模型效果，開視窗）")
-        return 2
-
-    if choice == "1":
-        return 1
-    return 2
-
-
 # ===== 正規化座標面板（右下角）=====
 _ALL_KP_NAMES = [
     "Nose", "LEar", "REar", "Chst", "MidB",
@@ -777,10 +622,6 @@ def draw_norm_coords_panel(frame, norm_history):
 
 
 def main():
-    run_mode = resolve_run_mode()
-    is_stats_mode = (run_mode == 1)
-    is_test_mode = (run_mode == 2)
-
     # use a local mutable copy to avoid modifying module-level constant
     feature_mode = STGCN_FEATURE_MODE
 
@@ -816,13 +657,12 @@ def main():
     folder_positions: dict = {k: 0 for k in FOLDER_MAP}
     switch_folder_key: str = ""   # 非空時代表要切換資料夾
 
-    display_window = DISPLAY_WINDOW and is_test_mode
-    loop_playback = LOOP_PLAYBACK and is_test_mode
+    display_window = DISPLAY_WINDOW
+    loop_playback = LOOP_PLAYBACK
 
     print("="*60)
-    print("影片推論測試（EMA 平滑版）")
+    print("骨架正規化視覺化 Demo")
     print("="*60)
-    print(f"執行模式: {'模式1-統計分析' if is_stats_mode else '模式2-視窗測試'}")
     print(f"EMA Alpha: {EMA_ALPHA}")
     print(f"影片路徑 (展開後共 {len(video_paths)} 部):")
     for i, p in enumerate(video_paths):
@@ -896,33 +736,6 @@ def main():
         return
     visualizer = Visualizer()
 
-    # 統計累計（僅計入完整播放完成的影片）
-    frame_count = 0
-    predictions = []
-    behavior_change_count = 0
-    frames_with_cat = 0
-    frames_without_cat = 0
-
-    # 17點抖動統計（跨影片）
-    global_jitter_px = [[] for _ in range(17)]
-    global_jitter_norm = [[] for _ in range(17)]
-    global_valid_counts = np.zeros(17, dtype=np.int64)
-    global_pair_counts = np.zeros(17, dtype=np.int64)
-    global_behavior_duration_sec = np.zeros(5, dtype=np.float64)
-
-    # 每影片抖動統計
-    per_video_stats = defaultdict(
-        lambda: {
-            "jitter_px": [[] for _ in range(17)],
-            "jitter_norm": [[] for _ in range(17)],
-            "valid_counts": np.zeros(17, dtype=np.int64),
-            "pair_counts": np.zeros(17, dtype=np.int64),
-        }
-    )
-
-    # 完整播完才會寫入的每影片最終統計
-    recorded_video_stats = {}
-
     # 狀態控制
     paused = False
     stop_requested = False
@@ -949,18 +762,14 @@ def main():
         probs = np.zeros(5, dtype=np.float32)
 
     def reset_video_runtime_state():
-        nonlocal prev_kpts, prev_kpt_conf, ema_kpts, _last_norm_kpts, _last_norm_kconf
+        nonlocal ema_kpts, _last_norm_kpts, _last_norm_kconf
         nonlocal _last_raw_kpts, _last_raw_kconf, _last_prenorm_kpts
-        nonlocal local_predictions, local_behavior_change_count, local_last_behavior
+        nonlocal local_last_behavior
         nonlocal raw_frames_read, local_frames_processed, local_sampled_frames
-        nonlocal local_frames_with_cat, local_frames_without_cat
-        nonlocal local_jitter_px, local_jitter_norm, local_valid_counts, local_pair_counts
         nonlocal local_behavior_duration_sec, local_behavior_current_confidences
         nonlocal local_behavior_occurrence_counts, local_last_behavior_for_occurrence
 
         keypoints_buffer.clear()
-        prev_kpts = None
-        prev_kpt_conf = None
         ema_kpts = None
         keypoint_detector.reset_track()  # 避免上一段影片鎖定的貓誤帶到新的一段
         _last_norm_kpts = None
@@ -969,18 +778,10 @@ def main():
         _last_raw_kconf = None
         _last_prenorm_kpts = None
         _norm_history.clear()
-        local_predictions = []
-        local_behavior_change_count = 0
         local_last_behavior = None
         raw_frames_read = 0
         local_frames_processed = 0
         local_sampled_frames = 0
-        local_frames_with_cat = 0
-        local_frames_without_cat = 0
-        local_jitter_px = [[] for _ in range(17)]
-        local_jitter_norm = [[] for _ in range(17)]
-        local_valid_counts = np.zeros(17, dtype=np.int64)
-        local_pair_counts = np.zeros(17, dtype=np.int64)
         local_behavior_duration_sec = np.zeros(5, dtype=np.float64)
         local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
         local_behavior_occurrence_counts = np.zeros(5, dtype=np.int64)
@@ -999,35 +800,20 @@ def main():
         is_stream_url = _is_stream_url(video_path)
         if not is_stream_url and not Path(video_path).exists():
             print(f"❌ 影片不存在，跳過: {video_path}")
-            if is_stats_mode:
-                current_video_idx += 1
-                if current_video_idx >= len(video_paths):
-                    break
-            else:
-                current_video_idx = (current_video_idx + 1) % len(video_paths)
+            current_video_idx = (current_video_idx + 1) % len(video_paths)
             continue
 
         if is_stream_url:
             cap = open_video_capture_with_retry(video_path, retries=5, delay=3)
             if cap is None or not cap.isOpened():
                 print(f"❌ 無法開啟串流 {video_path}，請確認 URL 與網路連線，跳過")
-                if is_stats_mode:
-                    current_video_idx += 1
-                    if current_video_idx >= len(video_paths):
-                        break
-                else:
-                    current_video_idx = (current_video_idx + 1) % len(video_paths)
+                current_video_idx = (current_video_idx + 1) % len(video_paths)
                 continue
         else:
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
                 print(f"❌ 無法開啟影片，跳過: {video_path}")
-                if is_stats_mode:
-                    current_video_idx += 1
-                    if current_video_idx >= len(video_paths):
-                        break
-                else:
-                    current_video_idx = (current_video_idx + 1) % len(video_paths)
+                current_video_idx = (current_video_idx + 1) % len(video_paths)
                 continue
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -1060,9 +846,8 @@ def main():
         print(f"影片資訊: {width}x{height}, source_fps={source_fps:.1f}, total={total_frames} 幀")
         print(f"模型輸入時基: {model_input_fps:.2f} fps (frame_step={frame_step})")
         print(f"時長: {duration:.1f} 秒")
-        if is_test_mode:
-            print("控制: q=退出  space=暫停  r=重置  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  u=全部面板")
-            print("消融: f=flip  o=orient  n=coord  p=raw/norm overlay")
+        print("控制: q=退出  space=暫停  r=重置  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  u=全部面板")
+        print("消融: f=flip  o=orient  n=coord  p=raw/norm overlay")
         if loop_playback:
             print("🔁 循環播放模式（當前影片播完會重播）")
         print("-" * 60)
@@ -1070,8 +855,6 @@ def main():
         keypoints_buffer = deque(maxlen=SEQUENCE_LENGTH)
         local_loop_count = 0
         switch_delta = 0
-        prev_kpts = None
-        prev_kpt_conf = None
         first_pass_completed = False
         switched_before_first_pass_complete = False
 
@@ -1087,19 +870,11 @@ def main():
         _last_prenorm_kpts = None # shape (V, 2)，flip+orient 後、coord 正規化前的像素座標（n=OFF 時顯示用）
         _norm_history = deque(maxlen=1)  # (frame_num, norm_kpts) 供右下角座標面板使用；只保留最新一幀
 
-        # 本次影片臨時統計（只有完整第一輪才會被提交）
-        local_predictions = []
-        local_behavior_change_count = 0
+        # 本次影片播放期間的即時 HUD 狀態
         local_last_behavior = None
         raw_frames_read = 0
         local_frames_processed = 0
         local_sampled_frames = 0
-        local_frames_with_cat = 0
-        local_frames_without_cat = 0
-        local_jitter_px = [[] for _ in range(17)]
-        local_jitter_norm = [[] for _ in range(17)]
-        local_valid_counts = np.zeros(17, dtype=np.int64)
-        local_pair_counts = np.zeros(17, dtype=np.int64)
         local_behavior_duration_sec = np.zeros(5, dtype=np.float64)
         local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
         local_behavior_occurrence_counts = np.zeros(5, dtype=np.int64)
@@ -1159,37 +934,6 @@ def main():
                 # ============================================================
 
                 # kpts: (17, 2), kpt_conf: (17,)
-                if is_first_pass:
-                    local_frames_with_cat += 1
-
-                # 統計有效關鍵點幀數與抖動（僅統計模式需要，視覺模式跳過）
-                if is_stats_mode:
-                    valid_mask = (kpt_conf > JITTER_CONF_THRESHOLD)
-                    if is_first_pass:
-                        local_valid_counts += valid_mask.astype(np.int64)
-
-                    if prev_kpts is not None and prev_kpt_conf is not None:
-                        bbox_diag = None
-                        if bbox is not None:
-                            x1, y1, x2, y2 = bbox
-                            w_box = max(1.0, float(x2 - x1))
-                            h_box = max(1.0, float(y2 - y1))
-                            bbox_diag = float(np.sqrt(w_box * w_box + h_box * h_box))
-                        pair_mask = (kpt_conf > JITTER_CONF_THRESHOLD) & (prev_kpt_conf > JITTER_CONF_THRESHOLD)
-                        for kp_idx in range(17):
-                            if not pair_mask[kp_idx]:
-                                continue
-                            jitter_px = float(np.linalg.norm(kpts[kp_idx] - prev_kpts[kp_idx]))
-                            if is_first_pass:
-                                local_jitter_px[kp_idx].append(jitter_px)
-                                local_pair_counts[kp_idx] += 1
-                            if bbox_diag is not None and bbox_diag > 0:
-                                jitter_norm = jitter_px / bbox_diag
-                                if is_first_pass:
-                                    local_jitter_norm[kp_idx].append(jitter_norm)
-
-                prev_kpts = kpts.copy()
-                prev_kpt_conf = kpt_conf.copy()
 
                 # 儲存原始像素座標供 overlay_raw 模式顯示
                 _last_raw_kpts  = kpts.copy()
@@ -1277,23 +1021,11 @@ def main():
                             local_behavior_occurrence_counts[int(behavior_id_for_display)] += 1
                         local_last_behavior_for_occurrence = behavior_id_for_display
 
-                    # 只統計高信心預測
+                    # 行為切換時印一行即時 log，方便對照畫面講解
                     if behavior_id_for_display != LOW_CONF_ID:
                         behavior_text = get_behavior_name(behavior_id, use_text=False, fallback=str(behavior_id), confidence=confidence)
-                        if is_stats_mode and is_first_pass:
-                            local_predictions.append({
-                                'video_idx': current_video_idx,
-                                'video_path': video_path,
-                                'frame': local_frames_processed,
-                                'time': frame_time_sec,
-                                'behavior_id': behavior_id,
-                                'behavior_name': BEHAVIOR_CLASSES[behavior_id],
-                                'confidence': confidence,
-                                'probs': probs.copy()
-                            })
                         if local_last_behavior != behavior_id:
                             if local_last_behavior is not None and is_first_pass:
-                                local_behavior_change_count += 1
                                 probs_str = " ".join(
                                     f"{cls}:{probs[i]*100:4.1f}%"
                                     for i, cls in enumerate(BEHAVIOR_CLASSES)
@@ -1309,10 +1041,6 @@ def main():
                         local_behavior_duration_sec[int(behavior_id)] += frame_dt
                     local_behavior_current_confidences[int(behavior_id)] = float(confidence)
             else:
-                if is_first_pass:
-                    local_frames_without_cat += 1
-                prev_kpts = None
-                prev_kpt_conf = None
                 ema_kpts = None  # 貓消失時重置 EMA，避免下次出現時使用過時的平均值
                 _last_norm_kpts = None
                 _last_norm_kconf = None
@@ -1603,57 +1331,9 @@ def main():
 
         cap.release()
 
-        # 只有完整播放第一輪且非中途切換，才提交本影片統計
+        # 只有完整播放第一輪且非中途切換，才印出本影片行為摘要
         if first_pass_completed and not switched_before_first_pass_complete:
-            behavior_counts = np.zeros(5, dtype=np.int64)
-            behavior_confidences = []
-            for p in local_predictions:
-                behavior_counts[p['behavior_id']] += 1
-                behavior_confidences.append(p['confidence'])
-
-            recorded_video_stats[current_video_idx] = {
-                "video_idx": current_video_idx,
-                "video_path": video_path,
-                "width": width,
-                "height": height,
-                "fps": float(source_fps),
-                "model_input_fps": float(model_input_fps),
-                "frame_step": int(frame_step),
-                "total_frames": int(total_frames),
-                "processed_frames": int(local_frames_processed),
-                "frames_with_cat": int(local_frames_with_cat),
-                "frames_without_cat": int(local_frames_without_cat),
-                "behavior_counts": behavior_counts,
-                "behavior_confidences": behavior_confidences,
-                "behavior_duration_sec": local_behavior_duration_sec.copy(),
-                "behavior_occurrence_counts": local_behavior_occurrence_counts.copy(),
-                "jitter_px": local_jitter_px,
-                "jitter_norm": local_jitter_norm,
-                "valid_counts": local_valid_counts,
-                "pair_counts": local_pair_counts,
-            }
-
-            # 合併到全域統計
-            frame_count += local_frames_processed
-            frames_with_cat += local_frames_with_cat
-            frames_without_cat += local_frames_without_cat
-            predictions.extend(local_predictions)
-            behavior_change_count += local_behavior_change_count
-            global_behavior_duration_sec += local_behavior_duration_sec
-
-            for i in range(17):
-                global_jitter_px[i].extend(local_jitter_px[i])
-                global_jitter_norm[i].extend(local_jitter_norm[i])
-            global_valid_counts += local_valid_counts
-            global_pair_counts += local_pair_counts
-
-            per_video_stats[current_video_idx] = {
-                "jitter_px": local_jitter_px,
-                "jitter_norm": local_jitter_norm,
-                "valid_counts": local_valid_counts,
-                "pair_counts": local_pair_counts,
-            }
-            print(f"✓ 影片[{current_video_idx}] 已完整播放，統計已記錄")
+            print(f"✓ 影片[{current_video_idx}] 已完整播放")
             print(f"  ┌─{'─'*10}─┬─{'─'*6}─┬─{'─'*9}─┐")
             print(f"  │ {'行為':<10} │ {'次數':>6} │ {'持續(秒)':>9} │")
             print(f"  ├─{'─'*10}─┼─{'─'*6}─┼─{'─'*9}─┤")
@@ -1665,9 +1345,9 @@ def main():
             print(f"  └─{'─'*10}─┴─{'─'*6}─┴─{'─'*9}─┘")
         else:
             if switched_before_first_pass_complete:
-                print(f"⚠ 影片[{current_video_idx}] 中途切換，該影片統計不記錄")
+                print(f"⚠ 影片[{current_video_idx}] 中途切換，略過行為摘要")
             else:
-                print(f"⚠ 影片[{current_video_idx}] 未完成第一輪播放，該影片統計不記錄")
+                print(f"⚠ 影片[{current_video_idx}] 未完成第一輪播放，略過行為摘要")
 
         if stop_requested:
             break
@@ -1682,117 +1362,20 @@ def main():
             switch_delta = 0
             continue
 
-        if is_stats_mode:
-            current_video_idx += 1
-            if current_video_idx >= len(video_paths):
-                break
-        else:
-            if switch_delta != 0:
-                current_video_idx = (current_video_idx + switch_delta) % len(video_paths)
-            elif is_stream_url:
-                # 串流不做循環播放，結束後維持在當前來源即可
-                break
-            elif not loop_playback:
-                break
+        if switch_delta != 0:
+            current_video_idx = (current_video_idx + switch_delta) % len(video_paths)
+        elif is_stream_url:
+            # 串流不做循環播放，結束後維持在當前來源即可
+            break
+        elif not loop_playback:
+            break
 
     if display_window:
         cv2.destroyAllWindows()
 
-    if is_test_mode:
-        print("\n模式2完成：視窗測試結束（未產生統計報告）")
-        print("=" * 60)
-        return
+    print("\nDemo 結束")
+    print("=" * 60)
 
-    print("-"*60)
-    print(f"\n推論完成！共納入 {frame_count} 幀（僅完整播放影片）")
-    print(f"\nYOLO 偵測統計:")
-    if frame_count > 0:
-        print(f"  偵測到貓咪: {frames_with_cat} 幀 ({frames_with_cat/frame_count*100:.1f}%)")
-        print(f"  未偵測到: {frames_without_cat} 幀 ({frames_without_cat/frame_count*100:.1f}%)")
-    else:
-        print("  偵測到貓咪: 0 幀 (0.0%)")
-        print("  未偵測到: 0 幀 (0.0%)")
-    print(f"\n有效預測: {len(predictions)} 次")
-    print(f"行為變化: {behavior_change_count} 次")
-
-    # 抖動統計（全域）
-    print_jitter_report(
-        title=f"17關鍵點抖動統計（全域，EMA={EMA_ALPHA}，conf>{JITTER_CONF_THRESHOLD}）",
-        jitter_px=global_jitter_px,
-        jitter_norm=global_jitter_norm,
-        valid_counts=global_valid_counts,
-        pair_counts=global_pair_counts,
-    )
-
-    # 抖動統計（每影片）
-    for vid_idx, stats in sorted(per_video_stats.items(), key=lambda x: x[0]):
-        print_jitter_report(
-            title=f"17關鍵點抖動統計（影片[{vid_idx}]，EMA={EMA_ALPHA}，conf>{JITTER_CONF_THRESHOLD}）",
-            jitter_px=stats["jitter_px"],
-            jitter_norm=stats["jitter_norm"],
-            valid_counts=stats["valid_counts"],
-            pair_counts=stats["pair_counts"],
-        )
-
-    # 產出文檔報告
-    try:
-        report_path = generate_report_file(REPORT_OUTPUT_PATH, recorded_video_stats)
-        print(f"\n✓ 分析報告已輸出: {report_path}")
-    except Exception as e:
-        print(f"⚠ 無法輸出報告（{REPORT_OUTPUT_PATH}）：{e}")
-
-    # 統計分析
-    if predictions:
-        print("\n" + "="*60)
-        print("統計分析")
-        print("="*60)
-
-        from collections import Counter
-        behavior_counts = Counter([p['behavior_id'] for p in predictions])
-        print("\n各行為出現次數:")
-        for bid in range(5):
-            count = behavior_counts.get(bid, 0)
-            pct = count / len(predictions) * 100 if predictions else 0
-            print(f"  {BEHAVIOR_TEXT_MAP[bid]:6s} ({BEHAVIOR_CLASSES[bid]:8s}): {count:4d} 次 ({pct:5.1f}%)")
-
-        print("\n各行為持續時間（秒）:")
-        for bid in range(5):
-            print(f"  {BEHAVIOR_TEXT_MAP[bid]:6s} ({BEHAVIOR_CLASSES[bid]:8s}): {float(global_behavior_duration_sec[bid]):7.2f} s")
-
-        avg_probs = np.mean([p['probs'] for p in predictions], axis=0)
-        print("\n平均機率分布:")
-        for i, (cls, prob) in enumerate(zip(BEHAVIOR_CLASSES, avg_probs)):
-            print(f"  {BEHAVIOR_TEXT_MAP[i]:6s} ({cls:8s}): {prob*100:5.1f}%")
-
-        confidences = [p['confidence'] for p in predictions]
-        print(f"\n信心值統計:")
-        print(f"  平均: {np.mean(confidences)*100:.1f}%")
-        print(f"  最小: {np.min(confidences)*100:.1f}%")
-        print(f"  最大: {np.max(confidences)*100:.1f}%")
-
-        most_common_id = behavior_counts.most_common(1)[0][0]
-        print(f"\n✓ 主要行為: {BEHAVIOR_TEXT_MAP[most_common_id]} ({BEHAVIOR_CLASSES[most_common_id]})")
-        print(f"  出現比例: {behavior_counts[most_common_id]/len(predictions)*100:.1f}%")
-
-        print("\n" + "="*60)
-        print("結果分析")
-        print("="*60)
-
-        if most_common_id == 1:
-            print("⚠ 主要預測為 scratch（搔抓），建議檢查:")
-            print("  1. 影片內容是否包含抓癢/停頓等與 scratch 相似片段")
-            print("  2. 是否有大量低信心窗被濾除，造成剩餘樣本偏向 scratch")
-            print("  3. 重新檢視混淆矩陣與該影片逐幀機率曲線")
-        elif most_common_id == 0:
-            print("✓ 主要預測為 walk（走動），符合預期")
-            print("  → 模型正確辨識出行走行為")
-        else:
-            print(f"預測為 {BEHAVIOR_TEXT_MAP[most_common_id]}，需檢查:")
-            print("  1. 影片內容是否確實為此行為")
-            print("  2. 模型訓練數據品質")
-            print("  3. 正規化是否正確 (normalize=True)")
-
-    print("\n" + "="*60)
 
 if __name__ == "__main__":
     main()

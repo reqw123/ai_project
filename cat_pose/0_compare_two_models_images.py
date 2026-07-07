@@ -9,12 +9,12 @@ import shutil
 # =====================================================
 MODELS = {
     "640.1": {
-        "path": r"C:\ai_project\cat_pose\v11s_118.pt",
+        "path": r"C:\ai_project\cat_pose\v11s_121.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     },
     "640.2": {
-        "path": r"C:\ai_project\cat_pose\v11s_118.pt",
+        "path": r"C:\ai_project\cat_pose\v11s_121.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     }
@@ -24,7 +24,7 @@ MODELS = {
 for cfg in MODELS.values():
     cfg["label"] = Path(cfg["path"]).name
 
-INPUT_DIR = r"C:\Users\homec\Downloads\images"
+INPUT_DIR = r"C:\Users\homec\OneDrive\圖片\Screenshots"
 
 # 前處理：YOLO Pose 訓練時用 imgsz=640，這裡先把 INPUT_DIR 底下的圖片等比
 # 壓縮到最長邊 640px，直接覆寫回原檔案（不留備份，原始解析度會永久消失）；

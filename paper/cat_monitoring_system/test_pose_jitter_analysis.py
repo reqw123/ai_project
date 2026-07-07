@@ -107,7 +107,7 @@ from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 #   6 = 全模式一鍵啟動（依序執行 Mode 1~5）
 ANALYSIS_MODE = 6
 # ── 影片路徑 ────────────────────────────────────────────────────────
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\stop\stop_22.mp4"
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\暫存\stop\stop_22.mp4"
 
 # ── 輸出根目錄 ──────────────────────────────────────────────────────
 OUTPUT_DIR = Path(r"C:\ai_project\paper\output\jitter_analysis")
@@ -150,8 +150,8 @@ _MODE_SUBDIR = {
 # 由 EXCLUDED_KEYPOINTS 衍生，供各分析函式共用
 _ACTIVE_KP_IDS: list = [i for i in range(17) if i not in EXCLUDED_KEYPOINTS]
 
-YOLO_MODEL_PATH  = r"C:\AI_Project\cat_pose\v11s_101.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\stgcn_best_047_xy_conf_v_att_on.pth"
+YOLO_MODEL_PATH  = r"C:\AI_Project\cat_pose\v11s_121.pt"
+STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_121_xy_conf_v_bone_att_on\121_best_model.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640
 STGCN_NORMALIZE = True

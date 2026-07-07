@@ -51,7 +51,7 @@ VIDEO_FOLDERS = [
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\stop",
 ]
 OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_119.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_121.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
 TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5
@@ -1331,14 +1331,20 @@ def manual_action_labeling():
     print("\n[Done] All annotation tasks completed.")
 
 
-def reextract_preserve_labels():
+def reextract_preserve_labels(target_stems: set = None):
     """
     以新 YOLO 模型重新推論骨架，並依「時間」（而非幀 index）還原既有 JSON 的
     frame label／action_intervals，因此不論新舊抽取的 TARGET_FPS、補償邏輯或
     總幀數是否一致，標注都能正確對應到新的時間網格。
+
+    target_stems: 若提供，只重新推論檔名（不含副檔名）在此集合內的影片，其餘
+    影片完全跳過（連掃描/讀取都不做）；標籤覆蓋邏輯與 target_stems=None（模式 3，
+    處理全部影片）完全相同，差別只在於「要重新推論哪些檔案」。
     """
     print("="*60)
     print("Skeleton Re-extraction (preserve annotations)")
+    if target_stems:
+        print(f"（僅限指定的 {len(target_stems)} 支影片）")
     print("="*60)
     setup_directories()
 
@@ -1354,6 +1360,14 @@ def reextract_preserve_labels():
             (f for f in vp.iterdir() if f.suffix.lower() in video_extensions),
             key=_natural_sort_key,
         ))
+
+    if target_stems is not None:
+        found_stems = {v.stem for v in video_files if v.stem in target_stems}
+        missing_stems = target_stems - found_stems
+        if missing_stems:
+            print(f"  ⚠ 在 VIDEO_FOLDERS 裡找不到以下指定檔案，已略過："
+                  f"{', '.join(sorted(missing_stems))}")
+        video_files = [v for v in video_files if v.stem in target_stems]
 
     if not video_files:
         print("✗ 找不到任何影片。")
@@ -1492,6 +1506,107 @@ def reextract_preserve_labels():
         print(f"  ✓ 已儲存: {output_path}")
 
     print("\n✓ 全部重新推論完成。")
+
+
+def _scan_video_files_with_index():
+    """掃描 VIDEO_FOLDERS，回傳依編號排序好的影片清單（供選檔用的編號跟這裡的順序一致）。"""
+    video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv']
+    video_files = []
+    for folder in VIDEO_FOLDERS:
+        vp = Path(folder)
+        if not vp.exists():
+            continue
+        video_files.extend(sorted(
+            (f for f in vp.iterdir() if f.suffix.lower() in video_extensions),
+            key=_natural_sort_key,
+        ))
+    return video_files
+
+
+def _parse_video_selection(raw: str, video_files: list) -> set:
+    """
+    解析選檔輸入，逗號分隔，可混用以下寫法：
+      - 編號：3
+      - 編號區段（含頭尾）：3-9
+      - 行為名稱（walk/lick/scratch/shake/stop）：選中該行為的全部影片
+      - all：全選
+      - 其餘一律當作檔名（不含副檔名）直接比對，方便手動指定不在清單編號範圍內的檔案
+    回傳選中的檔名（stem）集合；無法解析的編號/區段/行為名稱會印警告但不中斷。
+    """
+    raw = raw.strip()
+    if not raw:
+        return set()
+    if raw.lower() == 'all':
+        return {v.stem for v in video_files}
+
+    stem_by_index = {i: v.stem for i, v in enumerate(video_files, 1)}
+    behavior_stems = {
+        behavior: {v.stem for v in video_files if _parse_behavior(v.stem) == behavior}
+        for behavior in _BEHAVIOR_ORDER
+    }
+
+    selected = set()
+    for token in raw.split(','):
+        token = token.strip()
+        if not token:
+            continue
+        if re.fullmatch(r'\d+', token):
+            idx = int(token)
+            if idx in stem_by_index:
+                selected.add(stem_by_index[idx])
+            else:
+                print(f"  ⚠ 編號 {idx} 超出範圍（共 {len(video_files)} 支），已略過")
+        elif re.fullmatch(r'\d+-\d+', token):
+            start, end = (int(x) for x in token.split('-'))
+            if start > end:
+                start, end = end, start
+            matched = [stem_by_index[i] for i in range(start, end + 1) if i in stem_by_index]
+            if matched:
+                selected.update(matched)
+            else:
+                print(f"  ⚠ 區段 {token} 沒有對應到任何影片，已略過")
+        elif token.lower() in behavior_stems:
+            matched = behavior_stems[token.lower()]
+            if matched:
+                selected.update(matched)
+                print(f"  ✓ [{token}] 選中 {len(matched)} 支影片")
+            else:
+                print(f"  ⚠ 找不到任何 [{token}] 的影片，已略過")
+        else:
+            selected.add(token)  # 當作檔名直接比對，交由下游驗證是否存在
+    return selected
+
+
+def reextract_preserve_labels_selected():
+    """
+    模式 3 的變體：標籤覆蓋邏輯完全相同（依 timestamp 還原既有 action_intervals／
+    frame label），但骨架重新推論只針對使用者手動指定的部分檔案，不會掃描/重推
+    VIDEO_FOLDERS 裡的其他影片。適合只想修正少數幾支骨架抽取結果不佳的影片，
+    不想為此重跑整個資料集（耗時）的情境。
+    """
+    print("="*60)
+    print("Skeleton Re-extraction (preserve annotations, 指定檔案)")
+    print("="*60)
+
+    video_files = _scan_video_files_with_index()
+    if not video_files:
+        print("✗ VIDEO_FOLDERS 裡找不到任何影片。")
+        return
+
+    print(f"\n可選影片清單（共 {len(video_files)} 支）：")
+    for i, v in enumerate(video_files, 1):
+        print(f"  [{i:>3}] {v.stem}")
+
+    print("\n輸入方式（逗號分隔，可混用）：")
+    print("  編號：3        編號區段：3-9        行為全選：scratch        全選：all")
+    print("  也可以直接輸入檔名（不含副檔名），例如 scratch_22")
+    raw = input("請輸入要重新推論的影片：").strip()
+    target_stems = _parse_video_selection(raw, video_files)
+    if not target_stems:
+        print("✗ 未選擇任何影片，已取消。")
+        return
+    print(f"\n共選中 {len(target_stems)} 支影片：{', '.join(sorted(target_stems))}")
+    reextract_preserve_labels(target_stems=target_stems)
 
 
 # ==================== Window-level Discard Report ====================
@@ -1815,7 +1930,9 @@ if __name__ == "__main__":
     print("   → YOLO 模型更換或 fps 補償邏輯更新後皆可使用，標注依 timestamp 對應不受幀數變動影響")
     print("4. 檢查有哪些影片／幀/訓練視窗被捨棄或過濾（未進入訓練資料）")
     print("   → 純讀取報告，不修改任何檔案；視窗層級會標出被丟棄的 window 從影片哪個 frame/秒數切出來")
-    mode = input("請選擇模式 (1/2/3/4): ").strip()
+    print("5. 重新推論骨架（新模型），但只針對指定的部分檔案，標籤覆蓋邏輯同模式 3")
+    print("   → 只想修正少數幾支骨架抽取結果不佳的影片時使用，不用重跑整個資料集")
+    mode = input("請選擇模式 (1/2/3/4/5): ").strip()
     if mode == '1':
         process_all_videos()
     elif mode == '2':
@@ -1824,5 +1941,7 @@ if __name__ == "__main__":
         reextract_preserve_labels()
     elif mode == '4':
         check_discarded_files()
+    elif mode == '5':
+        reextract_preserve_labels_selected()
     else:
         print("✗ 未選擇正確模式，程式結束。")

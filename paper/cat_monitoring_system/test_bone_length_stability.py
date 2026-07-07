@@ -70,22 +70,22 @@ from models.stgcn_model import (
 INPUT_MODE = "paths"  # "paths" 或 "folder"
 
 VIDEO_PATHS = [
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\walk\walk_1.mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\walk\walk_2.mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\walk\walk_3.mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\walk\walk_4.mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\walk\walk_5.mp4"
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_1.mp4",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_2.mp4",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_3.mp4",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_4.mp4",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_5.mp4"
 ]
 # 1~5 支「單一影片檔案」路徑（不是資料夾），依序處理。建議至少放一支
 # 追蹤穩定的正常影片、一支已知會誤判成 walk/shake 的抖動影片做對照。
 # 只有 INPUT_MODE = "paths" 時才會用到這份清單。
 
-VIDEO_FOLDER = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試"
+VIDEO_FOLDER = r"C:\Users\homec\OneDrive\圖片\1_貓咪圖像資料集\泛化測試"
 VIDEO_FOLDER_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
 # 只有 INPUT_MODE = "folder" 時才會用到：資料夾底下（不含子資料夾）
 # 副檔名符合上面清單的影片檔，依檔名排序後最多取前 5 支。
 
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_113.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_121.pt"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 

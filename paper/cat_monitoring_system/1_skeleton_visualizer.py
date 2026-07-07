@@ -282,7 +282,7 @@ SKELETON_EDGE_COLORS = [
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\暫存\shake"
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\暫存\shake"
 VIDEO_LIST = [
     r"C:\Users\homec\Downloads\OneDrive_1_2026-5-21",
     r"C:\Users\homec\Downloads\OneDrive_2_2026-5-21",
@@ -292,7 +292,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_90.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_121.pt"
 
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640

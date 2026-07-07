@@ -66,8 +66,8 @@ def _vrj(s: str, w: int) -> str:
 # ═══════════════════════════════════════════════════════
 #  設定區  ── 修改這裡，不需要命令列參數
 # ═══════════════════════════════════════════════════════
-OLD_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_117.pt"
-NEW_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_118.pt"
+OLD_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_121.pt"
+NEW_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_122.pt"
 BENCHMARK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試"
 OUTPUT_DIR       = r"C:\ai_project\compare_results"
 INFERENCE_DEVICE = "cuda"   # "cuda" 或 "cpu"
@@ -315,10 +315,22 @@ def aggregate(results: List[Dict]) -> Dict:
 
 
 # ─── Metric Helpers ───────────────────────────────────────────────
-def improvement(old, new, higher_is_better=True) -> float:
+# 小基期門檻：missing_ratio 這類指標常態下是個位數百分比甚至更低（例如 0.8%），
+# 分母趨近 0 時，一點點絕對變化就會被「相對變化率」公式放大成失真的大百分比
+# （例如 0.8%→1.4%，相對變化是 -75%，但實際只多了 0.6 個百分點）。
+# confidence（恆在 0.85~1.0）跟 jitter（以 px 為單位，恆遠大於此門檻）不會受影響。
+SMALL_BASE_FLOOR = 0.02
+
+
+def improvement(old, new, higher_is_better=True, small_base_floor=SMALL_BASE_FLOOR) -> float:
+    """回傳 old→new 的改善百分比。當 abs(old) 低於 small_base_floor 時（分母太小、
+    相對變化率會失真），改回傳絕對變化量（百分點）而不是相對百分比。"""
+    diff = (new - old) if higher_is_better else (old - new)
+    if small_base_floor is not None and abs(old) < small_base_floor:
+        return diff * 100.0
     if abs(old) < 1e-9:
         return 0.0
-    return ((new - old) if higher_is_better else (old - new)) / abs(old) * 100.0
+    return diff / abs(old) * 100.0
 
 
 def composite_score(m: Dict) -> float:
@@ -328,16 +340,14 @@ def composite_score(m: Dict) -> float:
     return W_CONFIDENCE * conf_s + W_JITTER * jitter_s + W_MISSING * missing_s
 
 
-def behavior_score(old_m: Dict, new_m: Dict) -> float:
-    ci = improvement(old_m["mean_confidence"], new_m["mean_confidence"], True)
-    ji = improvement(old_m["mean_jitter_px"],  new_m["mean_jitter_px"],  False)
-    mi = improvement(old_m["missing_ratio"],   new_m["missing_ratio"],   False)
-    return W_CONFIDENCE * ci + W_JITTER * ji + W_MISSING * mi
-
-
 def best_worst_behavior(class_old: Dict, class_new: Dict) -> Tuple[str, float, str, float]:
-    scores = {b: behavior_score(class_old[b], class_new[b])
-              for b in BEHAVIOR_CLASSES if class_old.get(b) and class_new.get(b)}
+    """依主指標（P95 Jitter，尾部抖動穩定度）評選各行為裡進步最多／退步最多的一個，
+    不再用信心/抖動/缺失率的加權複合分數——複合分數會被 missing_ratio 這種小基期
+    指標的失真波動主導，跟「以抖動為主指標」的判斷邏輯不一致，容易誤導結論。"""
+    scores = {
+        b: improvement(class_old[b]["p95_jitter_px"], class_new[b]["p95_jitter_px"], False)
+        for b in BEHAVIOR_CLASSES if class_old.get(b) and class_new.get(b)
+    }
     if not scores:
         return "N/A", 0.0, "N/A", 0.0
     best  = max(scores, key=scores.get)

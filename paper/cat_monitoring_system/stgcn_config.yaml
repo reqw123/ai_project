@@ -35,6 +35,7 @@ RUN_SEQLEN_ABLATION: false
 # 要依序比較的序列長度（幀數）；16 = 0.53s@30fps，32 = 1.07s@30fps
 ABLATION_SEQLENS:
   - 16
+  - 24
   - 32
 
 # Regularization / Optimizer Ablation
@@ -153,6 +154,41 @@ USE_EMA_FOR_EVAL: false
 # 可改善類別不平衡問題
 # 適合少數類別樣本明顯不足時使用
 USE_WEIGHTED_SAMPLER: true
+
+# Class-Balanced (CB) Loss
+# 是否改用「有效樣本數」(effective number of samples) 公式計算 class_weights，
+# 取代預設的反頻率 (inverse frequency) 公式。當類別內樣本高度相似（例如同一隻貓、
+# 同一場景反覆出現）時，反頻率會高估重複樣本的邊際資訊量，導致少數類別權重被過度放大；
+# CB Loss 用 effective_num = (1 - beta^n) / (1 - beta) 折算「實際有效樣本數」較穩健。
+# false（預設）= 沿用原本反頻率公式，行為完全不變。
+USE_CB_LOSS: false
+# beta 越小，對重複樣本的折扣越強（effective_num 很快封頂，遠低於實際樣本數，
+# 權重形狀趨於平緩）；beta 越接近 1，折扣越弱（effective_num → n，趨近原本的
+# 反頻率公式，等於沒有針對冗余做調整）。資料重複度越高（例如同一隻貓/場景反覆
+# 出現）就該用越小的 beta 加強折扣（建議測試範圍 0.9 / 0.99 / 0.999 / 0.9999）。
+# 只有 USE_CB_LOSS: true 時才會用到。
+# 注意：此註解先前寫反了方向，2026-07 已修正——106_best_model 用 0.9999 測試時
+# （原註解建議的方向）結果幾乎跟 0.999 一樣（見下方實驗記錄），因為兩者都已經
+# 很接近「無折扣」的反頻率形狀；真正該測的是更小的 beta（如這裡設的 0.9）。
+CB_BETA: 0.9
 # Attention
 # 是否啟用關節注意力模組（true=啟用）
 USE_ATTENTION: true
+
+# Joint Prior Weights（架構層級的固定先驗權重，非學習參數）
+# 依據 diagnose_keypoint_motion 的實測結果，Nose 是 lick/stop 判別力最高的關節
+# （差距是第二名耳朵的 2.5 倍以上），這裡測試「強制放大特定關節的訊號」是否能
+# 進一步改善辨識率：對 JointAttention 學出來的 sigmoid gate，逐關節乘上固定倍數
+# （不是取代學習到的 attention，是額外疊加的先驗）。只有 USE_ATTENTION: true 時
+# 才會生效。false（預設）= 全部關節維持原本行為，不受影響。
+USE_JOINT_PRIOR_WEIGHTS: true
+# {關節名稱: 權重}，名稱需對應 KEYPOINT_NAMES（Nose/Left_Ear/Right_Ear/Chest/
+# Mid_Back/Hip/LF_Elbow/LF_Paw/RF_Elbow/RF_Paw/LH_Knee/LH_Paw/RH_Knee/RH_Paw/
+# Tail_Root/Tail_Mid/Tail_Tip）。沒列出的關節維持權重 1.0（不影響）。
+JOINT_PRIOR_WEIGHTS:
+  Nose: 2.0
+  Left_Ear: 1.5
+  Right_Ear: 1.5
+  LF_Paw: 1.5
+  RF_Paw: 1.5
+

@@ -56,6 +56,18 @@
 | `cat_monitoring_system/detectors/behavior_classifier.py` | `BehaviorClassifier`：ST-GCN 封裝，統一接收 `(T,V,2)` 原始座標 + `(T,V)` 信心值，內部依模型 `in_channels` 自動決定前處理路徑（14 關節截斷、補點、翻轉、正規化、特徵組裝皆在此觸發） |
 | `cat_monitoring_system/models/stgcn_model.py` | ST-GCN 模型本體（`CatBehaviorSTGCN`、`JointAttention`、`SpatialGraphConv`、`MultiScaleTemporalConv`）與所有前處理純函式（`interpolate_missing`、`flip_normalize`、`orientation_normalize`、`normalize_skeleton_coords`、`build_feature_tensor`、`add_velocity_feature`、`compute_bone_feature` 等）；訓練腳本 `0_train_gcn.py` 與推論路徑共用同一份函式 |
 
+### 3.3.1 Joint Prior Weights（關節先驗權重，進行中的研究功能）
+
+- **設定**：`stgcn_config.yaml` 的 `USE_JOINT_PRIOR_WEIGHTS`（開關）/`JOINT_PRIOR_WEIGHTS`（`{關節名稱: 權重}`）；**目前設定為啟用**（`true`），權重為 `Nose:2.0, Left_Ear:1.5, Right_Ear:1.5, LF_Paw:1.5, RF_Paw:1.5`，其餘關節=1.0。
+- **實作**：`models/stgcn_model.py` 的 `JointAttention`（`prior_weights` 以 `register_buffer` 存放，非學習參數，但隨 checkpoint 一起存/讀，推論端`eval_gcn_model.py`/`1_run_video_inference.py` 完全不需額外設定即自動生效）；`0_train_gcn.py` 的 `_build_joint_prior_weights()` 負責讀取 config 並在訓練時建構這組權重。
+- **原因**：`0_train_gcn.py` 的 `diagnose_keypoint_motion()`（逐關節動作幅度診斷）分析驗證集發現，lick/stop 正確分類樣本的判別訊號高度集中在 Nose（動作幅度差異是第二名 Right_Ear 的 2.5 倍以上，其餘關節幾乎無差異），但既有 `JointAttention` 只是逐關節獨立的 sigmoid gate（類似 SE-Net channel gate），關節間無互動、不是 Transformer/GAT 式的 self-attention，模型不一定會自己學會多看鼻子。
+- **目的**：測試「架構層面強制放大特定關節訊號」是否能改善辨識率。
+- **目前結果（三輪 McNemar 檢定，皆基於 `eval_gcn_model.py` 獨立測試集）**：
+  - `Nose:3.0`：stop 顯著改善（p=0.0000），但 scratch 顯著犧牲（p=0.0156）——真實 trade-off，非全面提升。
+  - `Nose:5.0`：沒有換到額外好處（stop/scratch 皆無進一步改善），反而讓 lick 顯著崩潰在單一影片上（p=0.0002）——過頭了。
+  - `Nose:2.0 + Left_Ear/Right_Ear:1.5 + LF_Paw/RF_Paw:1.5`（目前設定）：walk/scratch/shake 方向一致小幅改善、stop 小幅回檔，但 `n_discordant` 僅 2~5，**未達統計顯著**，需要多組 `RANDOM_SEED` 重複訓練＋彙總比較才能確認效果是否穩定。
+  - 附註：scratch 類別的獨立測試集準確率偏低已確認主因是「搔抓片段佔比短、被大量非搔抓畫面稀釋」的評估方式問題（`max_true_prob`/`event_detected` 顯示模型仍抓到高信心事件），並非單純判別力不足，因此 scratch 相關的權重調整效果不能只看這個準確率數字判斷。
+
 ### 3.4 服務流層（Service Layer）— 統計、記錄、推送、視覺化
 
 | 路徑 | 職責 |

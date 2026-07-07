@@ -14,6 +14,7 @@ Date: 2026-01-29
 import os
 import json
 import copy
+import warnings
 import numpy as np
 import torch
 import torch.nn as nn
@@ -66,7 +67,8 @@ class ModelEMA:
             input_dropout=model_config.get('input_dropout', 0.05),
             block_dropout=model_config.get('block_dropout', 0.15),
             final_dropout=model_config.get('final_dropout', 0.5),
-            use_attention=model_config.get('use_attention', True)
+            use_attention=model_config.get('use_attention', True),
+            joint_prior_weights=model_config.get('joint_prior_weights', None),
         )
         return ema_model
 
@@ -168,6 +170,13 @@ KP_EMA_ALPHA = CONFIG['KP_EMA_ALPHA']
 NUM_CLASSES = CONFIG['NUM_CLASSES']
 BEHAVIOR_PREFIXES = CONFIG['BEHAVIOR_PREFIXES']
 NUM_JOINTS = CONFIG['NUM_JOINTS']
+# 跟 eval_pose_models.py 的 KEYPOINT_NAMES 同一份骨架定義（joint_id 0~16 依序對應）
+KEYPOINT_NAMES = [
+    "Nose", "Left_Ear", "Right_Ear", "Chest", "Mid_Back",
+    "Hip", "LF_Elbow", "LF_Paw", "RF_Elbow", "RF_Paw",
+    "LH_Knee", "LH_Paw", "RH_Knee", "RH_Paw",
+    "Tail_Root", "Tail_Mid", "Tail_Tip",
+]
 # JSON 骨架檔永遠有 17 個關節；NUM_JOINTS 控制實際送入模型的關節數
 # 支援兩種模式：17（完整）或 14（忽略 tail_base/tail_mid/tail_tip）
 _JSON_NUM_JOINTS = 17
@@ -208,6 +217,29 @@ RUN_KP_EMA_ABLATION    = CONFIG.get('RUN_KP_EMA_ABLATION', False)
 ABLATION_KP_EMA_ALPHAS = CONFIG.get('ABLATION_KP_EMA_ALPHAS', [1.0, 0.9, 0.7, 0.5])
 RUN_REG_ABLATION       = CONFIG.get('RUN_REG_ABLATION', False)
 REG_ABLATION_CONFIGS   = CONFIG.get('REG_ABLATION_CONFIGS', None)
+USE_CB_LOSS = CONFIG.get('USE_CB_LOSS', False)
+CB_BETA     = CONFIG.get('CB_BETA', 0.999)
+USE_JOINT_PRIOR_WEIGHTS = CONFIG.get('USE_JOINT_PRIOR_WEIGHTS', False)
+JOINT_PRIOR_WEIGHTS_CFG = CONFIG.get('JOINT_PRIOR_WEIGHTS', {}) or {}
+
+
+def _build_joint_prior_weights():
+    """把 JOINT_PRIOR_WEIGHTS（{關節名稱: 權重}）轉成長度 NUM_JOINTS 的 tensor，
+    預設全部 1.0（不影響行為），只有 config 裡指名的關節會覆寫成指定權重。
+    USE_JOINT_PRIOR_WEIGHTS=false 時回傳 None（STGCN 內部視同全 1.0）。"""
+    if not USE_JOINT_PRIOR_WEIGHTS:
+        return None
+    weights = [1.0] * NUM_JOINTS
+    name_to_idx = {name: i for i, name in enumerate(KEYPOINT_NAMES)}
+    for name, w in JOINT_PRIOR_WEIGHTS_CFG.items():
+        idx = name_to_idx.get(name)
+        if idx is None or idx >= NUM_JOINTS:
+            print(f"  ⚠ JOINT_PRIOR_WEIGHTS: 找不到關節 '{name}'（或已被 NUM_JOINTS={NUM_JOINTS} 消融排除），已略過")
+            continue
+        weights[idx] = float(w)
+    print(f"✓ Joint prior weights 已啟用: "
+          f"{ {KEYPOINT_NAMES[i]: w for i, w in enumerate(weights) if w != 1.0} }")
+    return weights
 
 # 預設的 dropout / label smoothing / batch / learning rate 消融網格：
 #   baseline_no_reg — 目前 yaml 的設定（全部關閉，用來對照現況）
@@ -487,11 +519,16 @@ class CatSkeletonDataset(Dataset):
                     unknown_label_counter[best_label] += 1
                     continue
 
+                end_idx = start_idx + self.sequence_length - 1
                 sequences.append({
                     'video_id': video_id,
                     'sequence': np.array(sequence),
                     'conf_sequence': np.array(confs[start_idx:start_idx + self.sequence_length]),
                     'label':    label_idx,
+                    # 供誤判診斷（見 diagnose_confusion_pair）回推這個 window 對應影片的哪個時間點
+                    'start_idx':  start_idx,
+                    'start_time': frames[start_idx].get('timestamp'),
+                    'end_time':   frames[end_idx].get('timestamp'),
                 })
 
         # ── 資料載入診斷：把靜默跳過的情況印出來，才能核對「有幾支 json → 實際用了幾支」 ──
@@ -685,6 +722,112 @@ def validate(model, dataloader, criterion, device, desc="Val"):
 
 
 # ==================== Main Training Loop ====================
+def split_train_val_indices(full_dataset, verbose=True):
+    """
+    影片級切分（防止滑動窗 data leakage），從 train_model() 抽出來獨立成函式，
+    讓不需要重新訓練、只想針對「某個已經訓練好的 checkpoint」跑驗證集診斷
+    （例如 diagnose_keypoint_motion）的獨立腳本可以重用同一套切分邏輯，
+    不用重複貼一份容易失去同步的程式碼。邏輯與參數（RANDOM_SEED/TRAIN_TEST_SPLIT）
+    跟 train_model() 完全相同，只要 full_dataset 的載入參數一致，就能重現同一份切分。
+
+    Returns: (train_indices, val_indices)
+    """
+    from collections import Counter
+    video_label_map = {}
+    for seq in full_dataset.sequences:
+        vid = seq['video_id']
+        video_label_map.setdefault(vid, []).append(seq['label'])
+
+    video_ids = list(video_label_map.keys())
+
+    def label_from_video_id(video_id):
+        vid_lower = video_id.lower()
+        for prefix, lbl in BEHAVIOR_PREFIXES.items():
+            if vid_lower.startswith(prefix):
+                return lbl
+        # fallback：序列多數決（適用前綴不符的特殊命名）
+        return Counter(video_label_map[video_id]).most_common(1)[0][0]
+
+    video_labels = [label_from_video_id(v) for v in video_ids]
+    video_label_lookup = {vid: lbl for vid, lbl in zip(video_ids, video_labels)}
+    # derive ordered label names by index for logging and distribution prints
+    label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+
+    def print_video_distribution(title, vids):
+        from collections import Counter
+        counter = Counter(video_label_lookup[v] for v in vids)
+        print(f"\n{title} video distribution:")
+        for cls_idx, cls_name in enumerate(label_names):
+            print(f"  {cls_name}: {counter.get(cls_idx, 0)} videos")
+
+    # 影片數太少時 stratify 會失敗（val 影片數 < 類別數），自動退回 random split
+    n_val_vids = max(1, int(len(video_ids) * TRAIN_TEST_SPLIT))
+    num_unique_labels = len(set(video_labels))
+    use_stratify = n_val_vids >= num_unique_labels
+    if not use_stratify and verbose:
+        print(f"  ⚠ 影片數不足以 stratify（val={n_val_vids} < classes={num_unique_labels}），改用 random split")
+    train_vids, val_vids = train_test_split(
+        video_ids,
+        test_size=TRAIN_TEST_SPLIT,
+        random_state=RANDOM_SEED,
+        stratify=video_labels if use_stratify else None
+    )
+
+    # 確保驗證集盡量覆蓋所有可切分類別：若某類別有 >=2 支影片且 val 缺席，
+    # 從 train 移 1 支該類別影片到 val（必要時再移回 1 支其他類別維持大小）。
+    rng = np.random.default_rng(RANDOM_SEED)
+    desired_val_size = max(1, int(len(video_ids) * TRAIN_TEST_SPLIT))
+    train_vids = list(train_vids)
+    val_vids = list(val_vids)
+
+    total_label_counts = Counter(video_labels)
+    val_label_counts = Counter(video_label_lookup[v] for v in val_vids)
+
+    for cls in sorted(set(video_labels)):
+        if total_label_counts[cls] < 2:
+            continue
+        if val_label_counts.get(cls, 0) > 0:
+            continue
+
+        candidates = [v for v in train_vids if video_label_lookup[v] == cls]
+        if not candidates:
+            continue
+
+        moved_to_val = candidates[int(rng.integers(len(candidates)))]
+        train_vids.remove(moved_to_val)
+        val_vids.append(moved_to_val)
+        val_label_counts[cls] += 1
+
+        # 盡量維持 val 目標大小
+        if len(val_vids) > desired_val_size:
+            removable = [
+                v for v in val_vids
+                if v != moved_to_val
+                and val_label_counts[video_label_lookup[v]] > 1
+            ]
+            if removable:
+                moved_back = removable[int(rng.integers(len(removable)))]
+                val_vids.remove(moved_back)
+                train_vids.append(moved_back)
+                val_label_counts[video_label_lookup[moved_back]] -= 1
+
+    train_vids_set = set(train_vids)
+    val_vids_set   = set(val_vids)
+
+    train_indices = [i for i, s in enumerate(full_dataset.sequences)
+                     if s['video_id'] in train_vids_set]
+    val_indices   = [i for i, s in enumerate(full_dataset.sequences)
+                     if s['video_id'] in val_vids_set]
+
+    if verbose:
+        print(f"  Videos → train: {len(train_vids)}, val: {len(val_vids)}")
+        print(f"  Sequences → train: {len(train_indices)}, val: {len(val_indices)}")
+        print_video_distribution("Train", train_vids)
+        print_video_distribution("Validation", val_vids)
+
+    return train_indices, val_indices
+
+
 def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
                 shared_models_dir=None, kp_ema_alpha=None, seq_len=None,
                 batch_size=None, learning_rate=None,
@@ -853,99 +996,8 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     except Exception as e:
         print(f"⚠ Failed to write initial run log: {e}")
 
-    # ── 影片級切分（防止滑動窗 data leakage） ──────────────────────────
-    from collections import Counter
-    video_label_map = {}
-    for seq in full_dataset.sequences:
-        vid = seq['video_id']
-        video_label_map.setdefault(vid, []).append(seq['label'])
-
-    video_ids = list(video_label_map.keys())
-
-    def label_from_video_id(video_id):
-        vid_lower = video_id.lower()
-        for prefix, lbl in BEHAVIOR_PREFIXES.items():
-            if vid_lower.startswith(prefix):
-                return lbl
-        # fallback：序列多數決（適用前綴不符的特殊命名）
-        return Counter(video_label_map[video_id]).most_common(1)[0][0]
-
-    video_labels = [label_from_video_id(v) for v in video_ids]
-    video_label_lookup = {vid: lbl for vid, lbl in zip(video_ids, video_labels)}
-    # derive ordered label names by index for logging and distribution prints
-    label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
-
-    def print_video_distribution(title, vids):
-        from collections import Counter
-        counter = Counter(video_label_lookup[v] for v in vids)
-        print(f"\n{title} video distribution:")
-        for cls_idx, cls_name in enumerate(label_names):
-            print(f"  {cls_name}: {counter.get(cls_idx, 0)} videos")
-
-    # 影片數太少時 stratify 會失敗（val 影片數 < 類別數），自動退回 random split
-    n_val_vids = max(1, int(len(video_ids) * TRAIN_TEST_SPLIT))
-    num_unique_labels = len(set(video_labels))
-    use_stratify = n_val_vids >= num_unique_labels
-    if not use_stratify:
-        print(f"  ⚠ 影片數不足以 stratify（val={n_val_vids} < classes={num_unique_labels}），改用 random split")
-    train_vids, val_vids = train_test_split(
-        video_ids,
-        test_size=TRAIN_TEST_SPLIT,
-        random_state=RANDOM_SEED,
-        stratify=video_labels if use_stratify else None
-    )
-
-    # 確保驗證集盡量覆蓋所有可切分類別：若某類別有 >=2 支影片且 val 缺席，
-    # 從 train 移 1 支該類別影片到 val（必要時再移回 1 支其他類別維持大小）。
-    from collections import Counter
-    rng = np.random.default_rng(RANDOM_SEED)
-    desired_val_size = max(1, int(len(video_ids) * TRAIN_TEST_SPLIT))
-    train_vids = list(train_vids)
-    val_vids = list(val_vids)
-
-    total_label_counts = Counter(video_labels)
-    val_label_counts = Counter(video_label_lookup[v] for v in val_vids)
-
-    for cls in sorted(set(video_labels)):
-        if total_label_counts[cls] < 2:
-            continue
-        if val_label_counts.get(cls, 0) > 0:
-            continue
-
-        candidates = [v for v in train_vids if video_label_lookup[v] == cls]
-        if not candidates:
-            continue
-
-        moved_to_val = candidates[int(rng.integers(len(candidates)))]
-        train_vids.remove(moved_to_val)
-        val_vids.append(moved_to_val)
-        val_label_counts[cls] += 1
-
-        # 盡量維持 val 目標大小
-        if len(val_vids) > desired_val_size:
-            removable = [
-                v for v in val_vids
-                if v != moved_to_val
-                and val_label_counts[video_label_lookup[v]] > 1
-            ]
-            if removable:
-                moved_back = removable[int(rng.integers(len(removable)))]
-                val_vids.remove(moved_back)
-                train_vids.append(moved_back)
-                val_label_counts[video_label_lookup[moved_back]] -= 1
-
-    train_vids_set = set(train_vids)
-    val_vids_set   = set(val_vids)
-
-    train_indices = [i for i, s in enumerate(full_dataset.sequences)
-                     if s['video_id'] in train_vids_set]
-    val_indices   = [i for i, s in enumerate(full_dataset.sequences)
-                     if s['video_id'] in val_vids_set]
-
-    print(f"  Videos → train: {len(train_vids)}, val: {len(val_vids)}")
-    print(f"  Sequences → train: {len(train_indices)}, val: {len(val_indices)}")
-    print_video_distribution("Train", train_vids)
-    print_video_distribution("Validation", val_vids)
+    # 影片級切分（防止滑動窗 data leakage），邏輯抽到 split_train_val_indices()
+    train_indices, val_indices = split_train_val_indices(full_dataset)
 
     # ── 獨立的 augment 旗標（copy.copy 共享 sequences 但各自持有旗標） ──
     train_base = copy.copy(full_dataset)
@@ -978,12 +1030,25 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     train_labels_all = [full_dataset.sequences[i]['label'] for i in train_indices]
     label_counts = Counter(train_labels_all)
     total = sum(label_counts.values())
-    class_weights = torch.tensor(
-        [total / (NUM_CLASSES * label_counts.get(c, 1)) for c in range(NUM_CLASSES)],
-        dtype=torch.float32
-    ).to(DEVICE)
+    if USE_CB_LOSS:
+        # Class-Balanced Loss（effective number of samples）：
+        # effective_num = (1 - beta^n) / (1 - beta)，weight ∝ 1 / effective_num，
+        # 再正規化使平均權重為 1，維持跟反頻率公式相近的 loss 量級。
+        effective_num = [1.0 - CB_BETA ** label_counts.get(c, 1) for c in range(NUM_CLASSES)]
+        cb_weights = [(1.0 - CB_BETA) / max(en, 1e-8) for en in effective_num]
+        mean_w = sum(cb_weights) / NUM_CLASSES
+        class_weights = torch.tensor(
+            [w / mean_w for w in cb_weights],
+            dtype=torch.float32
+        ).to(DEVICE)
+    else:
+        class_weights = torch.tensor(
+            [total / (NUM_CLASSES * label_counts.get(c, 1)) for c in range(NUM_CLASSES)],
+            dtype=torch.float32
+        ).to(DEVICE)
 
-    print(f"\n✓ Class weights: { {i: round(float(w), 3) for i, w in enumerate(class_weights.cpu())} }")
+    print(f"\n✓ Class weights ({'CB loss, beta=' + str(CB_BETA) if USE_CB_LOSS else 'inverse frequency'}): "
+          f"{ {i: round(float(w), 3) for i, w in enumerate(class_weights.cpu())} }")
 
     # Add class counts to run_log meta and flush to disk
     run_log_data['meta']['class_counts'] = {str(k): int(v) for k, v in label_counts.items()}
@@ -1044,6 +1109,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
 
     # Create model
     print("\nInitializing ST-GCN model...")
+    joint_prior_weights = _build_joint_prior_weights()
     model_config = {
         'num_classes': NUM_CLASSES,
         'in_channels': in_channels,
@@ -1055,6 +1121,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'block_dropout': eff_block_dropout,
         'final_dropout': eff_final_dropout,
         'use_attention': use_attention,
+        'joint_prior_weights': joint_prior_weights,
     }
     model = STGCN(
         num_classes=NUM_CLASSES,
@@ -1067,6 +1134,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         block_dropout=eff_block_dropout,
         final_dropout=eff_final_dropout,
         use_attention=use_attention,
+        joint_prior_weights=joint_prior_weights,
     ).to(DEVICE)
 
     # EMA
@@ -1219,6 +1287,16 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         print(f"\n✓ Best model saved to: {run_model_path}")
         print(f"  Best val acc={best_val_acc:.4f}, val macro_f1={best_val_macro_f1:.4f}, val loss={best_val_loss:.4f}")
         plot_confusion_matrix(best_val_labels, best_val_preds, run_results_dir)
+        diagnose_confusion_pair(full_dataset, val_indices, best_val_labels, best_val_preds,
+                                'lick', 'stop', output_dir=run_results_dir)
+        diagnose_keypoint_motion(full_dataset, val_indices, best_val_labels, best_val_preds,
+                                 'lick', 'stop', output_dir=run_results_dir)
+        # scratch 在驗證集裡幾乎沒有真實誤判（100% 精確率/召回率），diagnose_confusion_pair
+        # 沒有意義；但 Table 1（正確分類的兩類逐關節動作幅度比較）本身不需要誤判樣本，
+        # 拿 stop（近乎靜止的類別）當比較基準，可以驗證 scratch 的判別訊號集中在哪個關節
+        # （例如懷疑的後腳尖 LH_Paw/RH_Paw，而非之前 JOINT_PRIOR_WEIGHTS 誤設的前腳）。
+        diagnose_keypoint_motion(full_dataset, val_indices, best_val_labels, best_val_preds,
+                                 'scratch', 'stop', output_dir=run_results_dir)
 
     # 計算訓練總時長
     training_end_time = datetime.now(timezone.utc)
@@ -1371,6 +1449,439 @@ def plot_confusion_matrix(labels, preds, output_dir):
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f"✓ Confusion matrix saved to: {save_path}")
     plt.close()
+
+
+def _vlen(s: str) -> int:
+    """字串的視覺寬度（中文/全形 = 2，其餘 = 1），CJK 與英數混排時對齊表格用。"""
+    import unicodedata
+    return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in str(s))
+
+
+def _vlj(s, w: int) -> str:
+    """左對齊，依視覺寬度補空格。"""
+    s = str(s)
+    return s + " " * max(0, w - _vlen(s))
+
+
+def _vrj(s, w: int) -> str:
+    """右對齊，依視覺寬度補空格。"""
+    s = str(s)
+    return " " * max(0, w - _vlen(s)) + s
+
+
+def _compute_window_motion(seq_xy: np.ndarray, conf_seq: np.ndarray, conf_threshold: float = 0.3) -> float:
+    """
+    算一個 window 的平均逐幀關節位移量（只計入信心足夠的關節），數值代表模型
+    實際看到的「動態程度」。seq_xy 須先經過跟 __getitem__ 相同的
+    flip_normalize/orientation_normalize/normalize_skeleton_coords，才能跨影片
+    比較（否則不同鏡頭距離/縮放會讓像素位移不可比）。
+    """
+    diffs = seq_xy[1:] - seq_xy[:-1]                 # (T-1, J, 2)
+    dist  = np.linalg.norm(diffs, axis=-1)            # (T-1, J)
+    valid = (conf_seq[1:] > conf_threshold) & (conf_seq[:-1] > conf_threshold)
+    if not valid.any():
+        return 0.0
+    return float(dist[valid].mean())
+
+
+def _compute_per_joint_motion(seq_xy: np.ndarray, conf_seq: np.ndarray,
+                              conf_threshold: float = 0.3) -> np.ndarray:
+    """
+    跟 _compute_window_motion 邏輯相同，但回傳每個關節各自的平均逐幀位移量
+    （shape=(J,)），用來檢驗「動態訊號是不是集中在頭部少數關節」這類假設。
+    信心不足、整個 window 都沒有有效幀的關節回傳 NaN（統計時記得用 nanmean 略過）。
+    """
+    diffs = seq_xy[1:] - seq_xy[:-1]                 # (T-1, J, 2)
+    dist  = np.linalg.norm(diffs, axis=-1)            # (T-1, J)
+    valid = (conf_seq[1:] > conf_threshold) & (conf_seq[:-1] > conf_threshold)   # (T-1, J)
+    out = np.full(dist.shape[1], np.nan, dtype=np.float64)
+    for j in range(dist.shape[1]):
+        if valid[:, j].any():
+            out[j] = dist[valid[:, j], j].mean()
+    return out
+
+
+def _joint_prior_weights_note() -> str:
+    """回傳這次訓練當下的 JOINT_PRIOR_WEIGHTS 設定描述，嵌進診斷報告開頭，
+    這樣報告本身就能回答「這次是用什麼權重設定跑出來的」，不用回頭翻 config。"""
+    if not USE_JOINT_PRIOR_WEIGHTS or not JOINT_PRIOR_WEIGHTS_CFG:
+        return "Joint Prior Weights: 未啟用（全部關節=1.0，跟原本行為相同）"
+    weights_str = ', '.join(f'{name}={w}' for name, w in JOINT_PRIOR_WEIGHTS_CFG.items())
+    return f"Joint Prior Weights: 已啟用 — {weights_str}（其餘關節=1.0）"
+
+
+def diagnose_confusion_pair(full_dataset, val_indices, val_labels, val_preds,
+                            class_a: str, class_b: str, max_examples: int = 8,
+                            output_dir: str = None):
+    """
+    針對兩個容易混淆的類別（例如 lick/stop），量化檢驗「是不是誤判的 window
+    本身動態幅度就偏低，跟另一類很像」這個假設：
+      1. 分別算出「真的是 A 且分對」「真的是 B 且分對」的動作幅度分布，當作兩類的參考基準。
+      2. 再看「真的是 A 卻分成 B」「真的是 B 卻分成 A」這些誤判 window 的動作幅度，
+         落在哪一邊——如果誤判的 A→B window 動作幅度明顯偏向 B 的基準，就支持
+         「這些 window 本質上動態不足、跟 B 太像」的假設；如果落在 A 的基準附近，
+         代表問題不在動態量本身，得往別的方向（例如姿勢相似度、標籤邊界）查。
+      3. 依影片彙總誤判 window 數，方便看出是不是集中在少數幾支影片（拖累整體誤判數的
+         問題影片），而非該類別普遍容易混淆。
+      4. 同時列出每個誤判 window 對應的影片與時間戳，方便手動回放影片核對畫面。
+
+    output_dir: 若提供，把這份報告額外存成
+    {output_dir}/confusion_diagnosis_{class_a}_{class_b}.txt（每次訓練都會覆寫成最新結果，
+    方便跟該次訓練的其他輸出檔案放在一起留存紀錄，不只印在終端）。
+    """
+    lines = []
+    def _p(s=""):
+        lines.append(s)
+
+    label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+    if class_a not in label_names or class_b not in label_names:
+        print(f"  ⚠ diagnose_confusion_pair: {class_a}/{class_b} 不在 BEHAVIOR_PREFIXES 內，略過")
+        return
+    a_idx, b_idx = label_names.index(class_a), label_names.index(class_b)
+
+    def _motion_for(idx):
+        item = full_dataset.sequences[idx]
+        seq  = item['sequence']
+        conf_seq = item['conf_sequence']
+        if full_dataset.num_joints < seq.shape[1]:
+            seq = seq[:, :full_dataset.num_joints, :]
+            conf_seq = conf_seq[:, :full_dataset.num_joints]
+        seq = flip_normalize(seq)
+        seq = orientation_normalize(seq)
+        seq = normalize_skeleton_coords(seq)
+        return _compute_window_motion(seq, conf_seq)
+
+    def _fmt_time(t):
+        return f"{t:.2f}s" if t is not None else "n/a"
+
+    correct_a, correct_b = [], []
+    confused_a_to_b, confused_b_to_a = [], []
+    for i, (true, pred) in enumerate(zip(val_labels, val_preds)):
+        if true == a_idx and pred == a_idx:
+            correct_a.append(_motion_for(val_indices[i]))
+        elif true == b_idx and pred == b_idx:
+            correct_b.append(_motion_for(val_indices[i]))
+        elif true == a_idx and pred == b_idx:
+            confused_a_to_b.append(val_indices[i])
+        elif true == b_idx and pred == a_idx:
+            confused_b_to_a.append(val_indices[i])
+
+    from collections import Counter
+    SEP = '─' * 70
+
+    _p(f"\n{'='*70}")
+    _p(f"  混淆診斷：{class_a} ↔ {class_b}")
+    _p(f"  {_joint_prior_weights_note()}")
+    _p(f"{'='*70}")
+
+    # ── 動作幅度統計表 ──────────────────────────────────────────────────
+    _p("\n【動作幅度統計】")
+    _p(f"  {_vlj('分類', 20)} {_vrj('n', 6)} {_vrj('mean', 10)} {_vrj('median', 10)}")
+    _p(f"  {SEP}")
+
+    def _stat_row(name, vals):
+        if not vals:
+            _p(f"  {_vlj(name, 20)} {_vrj('—', 6)} {_vrj('—', 10)} {_vrj('—', 10)}")
+            return
+        arr = np.array(vals)
+        _p(f"  {_vlj(name, 20)} {_vrj(len(arr), 6)} {_vrj(f'{arr.mean():.4f}', 10)} "
+           f"{_vrj(f'{np.median(arr):.4f}', 10)}")
+
+    _stat_row(f"正確分類的 {class_a}", correct_a)
+    _stat_row(f"正確分類的 {class_b}", correct_b)
+
+    all_detail_rows = []   # 給 CSV 用：(direction, video_id, start_time, end_time, start_idx, motion)
+
+    def _report_confused(indices, true_name, pred_name):
+        if not indices:
+            _stat_row(f"誤判 {true_name}→{pred_name}", [])
+            return
+        motions = [_motion_for(idx) for idx in indices]
+        _stat_row(f"誤判 {true_name}→{pred_name}", motions)
+
+        direction = f"{true_name}→{pred_name}"
+        for idx, m in zip(indices, motions):
+            item = full_dataset.sequences[idx]
+            all_detail_rows.append((direction, item['video_id'], item.get('start_time'),
+                                    item.get('end_time'), item.get('start_idx'), m))
+        return motions
+
+    motions_a_to_b = _report_confused(confused_a_to_b, class_a, class_b)
+    motions_b_to_a = _report_confused(confused_b_to_a, class_b, class_a)
+
+    ref_a = np.median(correct_a) if correct_a else None
+    ref_b = np.median(correct_b) if correct_b else None
+    for direction, motions in ((f"{class_a}→{class_b}", motions_a_to_b),
+                               (f"{class_b}→{class_a}", motions_b_to_a)):
+        if motions and ref_a is not None and ref_b is not None:
+            # 用 median（而非 mean）判斷比較接近哪一類的基準：mean 在樣本數不多、
+            # 分布右偏（少數離群值把平均拉高）時容易誤導結論，median 對離群值較穩健。
+            med_m = np.median(motions)
+            closer_to = class_a if abs(med_m - ref_a) < abs(med_m - ref_b) else class_b
+            skew_note = ""
+            if abs(np.mean(motions) - med_m) > 0.3 * max(med_m, 1e-9):
+                skew_note = f"（注意：mean={np.mean(motions):.4f} 跟 median 差距較大，分布可能右偏，判斷以 median 為準）"
+            _p(f"    → 誤判 {direction} 的動作幅度中位數較接近「{closer_to}」的基準"
+                f"（{class_a} median={ref_a:.4f}, {class_b} median={ref_b:.4f}）{skew_note}")
+
+    # ── 依影片彙總表 ────────────────────────────────────────────────────
+    for indices, true_name, pred_name in ((confused_a_to_b, class_a, class_b),
+                                          (confused_b_to_a, class_b, class_a)):
+        if not indices:
+            continue
+        video_counts = Counter(full_dataset.sequences[idx]['video_id'] for idx in indices)
+        if len(video_counts) <= 1:
+            continue
+        _p(f"\n【{true_name}→{pred_name} 誤判依影片彙總】（共 {len(video_counts)} 支影片）")
+        _p(f"  {_vlj('影片', 24)} {_vrj('誤判數', 8)}")
+        _p(f"  {SEP}")
+        for vid, cnt in video_counts.most_common():
+            _p(f"  {_vlj(vid, 24)} {_vrj(cnt, 8)}")
+
+    # ── 逐筆明細表 ──────────────────────────────────────────────────────
+    for indices, true_name, pred_name in ((confused_a_to_b, class_a, class_b),
+                                          (confused_b_to_a, class_b, class_a)):
+        if not indices:
+            continue
+        motions = [_motion_for(idx) for idx in indices]
+        _p(f"\n【{true_name}→{pred_name} 誤判明細】（依動作幅度排序，最多列 {max_examples} 筆）")
+        _p(f"  {_vlj('影片', 24)} {_vlj('時間區間', 22)} {_vrj('start_idx', 10)} {_vrj('動作幅度', 10)}")
+        _p(f"  {SEP}")
+        for idx, m in sorted(zip(indices, motions), key=lambda x: x[1])[:max_examples]:
+            item = full_dataset.sequences[idx]
+            time_range = f"{_fmt_time(item.get('start_time'))} ~ {_fmt_time(item.get('end_time'))}"
+            _p(f"  {_vlj(item['video_id'], 24)} {_vlj(time_range, 22)} "
+               f"{_vrj(item.get('start_idx'), 10)} {_vrj(f'{m:.4f}', 10)}")
+
+    _p(f"\n{'='*70}\n")
+
+    print('\n'.join(lines))
+    if output_dir:
+        # 跟 diagnose_keypoint_motion() 共用同一份報告檔（{a}_{b}_diagnosis.txt），
+        # 這個函式先呼叫、用 'w' 建立/覆寫，diagnose_keypoint_motion() 之後接著用
+        # 'a' 附加進同一個檔案，兩者互補（動作幅度總量+位置 vs 逐關節拆解），
+        # 合成一份檔案就不用來回對照兩個檔案。
+        out_path = os.path.join(output_dir, f'{class_a}_{class_b}_diagnosis.txt')
+        with open(out_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        print(f"✓ 混淆診斷已存檔: {out_path}")
+
+        if all_detail_rows:
+            import csv
+            csv_path = os.path.join(output_dir, f'{class_a}_{class_b}_diagnosis.csv')
+            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                w = csv.writer(f)
+                w.writerow(['direction', 'video_id', 'start_time', 'end_time', 'start_idx', 'motion'])
+                for row in sorted(all_detail_rows, key=lambda r: r[-1]):
+                    w.writerow(row)
+            print(f"✓ 混淆診斷明細（全部 {len(all_detail_rows)} 筆）已存成 CSV: {csv_path}")
+
+
+def diagnose_keypoint_motion(full_dataset, val_indices, val_labels, val_preds,
+                             class_a: str, class_b: str,
+                             opening_frame_threshold: int = 48,
+                             output_dir: str = None):
+    """
+    diagnose_confusion_pair() 的逐關節版本，驗證「判別力是否集中在頭部少數關節」
+    這個假設（例如 lick/stop 混淆懷疑是頭部局部運動被全域圖卷積稀釋造成）：
+      1. 分別算出「正確分類的 A／B」的逐關節動作幅度平均值，兩者差異最大的關節
+         就是理論上最有判別力的關節（驗證 Nose/耳朵是否名列前茅）。
+      2. 針對 B→A 誤判 window，依 start_idx 是否落在影片開頭
+         （< opening_frame_threshold 幀）分成兩組分別看逐關節動作幅度——
+         如果排除開頭那組後，剩下的誤判仍呈現「頭部關節動態接近 A、其餘關節接近 B」
+         的訊號，才真正支持「局部頭部運動被稀釋」這個假設；如果訊號主要來自開頭那組，
+         代表誤判主力其實是別的原因（例如入鏡安頓、偵測未穩定），該分開論述。
+
+    opening_frame_threshold: 幾幀以內視為「影片開頭」，預設 48 幀（≈1.6s@30fps），
+    依先前診斷觀察到的誤判聚集範圍抓的門檻，可依實際狀況調整。
+    """
+    lines = []
+    def _p(s=""):
+        lines.append(s)
+
+    label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+    if class_a not in label_names or class_b not in label_names:
+        print(f"  ⚠ diagnose_keypoint_motion: {class_a}/{class_b} 不在 BEHAVIOR_PREFIXES 內，略過")
+        return
+    a_idx, b_idx = label_names.index(class_a), label_names.index(class_b)
+
+    def _joint_motion_for(idx):
+        item = full_dataset.sequences[idx]
+        seq  = item['sequence']
+        conf_seq = item['conf_sequence']
+        if full_dataset.num_joints < seq.shape[1]:
+            seq = seq[:, :full_dataset.num_joints, :]
+            conf_seq = conf_seq[:, :full_dataset.num_joints]
+        seq = flip_normalize(seq)
+        seq = orientation_normalize(seq)
+        seq = normalize_skeleton_coords(seq)
+        return _compute_per_joint_motion(seq, conf_seq)
+
+    n_joints = full_dataset.num_joints
+    joint_names = KEYPOINT_NAMES[:n_joints]
+
+    correct_a_j, correct_b_j = [], []
+    confused_a_to_b_idx, confused_b_to_a_idx = [], []
+    for i, (true, pred) in enumerate(zip(val_labels, val_preds)):
+        if true == a_idx and pred == a_idx:
+            correct_a_j.append(_joint_motion_for(val_indices[i]))
+        elif true == b_idx and pred == b_idx:
+            correct_b_j.append(_joint_motion_for(val_indices[i]))
+        elif true == a_idx and pred == b_idx:
+            confused_a_to_b_idx.append(val_indices[i])
+        elif true == b_idx and pred == a_idx:
+            confused_b_to_a_idx.append(val_indices[i])
+
+    with np.errstate(invalid='ignore'):
+        mean_a = np.nanmean(np.stack(correct_a_j), axis=0) if correct_a_j else np.full(n_joints, np.nan)
+        mean_b = np.nanmean(np.stack(correct_b_j), axis=0) if correct_b_j else np.full(n_joints, np.nan)
+
+    SEP = '─' * 70
+    _p(f"\n{'='*70}")
+    _p(f"  逐關節動作幅度診斷：{class_a} ↔ {class_b}")
+    _p(f"  {_joint_prior_weights_note()}")
+    _p(f"{'='*70}")
+
+    _p(f"\n【正確分類的 {class_a} vs {class_b}：逐關節動作幅度】"
+       f"（依差異排序，最上面的關節理論上判別力最高）")
+    _p(f"  {_vlj('關節', 12)} {_vrj(class_a+'均值', 12)} {_vrj(class_b+'均值', 12)} {_vrj('差異', 10)}")
+    _p(f"  {SEP}")
+    order = np.argsort(-np.nan_to_num(mean_a - mean_b, nan=-np.inf))
+    for j in order:
+        va, vb = mean_a[j], mean_b[j]
+        diff_s = f"{va-vb:+.4f}" if not (np.isnan(va) or np.isnan(vb)) else "n/a"
+        va_s = f"{va:.4f}" if not np.isnan(va) else "n/a"
+        vb_s = f"{vb:.4f}" if not np.isnan(vb) else "n/a"
+        _p(f"  {_vlj(joint_names[j], 12)} {_vrj(va_s, 12)} {_vrj(vb_s, 12)} {_vrj(diff_s, 10)}")
+
+    def _closer_label(v, ref_a, ref_b):
+        if np.isnan(v) or np.isnan(ref_a) or np.isnan(ref_b):
+            return "n/a"
+        return class_a if abs(v - ref_a) < abs(v - ref_b) else class_b
+
+    def _report_group(idxs, group_name):
+        if not idxs:
+            _p(f"\n  {group_name}：無樣本")
+            return
+        arrs = [_joint_motion_for(idx) for idx in idxs]
+        with np.errstate(invalid='ignore'), warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='Mean of empty slice')
+            mean_g = np.nanmean(np.stack(arrs), axis=0)
+        _p(f"\n【{group_name}】（n={len(idxs)}）")
+        _p(f"  {_vlj('關節', 12)} {_vrj('此組均值', 12)} {_vrj(class_a+'基準', 12)} "
+           f"{_vrj(class_b+'基準', 12)} {_vrj('較接近', 8)}")
+        _p(f"  {SEP}")
+        for j in range(n_joints):
+            v = mean_g[j]
+            v_s = f"{v:.4f}" if not np.isnan(v) else "n/a"
+            _p(f"  {_vlj(joint_names[j], 12)} {_vrj(v_s, 12)} {_vrj(f'{mean_a[j]:.4f}', 12)} "
+               f"{_vrj(f'{mean_b[j]:.4f}', 12)} {_vrj(_closer_label(v, mean_a[j], mean_b[j]), 8)}")
+
+    _report_group(confused_a_to_b_idx, f"誤判 {class_a}→{class_b}：逐關節動作幅度")
+
+    opening_idx = [idx for idx in confused_b_to_a_idx
+                  if full_dataset.sequences[idx].get('start_idx', 0) < opening_frame_threshold]
+    other_idx = [idx for idx in confused_b_to_a_idx if idx not in opening_idx]
+    _p(f"\n【誤判 {class_b}→{class_a}：依 start_idx < {opening_frame_threshold} 幀（影片開頭）分群】")
+    _p(f"  開頭組 n={len(opening_idx)}，非開頭組 n={len(other_idx)}")
+    _report_group(opening_idx, f"誤判 {class_b}→{class_a}（開頭組）：逐關節動作幅度")
+    _report_group(other_idx, f"誤判 {class_b}→{class_a}（非開頭組）：逐關節動作幅度 ← 排除開頭雜訊後的真實訊號")
+
+    _p(f"\n{'='*70}\n")
+
+    print('\n'.join(lines))
+    if output_dir:
+        # 附加進 diagnose_confusion_pair() 已建立的同一份報告檔，兩份診斷合成一份，
+        # 不需要另外開一個檔案來回對照。
+        out_path = os.path.join(output_dir, f'{class_a}_{class_b}_diagnosis.txt')
+        mode = 'a' if os.path.exists(out_path) else 'w'
+        with open(out_path, mode, encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        print(f"✓ 逐關節動作幅度診斷已附加存檔: {out_path}")
+
+
+def diagnose_keypoint_motion_groundtruth(full_dataset, indices, class_a: str, class_b: str,
+                                         output_dir: str = None):
+    """
+    diagnose_keypoint_motion() 的「純資料版」：完全不需要模型/預測結果，只依
+    ground truth 標籤篩選 window，比較兩個類別「全部」樣本（不是只挑模型判對
+    的樣本）的逐關節動作幅度。
+
+    動機：diagnose_keypoint_motion() 的 Table 1 只統計「模型判對」的樣本，而
+    模型是拿全部行為類別一起訓練出來的——如果訓練時的類別交互作用讓「判對的
+    scratch」剛好偏向某種特定樣態（不是 scratch 的真實全貌），那 Table 1 看到
+    的關節排名就可能是訓練造成的假象，不是資料本身的特性。這個函式跳過模型，
+    直接用標註標籤挑出「全部」屬於該類別的 window 來算，結果如果跟
+    diagnose_keypoint_motion() 的 Table 1 一致，就能證明先前的結論不是模型
+    5 類別聯合訓練造成的選樣偏差；如果不一致，代表選樣偏差確實存在，要以這份
+    「純資料版」結果為準。
+
+    indices: 要涵蓋的 sequence index 清單（例如 val_indices，或
+    range(len(full_dataset.sequences)) 涵蓋全部資料以取得最大樣本數——這裡沒有
+    train/val 洩漏疑慮，因為完全不涉及任何模型評估，用全部資料統計最穩定）。
+    """
+    label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+    if class_a not in label_names or class_b not in label_names:
+        print(f"  ⚠ diagnose_keypoint_motion_groundtruth: {class_a}/{class_b} 不在 BEHAVIOR_PREFIXES 內，略過")
+        return
+    a_idx, b_idx = label_names.index(class_a), label_names.index(class_b)
+
+    def _joint_motion_for(idx):
+        item = full_dataset.sequences[idx]
+        seq  = item['sequence']
+        conf_seq = item['conf_sequence']
+        if full_dataset.num_joints < seq.shape[1]:
+            seq = seq[:, :full_dataset.num_joints, :]
+            conf_seq = conf_seq[:, :full_dataset.num_joints]
+        seq = flip_normalize(seq)
+        seq = orientation_normalize(seq)
+        seq = normalize_skeleton_coords(seq)
+        return _compute_per_joint_motion(seq, conf_seq)
+
+    n_joints = full_dataset.num_joints
+    joint_names = KEYPOINT_NAMES[:n_joints]
+
+    a_joints, b_joints = [], []
+    for idx in indices:
+        lbl = full_dataset.sequences[idx]['label']
+        if lbl == a_idx:
+            a_joints.append(_joint_motion_for(idx))
+        elif lbl == b_idx:
+            b_joints.append(_joint_motion_for(idx))
+
+    with np.errstate(invalid='ignore'):
+        mean_a = np.nanmean(np.stack(a_joints), axis=0) if a_joints else np.full(n_joints, np.nan)
+        mean_b = np.nanmean(np.stack(b_joints), axis=0) if b_joints else np.full(n_joints, np.nan)
+
+    lines = []
+    def _p(s=""):
+        lines.append(s)
+
+    SEP = '─' * 70
+    _p(f"\n{'='*70}")
+    _p(f"  逐關節動作幅度診斷（純資料版，不經模型）：{class_a} ↔ {class_b}")
+    _p(f"  {_joint_prior_weights_note()}")
+    _p(f"{'='*70}")
+    _p(f"\n【全部 {class_a}（n={len(a_joints)}） vs 全部 {class_b}（n={len(b_joints)}）：逐關節動作幅度】")
+    _p(f"  （依 ground truth 標籤挑樣本，不經模型分類，驗證 Table 1 排名是否為訓練選樣偏差）")
+    _p(f"  {_vlj('關節', 12)} {_vrj(class_a+'均值', 12)} {_vrj(class_b+'均值', 12)} {_vrj('差異', 10)}")
+    _p(f"  {SEP}")
+    order = np.argsort(-np.nan_to_num(mean_a - mean_b, nan=-np.inf))
+    for j in order:
+        va, vb = mean_a[j], mean_b[j]
+        diff_s = f"{va-vb:+.4f}" if not (np.isnan(va) or np.isnan(vb)) else "n/a"
+        va_s = f"{va:.4f}" if not np.isnan(va) else "n/a"
+        vb_s = f"{vb:.4f}" if not np.isnan(vb) else "n/a"
+        _p(f"  {_vlj(joint_names[j], 12)} {_vrj(va_s, 12)} {_vrj(vb_s, 12)} {_vrj(diff_s, 10)}")
+    _p(f"\n{'='*70}\n")
+
+    print('\n'.join(lines))
+    if output_dir:
+        out_path = os.path.join(output_dir, f'{class_a}_{class_b}_diagnosis.txt')
+        mode = 'a' if os.path.exists(out_path) else 'w'
+        with open(out_path, mode, encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        print(f"✓ 純資料版逐關節動作幅度診斷已附加存檔: {out_path}")
 
 
 def run_ablation_study(modes=None):

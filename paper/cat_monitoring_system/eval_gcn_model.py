@@ -32,6 +32,10 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+# Joint Prior Weights 標註用中文，預設 DejaVu Sans 沒有 CJK 字型會顯示成方框，
+# 跟 eval_model_worst_videos.py 用同一組字型清單
+matplotlib.rcParams['font.sans-serif'] = ['Microsoft JhengHei', 'Microsoft YaHei', 'MingLiU', 'SimHei']
+matplotlib.rcParams['axes.unicode_minus'] = False
 
 from detectors.keypoint_detector import KeypointDetector
 from detectors.behavior_classifier import BehaviorClassifier
@@ -44,6 +48,7 @@ from models.stgcn_model import (
 )
 from utils.constants import BEHAVIOR_CLASSES
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from scipy.stats import chi2, binomtest
 
 # ── Channel → feature mode ────────────────────────────────────────────────
 CH_TO_FEATURE = {
@@ -55,25 +60,31 @@ CH_TO_FEATURE = {
 }
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
-DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_117.pt"
+DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_121.pt"
 DEFAULT_IMGSZ   = 640
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16
-DEFAULT_STRIDE  = 2
+DEFAULT_STRIDE  = 3
 EVENT_MIN_WINDOWS = 3   # 保留作備用下限；實際以比例門檻為主
 EVENT_MIN_RATIO   = 0.30  # 事件偵測（比例門檻）：正確 window 數 / 總 window 數 ≥ 此值即視為偵測成功
 PROB_EVENT_THRESHOLD = 0.40  # 機率門檻型事件偵測：true-class prob ≥ 此值的 window 達 EVENT_MIN_WINDOWS 即算偵測
 DEFAULT_DEVICE  = 'cuda'
 
+# 影片內並非整段都屬於該類別的行為（例如 scratch/shake 只在影片中出現一小段，
+# 其餘畫面是 stop 或其他行為），這些類別的絕對準確率會被結構性拉低——不是模型
+# 缺陷，是評測資料本身的特性。這裡列出的類別在報表中會加 † 標記，並且比較
+# 多個模型時建議優先看「Δ vs baseline」的相對變化，而非本表的絕對數字。
+PARTIAL_COVERAGE_CLASSES = {'scratch', 'shake'}
+
 # 預設比較清單：2~5 筆皆可，每筆為 {path, name, ema_alpha, seq_len}。
 # name=None 時自動從檔名推導；--models 等 CLI 參數會整個覆蓋這份清單。
 HARD_MODELS = [
-    {'path': r"C:\Users\homec\Downloads\stgcn_results\run_087_xy_conf_v_bone_att_on\087_best_model.pth",
+    {'path': r"C:\Users\homec\Downloads\stgcn_results\run_119_xy_conf_v_bone_att_on\119_best_model.pth",
      'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
-    {'path': r"C:\Users\homec\Downloads\stgcn_results\run_103_xy_conf_v_bone_att_on\103_best_model.pth",
+    {'path': r"C:\Users\homec\Downloads\stgcn_results\run_120_xy_conf_v_bone_att_on\120_best_model.pth",
      'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
-     {'path': r"C:\Users\homec\Downloads\stgcn_results\run_104_xy_conf_v_bone_att_on\104_best_model.pth",
-     'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
+   # {'path': r"C:\Users\homec\Downloads\stgcn_results\run_116_seqlen_ablation_att_on\116_xy_conf_v_bone_T32_att_on.pth",
+   #  'name': None, 'ema_alpha': 1.0, 'seq_len': 32},
   #   {'path': r"C:\Users\homec\Downloads\stgcn_results\run_095_reg_ablation_att_on\4.pth",
    #  'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
  #    {'path': r"C:\Users\homec\Downloads\stgcn_results\run_095_reg_ablation_att_on\5.pth",
@@ -89,6 +100,31 @@ HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_result
 
 # ── 視覺樣式：最多支援 5 個模型，一模型一色 ─────────────────────────────────
 _PALETTE = ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0', '#F44336']  # 藍/橘/綠/紫/紅
+
+# 跟 0_train_gcn.py / eval_pose_models.py 同一份骨架定義（joint_id 0~16 依序對應）
+KEYPOINT_NAMES = [
+    "Nose", "Left_Ear", "Right_Ear", "Chest", "Mid_Back",
+    "Hip", "LF_Elbow", "LF_Paw", "RF_Elbow", "RF_Paw",
+    "LH_Knee", "LH_Paw", "RH_Knee", "RH_Paw",
+    "Tail_Root", "Tail_Mid", "Tail_Tip",
+]
+
+
+def get_joint_prior_weights_str(clf) -> str:
+    """讀取分類器內部 STGCN 模型的 JointAttention.prior_weights buffer（訓練時
+    設定的固定關節先驗權重，隨 checkpoint 存讀，見 0_train_gcn.py 的
+    USE_JOINT_PRIOR_WEIGHTS/JOINT_PRIOR_WEIGHTS），格式化成一行文字，只列出非
+    1.0 的關節。模型沒有 attention 模組，或找不到這個 buffer（例如比較新舊版本
+    checkpoint 時舊版沒有這個欄位）時回傳說明文字，不中斷繪圖。"""
+    try:
+        joint_attn = clf.model.model.joint_attention
+        weights = joint_attn.prior_weights.detach().cpu().numpy().flatten()
+    except AttributeError:
+        return "無 attention 模組"
+    names = KEYPOINT_NAMES[:len(weights)]
+    non_default = [f'{names[i]}={weights[i]:.1f}' for i in range(len(weights))
+                  if abs(weights[i] - 1.0) > 1e-6]
+    return ', '.join(non_default) if non_default else "無自訂權重（全部關節=1.0）"
 
 # ── Windows MAX_PATH 保護 ────────────────────────────────────────────────────
 # 完整 label（例如 "095_xy_conf_v_bone_manual_tuning_scaled_lr_att_on"）在 N 個
@@ -397,6 +433,245 @@ def compute_metrics(preds_by_class: dict,
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# McNemar's test（同一批 window 上的配對顯著性檢定，回答「這次的準確率差異
+# 是不是真的顯著，還是雜訊」——見與使用者討論的驗證方法 1）
+# ═══════════════════════════════════════════════════════════════════════════
+def mcnemar_test(correct_a: np.ndarray, correct_b: np.ndarray) -> dict:
+    """
+    對兩個模型在同一批（配對）window 上的正確與否做 McNemar's test。
+    b = A對B錯的 window 數，c = A錯B對的 window 數；只有 b、c 這兩格不一致的
+    windows 才有資訊量，兩者都對/都錯的 windows 不影響檢定。
+
+    n = b + c < 25 時用精確二項檢定（exact binomial test，p=0.5），
+    n >= 25 時用連續性校正卡方近似（standard practice，small-sample chi2 校正不可靠）。
+    """
+    correct_a = np.asarray(correct_a, dtype=bool)
+    correct_b = np.asarray(correct_b, dtype=bool)
+    b = int(np.sum(correct_a & ~correct_b))   # A 對、B 錯
+    c = int(np.sum(~correct_a & correct_b))   # A 錯、B 對
+    n = b + c
+    if n == 0:
+        return {'b': b, 'c': c, 'n_discordant': n, 'statistic': 0.0,
+                'p_value': 1.0, 'method': 'n/a（兩模型完全一致，無法檢定）'}
+    if n < 25:
+        res = binomtest(min(b, c), n, 0.5, alternative='two-sided')
+        return {'b': b, 'c': c, 'n_discordant': n, 'statistic': float(min(b, c)),
+                'p_value': float(res.pvalue), 'method': 'exact_binomial'}
+    stat = (abs(b - c) - 1) ** 2 / n   # continuity-corrected chi-square, df=1
+    p = float(1 - chi2.cdf(stat, df=1))
+    return {'b': b, 'c': c, 'n_discordant': n, 'statistic': float(stat),
+            'p_value': p, 'method': 'chi2_corrected'}
+
+
+def _pairwise_align_by_frame(vid_preds_a: list, vid_preds_b: list) -> tuple:
+    """把同一部影片、兩個模型的 window 預測依 'frame' 對齊（因不同模型可能用
+    不同 seq_len/EMA，window 數量不一定完全一致），回傳交集後的兩份 pred 清單。"""
+    by_frame_a = {p['frame']: p for p in vid_preds_a}
+    by_frame_b = {p['frame']: p for p in vid_preds_b}
+    common = sorted(set(by_frame_a) & set(by_frame_b))
+    return [by_frame_a[f] for f in common], [by_frame_b[f] for f in common]
+
+
+def compute_mcnemar_pairs(preds_list: list, evaluated_cls: list) -> dict:
+    """
+    對 N 個模型的每一對做 McNemar's test（overall + per-class）。
+    preds_list[model_idx] = {cls_idx: [[window_dict, ...] per video]}（跟 main() 裡
+    preds_list 同一份資料，未展平）。假設同一 class 下所有模型走的是同一批、
+    同順序的影片（main() 對每個模型都用同一個 dir_path 資料夾排序過的影片清單）。
+
+    Returns: {(i, j): {'overall': mcnemar_result, 'per_class': {cls_idx: mcnemar_result}}}
+    """
+    n_models = len(preds_list)
+    results = {}
+    for i in range(n_models):
+        for j in range(i + 1, n_models):
+            per_class_res = {}
+            overall_a, overall_b = [], []
+            for cls_idx in evaluated_cls:
+                vids_a = preds_list[i].get(cls_idx, [])
+                vids_b = preds_list[j].get(cls_idx, [])
+                cls_a, cls_b = [], []
+                for va, vb in zip(vids_a, vids_b):
+                    pa, pb = _pairwise_align_by_frame(va, vb)
+                    cls_a.extend(int(p['pred']) == cls_idx for p in pa)
+                    cls_b.extend(int(p['pred']) == cls_idx for p in pb)
+                cls_a_arr = np.array(cls_a, dtype=bool)
+                cls_b_arr = np.array(cls_b, dtype=bool)
+                per_class_res[cls_idx] = mcnemar_test(cls_a_arr, cls_b_arr)
+                overall_a.extend(cls_a)
+                overall_b.extend(cls_b)
+            results[(i, j)] = {
+                'overall': mcnemar_test(np.array(overall_a, dtype=bool),
+                                        np.array(overall_b, dtype=bool)),
+                'per_class': per_class_res,
+            }
+    return results
+
+
+def print_mcnemar_summary(mcnemar_results: dict, names: list, classes: list,
+                          evaluated_cls: list, alpha: float = 0.05) -> list:
+    """把 compute_mcnemar_pairs() 的結果印成人類可讀的顯著性檢定報告。
+    回傳 lines list，方便同時印到終端與寫進檔案。"""
+    SEP = '─' * 70
+    lines = [
+        '',
+        '● McNemar\'s Test  (配對顯著性檢定：這次的準確率差異是否顯著，還是雜訊)',
+        f'  {SEP}',
+        '  p < 0.05 視為顯著差異（★）；n_discordant 是兩模型「答案不同」的 window 數，',
+        '  只有這些 window 有資訊量，n_discordant 太小（<10）時檢定力不足，結果僅供參考。',
+        '',
+    ]
+    for (i, j), res in mcnemar_results.items():
+        ov = res['overall']
+        sig = '★ 顯著' if ov['p_value'] < alpha else '  不顯著'
+        winner = names[i] if ov['b'] > ov['c'] else (names[j] if ov['c'] > ov['b'] else '=')
+        lines.append(f"  {names[i]}  vs  {names[j]}")
+        lines.append(f"    Overall: p={ov['p_value']:.4f}  {sig}  "
+                     f"(n_discordant={ov['n_discordant']}, {names[i]}對B錯={ov['b']}, "
+                     f"{names[j]}對A錯={ov['c']}, method={ov['method']}) → 較優: {winner}")
+        for cls_idx in evaluated_cls:
+            cr = res['per_class'][cls_idx]
+            csig = '★' if cr['p_value'] < alpha else ' '
+            lines.append(f"      [{classes[cls_idx]:<8}] p={cr['p_value']:.4f} {csig}  "
+                         f"(n_discordant={cr['n_discordant']}, b={cr['b']}, c={cr['c']}, {cr['method']})")
+        lines.append('')
+    print('\n'.join(lines))
+    return lines
+
+
+def save_mcnemar_csv(mcnemar_results: dict, names: list, classes: list,
+                     evaluated_cls: list, out_path: Path):
+    """把 McNemar 檢定結果存成 CSV，方便論文附錄引用。"""
+    rows = [['pair', 'scope', 'b', 'c', 'n_discordant', 'statistic', 'p_value', 'method', 'significant(p<0.05)']]
+    for (i, j), res in mcnemar_results.items():
+        pair = f'{names[i]}_vs_{names[j]}'
+        ov = res['overall']
+        rows.append([pair, 'overall', ov['b'], ov['c'], ov['n_discordant'],
+                    f"{ov['statistic']:.4f}", f"{ov['p_value']:.4f}", ov['method'],
+                    'YES' if ov['p_value'] < 0.05 else ''])
+        for cls_idx in evaluated_cls:
+            cr = res['per_class'][cls_idx]
+            rows.append([pair, classes[cls_idx], cr['b'], cr['c'], cr['n_discordant'],
+                        f"{cr['statistic']:.4f}", f"{cr['p_value']:.4f}", cr['method'],
+                        'YES' if cr['p_value'] < 0.05 else ''])
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
+        csv.writer(f).writerows(rows)
+    print(f"  ✓ {out_path.name}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Per-video accuracy breakdown（診斷用：找出某類別是不是被少數幾支影片拖累）
+# ═══════════════════════════════════════════════════════════════════════════
+def compute_per_video_accuracy(preds_list: list, video_names: dict, evaluated_cls: list,
+                               event_min_windows: int = EVENT_MIN_WINDOWS,
+                               event_min_ratio: float = EVENT_MIN_RATIO) -> dict:
+    """
+    對每個類別、每支影片、每個模型算 discrete accuracy（pred == cls_idx 的比例），
+    以及 max_true_prob（該影片所有 window 裡，true-class 機率的最高值）跟
+    event_detected（影片層級偵測：正確 window 比例 ≥ event_min_ratio 或
+    數量 ≥ event_min_windows，邏輯跟 compute_metrics 的事件偵測一致）。
+
+    discrete accuracy 是用「整支影片＝該類別」當 ground truth 算出來的，如果該
+    行為在影片裡只佔一小段（例如 scratch/shake 這種瞬發行為，其餘畫面是趨近
+    /其他行為），accuracy 會被結構性拉低，即使模型在真正發生的那幾秒表現正常。
+    max_true_prob／event_detected 是判斷「這支影片是不是真的評不出模型能力，
+    而不是模型真的很差」的關鍵佐證——如果 accuracy 很低但 max_true_prob 很高、
+    event_detected=True，代表模型有抓到事件峰值，只是被同一支影片裡大量非
+    事件畫面的 window 稀釋了平均準確率。
+    影片依 model 0（baseline）的準確率由低到高排序，方便一眼看出哪幾支影片特別差。
+
+    Returns: {cls_idx: [{'video', 'accuracy': [...], 'n_windows': [...],
+                         'max_true_prob': [...], 'event_detected': [...]}]}
+    """
+    n_models = len(preds_list)
+    result = {}
+    for cls_idx in evaluated_cls:
+        names_for_cls = video_names.get(cls_idx, [])
+        rows = []
+        for vi, vid_name in enumerate(names_for_cls):
+            accs, n_windows, max_probs, event_flags = [], [], [], []
+            for mi in range(n_models):
+                vids = preds_list[mi].get(cls_idx, [])
+                if vi >= len(vids) or not vids[vi]:
+                    accs.append(None)
+                    n_windows.append(0)
+                    max_probs.append(None)
+                    event_flags.append(None)
+                    continue
+                preds = vids[vi]
+                n_correct = sum(1 for p in preds if int(p['pred']) == cls_idx)
+                n = len(preds)
+                accs.append(n_correct / n)
+                n_windows.append(n)
+                probs_cls = [p['probs'][cls_idx] for p in preds if cls_idx < len(p['probs'])]
+                max_probs.append(max(probs_cls) if probs_cls else 0.0)
+                event_flags.append((n_correct / n) >= event_min_ratio or n_correct >= event_min_windows)
+            rows.append({'video': vid_name, 'accuracy': accs, 'n_windows': n_windows,
+                        'max_true_prob': max_probs, 'event_detected': event_flags})
+        rows.sort(key=lambda r: r['accuracy'][0] if r['accuracy'][0] is not None else 1.0)
+        result[cls_idx] = rows
+    return result
+
+
+def print_per_video_accuracy(per_video: dict, names: list, classes: list,
+                             low_flag: float = 0.15) -> list:
+    """印出逐影片準確率，標記明顯低於同類別平均（以 baseline/names[0] 為準）的影片——
+    這些影片是拉低該類別整體準確率的主要來源，值得優先檢查（是否標註邊界模糊、
+    畫面角度特殊、或跟訓練資料的場景差異特別大）。同時列出 max_true_prob／
+    event_detected：如果一支影片 accuracy 很低但這兩項顯示模型仍抓到事件峰值，
+    代表低準確率主要是「事件在影片裡佔比太短、被大量非事件 window 稀釋」的
+    資料特性，不是模型真的辨識失敗。"""
+    SEP = '─' * 70
+    lines = ['', '● Per-Video Accuracy Breakdown  (診斷用：找出特定類別裡表現特別差的影片)',
+            f'  {SEP}']
+    for cls_idx, rows in per_video.items():
+        if not rows:
+            continue
+        cls = classes[cls_idx]
+        valid = [r['accuracy'][0] for r in rows if r['accuracy'][0] is not None]
+        mean_acc = sum(valid) / len(valid) if valid else 0.0
+        lines.append(f'  [{cls}]  baseline({names[0]}) 影片平均準確率 = {mean_acc:.1%}')
+        for r in rows:
+            cells = []
+            for mi, acc in enumerate(r['accuracy']):
+                if acc is None:
+                    cells.append(f'{names[mi]}: n/a')
+                else:
+                    mtp = r['max_true_prob'][mi]
+                    ev = r['event_detected'][mi]
+                    ev_s = '✓' if ev else '✗'
+                    cells.append(f'{names[mi]}: {acc:.1%}(n={r["n_windows"][mi]}, '
+                                f'max_prob={mtp:.0%}, event={ev_s})')
+            a0 = r['accuracy'][0]
+            flag = '  ⚠ 遠低於該類別平均' if (a0 is not None and mean_acc - a0 >= low_flag) else ''
+            if flag and a0 is not None and r['max_true_prob'][0] is not None and r['max_true_prob'][0] >= 0.7:
+                flag += '（但 max_prob 高，可能只是事件片段太短被稀釋，非模型缺陷）'
+            lines.append(f'    {r["video"]:<28}  ' + '   '.join(cells) + flag)
+        lines.append('')
+    print('\n'.join(lines))
+    return lines
+
+
+def save_per_video_accuracy_csv(per_video: dict, names: list, classes: list, out_path: Path):
+    """把逐影片準確率存成 CSV。"""
+    header = (['class', 'video'] + [f'{n}_accuracy' for n in names]
+             + [f'{n}_n_windows' for n in names]
+             + [f'{n}_max_true_prob' for n in names]
+             + [f'{n}_event_detected' for n in names])
+    rows = [header]
+    for cls_idx, cls_rows in per_video.items():
+        cls = classes[cls_idx]
+        for r in cls_rows:
+            acc_cells = [f"{a:.4f}" if a is not None else '' for a in r['accuracy']]
+            prob_cells = [f"{p:.4f}" if p is not None else '' for p in r['max_true_prob']]
+            event_cells = ['' if e is None else ('YES' if e else '') for e in r['event_detected']]
+            rows.append([cls, r['video']] + acc_cells + list(r['n_windows']) + prob_cells + event_cells)
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
+        csv.writer(f).writerows(rows)
+    print(f"  ✓ {out_path.name}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Visualizations（泛化成 N 個模型，N = 2~5）
 # ═══════════════════════════════════════════════════════════════════════════
 def plot_accuracy_comparison(metrics_list, names, classes, out_path):
@@ -498,8 +773,14 @@ def plot_accuracy_comparison(metrics_list, names, classes, out_path):
     print(f"  ✓ {out_path.name}")
 
 
-def plot_confusion_matrices(cms, names, classes, out_path):
-    """N 個 confusion matrix 並排，支援 seaborn（可選）。"""
+def plot_confusion_matrices(cms, names, classes, out_path, joint_weight_strs=None):
+    """N 個 confusion matrix 並排，支援 seaborn（可選）。
+
+    joint_weight_strs: 若提供（每個模型一個字串，見 get_joint_prior_weights_str()），
+    會在 suptitle 正下方、熱力圖正上方保留一塊完全空白的區域，由上到下依序列出
+    每個模型的 Joint Prior Weights 設定，置中對齊——這塊區域是額外預留的圖高，
+    不是疊在既有的熱力圖/座標軸/colorbar 上面，不會遮擋任何原本的內容。
+    """
     n_models = len(cms)
     try:
         import seaborn as sns
@@ -507,8 +788,45 @@ def plot_confusion_matrices(cms, names, classes, out_path):
     except ImportError:
         _sns = False
 
-    fig, axes = plt.subplots(1, n_models, figsize=(6.2 * n_models, 5.5), constrained_layout=True)
-    fig.suptitle('Confusion Matrices', fontsize=13, fontweight='bold')
+    # 用絕對英吋精確算出每一段區域要多高，由上到下依序是：
+    # 頂部留白 → suptitle → (權重文字區塊) → 跟熱力圖標題之間的間隔 → 熱力圖自己
+    # 的雙行標題（model 名稱 + Avg Recall）→ 熱力圖本體 → 底部（x 軸刻度/標籤）。
+    # 全部用固定英吋數堆疊，而非用比例反推，確保權重文字區塊有絕對足夠、不會
+    # 被 ax.set_title() 的雙行標題擠壓到重疊的獨立空間。
+    n_weight_lines       = n_models if joint_weight_strs else 0
+    top_margin_in        = 0.10
+    suptitle_h_in        = 0.42
+    gap_after_suptitle_in = 0.08
+    weight_line_h_in     = 0.24
+    gap_before_title_in  = 0.14
+    subplot_title_h_in   = 0.66   # 雙行標題（名稱 + Avg Recall）的預留高度
+    plot_area_h_in       = 4.3
+    bottom_margin_in     = 0.75
+
+    above_axes_in = (top_margin_in + suptitle_h_in + gap_after_suptitle_in
+                    + n_weight_lines * weight_line_h_in
+                    + (gap_before_title_in if n_weight_lines else 0.05)
+                    + subplot_title_h_in)
+    fig_h = above_axes_in + plot_area_h_in + bottom_margin_in
+
+    fig, axes = plt.subplots(1, n_models, figsize=(6.2 * n_models, fig_h))
+    if n_models == 1:
+        axes = [axes]
+
+    suptitle_y = 1.0 - (top_margin_in + suptitle_h_in * 0.5) / fig_h
+    fig.suptitle('Confusion Matrices', fontsize=13, fontweight='bold', y=suptitle_y)
+
+    if joint_weight_strs:
+        block_top_y = 1.0 - (top_margin_in + suptitle_h_in + gap_after_suptitle_in) / fig_h
+        line_h_frac = weight_line_h_in / fig_h
+        for i, (name, wstr) in enumerate(zip(names, joint_weight_strs)):
+            y = block_top_y - i * line_h_frac
+            fig.text(0.5, y, f'{name}: {wstr}', ha='center', va='top',
+                     fontsize=9, color=_PALETTE[i % len(_PALETTE)])
+
+    top_for_axes = 1.0 - above_axes_in / fig_h
+    bottom_for_axes = bottom_margin_in / fig_h
+    fig.subplots_adjust(top=top_for_axes, bottom=bottom_for_axes, left=0.055, right=0.98, wspace=0.4)
 
     for ax, cm, name, col in zip(axes, cms, names, _PALETTE[:n_models]):
         if _sns:
@@ -769,6 +1087,19 @@ def print_final_summary(metrics_list, names):
             cells.append(('*' + s) if abs(v - best) < 0.005 else (' ' + s))
         return f'  {label:<{label_w}}  ' + '  '.join(f'{c:>{col_w}}' for c in cells)
 
+    def _cls_label(cls):
+        """類別名稱加 † 標記（若屬於 PARTIAL_COVERAGE_CLASSES，見常數定義處說明）。"""
+        return f'{cls} †' if cls in PARTIAL_COVERAGE_CLASSES else cls
+
+    def _delta_row(label, base_val, rest_vals, label_w=10):
+        """Δ vs baseline（names[0]）：只顯示 names[1:] 相對 baseline 的變化。"""
+        cells = []
+        for v in rest_vals:
+            d = v - base_val
+            s = f'{d:+.1%}'
+            cells.append(('▲' + s) if d > 0.005 else (('▼' + s) if d < -0.005 else (' ' + s)))
+        return f'  {label:<{label_w}}  ' + '  '.join(f'{c:>{col_w}}' for c in cells)
+
     # ── 主指標：Accuracy（argmax 正確率，獨立於下方複合分數）──────────────────
     accs = [m['overall']['accuracy'] for m in metrics_list]
     primary_best     = max(accs)
@@ -785,12 +1116,15 @@ def print_final_summary(metrics_list, names):
         _hdr_row(),
         f'  {SEP}',
     ]
+    flagged_evaluated = []
     for i, cls in enumerate(classes):
         pcs = [per[i] for per in per_list]
         if all(p['n_windows'] == 0 for p in pcs):
             continue
+        if cls in PARTIAL_COVERAGE_CLASSES:
+            flagged_evaluated.append(cls)
         vals = [p['accuracy'] for p in pcs]
-        lines.append(_val_row(cls, vals))
+        lines.append(_val_row(_cls_label(cls), vals))
     lines += [
         f'  {SEP}',
         _val_row('Overall', accs),
@@ -800,6 +1134,14 @@ def print_final_summary(metrics_list, names):
         lines.append(f'  ★ 主指標結論：{len(primary_winners)} 個模型準確率並列最高')
     else:
         lines.append(f'  ★ 主指標結論：{primary_winner} 準確率最高 — 依你指定的主指標，優先選它')
+
+    if flagged_evaluated:
+        lines += [
+            NL,
+            f"  † {'/'.join(flagged_evaluated)}：影片中該行為只出現一小段（其餘畫面多為 stop 或其他行為），"
+            f"絕對準確率因此結構性偏低，這是資料特性、不是模型缺陷。",
+            f"  比較多個模型時，這些類別請優先看下方「Δ vs baseline」的相對變化，而非本表的絕對數字。",
+        ]
 
     # ── [參考，非主指標] Overall Performance  (Event Detection Rate / Macro F1) ──
     ev_min = metrics_list[0].get('event_min_windows', EVENT_MIN_WINDOWS)
@@ -836,12 +1178,32 @@ def print_final_summary(metrics_list, names):
         for j in winners:
             class_wins[j] += 1.0 / len(winners)
         class_ranges.append((max(vals) - min(vals), cls, vals))
-        lines.append(_val_row(cls, vals))
+        lines.append(_val_row(_cls_label(cls), vals))
     lines.append(NL)
     n_evaluated = sum(1 for i in range(n_cls) if per_list[0][i]['n_windows'] > 0)
     wins_str = '   '.join(f'{names[j]}: {class_wins[j]:.1f}/{n_evaluated}' for j in range(n_models))
     lines.append(f'  Class wins → {wins_str}')
     lines.append(NL)
+
+    # ── Per-Class Accuracy Δ vs baseline（names[0]）──────────────────────────
+    # 判斷「有沒有改善」用這張表：對 PARTIAL_COVERAGE_CLASSES（見常數定義）而言，
+    # 絕對準確率結構性偏低，Δ（相對 baseline 的變化）才是有意義的比較基準。
+    if n_models >= 2:
+        lines += [
+            f'● Per-Class Accuracy Δ vs baseline ({names[0]})  — 判斷「有沒有改善」看這張表',
+            f'  {"":<10}  ' + '  '.join(f'{n:>{col_w}}' for n in names[1:]),
+            f'  {SEP}',
+        ]
+        for i, cls in enumerate(classes):
+            pcs = [per[i] for per in per_list]
+            if all(p['n_windows'] == 0 for p in pcs):
+                continue
+            vals = [p['accuracy'] for p in pcs]
+            lines.append(_delta_row(_cls_label(cls), vals[0], vals[1:]))
+        overall_vals = accs
+        lines.append(f'  {SEP}')
+        lines.append(_delta_row('Overall', overall_vals[0], overall_vals[1:]))
+        lines.append(NL)
 
     # ── Per-class avg true-class probability ──
     lines += ['● Avg True-Class Probability  (model conviction)', f'  {SEP}']
@@ -1010,6 +1372,9 @@ def main():
     # ── Inference ──────────────────────────────────────────────────────────
     # preds_list[model_idx][cls_idx] = [[pred_dict, ...], ...]  （外層 = 每部影片）
     preds_list = [dict() for _ in range(n_models)]
+    # video_names[cls_idx] = [filename, ...]，跟 preds_list[*][cls_idx] 外層順序一致
+    # （同一個資料夾、同樣排序過的檔案清單，所有模型看到的影片順序相同，只取 model 0 的）
+    video_names = {}
 
     for dir_path, cls_idx in dirs:
         cls_name = BEHAVIOR_CLASSES[cls_idx]
@@ -1017,10 +1382,13 @@ def main():
 
         for mi, (cfg, (clf, fm)) in enumerate(zip(models_cfg, classifiers)):
             print(f"  ▶ {chr(65 + mi)} ({labels[mi]})")
-            preds_list[mi][cls_idx] = [p for _, p in evaluate_folder(
+            folder_results = evaluate_folder(
                 dir_path, kp_det, clf, fm,
                 cfg['seq_len'], args.classify_stride, ema_alpha=cfg['ema_alpha']
-            )]
+            )
+            preds_list[mi][cls_idx] = [p for _, p in folder_results]
+            if mi == 0:
+                video_names[cls_idx] = [name for name, _ in folder_results]
 
         nv = len(preds_list[0][cls_idx])
         counts_str = '  '.join(
@@ -1048,7 +1416,7 @@ def main():
     _row('Event Det. Rate (ratio)',    [m['overall']['event_detection_rate']      for m in metrics_list])
     _row('Event Det. Rate (prob thr)', [m['overall']['prob_event_detection_rate'] for m in metrics_list])
     print()
-    evaluated_cls = {idx for _, idx in dirs}
+    evaluated_cls = sorted({idx for _, idx in dirs})
     for i, cls in enumerate(BEHAVIOR_CLASSES):
         if i not in evaluated_cls:
             continue
@@ -1079,12 +1447,22 @@ def main():
     save_summary_csv(
         metrics_list, labels, BEHAVIOR_CLASSES, out_dir / 'comparison_summary.csv'
     )
+    mcnemar_results = compute_mcnemar_pairs(preds_list, evaluated_cls)
+    save_mcnemar_csv(
+        mcnemar_results, labels, BEHAVIOR_CLASSES, evaluated_cls,
+        out_dir / 'mcnemar_test.csv'
+    )
+    per_video_acc = compute_per_video_accuracy(preds_list, video_names, evaluated_cls)
+    save_per_video_accuracy_csv(
+        per_video_acc, labels, BEHAVIOR_CLASSES, out_dir / 'per_video_accuracy.csv'
+    )
     plot_accuracy_comparison(
         metrics_list, labels, BEHAVIOR_CLASSES, out_dir / 'accuracy_comparison.png'
     )
+    joint_weight_strs = [get_joint_prior_weights_str(clf) for clf, fm in classifiers]
     plot_confusion_matrices(
         [m['confusion_matrix'] for m in metrics_list], labels, BEHAVIOR_CLASSES,
-        out_dir / 'confusion_matrices.png'
+        out_dir / 'confusion_matrices.png', joint_weight_strs=joint_weight_strs
     )
     plot_prob_histograms(
         flat_list, labels, BEHAVIOR_CLASSES, out_dir / 'prob_histograms.png'
@@ -1093,6 +1471,8 @@ def main():
     print(f'\n✓ All results saved to: {out_dir}')
 
     print_final_summary(metrics_list, labels)
+    print_mcnemar_summary(mcnemar_results, labels, BEHAVIOR_CLASSES, evaluated_cls)
+    print_per_video_accuracy(per_video_acc, labels, BEHAVIOR_CLASSES)
 
 
 if __name__ == '__main__':
