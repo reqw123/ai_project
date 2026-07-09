@@ -62,7 +62,6 @@ Mode 7 — ROI Padding Impact on Keypoint Stability
   4. 輸出根目錄：OUTPUT_DIR / {mode_subdir} / run_YYYYMMDD_HHMMSS/
 """
 import sys
-import os
 import csv
 import cv2
 import numpy as np
@@ -70,29 +69,13 @@ import time
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from collections import deque
 from typing import Iterable
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from detectors.keypoint_detector import KeypointDetector
-from detectors.behavior_classifier import BehaviorClassifier
-from models.stgcn_model import (
-    interpolate_missing,
-    flip_normalize, 
-    orientation_normalize,
-    normalize_skeleton_coords,
-    build_feature_tensor,
-    get_in_channels_for_mode,
-)
-from utils.constants import (
-    BEHAVIOR_CLASSES,
-    LOW_CONF_ID,
-    BLACK,
-    COLOR_HEAD,
-)
-from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
+from utils.constants import BLACK, COLOR_HEAD
 
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║          使 用 者 設 定 區（每次執行前只需修改此區）             ║
@@ -107,7 +90,7 @@ from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 #   6 = 全模式一鍵啟動（依序執行 Mode 1~5）
 ANALYSIS_MODE = 6
 # ── 影片路徑 ────────────────────────────────────────────────────────
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\暫存\stop\stop_22.mp4"
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\7月2日 (4).mp4"
 
 # ── 輸出根目錄 ──────────────────────────────────────────────────────
 OUTPUT_DIR = Path(r"C:\ai_project\paper\output\jitter_analysis")
@@ -151,28 +134,10 @@ _MODE_SUBDIR = {
 _ACTIVE_KP_IDS: list = [i for i in range(17) if i not in EXCLUDED_KEYPOINTS]
 
 YOLO_MODEL_PATH  = r"C:\AI_Project\cat_pose\v11s_121.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_121_xy_conf_v_bone_att_on\121_best_model.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640
-STGCN_NORMALIZE = True
-SEQUENCE_LENGTH = 16
-_raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy")
-STGCN_FEATURE_MODE = str(_raw_stgcn_mode).strip().lower()
-_FEATURE_MODE_MAP = {
-    "xyconf":                    "xy_conf",
-    "xyv_conf":                  "xy_conf_v",
-    "xyv_conf_bone":             "xy_conf_v_bone",
-    "xyv_conf_bone_bone_motion": "xy_conf_v_bone_bmotion",
-    "xyv_conf_bone_bmotion":     "xy_conf_v_bone_bmotion",
-    "xyvconf":                   "xy_conf_v",
-    "xyvconfbone":               "xy_conf_v_bone",
-    "xyvconfbonebmotion":        "xy_conf_v_bone_bmotion",
-}
-STGCN_FEATURE_MODE = _FEATURE_MODE_MAP.get(STGCN_FEATURE_MODE, STGCN_FEATURE_MODE)
-BEHAVIOR_MIN_CONFIDENCE = _BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
 TARGET_MODEL_FPS = 30.0
 ENABLE_FPS_DOWNSAMPLE = True
-CLASSIFY_STRIDE = 2
 WINDOW_NAME = "Pose Jitter Analysis"
 DISPLAY_SIZE = (1080, 720)
 EMA_ALPHA = 1.0
@@ -590,7 +555,7 @@ def save_mode2_results(frame_records: list, run_dir: Path):
         import matplotlib.pyplot as plt
 
         frames = [r['frame'] for r in frame_records]
-        cmap = plt.cm.get_cmap('tab20', 17)
+        cmap = matplotlib.colormaps['tab20'].resampled(17)
 
         # Plot 1: keypoint_displacement_comparison.png (17 lines, index end-labels)
         fig, ax = plt.subplots(figsize=(14, 6))
@@ -738,7 +703,7 @@ def save_mode3_results(frame_records: list, run_dir: Path):
         import matplotlib.pyplot as plt
 
         frames = [r['frame'] for r in frame_records]
-        cmap = plt.cm.get_cmap('tab20', 17)
+        cmap = matplotlib.colormaps['tab20'].resampled(17)
 
         # Plot 1: confidence_comparison.png (17 lines, index end-labels)
         fig, ax = plt.subplots(figsize=(14, 6))
@@ -1601,8 +1566,6 @@ def save_mode6_results(frame_records: list):
 
 # ── 主函數 ─────────────────────────────────────────────────────────
 def main():
-    feature_mode = STGCN_FEATURE_MODE
-
     if not Path(VIDEO_PATH).exists():
         print(f"❌ 影片不存在: {VIDEO_PATH}")
         return
@@ -1616,36 +1579,6 @@ def main():
         print(f"排除關鍵點: {sorted(EXCLUDED_KEYPOINTS)} → {excl_names}")
     print("=" * 60)
 
-    # 推斷模型通道數
-    in_channels = None
-    try:
-        ck_channel_map = {2: 'xy', 3: 'xy_conf', 5: 'xy_conf_v', 7: 'xy_conf_v_bone', 9: 'xy_conf_v_bone_bmotion'}
-        import torch
-        if os.path.exists(STGCN_MODEL_PATH):
-            try:
-                try:
-                    ck = torch.load(STGCN_MODEL_PATH, map_location='cpu', weights_only=True)
-                except Exception:
-                    ck = torch.load(STGCN_MODEL_PATH, map_location='cpu')
-                state_dict = ck.get('model_state_dict', ck) if isinstance(ck, dict) else ck
-                if isinstance(state_dict, dict) and 'bn_input.weight' in state_dict:
-                    ck_in_ch = int(state_dict['bn_input.weight'].shape[0])
-                    try:
-                        expected_ch = get_in_channels_for_mode(feature_mode)
-                    except Exception:
-                        expected_ch = None
-                    if expected_ch is not None and ck_in_ch != expected_ch:
-                        if ck_in_ch in ck_channel_map:
-                            feature_mode = ck_channel_map[ck_in_ch]
-                    in_channels = ck_in_ch
-            except Exception as e:
-                print(f"⚠ 無法載入 checkpoint 以推斷通道數: {e}")
-    except Exception:
-        pass
-
-    if in_channels is None:
-        in_channels = get_in_channels_for_mode(feature_mode)
-
     try:
         keypoint_detector = KeypointDetector(
             YOLO_MODEL_PATH,
@@ -1655,19 +1588,6 @@ def main():
         )
     except Exception as e:
         print(f"❌ 無法載入 YOLO 模型（{YOLO_MODEL_PATH}）：{e}")
-        return
-
-    try:
-        behavior_classifier = BehaviorClassifier(
-            STGCN_MODEL_PATH,
-            device=INFERENCE_DEVICE,
-            sequence_length=SEQUENCE_LENGTH,
-            normalize=STGCN_NORMALIZE,
-            feature_mode=feature_mode,
-            in_channels=in_channels,
-        )
-    except Exception as e:
-        print(f"❌ 無法載入 ST-GCN 模型（{STGCN_MODEL_PATH}）：{e}")
         return
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -1696,7 +1616,6 @@ def main():
     _m7_pad_prev_kp: dict = (
         {p: np.full((17, 2), np.nan) for p in ROI_PADDING_LIST} if ANALYSIS_MODE == 7 else {}
     )
-    keypoints_buffer = deque(maxlen=SEQUENCE_LENGTH)
     ema_kpts = None
     prev_bbox_cx = prev_bbox_cy = np.nan
     prev_kp_xy = np.full((17, 2), np.nan)
@@ -1731,20 +1650,6 @@ def main():
             else:
                 ema_kpts = EMA_ALPHA * kpts + (1.0 - EMA_ALPHA) * ema_kpts
             kpts = ema_kpts.copy()
-
-            keypoints_buffer.append((kpts, kpt_conf))
-
-            # 行為分類（保留原始推論管線）
-            if len(keypoints_buffer) >= SEQUENCE_LENGTH and (local_sampled % CLASSIFY_STRIDE == 0):
-                kpts_arr = np.array([item[0] for item in keypoints_buffer])
-                conf_arr = np.array([item[1] for item in keypoints_buffer])
-                seq_array = interpolate_missing(kpts_arr, conf_arr, threshold=0.0)
-                if STGCN_NORMALIZE:
-                    seq_array = flip_normalize(seq_array)
-                    seq_array = orientation_normalize(seq_array)
-                    seq_array = normalize_skeleton_coords(seq_array)
-                seq_features = build_feature_tensor(seq_array, conf_arr, feature_mode)
-                behavior_classifier.classify(seq_features, precomputed=True)
 
             # BBox center displacement
             bbox_cx, bbox_cy = _bbox_center(bbox)

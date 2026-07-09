@@ -30,6 +30,7 @@ from models.stgcn_model import (
     flip_normalize,
     orientation_normalize,
     normalize_skeleton_coords,
+    compute_bone_feature,
     build_feature_tensor,
     get_in_channels_for_mode,
 )
@@ -73,12 +74,12 @@ RATING_LETTERS = ("A", "B", "C", "D", "E")
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
 FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\walk"  # 'single' 模式使用的扁平資料夾
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\lick_標記區"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_121.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_120_xy_conf_v_bone_att_on\120_best_model.pth"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_124.pt"
+STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth"
 INFERENCE_DEVICE = 'cuda'   
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 STGCN_NORMALIZE = True
@@ -128,6 +129,39 @@ YOLO_CONF_THRESHOLD = 0.5       # YOLO bbox 偵測信心門檻（KeypointDetecto
 JITTER_CONF_THRESHOLD = 0.3     # 抖動統計只使用高於此信心值的關鍵點
 DRAW_KP_CONF_THRESHOLD = 0.5    # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
 SHOW_PROBABILITY_BARS = False  # 關閉率條可減少每幀繪圖負載
+
+# ===== 骨架可信度檢查（Skeleton Quality Assessment，幾何判斷為輔）=====
+# 「GCN 分類為主、幾何判斷為輔」雙重判定機制：GCN 分類窗口跟這裡的幾何
+# 檢查用同一個滑動窗口（keypoints_buffer/bbox_buffer），只要任一指標判定
+# 骨架不可信，這次分類結果就覆蓋成 LOW_CONF_ID（跟 GCN 自己信心不足時
+# 一視同仁）。門檻/方向設計沿用 test_bone_length_stability.py 診斷腳本
+# 驗證過的版本（見該檔案「使用者設定區」的候選門檻註解），之後用真實影片
+# 跑過 test_bone_length_stability.py 的門檻分析圖再回頭調整這裡的數值。
+ENABLE_SKELETON_QUALITY_CHECK = False
+# 5 項指標各自獨立開關：只有在此集合中的指標名稱才會參與「是否不可信」的判定，
+# 其餘指標仍會照算並印在診斷輸出裡，只是不會觸發覆蓋成 LOW_CONF。
+# 可用名稱："torso_ratio", "midback_offset_ratio", "midback_angle_jitter",
+#          "torso_ratio_jitter", "bone_length_oscillation"
+SQA_ENABLED_CHECKS: set = {
+    "torso_ratio",
+    "midback_offset_ratio",
+    "midback_angle_jitter",
+    "torso_ratio_jitter",
+    "bone_length_oscillation",
+}
+SQA_BONE_CONF_THRESHOLD = 0.3               # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
+SQA_MIN_VALID_FRAMES_MIDBACK_OFFSET = 3     # midback_offset_ratio 至少要有幾幀有效才採信
+SQA_MIN_VALID_FRAME_PAIRS_JITTER = 3        # 各 jitter/oscillation 指標至少要有幾組相鄰有效幀對才採信
+SQA_CANDIDATE_TORSO_RATIO_THRESHOLD = 0.15           # torso_ratio：低於此值視為可疑（軀幹相對 bbox 塌陷）
+SQA_CANDIDATE_MIDBACK_OFFSET_THRESHOLD = 1.0         # midback_offset_ratio：高於此值視為可疑
+SQA_CANDIDATE_MIDBACK_ANGLE_JITTER_THRESHOLD = 5.0   # midback_angle_jitter：高於此值視為可疑（度/幀）
+SQA_CANDIDATE_TORSO_RATIO_JITTER_THRESHOLD = 0.03    # torso_ratio_jitter：高於此值視為可疑
+SQA_CANDIDATE_BONE_OSCILLATION_THRESHOLD = 0.05      # bone_length_oscillation：高於此值視為可疑
+# bone_length_oscillation 排除的關鍵點：尾巴（天生會彎曲）+ 耳朵/鼻子（甩頭時
+# 動作快、偵測誤差本來就大），跟 test_bone_length_stability.py 的設定一致。
+SQA_EXCLUDED_KEYPOINTS: set = {1, 2, 3, 14, 15, 16}
+SQA_PARENTS_17 = np.array([0, 0, 0, 0, 3, 4, 3, 6, 3, 8, 5, 10, 5, 12, 5, 14, 15])
+SQA_ACTIVE_BONE_IDS = [i for i in range(1, 17) if i not in SQA_EXCLUDED_KEYPOINTS]
 
 # ===== EMA 平滑設定 =====
 # alpha 越大 .→ 越貼近原始偵測值（響應快、平滑少）
@@ -728,6 +762,125 @@ def generate_report_file(report_path, recorded_video_stats):
     return out_path
 
 
+def compute_skeleton_quality(seq_raw, conf_window, bbox_window, seq_normalized):
+    """五項 Skeleton Quality Assessment（SQA）幾何指標，跟
+    test_bone_length_stability.py 的 compute_bone_stability_overlay() 是
+    同一套設計（該診斷腳本先驗證過門檻/方向，這裡搬進真正的推論流程）。
+
+    seq_raw: (T, V, 2) 只做過 interpolate_missing、尚未 flip/orientation/
+    scale 正規化的原始像素座標——torso_ratio 系列跟 midback 系列都要跟 bbox
+    比對，必須留在原始像素空間。
+    conf_window: (T, V) 原始信心值序列。
+    bbox_window: (T, 4) 原始像素座標的 (x1,y1,x2,y2)，缺值用 NaN 填。
+    seq_normalized: (T, V, 2) 已完成 flip/orientation/scale 正規化的座標
+    （分類器餵進模型前那份，這裡直接重用，不重算一次）——bone_length_
+    oscillation 要在跟訓練/推論一致的正規化尺度下量測才有意義。
+
+    回傳 (reliable: bool, metrics: dict, failed_checks: list[str])。
+    reliable=False 只在「有算出實際數值且該數值超標」時才成立；資料不足
+    導致某指標是 NaN 時不計入不可信判斷（幾何檢查只是輔助，證據不足時
+    不應該否決 GCN 的判斷）。
+    """
+    T = seq_raw.shape[0]
+    metrics = {
+        "torso_ratio": float("nan"),
+        "midback_offset_ratio": float("nan"),
+        "midback_angle_jitter": float("nan"),
+        "torso_ratio_jitter": float("nan"),
+        "bone_length_oscillation": float("nan"),
+    }
+    failed_checks = []
+
+    chest_hip_valid = (conf_window[:, 3] >= SQA_BONE_CONF_THRESHOLD) & (conf_window[:, 5] >= SQA_BONE_CONF_THRESHOLD)
+
+    if bbox_window is not None:
+        bbox_valid = ~np.isnan(bbox_window).any(axis=1)
+        combined_valid = chest_hip_valid & bbox_valid
+        if np.any(combined_valid):
+            bw_all = bbox_window[:, 2] - bbox_window[:, 0]
+            bh_all = bbox_window[:, 3] - bbox_window[:, 1]
+            bbox_diag_all = np.sqrt(bw_all ** 2 + bh_all ** 2)
+            body_size_all = np.linalg.norm(seq_raw[:, 3, :2] - seq_raw[:, 5, :2], axis=1)
+            diag_ok_all = combined_valid & (bbox_diag_all > 1e-6)
+
+            torso_ratio_per_frame = np.full(T, np.nan, dtype=np.float64)
+            torso_ratio_per_frame[diag_ok_all] = body_size_all[diag_ok_all] / bbox_diag_all[diag_ok_all]
+
+            valid_ratios = torso_ratio_per_frame[diag_ok_all]
+            if valid_ratios.size > 0:
+                metrics["torso_ratio"] = float(np.mean(valid_ratios))
+
+            pair_ok = diag_ok_all[1:] & diag_ok_all[:-1]
+            if int(np.sum(pair_ok)) >= SQA_MIN_VALID_FRAME_PAIRS_JITTER:
+                ratio_diffs = np.abs(torso_ratio_per_frame[1:][pair_ok] - torso_ratio_per_frame[:-1][pair_ok])
+                metrics["torso_ratio_jitter"] = float(np.mean(ratio_diffs))
+
+    midback_valid = chest_hip_valid & (conf_window[:, 4] >= SQA_BONE_CONF_THRESHOLD)
+    if np.any(midback_valid):
+        virtual_pt = (seq_raw[:, 3, :2] + seq_raw[:, 5, :2]) / 2.0
+        raw_offset = np.linalg.norm(seq_raw[:, 4, :2] - virtual_pt, axis=1)
+        body_size_per_frame = np.linalg.norm(seq_raw[:, 3, :2] - seq_raw[:, 5, :2], axis=1)
+        frame_ok = midback_valid & (body_size_per_frame > 1e-6)
+        if int(np.sum(frame_ok)) >= SQA_MIN_VALID_FRAMES_MIDBACK_OFFSET:
+            ratio_vals = raw_offset[frame_ok] / body_size_per_frame[frame_ok]
+            metrics["midback_offset_ratio"] = float(np.mean(ratio_vals))
+
+        chest_pt = seq_raw[:, 3, :2]
+        midback_pt = seq_raw[:, 4, :2]
+        hip_pt = seq_raw[:, 5, :2]
+        v1 = chest_pt - midback_pt
+        v2 = hip_pt - midback_pt
+        n1 = np.linalg.norm(v1, axis=1)
+        n2 = np.linalg.norm(v2, axis=1)
+        angle_ok = midback_valid & (n1 > 1e-6) & (n2 > 1e-6)
+        angle_deg = np.full(T, np.nan, dtype=np.float64)
+        if np.any(angle_ok):
+            cos_angle = np.clip(
+                np.sum(v1[angle_ok] * v2[angle_ok], axis=1) / (n1[angle_ok] * n2[angle_ok]), -1.0, 1.0
+            )
+            angle_deg[angle_ok] = np.degrees(np.arccos(cos_angle))
+        angle_pair_ok = angle_ok[1:] & angle_ok[:-1]
+        if int(np.sum(angle_pair_ok)) >= SQA_MIN_VALID_FRAME_PAIRS_JITTER:
+            angle_diffs = np.abs(angle_deg[1:][angle_pair_ok] - angle_deg[:-1][angle_pair_ok])
+            metrics["midback_angle_jitter"] = float(np.mean(angle_diffs))
+
+    bone_xy = compute_bone_feature(seq_normalized)   # (T, V, 2)
+    bone_len = np.linalg.norm(bone_xy, axis=-1)      # (T, V)
+    seg_oscillation = np.full(bone_len.shape[1], np.nan, dtype=np.float64)
+    for j in SQA_ACTIVE_BONE_IDS:
+        if j >= bone_len.shape[1]:
+            continue
+        parent = int(SQA_PARENTS_17[j])
+        bone_valid = (conf_window[:, j] >= SQA_BONE_CONF_THRESHOLD) & (conf_window[:, parent] >= SQA_BONE_CONF_THRESHOLD)
+        bone_pair_ok = bone_valid[1:] & bone_valid[:-1]
+        if int(np.sum(bone_pair_ok)) < SQA_MIN_VALID_FRAME_PAIRS_JITTER:
+            continue
+        length_diffs = np.abs(bone_len[1:, j][bone_pair_ok] - bone_len[:-1, j][bone_pair_ok])
+        seg_oscillation[j] = float(np.mean(length_diffs))
+    valid_oscillation = seg_oscillation[~np.isnan(seg_oscillation)]
+    if valid_oscillation.size > 0:
+        metrics["bone_length_oscillation"] = float(np.max(valid_oscillation))
+
+    checks = [
+        ("torso_ratio", SQA_CANDIDATE_TORSO_RATIO_THRESHOLD, "below"),
+        ("midback_offset_ratio", SQA_CANDIDATE_MIDBACK_OFFSET_THRESHOLD, "above"),
+        ("midback_angle_jitter", SQA_CANDIDATE_MIDBACK_ANGLE_JITTER_THRESHOLD, "above"),
+        ("torso_ratio_jitter", SQA_CANDIDATE_TORSO_RATIO_JITTER_THRESHOLD, "above"),
+        ("bone_length_oscillation", SQA_CANDIDATE_BONE_OSCILLATION_THRESHOLD, "above"),
+    ]
+    for key, threshold, direction in checks:
+        if key not in SQA_ENABLED_CHECKS:
+            continue
+        value = metrics[key]
+        if not np.isfinite(value):
+            continue
+        is_bad = (value > threshold) if direction == "above" else (value < threshold)
+        if is_bad:
+            failed_checks.append(key)
+
+    return len(failed_checks) == 0, metrics, failed_checks
+
+
 def resolve_run_mode():
     if RUN_MODE in (1, 2):
         return RUN_MODE
@@ -984,6 +1137,7 @@ def main():
         nonlocal _last_known_bbox, _last_known_bbox_conf
 
         keypoints_buffer.clear()
+        bbox_buffer.clear()
         prev_kpts = None
         prev_kpt_conf = None
         ema_kpts = None
@@ -1131,6 +1285,7 @@ def main():
         print("-" * 60)
 
         keypoints_buffer = deque(maxlen=SEQUENCE_LENGTH)
+        bbox_buffer = deque(maxlen=SEQUENCE_LENGTH)
         local_loop_count = 0
         switch_delta = 0
         prev_kpts = None
@@ -1273,6 +1428,7 @@ def main():
 
                 # 加入緩衝區
                 keypoints_buffer.append((kpts, kpt_conf))
+                bbox_buffer.append(bbox if bbox is not None else np.full(4, np.nan))
 
                 # velocity overlay removed (erroneous edit)
 
@@ -1281,6 +1437,7 @@ def main():
                     # 解包緩衝區
                     kpts_arr = np.array([item[0] for item in keypoints_buffer])  # (T, 17, 2)
                     conf_arr = np.array([item[1] for item in keypoints_buffer])  # (T, 17)
+                    bbox_arr = np.array(list(bbox_buffer))  # (T, 4)
 
                     # 14-joint 消融模型：切掉尾巴三點（tail_base/tail_mid/tail_tip）
                     _model_joints = getattr(behavior_classifier.model, 'num_joints', 17)
@@ -1292,6 +1449,7 @@ def main():
                     # threshold=0.0：只要 YOLO 偵測到座標（conf>0）就保留，避免低信心時整骨架歸零
                     # 若用 0.1，貓咪關節信心偏低時全部被清零 → 模型輸入全 0 → softmax 均等
                     seq_array = interpolate_missing(kpts_arr, conf_arr, threshold=0.0)
+                    seq_raw = seq_array.copy()  # 給 SQA 幾何檢查用：留一份正規化之前的像素座標
                     if STGCN_NORMALIZE:
                         seq_array = flip_normalize(seq_array)
                         seq_array = orientation_normalize(seq_array)
@@ -1320,6 +1478,20 @@ def main():
                         behavior_id = int(pred_id)
                         confidence = float(pred_conf)
                         probs = pred_probs.copy()
+
+                    # 幾何判斷為輔：GCN 分類完後，用同一個窗口跑 SQA 骨架可信度檢查，
+                    # 任一指標判定不可信就覆蓋成 LOW_CONF_ID（跟 GCN 自己信心不足時
+                    # 一視同仁，下面所有統計/顯示/hysteresis 邏輯不用另外分岔處理）。
+                    if ENABLE_SKELETON_QUALITY_CHECK and behavior_id != LOW_CONF_ID:
+                        _sqa_reliable, _, _sqa_failed = compute_skeleton_quality(
+                            seq_raw, conf_arr, bbox_arr, seq_array
+                        )
+                        if not _sqa_reliable:
+                            print(f"⚠ [SQA] 幀 {local_frames_processed:6d}: 骨架判定不可信 "
+                                  f"({', '.join(_sqa_failed)})，覆蓋為 LOW_CONF")
+                            behavior_id = LOW_CONF_ID
+                            confidence = 0.0
+                            probs = np.zeros(5, dtype=np.float32)
 
                     # Update the per-class current confidences for the bottom panel
                     # so the UI shows the latest probabilities for all classes.

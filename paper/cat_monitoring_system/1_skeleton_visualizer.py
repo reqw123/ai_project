@@ -282,7 +282,7 @@ SKELETON_EDGE_COLORS = [
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\暫存\shake"
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
 VIDEO_LIST = [
     r"C:\Users\homec\Downloads\OneDrive_1_2026-5-21",
     r"C:\Users\homec\Downloads\OneDrive_2_2026-5-21",
@@ -314,7 +314,7 @@ SCRATCH_CHEST_IDX = 3
 SCRATCH_HIP_IDX = 5
 SCRATCH_FRONT_PAW_IDXS = (7, 9)
 SCRATCH_HIND_PAW_IDXS = (11, 13)
-SCRATCH_DISTANCE_THRESHOLD_NORM = 0.22
+SCRATCH_DISTANCE_THRESHOLD_NORM = 0.5
 SCRATCH_DISTANCE_CONF_THRESHOLD = 0.5
 
 WINDOW_SCALE_STEP = 0.10

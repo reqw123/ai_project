@@ -41,17 +41,20 @@ KEY_RIGHT = 2555904
 
 # ==================== 模型清單（3個） ====================
 MODEL_LIST = [
-    r"C:\ai_project\cat_pose\play.pt",
-    r"C:\ai_project\cat_pose\v11s_66.pt",
-    r"C:\ai_project\cat_pose\worker4.pt"
+    r"C:\ai_project\cat_pose\v11s_124.pt",
+    r"C:\ai_project\cat_pose\v11s_124.pt",
+    r"C:\ai_project\cat_pose\v11s_124.pt"
 ]
 
 # ==================== 影片清單（可放「影片檔」或「資料夾」） ====================
 # - 放影片檔：直接加入播放清單
 # - 放資料夾：自動掃描資料夾內所有影片
 VIDEO_SOURCES = [
-    r"C:\Users\homec\OneDrive\圖片\貓咪\單純好玩資料",  # 6
-    r"C:\Users\homec\OneDrive\圖片\貓咪\2月18日.mp4",  # 7
+    r"C:\Users\homec\OneDrive\圖片\貓咪\自行拍攝\家貓\video_rating\B\2026-07-06 04_59_55.mp4",  # 6
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\shake5772.mp4",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\暫存\frontal_walk\frontal_walk5566.mp4",
+    r"C:\Users\homec\OneDrive\圖片\貓咪\自行拍攝\家貓\video_rating\B\2026-07-06 04_59_55.mp4",
+    r"C:\Users\homec\Downloads\新增資料夾\(858) 公園的小貓慢慢靠近…原來只是想被摸摸，瞬間被療癒了🐾 - YouTube - Google Chrome 2026-07-04 10-36-05.mp4",
     r"C:\Users\homec\OneDrive\圖片\貓咪\2月18日(1).mp4",  # 8
     r"C:\Users\homec\OneDrive\圖片\貓咪\VID20251128115657.mp4",  # 9
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\walk\walk_1.mp4",  # 0

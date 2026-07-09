@@ -998,6 +998,10 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
 
     # 影片級切分（防止滑動窗 data leakage），邏輯抽到 split_train_val_indices()
     train_indices, val_indices = split_train_val_indices(full_dataset)
+    # split_train_val_indices() 只回傳序列索引、不回傳影片 id 清單本身，
+    # 這裡從切分結果反推「不重複影片數」給下面的 run_log/history 紀錄用。
+    train_video_count = len({full_dataset.sequences[i]['video_id'] for i in train_indices})
+    val_video_count = len({full_dataset.sequences[i]['video_id'] for i in val_indices})
 
     # ── 獨立的 augment 旗標（copy.copy 共享 sequences 但各自持有旗標） ──
     train_base = copy.copy(full_dataset)
@@ -1340,8 +1344,8 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'block_dropout': eff_block_dropout,
         'final_dropout': eff_final_dropout,
         'label_smoothing': eff_label_smoothing,
-        'train_videos': len(train_vids),
-        'val_videos': len(val_vids),
+        'train_videos': train_video_count,
+        'val_videos': val_video_count,
         'train_sequences': len(train_indices),
         'val_sequences': len(val_indices),
         'total_epochs_run': total_epochs_run,

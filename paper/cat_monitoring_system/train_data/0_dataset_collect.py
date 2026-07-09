@@ -51,7 +51,7 @@ VIDEO_FOLDERS = [
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\stop",
 ]
 OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_121.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_124.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
 TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5

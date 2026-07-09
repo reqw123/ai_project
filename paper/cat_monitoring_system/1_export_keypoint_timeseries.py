@@ -28,13 +28,10 @@ from models.stgcn_model import (
 
 # 配置
 VIDEO_PATHS = [
-    r"C:\paper\videos\walk_5.mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\shake\shake_1.mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪\自行拍攝\影片\3月12日(1).mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\0_Cat_Calico_1920x1080.mp4",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\貓咪姿勢影片分類\模型專用\lick\lick_1.mp4",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\7月2日 (4).mp4",
+   
 ]
-YOLO_MODEL_PATH = r"C:\cat_pose\v11s_10.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\cat_pose\v11s_121.pt"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 YOLO_CONF_THRESHOLD = 0.5

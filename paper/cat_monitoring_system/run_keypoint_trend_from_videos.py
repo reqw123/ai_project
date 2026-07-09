@@ -31,8 +31,12 @@ import importlib.util
 _TRAIN_MODULE_PATH = Path(__file__).parent / "0_train_gcn.py"
 _COLLECT_MODULE_PATH = Path(__file__).parent / "train_data" / "0_dataset_collect.py"
 
-# 寫死路徑，要換資料夾時直接改這裡即可；類別名稱預設從資料夾名稱自動判斷，不用另外設定
-VIDEO_FOLDER = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
+# 直接執行（不帶任何參數）時用的預設設定：改 CLASS_TO_ANALYZE 這一行就能切換要分析的
+# 類別，DATASET_ROOT 底下要有 scratch/lick/shake/walk/stop 這幾個兄弟資料夾（stop 會
+# 被自動抓去當基準，不用改）。想指定其他路徑/類別就用 --video_folder / --class_name。
+DATASET_ROOT = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
+CLASS_TO_ANALYZE = "scratch"  # scratch / lick / shake / walk
+VIDEO_FOLDER = str(Path(DATASET_ROOT) / CLASS_TO_ANALYZE)
 YOLO_MODEL_PATH = r"C:\ai_project\cat_pose\v11s_121.pt"
 TARGET_FPS = 30
 IMGSZ = 640
@@ -86,18 +90,41 @@ def _consistency_label(mean_v, std_v):
     return "低"
 
 
-def _build_insight(zh_sorted, values_sorted, metric_label):
+def _build_insight(zh_sorted, values_sorted, metric_label, allow_negative=False):
     """自動產生洞察文字：前幾名關節彼此差距是否平緩（分散）或有明顯斷層（集中）。
-    metric_label 用來區分是描述「絕對動作幅度」還是「扣除 stop 基準後的差異」。"""
+    metric_label 用來區分是描述「絕對動作幅度」還是「扣除 stop 基準後的差異」。
+
+    allow_negative=True（只用在 diff 視圖，因為 diff 可能是負值）時，會先檢查
+    「排序後由高到低，數值明顯高於基準（> 峰值 5%）的關節」有幾個——如果只有一小
+    撮、後面就轉負或趨近於 0，代表訊號其實集中在那幾個關節，不該用「差距幾 %」
+    這種只適用於「全部都正值、只是差距平緩」情境的講法，否則像「差距117%」這種
+    跨過 0 的百分比會誤導成「分散」。"""
     valid = [v for v in values_sorted if v is not None]
-    top_n = min(7, len(valid))
-    if top_n < 2 or valid[0] <= 1e-9:
+    if len(valid) < 2 or valid[0] <= 1e-9:
         return f"樣本不足或無明顯{metric_label}，無法判斷分散或集中。"
+
     ratio = valid[0] / valid[1] if valid[1] > 1e-9 else float('inf')
-    top_span_pct = (valid[0] - valid[top_n - 1]) / valid[0] * 100.0
     if ratio >= 2.0:
         return (f"第 1 名（{zh_sorted[0]}）{metric_label}是第 2 名（{zh_sorted[1]}）的 {ratio:.1f} 倍，"
                 f"訊號高度集中在單一關節。")
+
+    if allow_negative:
+        threshold = max(1e-9, valid[0] * 0.05)  # 低於峰值 5% 視為跟基準沒有明顯差異
+        positive_count = 0
+        for v in valid:
+            if v > threshold:
+                positive_count += 1
+            else:
+                break
+        if 0 < positive_count < len(valid) and positive_count <= 6:
+            names = "、".join(zh_sorted[:positive_count])
+            lo, hi = valid[positive_count - 1], valid[0]
+            return (f"只有 {positive_count} 個關節{metric_label}明顯高於 stop 基準"
+                    f"（{names}，落在 {lo:.4f}–{hi:.4f} 之間），其餘關節都在基準值附近或更低，"
+                    f"訊號集中在這幾個關節，不是全身性分散。")
+
+    top_n = min(7, len(valid))
+    top_span_pct = (valid[0] - valid[top_n - 1]) / valid[0] * 100.0
     return (f"前 {top_n} 名關節{metric_label}落在 {valid[top_n-1]:.4f}–{valid[0]:.4f} 之間"
             f"（差距 {top_span_pct:.0f}%），沒有單一關節壓倒性領先，訊號分散在多個關節。")
 
@@ -135,7 +162,7 @@ def build_html(class_name, joint_names, agg_mean, agg_std, per_video_means,
     if has_diff:
         diff_means = [None if np.isnan(diff_mean[j]) else round(float(diff_mean[j]), 5) for j in order]
         diff_ses = [None if np.isnan(diff_se[j]) else round(float(diff_se[j]), 5) for j in order]
-        diff_insight = _build_insight(zh_sorted, diff_means, "差異值")
+        diff_insight = _build_insight(zh_sorted, diff_means, "差異值", allow_negative=True)
         diff_payload = {
             "means": diff_means,
             "ses": diff_ses,
