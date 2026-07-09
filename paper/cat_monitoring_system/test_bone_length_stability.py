@@ -98,7 +98,7 @@ from models.stgcn_model import (
     normalize_skeleton_coords,
     compute_bone_feature,
 )
-from utils.constants import BEHAVIOR_CLASSES, BEHAVIOR_COLORS, LOW_CONF_ID
+from utils.constants import BEHAVIOR_COLORS, LOW_CONF_ID
 from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig
 
@@ -173,6 +173,10 @@ MIN_VALID_FRAME_PAIRS_BONE_OSCILLATION = 3      # bone_length_oscillation 每根
 
 # 面板/圖表用的候選門檻線（2026-07-09 已用 shake5772/walk_13535868/
 # 7月3日scratch(2)(1) 三支影片的 batch 結果校準過一輪，見下方各項調整依據）
+
+# ============================================================================
+# ===== torso_ratio（下界）── 軀幹相對 bbox 塌陷 =====
+# ============================================================================
 # torso_ratio（胸髖距離 ÷ bbox 對角線）專屬的候選門檻——數值「低於」這個
 # 值才視為可疑（軀幹相對 bbox 塌陷）。原本猜 0.15，但實測 pooled 資料最小值
 # 是 0.159，這個門檻從未被觸發過（4 支影片、468 幀，flag rate 恆為 0%）。
@@ -181,6 +185,10 @@ MIN_VALID_FRAME_PAIRS_BONE_OSCILLATION = 3      # bone_length_oscillation 每根
 # flag rate 34.8%、其餘影片仍 0%，乾淨分離。用 torso_ratio_threshold_chart
 # 持續驗證/調整。
 CANDIDATE_TORSO_RATIO_THRESHOLD = 0.28
+
+# ============================================================================
+# ===== torso_ratio_inflated（上界）── 尺度正規化失效、chest-hip 被撐大 =====
+# ============================================================================
 # torso_ratio 上界候選門檻：跟上面的下界門檻是同一個原始比例（chest-hip /
 # bbox 對角線），只是換一個方向。下界抓的是「軀幹相對 bbox 塌陷」；這個
 # 上界抓的是另一種尺度正規化失效模式——chest 或 hip 其中一個關鍵點整個
@@ -190,6 +198,10 @@ CANDIDATE_TORSO_RATIO_THRESHOLD = 0.28
 # torso_ratio_inflated_threshold_chart 驗證/調整（沿用同一份 torso_ratio
 # 資料，只是換個門檻方向分析，不需要另外收集資料）。
 CANDIDATE_TORSO_RATIO_UPPER_THRESHOLD = 0.55
+
+# ============================================================================
+# ===== midback_angle_jitter ── Chest-MidBack-Hip 夾角的逐幀抖動程度 =====
+# ============================================================================
 # midback_angle_jitter（Chest-MidBack-Hip 夾角，連續幀之間的抖動程度，單位
 # 度/幀）專屬的候選門檻。原本考慮用「窗口平均角度」設絕對門檻，但 MidBack
 # 標在背部拱起最高點、跟 Chest/Hip 天生是三角形（不共線），角度本身會隨
@@ -200,6 +212,10 @@ CANDIDATE_TORSO_RATIO_UPPER_THRESHOLD = 0.55
 # 跟絕對角度無關，方向是數值「越大」越可疑。先猜一個起點，之後用真實
 # 影片跟 midback_angle_jitter_threshold_chart 驗證/調整。
 CANDIDATE_MIDBACK_ANGLE_JITTER_THRESHOLD = 5.0
+
+# ============================================================================
+# ===== midback_offset_ratio ── MidBack 偏離 Chest-Hip 虛擬中點的比例 =====
+# ============================================================================
 # midback_offset_ratio（MidBack 偏離 Chest-Hip 虛擬中點的距離 ÷ Chest-Hip
 # 距離本身）專屬的候選門檻。同樣沒有標註分布統計出來的「正常基準值」，這裡
 # 抓的是比較粗略的解剖合理性上限：MidBack 是拱背的頂點，偏移量正常情況下
@@ -210,6 +226,10 @@ CANDIDATE_MIDBACK_ANGLE_JITTER_THRESHOLD = 5.0
 # 明顯空隙，於是調低到 0.8：shake5772 flag rate 從 14.0% 提升到 25.0%，其餘
 # 影片仍是 0%，沒有誤傷。用 midback_offset_threshold_chart 持續驗證/調整。
 CANDIDATE_MIDBACK_OFFSET_THRESHOLD = 0.8
+
+# ============================================================================
+# ===== torso_ratio_jitter（Skeleton Scale Jitter）── 整體骨架尺度的逐幀抖動 =====
+# ============================================================================
 # torso_ratio_jitter（Skeleton Scale Jitter）：torso_ratio 逐幀值在相鄰幀
 # 之間的變化量。跟 midback_angle_jitter 同樣道理——不看 torso_ratio 絕對值
 # 本身（那個已經有 CANDIDATE_TORSO_RATIO_THRESHOLD 在管），只看窗口內是否
@@ -217,6 +237,10 @@ CANDIDATE_MIDBACK_OFFSET_THRESHOLD = 0.8
 # 方向是數值越大越可疑。先猜一個起點，之後用真實影片跟
 # torso_ratio_jitter_threshold_chart 驗證/調整。
 CANDIDATE_TORSO_RATIO_JITTER_THRESHOLD = 0.03
+
+# ============================================================================
+# ===== bone_length_oscillation ── 各骨段長度的逐幀振盪（取最大值）=====
+# ============================================================================
 # bone_length_oscillation：各骨段長度（正規化座標下，chest-hip 距離縮放為
 # 1.0 單位）在相鄰幀之間的變化量，取所有納入分析的骨段中最大值——用 MAX
 # 而非平均，避免單一骨段的劇烈振盪被其他穩定骨段平均掉（跟過去 max_cv 想
@@ -225,14 +249,64 @@ CANDIDATE_TORSO_RATIO_JITTER_THRESHOLD = 0.03
 # 起點，之後用真實影片跟 bone_length_oscillation_threshold_chart 驗證/調整。
 CANDIDATE_BONE_OSCILLATION_THRESHOLD = 0.05
 
-# ===== GUI 模式（模式2）面板「是否採用」門檻開關 =====
-# 上面 5 個 CANDIDATE_*_THRESHOLD 一律都會畫在圖表上（門檻分析/校準用途，
-# batch 模式不受這裡影響）；但 GUI 模式左上角面板（draw_bone_stability_panel）
-# 的綠/紅二元判定，只有「這裡列出的指標」才會套用門檻判斷。把某一行整行
-# 註解掉（或刪除該 key），該指標在面板上就只顯示數值、改用中性色，不再
-# 判定異常/正常——不影響其餘指標運行，也不會出錯（面板用 .get() 查表，
-# 查不到就跳過門檻判斷）。
+# ============================================================================
+# ===== BODY_AXIS_* ── Body Axis Proportion Analysis 用的門檻/參考值 =====
+# ============================================================================
+# 完整設計動機/計算流程見 compute_body_axis_geometry()／
+# compute_body_axis_score_jitter() 的 docstring（在檔案後段）；這裡只集中
+# 放常數本身，跟其他 CANDIDATE_*_THRESHOLD 放在同一區，方便一次看到全部
+# 會影響異常判斷的門檻。
+#
+# 正常貓咪身體主軸的參考比例（以 Chest-Hip 距離為 1.0 正規化）。2026-07-09
+# 用 shake5772.mp4 兩幀真實畫面校準過一輪：frame 12（坐姿、抬頭看、bbox
+# conf 0.96，姿勢乾淨判定為正常）量出來是 [0.671, 0.749, 0.695]，但原本
+# 瞎猜的 [0.35, 0.51, 0.51] 讓這個明顯正常的畫面也只拿到 28.4 分——顯示
+# 原本的參考值跟真實貓的比例差太多。改用這幀的實測值當參考點，同一支
+# 影片 frame 86（蹲低拱背，torso_ratio/midback_offset 也同時被判定異常）
+# 量出來是 [0.829, 1.159, 1.549]，跟新參考值的 geometry_error ≈ 0.96，
+# 用來反推 BODY_AXIS_ERROR_SIGMA（見下）。注意：只有 2 個樣本點，統計力
+# 很弱，之後應該用更多影片重新收斂。
+#
+# nose_chest 依使用者要求已從 Score 計算中移除（見 compute_body_axis_
+# geometry() 註解），這裡保留這個 key 純粹是留紀錄／未來想恢復時方便，
+# 目前不會被讀取用於評分。
+BODY_AXIS_REFERENCE_RATIOS = {
+    "nose_chest": 0.67,      # Nose-Chest / Chest-Hip（保留紀錄，Score 不使用）
+    "chest_midback": 0.75,   # Chest-MidBack / Chest-Hip
+    "midback_hip": 0.70,     # MidBack-Hip / Chest-Hip
+}
+
+# 校準依據：frame 12（正常）geometry_error ≈ 0.02 要落在高分區、frame 86
+# （蹲低拱背，判定異常）geometry_error ≈ 0.96 要落在 BODY_AXIS_RELIABLE_
+# THRESHOLD 以下——0.7 這個 sigma 讓正常幀仍接近 100 分、異常幀落在
+# 25 分附近（明確不可信但不會像原本 sigma=0.35 那樣直接砍到 2~3 分、
+# 看不出跟「完全崩壞」的差別）。
+BODY_AXIS_ERROR_SIGMA = 0.70         # geometry_error → body_axis_score 指數衰減的尺度常數
+BODY_AXIS_RELIABLE_THRESHOLD = 50.0  # body_axis_score 低於此值視為「身體主軸比例不可信」
+
+# compute_body_axis_score_jitter() 用的門檻：量測 body_axis_score 在一個
+# 窗口內的變化振幅（max - min），用來區分「持續穩定的低分（例如正面視角
+# 造成的系統性失真，振幅約 0~1）」跟「大範圍反覆跳動的低分（骨架真的不
+# 穩定/誤判，實測觀察 score 在 10~30 之間來回橫跳，振幅約 20）」——這兩種
+# 情況單幀分數可能一樣低，但背後成因不同。門檻是憑使用者實測觀察粗估的
+# 起點，不是從大量真實資料統計出來的基準值，之後應該用更多影片重新校準。
+BODY_AXIS_MIN_VALID_SAMPLES = 3          # 窗口內至少要有幾幀有效才採信振幅值
+BODY_AXIS_SCORE_JITTER_THRESHOLD = 12.0  # body_axis_score 窗口內振幅的候選門檻（方向：越大越可疑）
+
+# ============================================================================
+# ===== SQA_ENABLED_THRESHOLDS ── GUI 模式（模式2）面板「是否採用」門檻開關 =====
+# ============================================================================
+# 上面所有 CANDIDATE_*_THRESHOLD／BODY_AXIS_* 門檻一律都會畫在圖表上或
+# 供對應計算函式使用；但 GUI 模式左上角面板（draw_bone_stability_panel/
+# draw_body_axis_panel）的綠/紅二元判定、以及 apply_sqa_dual_judgment()
+# 的覆蓋決策，只有「這裡列出的指標」才會套用門檻判斷。把某一行整行
+# 註解掉（或刪除該 key），該指標就只顯示數值、改用中性色，不再判定
+# 異常/正常——不影響其餘指標運行，也不會出錯（sqa_check_reliable()/
+# _status_color_for() 都用 .get() 查表，查不到就跳過門檻判斷）。
 # value = (門檻值, 方向)："above"=數值越大越可疑，"below"=數值越小越可疑。
+#
+# 這是全檔案唯一一個「是否參與異常判斷」的登記表，8 項指標（6 項 Bone
+# Stability + 2 項 Body Axis）全部集中在這一個字典裡，不會散落在其他地方。
 SQA_ENABLED_THRESHOLDS: dict = {
     "torso_ratio": (CANDIDATE_TORSO_RATIO_THRESHOLD, "below"),
     # torso_ratio_inflated 跟上面的 torso_ratio 是同一個原始數值（compute_
@@ -243,15 +317,24 @@ SQA_ENABLED_THRESHOLDS: dict = {
     "midback_angle_jitter": (CANDIDATE_MIDBACK_ANGLE_JITTER_THRESHOLD, "above"),
     "torso_ratio_jitter": (CANDIDATE_TORSO_RATIO_JITTER_THRESHOLD, "above"),
     "bone_length_oscillation": (CANDIDATE_BONE_OSCILLATION_THRESHOLD, "above"),
+    # 以下兩項是 Body Axis Proportion Analysis 的分數（見檔案後段
+    # compute_body_axis_geometry()/compute_body_axis_score_jitter()），
+    # 呼叫端（analyze_single_video）會把這兩個函式的回傳值併入同一個 ovl
+    # dict，這兩項門檻才會真的生效。
+    "body_axis_score": (BODY_AXIS_RELIABLE_THRESHOLD, "below"),
+    "body_axis_score_jitter": (BODY_AXIS_SCORE_JITTER_THRESHOLD, "above"),
 }
 
+# ============================================================================
+# ===== ENABLE_SQA_DUAL_JUDGMENT ── GCN 分類為主、幾何判斷為輔的雙重判定總開關 =====
+# ============================================================================
 # True：GUI 模式（模式2）套用「GCN 分類為主、幾何判斷為輔」雙重判定——只要
 # SQA_ENABLED_THRESHOLDS 裡任一啟用的指標超標，右上角顯示的 GCN 分類結果就
 # 會被覆蓋成 LOW_CONF（信心值歸零），跟正式推論腳本 1_run_video_inference.py
 # 的覆蓋規則一致，可以直接在這支診斷腳本上肉眼確認覆蓋規則對不對。
 # False：兩個訊號各自獨立顯示（GCN 分類 vs 幾何面板），互不覆蓋，單純比對
 # 兩者是否吻合，適合還在校準門檻、還不確定要不要正式套用覆蓋時使用。
-ENABLE_SQA_DUAL_JUDGMENT = False
+ENABLE_SQA_DUAL_JUDGMENT = True
 
 # bone_length_oscillation 排除的關鍵點（不納入分析）：
 #   14,15,16（尾巴）——天生會彎曲，長度變化是真實生理現象，不是偵測雜訊，
@@ -539,37 +622,12 @@ def compute_bone_stability_overlay(seq_window, conf_window, bbox_window=None):
 # 問題，是身體主軸比例分析的最小可行版本，之後校準門檻時建議連同視角
 # 一起考慮。
 #
-# 下面的參考比例是憑解剖比例粗略估計的起點（不是從真實標註資料統計出來
-# 的基準值），照本檔案其他 SQA 門檻一貫的校準文化，之後應該用大量已知
-# 「這是貓」「這不是貓」的骨架資料實際跑過，再回頭調整。
+# 所有門檻/參考值常數（BODY_AXIS_REFERENCE_RATIOS、BODY_AXIS_ERROR_SIGMA、
+# BODY_AXIS_RELIABLE_THRESHOLD、BODY_AXIS_MIN_VALID_SAMPLES、
+# BODY_AXIS_SCORE_JITTER_THRESHOLD）統一集中管理在檔案前段跟其他
+# CANDIDATE_*_THRESHOLD 同一區（SQA_ENABLED_THRESHOLDS 定義之前），這裡
+# 不重複定義——這樣全部會影響異常判斷的門檻只需要在一個地方找。
 # ============================================================================
-
-# 正常貓咪身體主軸的參考比例（以 Chest-Hip 距離為 1.0 正規化）。
-# 2026-07-09 用 shake5772.mp4 兩幀真實畫面校準過一輪：frame 12（坐姿、
-# 抬頭看、bbox conf 0.96，姿勢乾淨判定為正常）量出來是
-# [0.671, 0.749, 0.695]，但原本瞎猜的 [0.35, 0.51, 0.51] 讓這個明顯正常
-# 的畫面也只拿到 28.4 分——顯示原本的參考值跟真實貓的比例差太多。改用
-# 這幀的實測值當參考點，同一支影片 frame 86（蹲低拱背，torso_ratio/
-# midback_offset 也同時被判定異常）量出來是 [0.829, 1.159, 1.549]，跟新
-# 參考值的 geometry_error ≈ 0.96，用來反推 BODY_AXIS_ERROR_SIGMA（見下）。
-# 注意：只有 2 個樣本點，統計力很弱，之後應該用更多影片重新收斂。
-#
-# nose_chest 依使用者要求已從 Score 計算中移除（見 compute_body_axis_
-# geometry() 註解），這裡保留這個 key 純粹是留紀錄／未來想恢復時方便，
-# 目前不會被讀取用於評分。
-BODY_AXIS_REFERENCE_RATIOS = {
-    "nose_chest": 0.67,      # Nose-Chest / Chest-Hip（保留紀錄，Score 不使用）
-    "chest_midback": 0.75,   # Chest-MidBack / Chest-Hip
-    "midback_hip": 0.70,     # MidBack-Hip / Chest-Hip
-}
-
-# 校準依據：frame 12（正常）geometry_error ≈ 0.02 要落在高分區、frame 86
-# （蹲低拱背，判定異常）geometry_error ≈ 0.96 要落在 BODY_AXIS_RELIABLE_
-# THRESHOLD 以下——0.7 這個 sigma 讓正常幀仍接近 100 分、異常幀落在
-# 25 分附近（明確不可信但不會像原本 sigma=0.35 那樣直接砍到 2~3 分、
-# 看不出跟「完全崩壞」的差別）。
-BODY_AXIS_ERROR_SIGMA = 0.70         # geometry_error → body_axis_score 指數衰減的尺度常數
-BODY_AXIS_RELIABLE_THRESHOLD = 50.0  # body_axis_score 低於此值視為「身體主軸比例不可信」
 
 
 def compute_body_axis_geometry(kpts, nose_joint=0, chest_joint=3, midback_joint=4, hip_joint=5):
@@ -652,28 +710,13 @@ def compute_body_axis_geometry(kpts, nose_joint=0, chest_joint=3, midback_joint=
     }
 
 
-# ---- Body Axis Score Jitter（振幅版）：時間維度的搭檔指標（跟 torso_ratio
-# 有 torso_ratio_jitter、midback_offset_ratio 有 midback_angle_jitter 是
-# 同一套設計邏輯）----
-# compute_body_axis_geometry() 本身是單幀指標，沒辦法分辨「score 持續偏低
-# 但穩定（實測觀察：貓正面朝鏡頭走時，同一支影片內 geometry_error 量級
-# 相近，屬於視角造成的系統性失真，score 大概在 0~1 之間）」跟「score 大幅度
-# 反覆跳動（實測觀察：骨架真的不穩定/誤判時，score 在 10~30 之間來回
-# 橫跳）」——這兩種情況單幀分數看起來可能一樣低，但背後成因不同。
-#
-# 這裡量測的是「窗口內分數整體晃動了多大範圍」（振幅 = max - min），不是
-# 「相鄰兩幀平均差了多少」（變化速度）——持續緩慢爬升但整體跨度不大，
-# 跟在小範圍內快速來回跳動，這兩種情況「相鄰幀平均差值」可能很接近，但
-# 兩者「整體振幅」不同；使用者要的是後者，才能對應「從 10~30 反覆變化」
-# 這種描述（那本來就是在講一個範圍區間，不是逐幀差值）。
-#
-# 門檻是憑使用者實測觀察粗估的起點（骨架崩壞時 score 在 10~30 之間反覆
-# 跳動，振幅約 20；視角問題造成的穩定低分振幅約 0~1），不是從大量真實
-# 資料統計出來的基準值，之後應該用更多影片重新校準。
-BODY_AXIS_MIN_VALID_SAMPLES = 3          # 窗口內至少要有幾幀有效才採信振幅值
-BODY_AXIS_SCORE_JITTER_THRESHOLD = 12.0  # body_axis_score 窗口內振幅的候選門檻（方向：越大越可疑）
-
-
+# ============================================================================
+# ===== body_axis_score_jitter ── Body Axis Score 的窗口內振幅（時間維度搭檔指標）=====
+# ============================================================================
+# 跟 torso_ratio 有 torso_ratio_jitter、midback_offset_ratio 有
+# midback_angle_jitter 是同一套設計邏輯。門檻常數（BODY_AXIS_MIN_VALID_
+# SAMPLES/BODY_AXIS_SCORE_JITTER_THRESHOLD）統一管理在 compute_body_axis_
+# geometry() 上方那個 BODY_AXIS_* 設定區塊，這裡不重複定義。
 def compute_body_axis_score_jitter(kpts_window):
     """量測 body_axis_score 在一個時間窗口內的變化振幅——跟
     compute_body_axis_geometry() 的單幀版本分開，這裡需要一整個窗口
@@ -702,23 +745,11 @@ def compute_body_axis_score_jitter(kpts_window):
     return amplitude, valid_sample_count
 
 
-# ===== 整合進 SQA_ENABLED_THRESHOLDS / apply_sqa_dual_judgment =====
-# 把 Body Axis Proportion Analysis 的兩個分數併入同一套「是否採用」門檻
-# 開關機制，跟其餘指標一視同仁：要暫時停用，直接把對應那一行從
-# SQA_ENABLED_THRESHOLDS 刪掉/註解掉即可，sqa_check_reliable()/
-# apply_sqa_dual_judgment() 不用改一行程式碼——它們本來就是泛用地遍歷
-# 這個字典。用 .update() 而不是寫進原本的字典literal，是因為
-# BODY_AXIS_RELIABLE_THRESHOLD/BODY_AXIS_SCORE_JITTER_THRESHOLD 這兩個
-# 常數定義在 SQA_ENABLED_THRESHOLDS 原本那個字典之後，模組內從上到下
-# 執行時還沒定義，用 .update() 補在這裡才不會出現 NameError。
-#
-# 呼叫端（analyze_single_video）要把 compute_body_axis_geometry()/
-# compute_body_axis_score_jitter() 的結果併入同一個 ovl dict，這兩項
-# 門檻才會真的生效。
-SQA_ENABLED_THRESHOLDS.update({
-    "body_axis_score": (BODY_AXIS_RELIABLE_THRESHOLD, "below"),
-    "body_axis_score_jitter": (BODY_AXIS_SCORE_JITTER_THRESHOLD, "above"),
-})
+# body_axis_score/body_axis_score_jitter 兩項門檻已經直接寫進檔案前段的
+# SQA_ENABLED_THRESHOLDS 字典 literal 裡（不再用 .update() 補），這裡不
+# 重複註冊。呼叫端（analyze_single_video）記得把 compute_body_axis_
+# geometry()/compute_body_axis_score_jitter() 的結果併入同一個 ovl dict，
+# 這兩項門檻才會真的生效。
 
 
 def classify_bone_window(kpts_arr, conf_arr, classifier):

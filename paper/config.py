@@ -137,14 +137,14 @@ class ModelPaths:
     """模型和資料檔案路徑"""
     
     # YOLO 模型
-    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_118.pt")
+    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_124.pt")
     
     # ST-GCN 模型
     STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_results\run_085_xy_conf_v_bone_att_on\085_best_model.pth")
     
     # 測試視頻
-    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪\自行拍攝\影片\1783259367519_0.mp4")
-                                                                  # rtsp://12345678:456456123@192.168.0.46:554/stream1
+    VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\5月5日(1).mp4")
+                                                                  # rtsp://12345678:456456123@192.168.0.192:554/stream1
     # 日誌和輸出目錄                                             # "C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\5月5日(1).mp4"
     # 日誌和輸出目錄
     LOG_DIR = _env_str("CAT_MONITORING_LOG_DIR", "./logs")
