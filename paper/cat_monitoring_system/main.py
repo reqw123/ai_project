@@ -7,6 +7,7 @@
 兩種模式共用 server/routes.py 的 _build_frame_processor() 等既有處理管線，
 不重新設計架構，只是換一種「前端」呈現方式。
 """
+import datetime
 import os
 import threading
 import time
@@ -17,8 +18,11 @@ import cv2
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 from server.flask_app import create_app
+from server.routes import _ensure_processor_started, _pause_processing
 from utils.helpers import get_ip
 from config import FlaskConfig, NodeRedConfig, RunModeConfig
+
+_SCHEDULER_POLL_SECONDS = 20  # 排程檢查間隔；不需要到秒級精準，這個粒度已足夠
 
 def send_ip_to_nodered(ip, node_red_url):
     """定期發送 Python IP 給 Node-RED，直到成功為止"""
@@ -47,8 +51,36 @@ def send_ip_to_nodered(ip, node_red_url):
     if retry_count >= max_retries:
         print("❌ 無法連接到 Node-RED，請檢查 Node-RED 是否啟動")
 
+
+def _scheduler_loop():
+    """持續依排程時間驅動處理管線的啟動／暫停／恢復，涵蓋兩種用法：
+
+    - 只設定 SCHEDULED_START_TIME（沒設結束時間）：等到那個時刻後啟動一次，
+      之後永遠保持運行，即使跨天也不會再暫停（「排程時間到、之後一直運行」）。
+    - 同時設定 SCHEDULED_START_TIME 與 SCHEDULED_END_TIME：每天在區間內自動
+      啟動/恢復、離開區間自動暫停，不需重啟 Python、也不會重新載入模型
+      （「區段執行」，每天依同一組 HH:MM 重複）。
+    - 兩者都沒設定：立即啟動，之後持續輪詢只是空判斷，成本可忽略。
+
+    以迴圈而非一次性等待實作，才能支援「區段執行」每天自動重複開始/結束，
+    而不是只處理「等到某個時刻」這一次性的情境。
+    """
+    was_active = False
+    while True:
+        active = RunModeConfig.is_within_active_window()
+        now_str = datetime.datetime.now().strftime('%H:%M:%S')
+        if active and not was_active:
+            _ensure_processor_started()
+            print(f"🚀 處理管線已啟動（{now_str}）")
+        elif not active and was_active:
+            _pause_processing()
+            print(f"⏸ 已離開排程時段，暫停處理管線，等待下次進入排程區間（{now_str}）")
+        was_active = active
+        time.sleep(_SCHEDULER_POLL_SECONDS)
+
+
 def run_server_mode():
-    """HTTP 伺服器模式（原本 main.py 的行為，未更動）：Flask + Node-RED 上線通知。"""
+    """HTTP 伺服器模式：Flask + Node-RED 上線通知 + （預設）啟動時自動觸發處理管線。"""
     if FlaskConfig.DEBUG:
         import warnings
         warnings.warn(
@@ -63,6 +95,20 @@ def run_server_mode():
         ip = "127.0.0.1"
     print(f"\n📺 Web 服務器啟動於 http://{ip}:{FlaskConfig.PORT}")
     print(f"📊 串流網址: http://{ip}:{FlaskConfig.PORT}/stream")
+
+    if RunModeConfig.AUTO_START_PROCESSING:
+        # 不等第一個 HTTP 請求（例如使用者打開 Dashboard 點播放）才啟動處理管線，
+        # 讓預錄影片可以在無人操作的排程時段也照常開始跑統計。_scheduler_loop() 會
+        # 持續依排程時間驅動啟動/暫停/恢復；放到背景執行緒是因為這裡會一直跑（可能
+        # 睡很久、也會載入 YOLO/ST-GCN 模型），不該卡住 app.run() 前的啟動流程。
+        threading.Thread(target=_scheduler_loop, daemon=True).start()
+        if RunModeConfig.SCHEDULED_START_HHMM is not None and RunModeConfig.SCHEDULED_END_HHMM is not None:
+            print(f"🚀 處理管線將每天於 {RunModeConfig.SCHEDULED_START_TIME}~{RunModeConfig.SCHEDULED_END_TIME} "
+                  f"自動執行（區段執行，不等待 Dashboard 連線）")
+        elif RunModeConfig.SCHEDULED_START_HHMM is not None:
+            print(f"🚀 處理管線將於 {RunModeConfig.SCHEDULED_START_TIME} 自動啟動，之後持續運行（不等待 Dashboard 連線）")
+        else:
+            print("🚀 已啟動處理管線（不等待 Dashboard 連線）")
 
     node_red_url = NodeRedConfig.ENDPOINT_NOTIFY
     if ip and ip != "127.0.0.1":

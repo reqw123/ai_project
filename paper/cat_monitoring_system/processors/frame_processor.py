@@ -199,20 +199,26 @@ class FrameProcessor:
         fps = self.cap.get(cv2.CAP_PROP_FPS)
         return fps if fps > 1 else STGCNConfig.TARGET_MODEL_FPS
 
+    def is_stream_source(self) -> bool:
+        """是否為即時串流來源（RTSP/HLS 等，沒有「結尾」概念）。
+        本機檔案來源回傳 False——播完就是播完，不循環（見 read_raw_frame()）。"""
+        return self._grabber is not None
+
     def read_raw_frame(self):
         """讀取下一幀。
         即時串流來源：由背景執行緒（_LatestFrameGrabber）持續抽乾緩衝區，
         這裡只取最新一幀，不做 loop/seek（串流沒有「結尾」的概念）。
-        本機檔案來源：維持原本行為——結尾時自動 loop 並重置 EMA。
+
+        本機檔案來源：影片播完（cap.read() 回傳 False）就結束，不管有沒有設定
+        排程都不會自動循環回開頭——排程只決定「這段時間該不該處理」，不代表
+        影片本身要被撐長；影片多長，統計就收多長，播完之後 ret=False 會一路
+        往上傳給 SharedFrameStreamer，由它的 finished 旗標正確地停下來
+        （見 server/streaming.py），不會無限重播、讓同一段素材的統計無限疊加。
         Returns: (ret: bool, frame | None)
         """
         if self._grabber is not None:
             return self._grabber.read()
-        ret, frame = self.cap.read()
-        if not ret:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self.reset_ema()
-        return ret, frame
+        return self.cap.read()
 
     def get_behavior_history_records(self, limit: int = 200) -> list:
         """回傳最近 limit 筆行為紀錄（原始 dict，由呼叫方決定格式化）。"""
@@ -389,18 +395,6 @@ class FrameProcessor:
     def register_plugin(self, plugin) -> None:
         """Register an optional plugin. Called before the first frame."""
         self._plugins.append(plugin)
-
-    def reset_ema(self):
-        """重置 EMA 與消失容忍/顯示 hysteresis 狀態（影片重播時由外部呼叫），
-        避免上一輪播放結尾的姿態被帶到這一輪開頭做消失容忍的橋接。"""
-        self._ema_kpts = None
-        self._cat_missing_streak = 0
-        self._last_known_kpts = None
-        self._last_known_kpt_conf = None
-        self._last_known_bbox = None
-        self._last_known_bbox_conf = None
-        self._hysteresis_candidate_id = LOW_CONF_ID
-        self._hysteresis_candidate_streak = 0
 
     def _update_display_hysteresis(self, candidate_id, candidate_confidence, candidate_probs):
         """依候選類別各自的門檻（BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS[class_id]），

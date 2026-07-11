@@ -3,6 +3,7 @@
 方便管理所有設置，避免直接修改主程序
 """
 
+import datetime as _datetime
 import os
 import builtins as _builtins
 from pathlib import Path
@@ -91,6 +92,22 @@ def _is_valid_port(port):
     return isinstance(port, int) and 1 <= port <= 65535
 
 
+def _parse_hhmm(value):
+    """解析 'HH:MM'（24 小時制）字串，回傳 (hour, minute)；空字串/格式錯誤回傳 None。"""
+    if not value:
+        return None
+    parts = value.strip().split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        hour, minute = int(parts[0]), int(parts[1])
+    except (TypeError, ValueError):
+        return None
+    if 0 <= hour <= 23 and 0 <= minute <= 59:
+        return (hour, minute)
+    return None
+
+
 def _normalize_feature_mode(feature_mode):
     mode = str(feature_mode).strip().lower()
     if not mode:
@@ -140,7 +157,7 @@ class ModelPaths:
     YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_124.pt")
     
     # ST-GCN 模型
-    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_results\run_085_xy_conf_v_bone_att_on\085_best_model.pth")
+    STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth")
     
     # 測試視頻
     VIDEO_INPUT = _env_video_input("CAT_MONITORING_VIDEO_INPUT", r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\5月5日(1).mp4")
@@ -232,6 +249,58 @@ class STGCNConfig:
     KP_EMA_ALPHA = _env_float("CAT_MONITORING_KP_EMA_ALPHA", 1.0)
     # 行為類別名稱與顏色見 BehaviorTrackingConfig.BEHAVIOR_CATEGORIES / utils.constants.BEHAVIOR_COLORS
 
+# ==================== ST-GCN 訓練設定（唯一權威來源：stgcn_config.yaml） ====================
+class STGCNTrainingConfig:
+    """0_train_gcn.py 訓練這個模型時實際使用的參數，全部從 stgcn_config.yaml
+    讀取——SEQUENCE_LENGTH/NUM_JOINTS/WINDOW_STRIDE/SPATIAL_KERNEL_SIZE/
+    FEATURE_MODE/BEHAVIOR_PREFIXES 等重要參數的權威來源都是那份 YAML，
+    這裡不重新定義任何預設值，只負責讀出來供 get_config_summary()／
+    validate_all_config() 顯示與比對，避免每次要確認訓練參數都要另外開檔案。
+
+    刻意跟 STGCNConfig 分開類別：STGCNConfig 是「推論/串流」執行期設定
+    （env 變數可覆寫，部分欄位如 in_channels/num_joints/attention 還會在
+    載入 checkpoint 時被自動偵測結果覆寫，見 models/stgcn_model.py），
+    跟「當初訓練這顆 checkpoint 時用的設定」是兩個不同時間點、不同目的
+    的東西，不應該混在同一個類別、更不該互相覆寫。
+
+    讀檔路徑跟 0_train_gcn.py 用同一個環境變數 STGCN_CONFIG_PATH（未設定
+    時預設指向 cat_monitoring_system/stgcn_config.yaml），確保兩邊讀的是
+    同一份檔案。找不到檔案、YAML 格式錯誤、或 PyYAML 未安裝時，get() 一律
+    回傳 default（通常是 None）而不拋例外——config.py 被很多地方 import，
+    這裡讀取失敗不該讓整個系統掛掉，只是配置摘要少顯示這幾行。
+    """
+    _DEFAULT_PATH = str(Path(__file__).parent / "cat_monitoring_system" / "stgcn_config.yaml")
+    _PATH = _env_str("STGCN_CONFIG_PATH", _DEFAULT_PATH)
+    _cache = None
+    _load_error = None
+
+    @classmethod
+    def _load(cls):
+        if cls._cache is not None:
+            return cls._cache
+        try:
+            import yaml
+            with open(cls._PATH, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            if not isinstance(data, dict):
+                raise ValueError(f"{cls._PATH} 內容不是一個 mapping/object")
+            cls._cache = data
+        except Exception as e:
+            cls._load_error = str(e)
+            cls._cache = {}
+        return cls._cache
+
+    @classmethod
+    def get(cls, key, default=None):
+        return cls._load().get(key, default)
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """True 代表成功讀到檔案內容；False 代表檔案不存在/格式錯誤/PyYAML
+        未安裝——呼叫端可用這個判斷要不要顯示「讀取失敗」提示。"""
+        cls._load()
+        return cls._load_error is None
+
 # ==================== 異常檢測參數 ====================
 class AnomalyDetectionConfig:
     """靜止偵測與運動分析
@@ -254,6 +323,62 @@ class RunModeConfig:
     "gui"           ：不啟動 Flask/Node-RED，直接用同一套 FrameProcessor 開本地視窗顯示
     """
     MODE = _env_str("CAT_MONITORING_RUN_MODE", "server")
+
+    # server 模式下，處理管線（開影片、載入 YOLO/ST-GCN、tracker 統計、CSV、Node-RED 推送）
+    # 原本要等第一個打到 /stream 等路由的 HTTP 請求才會啟動（見 routes.py 的
+    # _ensure_processor_started()），也就是實務上要有人打開 Dashboard 點播放才會真正開始跑。
+    # 預錄影片、排程無人值守執行時沒人會去點播放，關掉這個延遲啟動，改成 Python 進程一啟動
+    # 就立刻開始處理，不等任何請求。設為 False 可還原成原本「有人連線才啟動」的行為。
+    AUTO_START_PROCESSING = _env_bool("CAT_MONITORING_AUTO_START_PROCESSING", True)
+
+    # 排程啟動時間（24 小時制 "HH:MM"，例如 "06:00"）。設定後，處理管線在 Python 進程
+    # 啟動的當下不會立刻執行，而是持續等待直到真實世界時間到達此時刻才開始跑；
+    # 若進程啟動時已經過了這個時刻（例如排程 06:00 但 14:00 才啟動），視為時間已到，
+    # 立即開始，不會傻等到隔天。留空（預設）代表不啟用排程，沿用 AUTO_START_PROCESSING
+    # 的行為（一啟動就跑或永遠不自動跑）。用於預錄影片、無人值守的排程執行情境
+    # （例如固定每天啟動一次，只想在 06:00 才開始處理當天份的影片）。
+    SCHEDULED_START_TIME = _env_str("CAT_MONITORING_SCHEDULED_START_TIME", "19:20")  #"06:00"
+    SCHEDULED_START_HHMM = _parse_hhmm(SCHEDULED_START_TIME)
+
+    # 排程結束時間（24 小時制 "HH:MM"，例如 "12:00"）。留空（預設）＝不設結束時間，
+    # 只要 SCHEDULED_START_TIME 有設，一旦時間到就開始處理、之後永遠不會自動停止
+    # （對應「排程時間到、之後一直運行」的用法）。
+    # 若同時設定了開始與結束時間，就變成「區段執行」：只有現在時刻落在
+    # [開始, 結束) 之間才處理，區間外自動暫停，且每一天都會依同一組 HH:MM 重新套用
+    # （不需要重啟 Python，也不會重新載入模型——暫停只是不讀取/不推論，不釋放資源）。
+    # 若只設結束、沒設開始，開始時間視為當天 00:00。
+    SCHEDULED_END_TIME = _env_str("CAT_MONITORING_SCHEDULED_END_TIME", "")  #"12:00"
+    SCHEDULED_END_HHMM = _parse_hhmm(SCHEDULED_END_TIME)
+
+    @classmethod
+    def is_within_active_window(cls, now=None):
+        """判斷「現在」是否落在排程允許處理的時間內。
+
+        - 開始/結束都沒設定：一律允許（沒有時間限制）。
+        - 只設開始，沒設結束：現在 >= 今天的開始時刻就允許，且此後永遠允許
+          （不會因為跨天而重新暫停——這是「排程時間到、之後一直運行」的模式）。
+        - 有設結束（不論有沒有設開始）：視為每日重複的區段，只有現在落在
+          [開始（預設 00:00）, 結束) 之間才允許；結束時刻比開始時刻早（例如
+          22:00~06:00 跨午夜）時，視為跨天區間處理。
+        """
+        if now is None:
+            now = _datetime.datetime.now()
+        start_hhmm = cls.SCHEDULED_START_HHMM
+        end_hhmm = cls.SCHEDULED_END_HHMM
+
+        if start_hhmm is None and end_hhmm is None:
+            return True
+
+        if end_hhmm is None:
+            start_dt = now.replace(hour=start_hhmm[0], minute=start_hhmm[1], second=0, microsecond=0)
+            return now >= start_dt
+
+        start_h, start_m = start_hhmm if start_hhmm is not None else (0, 0)
+        start_dt = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+        end_dt = now.replace(hour=end_hhmm[0], minute=end_hhmm[1], second=0, microsecond=0)
+        if end_dt <= start_dt:
+            return now >= start_dt or now < end_dt
+        return start_dt <= now < end_dt
 
 # ==================== Flask 服務參數 ====================
 class FlaskConfig:
@@ -398,6 +523,32 @@ class SystemInfo:
 # ==================== 便利函數 ====================
 def get_config_summary():
     """取得配置摘要"""
+    # STGCNTrainingConfig 讀取 stgcn_config.yaml；找不到檔案/格式錯誤時
+    # is_available() 為 False，下面顯示用的值全部會是 None，不會拋例外。
+    _train_available = STGCNTrainingConfig.is_available()
+    _train_seq_len = STGCNTrainingConfig.get("SEQUENCE_LENGTH")
+    _train_num_joints = STGCNTrainingConfig.get("NUM_JOINTS")
+    _train_window_stride = STGCNTrainingConfig.get("WINDOW_STRIDE")
+    _train_spatial_kernel = STGCNTrainingConfig.get("SPATIAL_KERNEL_SIZE")
+    _train_temporal_kernel = STGCNTrainingConfig.get("TEMPORAL_KERNEL_SIZE")
+    _train_num_layers = STGCNTrainingConfig.get("NUM_STGCN_LAYERS")
+    _train_feature_mode = STGCNTrainingConfig.get("FEATURE_MODE")
+    _train_num_classes = STGCNTrainingConfig.get("NUM_CLASSES")
+    _train_use_attention = STGCNTrainingConfig.get("USE_ATTENTION")
+    _train_behavior_prefixes = STGCNTrainingConfig.get("BEHAVIOR_PREFIXES")
+
+    # SEQUENCE_LENGTH/FEATURE_MODE 這兩項推論時「不會」依 checkpoint 自動偵測
+    # 覆寫（跟 in_channels/num_joints/attention 不同，見 models/stgcn_model.py），
+    # 訓練/推論兩邊不一致會是安靜的 bug，這裡直接標記出來提醒使用者。
+    _seq_len_match = (
+        "—" if _train_seq_len is None
+        else ("✓" if _train_seq_len == STGCNConfig.SEQUENCE_LENGTH else "⚠ 不一致！")
+    )
+    _feature_mode_match = (
+        "—" if _train_feature_mode is None
+        else ("✓" if _normalize_feature_mode(_train_feature_mode) == STGCNConfig.FEATURE_MODE else "⚠ 不一致！")
+    )
+
     summary = f"""
     ╔════════════════════════════════════════════════════════╗
     ║          貓咪監測系統配置摘要                         ║
@@ -422,17 +573,42 @@ def get_config_summary():
       - FPS 降採樣        : {STGCNConfig.ENABLE_FPS_DOWNSAMPLE}
       - 關鍵點 EMA α      : {STGCNConfig.KP_EMA_ALPHA}  (1.0=不平滑)
 
+    🎓 ST-GCN 訓練設定  (唯一權威來源: {STGCNTrainingConfig._PATH}；讀取{"成功" if _train_available else "失敗，以下皆為 None"})
+      - 序列長度 (訓練)   : {_train_seq_len} 幀   [跟推論端 SEQUENCE_LENGTH 是否一致: {_seq_len_match}]
+      - 特徵模式 (訓練)   : {_train_feature_mode}   [跟推論端 FEATURE_MODE 是否一致: {_feature_mode_match}]
+      - 關節數 (NUM_JOINTS): {_train_num_joints}  (17=完整骨架, 14=排除尾巴三點；實際推論時由 checkpoint 自動偵測，不受這裡影響)
+      - 訓練滑動步長      : {_train_window_stride} 幀  (跟上面推論滑動步長是不同概念，無需一致)
+      - 空間 kernel 大小  : {_train_spatial_kernel}
+      - 時間 kernel 大小  : {_train_temporal_kernel}
+      - ST-GCN block 層數 : {_train_num_layers}
+      - 行為類別數 (訓練) : {_train_num_classes}
+      - 是否啟用 Attention: {_train_use_attention}
+      - 行為前綴對應      : {_train_behavior_prefixes}
+
     🛑 靜止偵測（滾動均值閾值，純 CSV 記錄；單位 body_fraction×100）
       - 最大動作值        : {AnomalyDetectionConfig.MAX_MOTION}  （body_fraction×100；走路約 10-20）
       - 關鍵點信心門檻    : {AnomalyDetectionConfig.KP_CONF_THRES}
       - 滾動視窗大小      : {AnomalyDetectionConfig.ROLLING_WINDOW_SIZE} 幀
       - 靜止動作門檻      : {AnomalyDetectionConfig.STILL_MOTION_THRESHOLD}  （body_fraction×100；呼吸抖動約 < 2）
 
+    🕐 執行模式與排程
+      - 執行模式          : {RunModeConfig.MODE}  ("server" 或 "gui")
+      - 啟動即自動處理    : {RunModeConfig.AUTO_START_PROCESSING}  （False=等第一個 /stream 等請求才啟動處理管線）
+      - 排程開始時間      : {RunModeConfig.SCHEDULED_START_TIME or "(未設定)"}
+      - 排程結束時間      : {RunModeConfig.SCHEDULED_END_TIME or "(未設定，開始後永遠運行)"}
+      - 目前是否在排程區間內: {RunModeConfig.is_within_active_window()}  （即時判斷，印出當下這一刻的狀態）
+
     🏷️ 行為追蹤門檻
       - ST-GCN 行為標籤門檻  : {BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD}
       - 最短記錄時長         : {BehaviorTrackingConfig.MIN_RECORD_DURATION_SECONDS} s
       - 活動分數時間窗        : {BehaviorTrackingConfig.ACTIVITY_SCORE_WINDOW_SECONDS} s
       - 活動力窗口大小        : {BehaviorTrackingConfig.ACTIVITY_WINDOW_SIZE} 幀
+      - 行為歷史保留筆數      : {BehaviorTrackingConfig.MAX_HISTORY_SIZE} 筆
+      - 低信心幀活動權重      : {BehaviorTrackingConfig.LOW_CONFIDENCE_ACTIVITY_WEIGHT}
+      - 貓消失容忍幀數        : {BehaviorTrackingConfig.CAT_MISSING_TOLERANCE_FRAMES} 幀  （<=0 等同關閉此機制）
+      - 顯示延遲窗口數(walk/lick/scratch/shake/stop):
+          {BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS_WALK}/{BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS_LICK}/{BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS_SCRATCH}/{BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS_SHAKE}/{BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS_STOP}
+      - 行為類別對照          : {BehaviorTrackingConfig.BEHAVIOR_CATEGORIES}
       - 搔抓警報秒數          : {BehaviorTrackingConfig.SCRATCH_ALERT_TIME_SECONDS} s
       - 搔抓警報次數          : {BehaviorTrackingConfig.SCRATCH_ALERT_COUNT_THRESHOLD} 次
       - 舔舐警報秒數          : {BehaviorTrackingConfig.LICK_ALERT_TIME_SECONDS} s
@@ -440,10 +616,14 @@ def get_config_summary():
       - 靜止警報秒數          : {BehaviorTrackingConfig.STOP_ALERT_TIME_SECONDS} s
       - 低活動 walk 門檻      : {BehaviorTrackingConfig.LOW_ACTIVITY_TIME_THRESHOLD_SECONDS} s
 
+    🐱 貓咪身分  (單一貓咪固定 ID，本系統不做多貓 re-ID)
+      - CAT_ID            : {CatIdentityConfig.CAT_ID}
+
     🌐 Flask 服務
       - 主機        : {FlaskConfig.HOST}:{FlaskConfig.PORT}
       - JPEG 品質   : {FlaskConfig.JPEG_QUALITY}
       - Debug 模式  : {FlaskConfig.DEBUG}
+      - Threaded    : {FlaskConfig.THREADED}
 
     🎞️ 串流視覺化
       - 串流縮放尺寸      : {VisualizationConfig.STREAM_DISPLAY_SIZE}
@@ -459,8 +639,9 @@ def get_config_summary():
       - Result v2 端點: {NodeRedConfig.ENDPOINT_RESULT_V2}
 
     📄 日誌設定
-      - 主要 CSV        : {LoggingConfig.CSV_PATH}
-      - 行為區段 CSV    : {LoggingConfig.SEGMENTS_CSV_PATH}
+      - 主要 CSV          : {LoggingConfig.CSV_PATH}
+      - 行為區段 CSV      : {LoggingConfig.SEGMENTS_CSV_PATH}
+      - Tracker 狀態檔    : {LoggingConfig.TRACKER_STATE_PATH}  （重啟後恢復當日累積資料）
 
     📁 路徑配置
       - YOLO 模型   : {ModelPaths.YOLO_MODEL}
@@ -512,10 +693,46 @@ def validate_all_config():
             return False
         return True
 
+    def _validate_train_inference_consistency():
+        """SEQUENCE_LENGTH/FEATURE_MODE 這兩項推論時不會依 checkpoint 自動
+        偵測覆寫（跟 in_channels/num_joints/attention 不同，見
+        models/stgcn_model.py），訓練/推論兩邊不一致會是安靜的 bug——例如
+        訓練時用 SEQUENCE_LENGTH=32，推論卻用 16，模型會吃到形狀對得上但
+        語意錯誤的輸入，不會報錯，只會默默地推論結果不準。
+
+        stgcn_config.yaml 讀不到（檔案不存在/PyYAML 未安裝）時視為無法比對，
+        不當成錯誤——這項檢查是「有資料可比對時才擋」，不是強制要求一定要有
+        這份訓練設定檔。
+        """
+        if not STGCNTrainingConfig.is_available():
+            print("  ⚠ 找不到 stgcn_config.yaml 或讀取失敗，略過訓練/推論一致性比對")
+            return True
+
+        mismatches = []
+        train_seq_len = STGCNTrainingConfig.get("SEQUENCE_LENGTH")
+        if train_seq_len is not None and train_seq_len != STGCNConfig.SEQUENCE_LENGTH:
+            mismatches.append(
+                f"SEQUENCE_LENGTH 不一致：訓練={train_seq_len}，推論={STGCNConfig.SEQUENCE_LENGTH}"
+            )
+
+        train_feature_mode = STGCNTrainingConfig.get("FEATURE_MODE")
+        if train_feature_mode is not None and _normalize_feature_mode(train_feature_mode) != STGCNConfig.FEATURE_MODE:
+            mismatches.append(
+                f"FEATURE_MODE 不一致：訓練={train_feature_mode}，推論={STGCNConfig.FEATURE_MODE}"
+            )
+
+        if mismatches:
+            print("  ✗ 訓練/推論一致性比對")
+            for m in mismatches:
+                print(f"    - {m}")
+            return False
+        return True
+
     checks = [
         ("模型檔案", ModelPaths.validate),
         ("目錄結構", lambda: (ModelPaths.ensure_dirs(), True)[1]),
         ("參數範圍", _validate_runtime_values),
+        ("訓練/推論一致性", _validate_train_inference_consistency),
     ]
     
     all_valid = True

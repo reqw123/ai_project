@@ -17,14 +17,19 @@ class ImprovedBehaviorTracker:
         self._lock = threading.RLock()
         self.behavior_time = {b: 0.0 for b in _behaviors}
         self.behavior_count = {b: 0 for b in _behaviors}
-        self.rest_time = 0.0          # YOLO 有偵測到貓但 ST-GCN 信心不足
+        self.low_conf_time = 0.0      # YOLO 有偵測到貓但 ST-GCN 信心不足（獨立追蹤，不歸入任何行為）
+        self.low_conf_count = 0       # 低信心事件次數（連續低信心視為同一事件，離開低信心狀態才算 1 次）
+        self._in_low_conf = False     # 是否正處於連續低信心區間，用於事件計數的邊界判斷
         self.not_detected_time = 0.0  # YOLO 未偵測到貓（貓不在畫面中）
         self.behavior_history = deque(maxlen=BehaviorTrackingConfig.MAX_HISTORY_SIZE)
         self.current_behavior = None
         self.current_gcn_id = None  # 正在進行的行為對應的 GCN ID
         self.behavior_start_time = time.time()
         self.current_event_start_time = time.time()  # 真實事件開始時間，只在行為切換時重置
-        self.last_update_time = time.time()  # 用於計算逐幀時間差
+        self.last_update_time = time.time()  # 用於計算逐幀時間差；同時也是「監測結束時間」
+                                              # （最後一次收到有效幀的時刻）給 Dashboard 顯示用
+        self.today_start_time = time.time()  # 今日監測開始時間（第一次啟動或跨日重置的當下）；
+                                              # 同一天內重啟程式會從 load_state() 還原，不會被重置
         self.last_reset = datetime.now().date()
         self.activity_window = deque(maxlen=BehaviorTrackingConfig.ACTIVITY_WINDOW_SIZE)
         self.transition_matrix = {}   # {"walk->lick": 3, ...}
@@ -42,7 +47,8 @@ class ImprovedBehaviorTracker:
                     "date":               str(self.last_reset),
                     "behavior_time":      dict(self.behavior_time),
                     "behavior_count":     dict(self.behavior_count),
-                    "rest_time":          self.rest_time,
+                    "low_conf_time":      self.low_conf_time,
+                    "low_conf_count":     self.low_conf_count,
                     "not_detected_time":  self.not_detected_time,
                     "transition_matrix":   dict(self.transition_matrix),
                     "hourly_distribution": {h: dict(v) for h, v in self.hourly_distribution.items()},
@@ -50,6 +56,7 @@ class ImprovedBehaviorTracker:
                     "_last_valid_behavior": self._last_valid_behavior,
                     "behavior_min_duration": dict(self.behavior_min_duration),
                     "behavior_max_duration": dict(self.behavior_max_duration),
+                    "today_start_time":    self.today_start_time,
                 }
             path = LoggingConfig.TRACKER_STATE_PATH
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -70,7 +77,8 @@ class ImprovedBehaviorTracker:
             with self._lock:
                 self.behavior_time     = {k: float(v) for k, v in state.get("behavior_time",  {}).items()}
                 self.behavior_count    = {k: int(v)   for k, v in state.get("behavior_count", {}).items()}
-                self.rest_time         = float(state.get("rest_time",         0.0))
+                self.low_conf_time     = float(state.get("low_conf_time",     0.0))
+                self.low_conf_count    = int(state.get("low_conf_count",      0))
                 self.not_detected_time = float(state.get("not_detected_time", 0.0))
                 self.transition_matrix   = {k: int(v) for k, v in state.get("transition_matrix", {}).items()}
                 self.hourly_distribution = {h: {b: float(t) for b, t in v.items()}
@@ -85,6 +93,12 @@ class ImprovedBehaviorTracker:
                     v = state.get("behavior_max_duration", {}).get(b)
                     if v is not None:
                         self.behavior_max_duration[b] = float(v)
+                # 還原「今日監測開始時間」，讓同一天內重啟程式不會把開始時間
+                # 誤植成重啟當下——沒有這個欄位的舊存檔（升級前）就維持
+                # __init__ 預設的目前時間，只影響升級當下那一次顯示。
+                saved_start = state.get("today_start_time")
+                if saved_start is not None:
+                    self.today_start_time = float(saved_start)
             logging.info("TrackerState restored from %s", path)
         except Exception as e:
             logging.warning("TrackerState load failed: %s", e)
@@ -96,7 +110,9 @@ class ImprovedBehaviorTracker:
             self.last_reset = today
             self.behavior_time = {k: 0.0 for k in self.behavior_time}
             self.behavior_count = {k: 0 for k in self.behavior_count}
-            self.rest_time = 0.0
+            self.low_conf_time = 0.0
+            self.low_conf_count = 0
+            self._in_low_conf = False
             self.not_detected_time = 0.0
             self.transition_matrix = {}
             self.hourly_distribution = {}
@@ -104,6 +120,7 @@ class ImprovedBehaviorTracker:
             self._last_valid_behavior = None
             self.behavior_min_duration = {k: None for k in self.behavior_min_duration}
             self.behavior_max_duration = {k: None for k in self.behavior_max_duration}
+            self.today_start_time = time.time()  # 跨日重置：新的一天，重新起算監測開始時間
     def map_gcn_to_tracker(self, behavior_id):
         mapping = BehaviorTrackingConfig.BEHAVIOR_CATEGORIES
         return mapping.get(behavior_id, "walk")
@@ -112,8 +129,8 @@ class ImprovedBehaviorTracker:
         """結算目前正在進行的行為事件到 now 這一刻，並清空 current_behavior。
 
         無論是「切換到新行為」還是「貓消失/信心不足導致事件被迫中斷」都要呼叫
-        這支方法，確保空窗（not_detected/rest）期間的時間只會算進
-        not_detected_time/rest_time，不會被歸到消失前或恢復後的行為時長裡
+        這支方法，確保空窗（not_detected/low_conf）期間的時間只會算進
+        not_detected_time/low_conf_time，不會被歸到消失前或恢復後的行為時長裡
         （修正：先前貓咪消失/低信心時 behavior_start_time 不會推進，等貓咪重新
         出現時那整段空窗時間會被灌進 behavior_time，即使剛好是同一個行為）。
 
@@ -163,20 +180,26 @@ class ImprovedBehaviorTracker:
             )
 
             if behavior_id == -2:
-                # YOLO 未偵測到貓（behavior_id == -2）：累積到 not_detected_time，不算休息，
+                # YOLO 未偵測到貓（behavior_id == -2）：累積到 not_detected_time，
                 # 並結算正在進行的行為事件，避免消失期間的時間灌進行為時長
                 self.not_detected_time += dt
+                self._in_low_conf = False  # 貓消失視為離開低信心區間，下次進入低信心重新計 1 次事件
                 if self._settle_current_behavior(now, 0.0):
                     _event_completed = True
             elif behavior_id == -1:
                 # 信心不足時（behavior_id == -1）：YOLO 有偵測到但 ST-GCN 信心未達門檻，
-                # 累積到 rest_time，同樣結算正在進行的行為事件
-                self.rest_time += dt
+                # 獨立累積到 low_conf_time/low_conf_count，不歸入任何行為統計（也不算「休息」——
+                # 「休息」由 stop 行為本身的次數/時長全權代表，此處純粹是模型不確定，性質不同）
+                self.low_conf_time += dt
+                if not self._in_low_conf:
+                    self.low_conf_count += 1
+                    self._in_low_conf = True
                 if self._settle_current_behavior(now, activity_value):
                     _event_completed = True
                 self.activity_window.append({"time": now, "activity": activity_value, "weight": 1.0})
             else:
                 # 有效行為（0~4）：累積到對應 behavior_time
+                self._in_low_conf = False  # 離開低信心區間
                 behavior = self.map_gcn_to_tracker(behavior_id)
 
                 # 每小時分布（dt 為幀間隔，即時累積）
@@ -238,13 +261,29 @@ class ImprovedBehaviorTracker:
                 "stop": self.behavior_count["stop"],
                 "stop_time": round(self.behavior_time["stop"], 1),
                 "active_time": round(total_active, 1),
-                "rest_time": round(self.rest_time, 1),
+                "low_conf": self.low_conf_count,
+                "low_conf_time": round(self.low_conf_time, 1),
                 "not_detected_time": round(self.not_detected_time, 1),
                 "monitoring_seconds": round(self.monitoring_seconds, 1),
+                # 供 Dashboard 直接顯示，不在前端 JS 重算：
+                # cat_visible_time = 貓出現時長（五類行為 + low_conf）
+                # total_uptime     = 系統真正運行時長（含貓不在畫面的時間）
+                "cat_visible_time": round(total_active + self.low_conf_time, 1),
+                "total_uptime": round(self.monitoring_seconds + self.not_detected_time, 1),
                 "transition_matrix": dict(self.transition_matrix),
                 "hourly_distribution": {h: dict(v) for h, v in self.hourly_distribution.items()},
                 "behavior_min_duration": dict(self.behavior_min_duration),
                 "behavior_max_duration": dict(self.behavior_max_duration),
+                # 供 Dashboard 顯示「監測開始時間 ~ 監測結束時間」：Unix 秒數
+                # （前端 new Date(ts*1000) 換算），不在這裡格式化成字串，避免
+                # 綁死時區/格式，前端可自行決定顯示方式。
+                # today_start_time = 今日第一次開始監測的時刻（同一天內重啟
+                #   程式不會改變，見 load_state()）。
+                # last_update_time = 最後一次收到有效幀、實際更新統計的時刻
+                #   ——系統持續運行時等同「現在」；管線暫停/影片播畢/排程
+                #   結束後就停在最後一次更新的時間點，視覺上代表監測結束。
+                "today_start_time": self.today_start_time,
+                "last_update_time": self.last_update_time,
             }
         return stats
     def add_monitoring_seconds(self, seconds: float) -> None:

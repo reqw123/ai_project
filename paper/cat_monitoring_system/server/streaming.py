@@ -36,6 +36,13 @@ class SharedFrameStreamer:
         self._client_count = 0
         self._client_lock = threading.Lock()
         self.running = True
+        # 排程「區段執行」用：暫停時完全不讀取/不推論/不寫入任何統計，但保留
+        # 模型與 VideoCapture 不釋放，恢復時可立即從暫停當下的位置繼續，不需重新載入。
+        # 與下面的 finished 分開：paused 是可被排程恢復的暫時狀態，finished 是本機
+        # 影片檔案播畢的終止狀態，不會因為進入排程允許時間就被自動復活。
+        self.paused = False
+        # 本機影片檔案播完（非串流來源）：True 代表已經放完，不再自動重播/重試讀取。
+        self.finished = False
         self.thread = threading.Thread(target=self._update_frame, daemon=True)
         self.thread.start()
 
@@ -60,12 +67,23 @@ class SharedFrameStreamer:
         _encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), _q]
 
         raw_frame_count = 0
+        is_stream = self.frame_processor.is_stream_source()
 
         while self.running:
             try:
+                if self.paused or self.finished:
+                    raw_frame_count = 0
+                    time.sleep(0.2)
+                    continue
+
                 ret, frame = self.frame_processor.read_raw_frame()
                 if not ret:
                     raw_frame_count = 0
+                    if not is_stream and not self.finished:
+                        # 本機影片檔案已放完：不循環、不重試，直接停在這裡等待人工處理
+                        # （例如換一支影片、重啟程式），避免統計被無限重播的相同片段疊加。
+                        self.finished = True
+                        logging.info("SharedFrameStreamer: 本機影片檔案已播畢，停止處理（不自動循環）")
                     continue
 
                 raw_frame_count += 1

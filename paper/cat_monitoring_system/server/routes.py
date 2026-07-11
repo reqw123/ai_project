@@ -20,6 +20,7 @@ from config import STGCNConfig as _STGCNConfig
 from config import NodeRedConfig as _NodeRedConfig
 from config import FlaskConfig as _FlaskConfig
 from config import SystemInfo as _SystemInfo
+from config import RunModeConfig as _RunModeConfig
 
 _KP_EMA_ALPHA = _STGCNConfig.KP_EMA_ALPHA
 _YOLO_MODEL_PATH = _ModelPaths.YOLO_MODEL
@@ -130,9 +131,18 @@ def _try_register_ext_body_zone(processor) -> None:
 
 
 def _ensure_processor_started():
-    """在首次請求時啟動處理管線（double-checked locking，避免多執行緒重複建立）。"""
+    """在首次請求時啟動處理管線（double-checked locking，避免多執行緒重複建立）。
+
+    若設定了排程時間（RunModeConfig.SCHEDULED_START_TIME/SCHEDULED_END_TIME）且目前不在
+    允許的時間內，即使有請求打進來（例如使用者提早打開 Dashboard 點播放）也不會啟動，
+    直接原地不動；真正的啟動/暫停/恢復由 main.py 的排程迴圈依時間持續驅動。
+    """
     global frame_streamer, frame_processor
     if frame_processor is not None and frame_streamer is not None:
+        if frame_streamer.paused and _RunModeConfig.is_within_active_window():
+            frame_streamer.paused = False
+        return
+    if not _RunModeConfig.is_within_active_window():
         return
     with _init_lock:
         if frame_processor is None:
@@ -143,11 +153,23 @@ def _ensure_processor_started():
             frame_streamer = SharedFrameStreamer(frame_processor)
 
 
+def _pause_processing():
+    """排程區段執行用：離開允許時間時呼叫，暫停讀取/推論，但不釋放模型與 VideoCapture。"""
+    if frame_streamer is not None:
+        frame_streamer.paused = True
+
+
 def register_routes(app):
 
     @app.route('/stream')
     def stream():
         _ensure_processor_started()
+        # _ensure_processor_started() 在排程時段外（或初始化競爭條件下）會
+        # 直接不初始化 frame_streamer 就返回，這裡要跟 /snapshot 一致地擋掉，
+        # 否則 mjpeg_stream() 內對 None 呼叫 acquire_client() 會直接拋
+        # AttributeError（曾在排程開始時間的邊界撞到過）。
+        if frame_streamer is None:
+            return Response(b'', status=503, mimetype='text/plain')
         def mjpeg_stream():
             frame_streamer.acquire_client()
             try:
