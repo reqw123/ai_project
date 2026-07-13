@@ -337,7 +337,7 @@ class RunModeConfig:
     # 立即開始，不會傻等到隔天。留空（預設）代表不啟用排程，沿用 AUTO_START_PROCESSING
     # 的行為（一啟動就跑或永遠不自動跑）。用於預錄影片、無人值守的排程執行情境
     # （例如固定每天啟動一次，只想在 06:00 才開始處理當天份的影片）。
-    SCHEDULED_START_TIME = _env_str("CAT_MONITORING_SCHEDULED_START_TIME", "19:20")  #"06:00"
+    SCHEDULED_START_TIME = _env_str("CAT_MONITORING_SCHEDULED_START_TIME", "")  #"06:00"
     SCHEDULED_START_HHMM = _parse_hhmm(SCHEDULED_START_TIME)
 
     # 排程結束時間（24 小時制 "HH:MM"，例如 "12:00"）。留空（預設）＝不設結束時間，

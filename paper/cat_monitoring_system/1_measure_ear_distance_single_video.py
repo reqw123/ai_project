@@ -62,7 +62,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_104.pt"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_127.pt"
 
 # 輸出 CSV 路徑（可直接在此處修改）
 OUTPUT_CSV_PATH = r"C:\Users\homec\left_right_ear_distance.csv"
@@ -85,6 +85,12 @@ _NEED_FRAME = DISPLAY_WINDOW or (STREAM_MODE == 2)
 # ===== 信心值門檻設定（bbox conf / keypoint conf，建議集中看這區） =====
 YOLO_CONF_THRESHOLD = 0.5  # YOLO bbox 偵測信心門檻
 EAR_CONF_THRESHOLD = 0.5  # 左右耳/胸/臀「幾何與耳距有效性」門檻（>此值才視為可用）
+# 這也是「梯形橫軸 trap_perp 是否信任耳線方向」的其中一個門檻（絕對信心
+# 門檻）：左右耳信心皆 > 此值（left_ok and right_ok）只是必要條件之一，還要
+# 另外滿足耳距的幾何長度門檻（TRAP_PERP_MIN_EAR_LINE_NORM_RATIO，定義於
+# 梯形方向跨幀穩定化參數區塊）才會採用耳線方向；任一條件不滿足就 fallback
+# 到 chest-hip 方向向量。見 compute_head_body_target_geometry() 內的
+# trap_perp 判斷區塊。
 DRAW_KP_CONF_THRESHOLD = 0.5  # 骨架與關鍵點「顯示門檻」（>此值才畫；只影響畫面，不影響耳距有效性）
 LIMB_CONF_THRESHOLD = 0.10  # 四肢區域建立門檻（膝與掌都需 > 此值）
 LOOP_PLAYBACK = True
@@ -95,6 +101,7 @@ KP_LEFT_EAR   = 1
 KP_RIGHT_EAR  = 2
 KP_NOSE       = 0
 KP_CHEST      = 3  # 前胸/胸口（前肢附著點）— 對應 stgcn chest_joint=3
+KP_MID_BACK   = 4  # 背部中點（標記在貓咪背部正上方，非 chest-hip 連線上的投影點）— 對應 ext_body_zones 的 KP_MID_BACK=4
 KP_HIP        = 5  # 臀部（後肢附著點）— 對應 stgcn lower_body_joint=5
 KP_FRONT_LEFT_KNEE = 6
 KP_FRONT_LEFT_PAW = 7
@@ -104,6 +111,9 @@ KP_HIND_LEFT_KNEE = 10
 KP_HIND_LEFT_PAW = 11
 KP_HIND_RIGHT_KNEE = 12
 KP_HIND_RIGHT_PAW = 13
+KP_TAIL_ROOT = 14
+KP_TAIL_MID = 15
+KP_TAIL_TIP = 16
 
 # ===== 面相偵測參數（可依資料再微調） =====
 NOSE_CONF_THRESHOLD = 0.3  # 鼻子可用門檻（同時用於本體幾何與背向規則）
@@ -173,13 +183,83 @@ HEAD_RAY_LENGTH_RATIO = 1.60      # 頭部向量延伸射線長度（相對 body
 HEAD_RAY_MIN_PX = 60.0
 
 # ===== 鼻子接觸區域（梯形）參數：依身體尺度等比適配 =====
-# 厚度以「公分」描述，再依 CAT_BODY_LENGTH_CM 轉換到像素；寬度以 body_len 比例描述。
-CAT_BODY_LENGTH_CM = 40.0
-NOSE_CONTACT_TRAPEZOID_THICKNESS_CM = 2.2
-NOSE_CONTACT_TRAPEZOID_THICKNESS_SCALE = 1.0
+# 厚度原本用「公分」描述、再依 CAT_BODY_LENGTH_CM=40.0（假設每隻貓都一樣長）
+# 換算回像素，但這個換算展開後其實等於 (THICKNESS_CM/CAT_BODY_LENGTH_CM) * eff_len
+# ——一個固定比例乘上 eff_len，跟寬度的算法本質相同，公分只是繞了一圈、沒有
+# 真的量到任何物理尺寸（單眼 2D 攝影機本來就無法分辨「大貓遠」跟「小貓近」）。
+# 這裡直接用比例常數，數值等於原本 2.2/40=0.055，不改變任何輸出結果。
+NOSE_CONTACT_TRAPEZOID_HEIGHT_RATIO = 0.055
+NOSE_CONTACT_TRAPEZOID_HEIGHT_SCALE = 1.0
 NOSE_CONTACT_TRAPEZOID_TOP_WIDTH_RATIO = 0.10
 NOSE_CONTACT_TRAPEZOID_BOTTOM_WIDTH_RATIO = 0.20
 NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE = 1.15
+
+# ===== 梯形大小依脊椎彎曲程度自適應（用 mid_back_dist_pct 當彎曲指標）=====
+# body_len（chest-hip 直線距離）量的是「兩點直線距離」；貓拱背/蜷曲時，
+# 沿著脊椎的真實身體長度其實比這條直線長（跟手肘彎曲時，手腕到肩膀的
+# 直線距離比整隻手臂的實際長度短，是同一種幾何道理）。彎越多，body_len
+# 對「真實體長」低估得越嚴重，用 body_len 算出來的梯形也會跟著被低估。
+# mid_back 偏離 chest-hip 中點的比例（mid_back_dist_pct）剛好可以當這個
+# 彎曲程度的指標：打直時 mid_back 接近落在 chest-hip 直線上、偏離量小；
+# 拱背/蜷曲時偏離量變大。這裡把 mid_back_dist_pct 線性映射成一個縮放倍率，
+# 套用在梯形尺寸上做回補；下面兩組端點皆為經驗值，未來有更多實測資料時
+# 可以再校準。
+CURVATURE_PCT_MIN = 0.0     # mid_back_dist_pct 下限：脊椎接近打直
+CURVATURE_PCT_MAX = 30.0    # mid_back_dist_pct 上限：明顯拱背/蜷曲
+CURVATURE_BOOST_MIN = 0.85  # 對應 CURVATURE_PCT_MIN 時的梯形縮放倍率（打直時縮小）
+CURVATURE_BOOST_MAX = 1.20  # 對應 CURVATURE_PCT_MAX 時的梯形縮放倍率（拱背時放大）
+
+
+def _curvature_size_boost(mid_back_dist_pct):
+    """依 mid_back_dist_pct（脊椎彎曲指標）算出梯形尺寸縮放倍率。
+
+    在 [CURVATURE_PCT_MIN, CURVATURE_PCT_MAX] 之間線性內插到
+    [CURVATURE_BOOST_MIN, CURVATURE_BOOST_MAX]，超出範圍則夾在端點值，
+    不會無限放大/縮小。mid_back 信心不足（傳入 NaN）時回傳 1.0（不調整，
+    退回原本固定尺寸的行為）。
+    """
+    if not np.isfinite(mid_back_dist_pct):
+        return 1.0
+    span = CURVATURE_PCT_MAX - CURVATURE_PCT_MIN
+    if span <= 1e-9:
+        return 1.0
+    t = (mid_back_dist_pct - CURVATURE_PCT_MIN) / span
+    t = max(0.0, min(1.0, t))
+    return CURVATURE_BOOST_MIN + t * (CURVATURE_BOOST_MAX - CURVATURE_BOOST_MIN)
+
+
+# ===== 梯形方向跨幀穩定化參數（移植自 plugins/lick_stage/analyzer.py 與
+# plugins/lick_stage/config.py 的同款設計；此腳本刻意不 import 模組化程式碼，
+# 獨立重新實作一份，數值與主專案保持一致）=====
+# trap_perp（耳線方向）對雜訊極敏感（耳間距短時尤其明顯），用「翻轉感知
+# EMA」+「連續反向才確認」跨幀穩定：新向量若與前一幀方向明顯相反，先翻轉
+# 再平均，只有連續多幀都反向（例如貓真的轉身）才接受為真正的方向改變。
+TRAP_PERP_EMA_ALPHA = 0.35  # trap_perp 的 EMA 係數（越小越穩定，但轉向反應越慢）
+TRAP_PERP_FLIP_MARGIN = 0.15  # 內積需低於 -此值才視為「真的反向」，避免邊界抖動誤觸發翻轉
+TRAP_PERP_FLIP_CONFIRM_FRAMES = 6  # 連續幾幀都判定為「反向」才接受為真正的方向改變
+# 耳線（right_ear - left_ear）長度相對身體尺度過短時（貓面對鏡頭、耳朵
+# 距離很近或部分重疊），正規化會把像素級關鍵點雜訊放大成大角度擺動——實測
+# 發現光靠 EAR_CONF_THRESHOLD 信心門檻不夠，就算信心值夠高，耳距太短時
+# 方向依然會不穩定，需要額外的幾何長度門檻才能真正擋掉這類低品質候選值。
+TRAP_PERP_MIN_EAR_LINE_NORM_RATIO = 0.12  # 耳距 / eff_len 需 >= 此值才信任耳線方向
+# 是否啟用上面這道耳距長度門檻；關閉時 trap_perp 只看 EAR_CONF_THRESHOLD
+# 信心門檻（回到「兩耳信心都夠就直接信任耳線方向」的行為），方便對照測試
+# 兩種判定方式的效果差異。耳距百分比（ear_line_norm/eff_len）會顯示在畫面
+# 診斷面板上（info_lines 的 EAR_LINE 那一行），不管此開關是否啟用都會顯示。
+# 這裡的值只是「程式啟動時的預設值」——執行時按鍵盤「g」鍵可即時切換
+# （見 main() 內 _handle_key() 的 g 分支），用 global 直接改寫這個模組層級
+# 變數，compute_head_body_target_geometry() 每幀讀取的就是改完之後的值。
+ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE = True
+
+# trap_dir（梯形延伸方向）只在第一次出現時強制指向影像下方一次（鼻子/短邊
+# 保證在上面），之後單純用翻轉感知 EMA 平滑追蹤，不再每幀重新驗證，避免在
+# 梯形接近水平時造成硬性翻轉抖動。
+TRAP_DIR_EMA_ALPHA = 0.12
+TRAP_DIR_FLIP_MARGIN = 0.15
+# 安全網：純 EMA 追蹤不會主動驗證 y>=0，若初始化那一刻剛好定出不符合直覺
+# 的方向，後續會一路穩定地錯下去。這裡連續多幀都偏離 y>=0（不是臨界抖動，
+# 是真的卡在錯誤方向）才強制翻轉拉回，平常的水平抖動只會讓計數器歸零。
+TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES = 10
 # 梯形與四肢區域的等效身體長度範圍，限縮遠近情境的尺寸差距：
 #   MIN：貓較遠（body_len 小）時的下限，防止區域過小漏判
 #   MAX：貓較近（body_len 大）時的上限，防止區域過大誤觸
@@ -187,12 +267,49 @@ NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE = 1.15
 CONTACT_BODY_LEN_MIN_PX = 300.0
 CONTACT_BODY_LEN_MAX_PX = 650.0
 
+# ===== 體長滾動視窗穩定化（解決貓轉頭造成的透視縮短誤判成距離變遠）=====
+# 貓面向/背向鏡頭時，chest-hip 的 2D 投影距離會透視縮短，即使貓跟鏡頭的
+# 實際距離沒變，導致梯形/四肢區域被誤判成「變遠了」而跟著縮小。透視縮短
+# 只會讓 body_len 變小、不會變大，且通常只是幾幀的暫時現象；真正的距離
+# 變化（貓真的走近/走遠）是持續性趨勢，會讓整個視窗一起往同個方向移動。
+# 用最近 N 幀 body_len 的高百分位數當尺寸參考，就能把暫時性的透視縮短
+# 「補回來」，同時仍然抓得到真正的距離變化。
+BODY_LEN_STABLE_WINDOW_FRAMES = 30
+# N：滾動視窗涵蓋的幀數。這裡的「幀」是指主迴圈實際處理（未被 frame_step
+# 跳過）的幀，速率等於 model_input_fps（預設 TARGET_MODEL_FPS=30），所以
+# 30 幀約等於 1 秒——足夠蓋過一次轉頭看鏡頭的時間（通常 <1 秒），但不會長
+# 到讓真正的距離變化要等太久才反映出來。
+BODY_LEN_STABLE_PERCENTILE = 90.0
+# 取視窗內第幾百分位數當作參考值。用「高百分位數」而非最大值，是為了同時
+# 抵抗兩種雜訊：關鍵點偵測偶爾抖動出一個異常大的 body_len（用最大值會直接
+# 採用這個離群值；90 百分位數則會被忽略），以及轉頭造成的暫時性縮小（90
+# 百分位數落在視窗內「較大」的那一段，能撐住正常值、不被少數低點拉低）。
+BODY_LEN_STABLE_MIN_SAMPLES = 10
+# 視窗內至少要累積這麼多個有效樣本，才啟用穩定化；樣本不足時（例如影片剛
+# 開始、貓剛進畫面）直接退回用這一幀自己的 body_len，避免用太少樣本算出來
+# 的百分位數不可靠。
+
 # ===== 四肢接觸區域參數：全部可調、依身體尺度等比適配 =====
 LIMB_CONTACT_SCALE = 1.0
-LIMB_PAW_CIRCLE_RADIUS_RATIO = 0.04
+LIMB_PAW_CIRCLE_RADIUS_RATIO = 0.05
 LIMB_STRIP_HALF_WIDTH_RATIO = 0.055
 # 長條端點與圓邊界的間隙（0=貼齊圓邊界；>0 可留細縫提升視覺分離感）
 LIMB_STRIP_EDGE_GAP_RATIO = 0.0
+
+# ===== 尾巴（TAIL）區域：與 FL/FR/HL/HR/BODY 同等地位 =====
+# 定義沿用主專案 plugins/lick_stage/ext_body_zones/config.py 的
+# TAIL_STRIP_HW_RATIO（該姊妹 plugin 本身「從不繪製任何 overlay」，統計數字
+# 只會出現在 Node-RED 面板/CSV），移植到這支診斷腳本後一併納入
+# infer_nearest_nose_region() 的「最近者勝出」命中仲裁與統計累計。
+#
+# 原本這裡還有一個「胸部（NECK_CHEST）」區域（圓心＝KP_CHEST），但實測發現
+# 結構性誤判：鼻子接觸梯形永遠從鼻尖出發，而 KP_CHEST 天生就緊貼鼻子/嘴巴
+# 附近（頭頸解剖上的必然結果），只要貓咪低頭理毛——不管實際舔的是哪個部位
+# ——梯形貼近鼻尖那一端幾乎必然掃過胸口，跟主專案 ext_body_zones 的 HEAD
+# 區域「鼻子必然落在自己頭部圓圈內」是同一種偏誤。縮小半徑治標不治本（誤判
+# 來源是「離梯形起點太近」，不是「範圍太大」），因此比照 HEAD 的既有處理
+# 方式，直接移除 NECK_CHEST 判定與 overlay，不參與命中仲裁與統計。
+TAIL_STRIP_HALF_WIDTH_RATIO = 0.045  # 尾巴長條寬度 = 身體長度 × 此比例
 
 # ===== 舔舐時間量測（依接觸區域累積秒數） =====
 # 說明：時間僅做「各部位舔舐時長」記錄，不作為舔舐成立判準。
@@ -218,6 +335,40 @@ LICK_ZONE_FL = "FL"
 LICK_ZONE_FR = "FR"
 LICK_ZONE_HL = "HL"
 LICK_ZONE_HR = "HR"
+
+# 四肢腳掌接觸圈顏色（BGR）：(命中時填色, 命中時邊框, 待命填色, 待命邊框)。
+# 與主專案 plugins/lick_stage/overlay.py 的 _PAW_COLORS 保持一致，讓四肢
+# 在畫面上各自維持穩定、可辨識的色相（而非四肢共用同一組紅/灰色），
+# 才能一眼看出鼻子最近的是哪一肢。
+_PAW_COLORS: dict[str, tuple] = {
+    "FL": ((0,  165, 255), (80,  220, 255), (0,   80, 140), (60, 140, 180)),  # 橙色
+    "FR": ((0,  255, 100), (120, 255, 180), (0,  110,  45), (60, 160,  90)),  # 萊姆綠
+    "HL": ((220,  50, 200), (255, 120, 240), (120, 20, 120), (160, 60, 170)), # 洋紅
+    "HR": ((255, 230,   0), (255, 255, 100), (140, 120,  0), (180, 160, 60)), # 青黃
+}
+_PAW_DEFAULT = ((180, 180, 180), (230, 230, 230), (90, 90, 90), (140, 140, 140))
+
+# 尾巴（TAIL）：與 FL/FR/HL/HR/BODY 同等地位的正式命中區域，一併參與
+# infer_nearest_nose_region() 的最近區域仲裁與統計累計
+# （entry_count/lick_time_sec/bout_count/bout_time_sec，見 ZONE_STAT_KEYS）。
+# NECK_CHEST 已因結構性誤判移除（見 TAIL_STRIP_HALF_WIDTH_RATIO 定義處說明）。
+# 配色比照 _PAW_COLORS 的 4 元組慣例：(命中填色, 命中邊框, 待命填色, 待命邊框)，
+# 色相刻意跟既有四肢/身體橢圓（綠/藍/橙/萊姆/洋紅/黃）都不同，避免視覺混淆。
+LICK_ZONE_TAIL = "TAIL"
+_TAIL_COLOR = ((50, 100, 190), (90, 140, 230), (25, 55, 95), (55, 85, 125))            # 棕橙
+
+# ===== 部位統計的完整區域清單（entry_count/lick_time_sec/bout_count/bout_time_sec
+# 等 per-zone 統計字典皆以此為 key 初始化，新增/移除區域只需改這裡） =====
+ZONE_STAT_KEYS = ("BODY", "FL", "FR", "HL", "HR", "TAIL")
+# 左下角統計面板顯示順序與文字/顏色（(顯示文字, 顏色)）
+_PANEL_ZONE_DISPLAY = {
+    "BODY": ("BODY ", (255, 255, 165)),
+    "FL": ("FL   ", (130, 230, 255)),
+    "FR": ("FR   ", (130, 230, 255)),
+    "HL": ("HL   ", (130, 230, 255)),
+    "HR": ("HR   ", (130, 230, 255)),
+    "TAIL": ("TAIL ", (90, 140, 230)),
+}
 
 CSV_FIELDNAMES = [
     "video_idx",
@@ -256,21 +407,25 @@ CSV_FIELDNAMES = [
     "limb_entry_count_hl",
     "limb_entry_count_hr",
     "target_entry_count",
+    "tail_entry_count",
     "lick_time_body_sec",
     "lick_time_fl_sec",
     "lick_time_fr_sec",
     "lick_time_hl_sec",
     "lick_time_hr_sec",
+    "lick_time_tail_sec",
     "lick_sec_per_hit_body",
     "lick_sec_per_hit_fl",
     "lick_sec_per_hit_fr",
     "lick_sec_per_hit_hl",
     "lick_sec_per_hit_hr",
+    "lick_sec_per_hit_tail",
     "lick_pref_pct_body",
     "lick_pref_pct_fl",
     "lick_pref_pct_fr",
     "lick_pref_pct_hl",
     "lick_pref_pct_hr",
+    "lick_pref_pct_tail",
     "nose_detected",
     "gaze_forward_norm",
     "gaze_lateral_norm",
@@ -317,6 +472,11 @@ SUMMARY_FIELDNAMES = [
     "hr_pref_pct",
     "hr_bout_count",
     "hr_mean_bout_sec",
+    "tail_hits",
+    "tail_lick_time_sec",
+    "tail_pref_pct",
+    "tail_bout_count",
+    "tail_mean_bout_sec",
 ]
 
 
@@ -807,9 +967,11 @@ def _safe_mean(total_value, count):
 
 
 def _zone_key_from_label(label):
-    """將命中標籤映射為統計區域鍵：BODY/FL/FR/HL/HR/NO_TARGET。"""
+    """將命中標籤映射為統計區域鍵：BODY/FL/FR/HL/HR/TAIL/NO_TARGET。"""
     if label == LICK_ZONE_CENTER:
         return "BODY"
+    if label == LICK_ZONE_TAIL:
+        return "TAIL"
     group = _limb_zone_group(label)
     if group in ("FL", "FR", "HL", "HR"):
         return group
@@ -817,9 +979,9 @@ def _zone_key_from_label(label):
 
 
 def _canonical_contact_label(label):
-    """將任意子區域標籤歸一化為嚴格計數標籤：BODY/FL/FR/HL/HR/NO_TARGET。"""
-    if label == LICK_ZONE_CENTER:
-        return LICK_ZONE_CENTER
+    """將任意子區域標籤歸一化為嚴格計數標籤：BODY_CENTER/FL/FR/HL/HR/TAIL/NO_TARGET。"""
+    if label in (LICK_ZONE_CENTER, LICK_ZONE_TAIL):
+        return label
     group = _limb_zone_group(label)
     if group in ("FL", "FR", "HL", "HR"):
         return group
@@ -918,6 +1080,42 @@ def compute_limb_strip_targets(kpts, kpt_conf, body_len):
                 "mid": 0.5 * (strip_start + strip_end),
             }
         )
+
+    return strip_targets
+
+
+def compute_tail_strip_targets(kpts, kpt_conf, body_len):
+    """建立尾巴（Root→Mid→Tip）長條區域，純視覺參考用（見
+    TAIL_STRIP_HALF_WIDTH_RATIO 定義處說明：不參與鼻部命中仲裁/統計）。
+    三個尾巴關鍵點信心值皆需 > LIMB_CONF_THRESHOLD 才建立，否則回傳空列表。
+    """
+    if kpts is None or kpt_conf is None:
+        return []
+    tail_ok = (
+        kpt_conf[KP_TAIL_ROOT] > LIMB_CONF_THRESHOLD
+        and kpt_conf[KP_TAIL_MID] > LIMB_CONF_THRESHOLD
+        and kpt_conf[KP_TAIL_TIP] > LIMB_CONF_THRESHOLD
+    )
+    if not tail_ok:
+        return []
+
+    eff_len = max(CONTACT_BODY_LEN_MIN_PX, min(CONTACT_BODY_LEN_MAX_PX, body_len))
+    half_width = max(1e-6, eff_len * TAIL_STRIP_HALF_WIDTH_RATIO * LIMB_CONTACT_SCALE)
+
+    root = np.asarray(kpts[KP_TAIL_ROOT], dtype=np.float64)
+    mid = np.asarray(kpts[KP_TAIL_MID], dtype=np.float64)
+    tip = np.asarray(kpts[KP_TAIL_TIP], dtype=np.float64)
+
+    strip_targets = []
+    for p0, p1 in ((root, mid), (mid, tip)):
+        seg = p1 - p0
+        seg_len = math.hypot(seg[0], seg[1])
+        if seg_len < 1e-6:
+            continue
+        corners = _compute_strip_corners(p0, p1, half_width)
+        if corners is None:
+            continue
+        strip_targets.append({"p0": p0, "p1": p1, "corners": corners, "half_width": half_width})
 
     return strip_targets
 
@@ -1027,6 +1225,19 @@ def infer_nearest_nose_region(target_geom):
         if math.isfinite(d_group):
             candidates.append((d_group, group))
 
+    tail_min_dist = float("inf")
+    for strip in target_geom.get("tail_strip_targets", []):
+        corners = strip.get("corners")
+        if corners is None or len(corners) != 4:
+            continue
+        if not _polygons_intersect(nose_trap_pts, np.asarray(corners, dtype=np.float64)):
+            continue
+        d_tail = float(_distance_point_to_segment(nose_pt, strip["p0"], strip["p1"]))
+        if d_tail < tail_min_dist:
+            tail_min_dist = d_tail
+    if math.isfinite(tail_min_dist):
+        candidates.append((tail_min_dist, LICK_ZONE_TAIL))
+
     if not candidates:
         return LICK_ZONE_NO_TARGET, float("nan"), False
 
@@ -1034,8 +1245,14 @@ def infer_nearest_nose_region(target_geom):
     return label_min, float(d_min), True
 
 
-def compute_head_body_target_geometry(kpts, kpt_conf):
-    """建立頭部/身體幾何資料與區域，供可視化與鼻子命中判定。"""
+def compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=None):
+    """建立頭部/身體幾何資料與區域，供可視化與鼻子命中判定。
+
+    stable_body_len：可選，由呼叫端（main() 迴圈）算好的「穩定體長參考」
+    （最近 N 幀 body_len 的高百分位數，見 BODY_LEN_STABLE_* 常數），用來決定
+    梯形/四肢區域/軀幹橢圓的大小，避免貓轉頭造成的透視縮短被誤判成距離變遠。
+    傳 None（預設）時退回用這一幀自己的 body_len，行為等同沒有這個功能。
+    """
     if kpts is None or kpt_conf is None:
         return None
 
@@ -1078,47 +1295,89 @@ def compute_head_body_target_geometry(kpts, kpt_conf):
     body_normal = np.array([-body_axis_unit[1], body_axis_unit[0]], dtype=np.float64)
 
     body_center = 0.5 * (chest + hip)
-    region_rx = max(1e-6, 0.5 * BODY_REGION_ELLIPSE_WIDTH_RATIO * body_len)
-    region_ry = max(1e-6, 0.5 * BODY_REGION_ELLIPSE_HEIGHT_RATIO * body_len)
 
-    ray_len = max(HEAD_RAY_MIN_PX, HEAD_RAY_LENGTH_RATIO * body_len)
+    # mid_back 與 chest-hip 中點（body_center）的距離、正規化為 body_len 的
+    # 百分比，供畫面診斷面板顯示。mid_back 標記在貓咪背部正上方，不在
+    # chest-hip 連線上，這裡單純看兩點的直線距離，不做投影或垂直分解。
+    mid_back_ok = kpt_conf[KP_MID_BACK] > EAR_CONF_THRESHOLD
+    mid_back_dist_pct = float("nan")
+    if mid_back_ok:
+        mid_back = np.asarray(kpts[KP_MID_BACK], dtype=np.float64)
+        mid_back_dist_pct = 100.0 * math.hypot(
+            mid_back[0] - body_center[0], mid_back[1] - body_center[1]
+        ) / body_len
+
+    # 梯形尺寸的彎曲回補倍率：見 CURVATURE_* 常數與 _curvature_size_boost()
+    # 說明。只套用在梯形（nose_trap_height/trap_top_half/trap_bottom_half），
+    # 不影響四肢區域與軀幹橢圓，因為那些的大小跟脊椎彎曲程度沒有直接關係。
+    curvature_boost = _curvature_size_boost(mid_back_dist_pct)
+
+    # size_ref_len：決定梯形/四肢區域/軀幹橢圓「大小」的體長參考。優先用
+    # 呼叫端（main() 迴圈）傳入的 stable_body_len——最近 N 幀 body_len 的高
+    # 百分位數，可以濾掉貓轉頭面向/背向鏡頭時透視縮短造成的暫時性縮小；
+    # 樣本不足（例如影片剛開始、貓剛出現）時 fallback 用這一幀的原始 body_len。
+    # 注意：body_axis_unit/body_normal/mid_back_dist_pct 仍然用這一幀「原始」
+    # body_len 不變，因為那些是描述「現在真實幾何」的量，不是尺寸大小的決策，
+    # 不應該被過去幾幀的歷史值影響。
+    size_ref_len = stable_body_len if stable_body_len is not None else body_len
+
+    region_rx = max(1e-6, 0.5 * BODY_REGION_ELLIPSE_WIDTH_RATIO * size_ref_len)
+    region_ry = max(1e-6, 0.5 * BODY_REGION_ELLIPSE_HEIGHT_RATIO * size_ref_len)
+
+    ray_len = max(HEAD_RAY_MIN_PX, HEAD_RAY_LENGTH_RATIO * size_ref_len)
     ray_end = ear_center + head_dir * ray_len
 
-    limb_targets = compute_limb_joint_targets(kpts, kpt_conf, body_len)
-    limb_strip_targets = compute_limb_strip_targets(kpts, kpt_conf, body_len)
+    limb_targets = compute_limb_joint_targets(kpts, kpt_conf, size_ref_len)
+    limb_strip_targets = compute_limb_strip_targets(kpts, kpt_conf, size_ref_len)
+    tail_strip_targets = compute_tail_strip_targets(kpts, kpt_conf, size_ref_len)
 
     # 梯形尺寸以等效身體長度計算，clamp 到 [MIN, MAX] 以縮小遠近情境差距
-    eff_len = max(CONTACT_BODY_LEN_MIN_PX, min(CONTACT_BODY_LEN_MAX_PX, body_len))
-    pixels_per_cm = max(eff_len / max(CAT_BODY_LENGTH_CM, 1e-6), 1e-6)
+    eff_len = max(CONTACT_BODY_LEN_MIN_PX, min(CONTACT_BODY_LEN_MAX_PX, size_ref_len))
 
     nose_trap_height = max(
         1e-6,
-        NOSE_CONTACT_TRAPEZOID_THICKNESS_CM
-        * NOSE_CONTACT_TRAPEZOID_THICKNESS_SCALE
-        * pixels_per_cm,
+        NOSE_CONTACT_TRAPEZOID_HEIGHT_RATIO * NOSE_CONTACT_TRAPEZOID_HEIGHT_SCALE * curvature_boost * eff_len,
     )
     trap_top_half = max(
         1e-6,
-        0.5 * NOSE_CONTACT_TRAPEZOID_TOP_WIDTH_RATIO * NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE * eff_len,
+        0.5 * NOSE_CONTACT_TRAPEZOID_TOP_WIDTH_RATIO * NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE * curvature_boost * eff_len,
     )
     trap_bottom_half = max(
         1e-6,
-        0.5 * NOSE_CONTACT_TRAPEZOID_BOTTOM_WIDTH_RATIO * NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE * eff_len,
+        0.5 * NOSE_CONTACT_TRAPEZOID_BOTTOM_WIDTH_RATIO * NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE * curvature_boost * eff_len,
     )
 
-    # 梯形橫軸（trap_perp）方向取決於左右耳信心是否均 > EAR_CONF_THRESHOLD：
-    #   兩耳皆有效（left_ok and right_ok）→ 平行耳中線（right_ear - left_ear 方向）
-    #   否則                               → fallback 身體法向量（body_normal）
+    # 梯形橫軸（trap_perp）方向是否信任耳線，需同時滿足兩個條件：
+    #   1) 左右耳關鍵點信心皆 > EAR_CONF_THRESHOLD（見該常數定義處註解）
+    #   2) ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE 開啟時，耳距（像素）相對
+    #      身體尺度 eff_len 也要 >= TRAP_PERP_MIN_EAR_LINE_NORM_RATIO——實測
+    #      發現光靠信心門檻不夠：耳距過短時（貓面對鏡頭、耳朵距離很近或
+    #      部分重疊）正規化會把像素級關鍵點雜訊放大成大角度擺動，梯形方向
+    #      會不穩定，就算信心值夠高也一樣，所以需要額外的幾何長度判定才能
+    #      真正穩住方向；此開關關閉時只看信心門檻，方便對照測試。
+    #   皆滿足 → 平行耳中線（right_ear - left_ear 方向）
+    #   否則   → fallback chest-hip 方向向量（body_axis_unit，
+    #            trap_perp 平行 chest-hip，trap_dir 因此垂直 chest-hip，
+    #            沿身體側邊方向延伸）
+    use_ear_line = False
+    ear_line_length_pct = float("nan")  # 耳距佔 eff_len 的百分比，供畫面診斷面板顯示
     if left_ok and right_ok:
         ear_line = right_ear - left_ear
         ear_line_norm = math.hypot(ear_line[0], ear_line[1])
         if ear_line_norm > 1e-9:
-            trap_perp = ear_line / ear_line_norm
-        else:
-            trap_perp = np.array([1.0, 0.0], dtype=np.float64)
-    else:
-        # 雙耳不完整時，回退到身體法向量作為梯形橫軸。
-        trap_perp = body_normal.copy()
+            ear_line_length_pct = 100.0 * ear_line_norm / eff_len
+            length_ok = (
+                not ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE
+                or ear_line_norm >= TRAP_PERP_MIN_EAR_LINE_NORM_RATIO * eff_len
+            )
+            if length_ok:
+                trap_perp = ear_line / ear_line_norm
+                use_ear_line = True
+
+    if not use_ear_line:
+        # 雙耳不完整、或耳距太短不可信時，回退到 chest-hip 方向向量
+        # （body_axis_unit）作為梯形橫軸。
+        trap_perp = body_axis_unit.copy()
         trap_perp_norm = math.hypot(trap_perp[0], trap_perp[1])
         if trap_perp_norm < 1e-9:
             trap_perp = np.array([1.0, 0.0], dtype=np.float64)
@@ -1161,9 +1420,177 @@ def compute_head_body_target_geometry(kpts, kpt_conf):
         "region_ry": region_ry,
         "limb_targets": limb_targets,
         "limb_strip_targets": limb_strip_targets,
+        # 尾巴長條：與四肢/身體同等地位的命中候選區域。
+        "tail_strip_targets": tail_strip_targets,
         "nose_contact_trapezoid": nose_contact_trapezoid,
         "nose_contact_thickness_px": nose_trap_height,
+        # 以下四項是這一幀「獨立計算」的候選值（未做跨幀穩定化），供呼叫端
+        # 的 _stabilize_nose_trapezoid_geometry() 做跨幀 EMA 平滑後覆寫
+        # nose_contact_trapezoid，本函式自身仍保持無狀態的純函式設計。
+        "trap_perp": trap_perp,
+        "trap_dir": trap_dir,
+        "trap_top_half": trap_top_half,
+        "trap_bottom_half": trap_bottom_half,
+        # 耳距佔 eff_len 的百分比（NaN＝雙耳信心不足，無法計算）；
+        # 供畫面診斷面板顯示，跟 TRAP_PERP_MIN_EAR_LINE_NORM_RATIO 對照。
+        "ear_line_length_pct": ear_line_length_pct,
+        "used_ear_line_for_trap_perp": use_ear_line,
+        # mid_back 到 chest-hip 中點的距離 / body_len（NaN＝mid_back 信心不足）
+        "mid_back_dist_pct": mid_back_dist_pct,
+        # 套用在梯形尺寸上的彎曲回補倍率（1.0＝未調整，mid_back 信心不足時恒為 1.0）
+        "curvature_boost": curvature_boost,
     }
+
+
+# ===== 鼻子接觸梯形跨幀方向穩定化 =====
+# 以下函式移植自 plugins/lick_stage/contact_regions.py、head_direction.py、
+# analyzer.py 的同款設計（含「trap_dir 長期卡死」的安全網修正）。此腳本刻意
+# 不 import 模組化程式碼，獨立重新實作一份，數值與行為與主專案保持一致，
+# 讓兩邊的梯形視覺化不會因為穩定化邏輯不同而出現不一致的結果。
+
+
+def _trap_dir_from_perp(trap_perp):
+    """梯形延伸方向：永遠垂直於 trap_perp，且強制指向影像座標系「下方」
+    （y 遞增方向）。貓咪不會倒著理毛，鼻子（窄邊）在畫面上方、身體端
+    （寬邊）在畫面下方是可以無條件成立的物理假設，不需要依賴「朝向
+    body_center」這種容易被雜訊干擾的判斷。
+    """
+    trap_perp = np.asarray(trap_perp, dtype=np.float64)
+    d = np.array([-float(trap_perp[1]), float(trap_perp[0])], dtype=np.float64)
+    if d[1] < 0.0:
+        d = -d
+    return d
+
+
+def _stabilize_direction_vector(new_vec, prev_vec, alpha, flip_margin):
+    """單位方向向量的翻轉感知 EMA：新向量若與前一幀方向明顯相反，先翻轉
+    再平均，避免兩個反向向量直接相加抵消（否則向量長度會被拉向 0，重新
+    正規化後方向變成任意雜訊，也就是「梯形亂轉」的不穩定成因）。
+
+    flip_margin 在垂直邊界（內積接近 0）附近留緩衝區，避免逐幀雜訊在
+    邊界來回時把符號反覆翻來翻去；只有內積明顯小於 -flip_margin 才視為
+    真正的反向讀數。
+    """
+    new_vec = np.asarray(new_vec, dtype=np.float64)
+    norm = math.hypot(float(new_vec[0]), float(new_vec[1]))
+    if norm < 1e-9:
+        return np.asarray(prev_vec, dtype=np.float64) if prev_vec is not None else new_vec
+    new_vec = new_vec / norm
+
+    if prev_vec is None:
+        return new_vec
+
+    prev_vec = np.asarray(prev_vec, dtype=np.float64)
+    dot = float(np.dot(new_vec, prev_vec))
+    if dot < -flip_margin:
+        new_vec = -new_vec
+        dot = -dot
+
+    blended = alpha * new_vec + (1.0 - alpha) * prev_vec
+    b_norm = math.hypot(float(blended[0]), float(blended[1]))
+    return blended / b_norm if b_norm > 1e-9 else new_vec
+
+
+def _stabilize_trap_perp_vector(new_vec, prev_vec, flip_streak):
+    """trap_perp 的翻轉感知 EMA + 連續反向確認：單幀雜訊造成的反向讀數，
+    flip_streak 累加但未達門檻時直接沿用前一個穩定方向（不理會這幀雜訊，
+    也不 blend 進去，避免被拖著慢慢偏移）；連續
+    TRAP_PERP_FLIP_CONFIRM_FRAMES 幀都反向，視為真正的方向改變（例如貓
+    整個轉身），直接採用新方向，不強行沿用舊方向造成永久卡死。
+
+    Returns (stable_vec, new_flip_streak)。
+    """
+    new_vec = np.asarray(new_vec, dtype=np.float64)
+    norm = float(math.hypot(new_vec[0], new_vec[1]))
+    if norm < 1e-9:
+        return (prev_vec if prev_vec is not None else new_vec), 0
+    unit = new_vec / norm
+
+    if prev_vec is None:
+        return unit, 0
+
+    dot = float(np.dot(unit, prev_vec))
+    if dot < -TRAP_PERP_FLIP_MARGIN:
+        flip_streak += 1
+        if flip_streak >= TRAP_PERP_FLIP_CONFIRM_FRAMES:
+            return unit, 0  # 真正的方向改變：直接採用新方向，重置計數
+        return prev_vec, flip_streak  # 尚未確認：視為雜訊，沿用前一穩定方向
+
+    stable = _stabilize_direction_vector(unit, prev_vec, TRAP_PERP_EMA_ALPHA, TRAP_PERP_FLIP_MARGIN)
+    return stable, 0
+
+
+def _build_nose_trapezoid(nose, trap_perp, trap_dir, trap_top_half, trap_bottom_half, trap_height):
+    """依已決定的方向向量重建梯形四角點（純函式，不含任何跨幀狀態）。"""
+    nose = np.asarray(nose, dtype=np.float64)
+    trap_perp = np.asarray(trap_perp, dtype=np.float64)
+    trap_dir = np.asarray(trap_dir, dtype=np.float64)
+    trap_bottom = nose + trap_dir * trap_height
+    return np.asarray(
+        [
+            nose - trap_perp * trap_top_half,
+            nose + trap_perp * trap_top_half,
+            trap_bottom + trap_perp * trap_bottom_half,
+            trap_bottom - trap_perp * trap_bottom_half,
+        ],
+        dtype=np.float64,
+    )
+
+
+def stabilize_nose_trapezoid_geometry(target_geom, prev_trap_perp, prev_trap_dir, trap_perp_flip_streak, trap_dir_wrong_streak):
+    """跨幀穩定鼻子接觸梯形角度，回傳穩定化後的梯形與更新後的狀態。
+
+    trap_perp 用「翻轉感知 EMA + 連續反向確認」跨幀穩定。trap_dir 只在
+    「第一次出現」（prev_trap_dir 尚未建立）時，用 _trap_dir_from_perp()
+    強制指向影像下方一次，之後單純用翻轉感知 EMA 平滑追蹤，不再每幀重新
+    強制 y>=0——每幀都強制的做法會在梯形接近水平（耳朵連線接近垂直，例如
+    貓側躺頭部縮短時）時，對一個已經被 EMA 穩定收斂、y 分量微小的結果又做
+    一次無緩衝的硬性翻轉，反而引入新的不穩定。
+
+    但純 EMA 追蹤完全信任 prev_trap_dir 這個歷史錨點，若初始化那一刻剛好
+    定出不符合直覺的方向，後續會一路「穩定地」錯下去、沒有機制自我修正。
+    因此在 EMA 之後另外加一道獨立安全網：連續好幾幀
+    （TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES）都偏離 y>=0 時才強制翻轉拉回，
+    平常的臨界水平抖動只會讓計數器歸零、不會觸發翻轉。
+
+    Returns (trapezoid, stable_perp, stable_dir, new_flip_streak, new_wrong_streak)。
+    target_geom 為 None 或缺少 trap_perp 欄位時，直接回傳輸入狀態不變。
+    """
+    if target_geom is None:
+        return None, prev_trap_perp, prev_trap_dir, trap_perp_flip_streak, trap_dir_wrong_streak
+
+    raw_perp = target_geom.get("trap_perp")
+    if raw_perp is None:
+        return (
+            target_geom.get("nose_contact_trapezoid"),
+            prev_trap_perp,
+            prev_trap_dir,
+            trap_perp_flip_streak,
+            trap_dir_wrong_streak,
+        )
+
+    stable_perp, new_flip_streak = _stabilize_trap_perp_vector(raw_perp, prev_trap_perp, trap_perp_flip_streak)
+
+    if prev_trap_dir is None:
+        stable_dir = _trap_dir_from_perp(stable_perp)
+        new_wrong_streak = 0
+    else:
+        dir_candidate = np.array([-float(stable_perp[1]), float(stable_perp[0])], dtype=np.float64)
+        stable_dir = _stabilize_direction_vector(dir_candidate, prev_trap_dir, TRAP_DIR_EMA_ALPHA, TRAP_DIR_FLIP_MARGIN)
+        new_wrong_streak = trap_dir_wrong_streak
+        if float(stable_dir[1]) < 0.0:
+            new_wrong_streak += 1
+            if new_wrong_streak >= TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES:
+                stable_dir = -stable_dir
+                new_wrong_streak = 0
+        else:
+            new_wrong_streak = 0
+
+    trapezoid = _build_nose_trapezoid(
+        target_geom["nose"], stable_perp, stable_dir,
+        target_geom["trap_top_half"], target_geom["trap_bottom_half"], target_geom["nose_contact_thickness_px"],
+    )
+    return trapezoid, stable_perp, stable_dir, new_flip_streak, new_wrong_streak
 
 
 def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, conf_thresh=DRAW_KP_CONF_THRESHOLD):
@@ -1383,28 +1810,24 @@ def main():
     video_processed_total = 0
     playback_pass = 0
     ema_kpts = None
+    # 鼻子接觸梯形跨幀方向穩定化狀態（見 stabilize_nose_trapezoid_geometry()）
+    prev_trap_perp = None
+    prev_trap_dir = None
+    trap_perp_flip_streak = 0
+    trap_dir_wrong_streak = 0
+    # 體長滾動視窗（見 BODY_LEN_STABLE_* 常數），用來穩定梯形/四肢區域大小
+    body_len_window = deque(maxlen=BODY_LEN_STABLE_WINDOW_FRAMES)
     state_history = deque(maxlen=STATE_SMOOTH_WINDOW)
-    target_entry_count = 0
-    limb_entry_count_fl = 0
-    limb_entry_count_fr = 0
-    limb_entry_count_hl = 0
-    limb_entry_count_hr = 0
+    # 各區域統計字典（BODY/FL/FR/HL/HR/CHEST/TAIL，見 ZONE_STAT_KEYS）。
+    # 用字典而非逐區域各開一個變數，是因為新增 CHEST/TAIL 後區域數來到 7 個，
+    # 逐一命名變數需要在 reset/累計/收斂/面板/CSV 共 6 處以上同步增減欄位，
+    # 任何一處漏改都會讓「統計得到的區域」與「畫面上參與判定的區域」不一致
+    # ——字典只需要 ZONE_STAT_KEYS 這一個地方定義區域清單即可。
+    entry_count = {k: 0 for k in ZONE_STAT_KEYS}
     prev_nose_region_label = LICK_ZONE_NO_TARGET
-    lick_time_body_sec = 0.0
-    lick_time_fl_sec = 0.0
-    lick_time_fr_sec = 0.0
-    lick_time_hl_sec = 0.0
-    lick_time_hr_sec = 0.0
-    bout_count_body = 0
-    bout_count_fl = 0
-    bout_count_fr = 0
-    bout_count_hl = 0
-    bout_count_hr = 0
-    bout_time_body_sec = 0.0
-    bout_time_fl_sec = 0.0
-    bout_time_fr_sec = 0.0
-    bout_time_hl_sec = 0.0
-    bout_time_hr_sec = 0.0
+    lick_time_sec = {k: 0.0 for k in ZONE_STAT_KEYS}
+    bout_count = {k: 0 for k in ZONE_STAT_KEYS}
+    bout_time_sec = {k: 0.0 for k in ZONE_STAT_KEYS}
     active_bout_zone = LICK_ZONE_NO_TARGET
     active_bout_sec = 0.0
 
@@ -1425,11 +1848,8 @@ def main():
 
     def _reset_video_state(cap_obj=None, seek_start=False):
         nonlocal raw_frame_idx, processed_frame_idx, ema_kpts
-        nonlocal target_entry_count, limb_entry_count_fl, limb_entry_count_fr, limb_entry_count_hl, limb_entry_count_hr
+        nonlocal prev_trap_perp, prev_trap_dir, trap_perp_flip_streak, trap_dir_wrong_streak
         nonlocal prev_nose_region_label, is_paused
-        nonlocal lick_time_body_sec, lick_time_fl_sec, lick_time_fr_sec, lick_time_hl_sec, lick_time_hr_sec
-        nonlocal bout_count_body, bout_count_fl, bout_count_fr, bout_count_hl, bout_count_hr
-        nonlocal bout_time_body_sec, bout_time_fl_sec, bout_time_fr_sec, bout_time_hl_sec, bout_time_hr_sec
         nonlocal active_bout_zone, active_bout_sec
 
         if seek_start and cap_obj is not None:
@@ -1438,89 +1858,48 @@ def main():
         raw_frame_idx = 0
         processed_frame_idx = 0
         ema_kpts = None
+        prev_trap_perp = None
+        prev_trap_dir = None
+        trap_perp_flip_streak = 0
+        trap_dir_wrong_streak = 0
+        body_len_window.clear()
         detector.reset_track()  # 避免上一段影片鎖定的貓誤帶到新的一段
         state_history.clear()
-        target_entry_count = 0
-        limb_entry_count_fl = 0
-        limb_entry_count_fr = 0
-        limb_entry_count_hl = 0
-        limb_entry_count_hr = 0
+        for k in ZONE_STAT_KEYS:
+            entry_count[k] = 0
+            lick_time_sec[k] = 0.0
+            bout_count[k] = 0
+            bout_time_sec[k] = 0.0
         prev_nose_region_label = LICK_ZONE_NO_TARGET
-        lick_time_body_sec = 0.0
-        lick_time_fl_sec = 0.0
-        lick_time_fr_sec = 0.0
-        lick_time_hl_sec = 0.0
-        lick_time_hr_sec = 0.0
-        bout_count_body = 0
-        bout_count_fl = 0
-        bout_count_fr = 0
-        bout_count_hl = 0
-        bout_count_hr = 0
-        bout_time_body_sec = 0.0
-        bout_time_fl_sec = 0.0
-        bout_time_fr_sec = 0.0
-        bout_time_hl_sec = 0.0
-        bout_time_hr_sec = 0.0
         active_bout_zone = LICK_ZONE_NO_TARGET
         active_bout_sec = 0.0
         is_paused = False
 
     def _increase_contact_counter(label):
-        nonlocal target_entry_count, limb_entry_count_fl, limb_entry_count_fr, limb_entry_count_hl, limb_entry_count_hr
-        group = _limb_zone_group(label)
-        if label == LICK_ZONE_CENTER:
-            target_entry_count += 1
-        elif group == "FL":
-            limb_entry_count_fl += 1
-        elif group == "FR":
-            limb_entry_count_fr += 1
-        elif group == "HL":
-            limb_entry_count_hl += 1
-        elif group == "HR":
-            limb_entry_count_hr += 1
+        key = _zone_key_from_label(label)
+        if key in entry_count:
+            entry_count[key] += 1
 
     def _accumulate_lick_time(label, dt_sec):
-        nonlocal lick_time_body_sec, lick_time_fl_sec, lick_time_fr_sec, lick_time_hl_sec, lick_time_hr_sec
         if dt_sec <= 0.0:
             return
-        group = _limb_zone_group(label)
-        if label == LICK_ZONE_CENTER:
-            lick_time_body_sec += dt_sec
-        elif group == "FL":
-            lick_time_fl_sec += dt_sec
-        elif group == "FR":
-            lick_time_fr_sec += dt_sec
-        elif group == "HL":
-            lick_time_hl_sec += dt_sec
-        elif group == "HR":
-            lick_time_hr_sec += dt_sec
+        key = _zone_key_from_label(label)
+        if key in lick_time_sec:
+            lick_time_sec[key] += dt_sec
 
     def _close_active_bout():
-        nonlocal bout_count_body, bout_count_fl, bout_count_fr, bout_count_hl, bout_count_hr
-        nonlocal bout_time_body_sec, bout_time_fl_sec, bout_time_fr_sec, bout_time_hl_sec, bout_time_hr_sec
         nonlocal active_bout_zone, active_bout_sec
 
-        if active_bout_zone == "BODY" and active_bout_sec > 0.0:
-            bout_count_body += 1
-            bout_time_body_sec += active_bout_sec
-        elif active_bout_zone == "FL" and active_bout_sec > 0.0:
-            bout_count_fl += 1
-            bout_time_fl_sec += active_bout_sec
-        elif active_bout_zone == "FR" and active_bout_sec > 0.0:
-            bout_count_fr += 1
-            bout_time_fr_sec += active_bout_sec
-        elif active_bout_zone == "HL" and active_bout_sec > 0.0:
-            bout_count_hl += 1
-            bout_time_hl_sec += active_bout_sec
-        elif active_bout_zone == "HR" and active_bout_sec > 0.0:
-            bout_count_hr += 1
-            bout_time_hr_sec += active_bout_sec
+        if active_bout_zone in bout_count and active_bout_sec > 0.0:
+            bout_count[active_bout_zone] += 1
+            bout_time_sec[active_bout_zone] += active_bout_sec
 
         active_bout_zone = LICK_ZONE_NO_TARGET
         active_bout_sec = 0.0
 
     def _handle_key(key, cap_obj, in_pause_loop=False):
         nonlocal show_overlay_info, window_scale, switch_delta, stop_all, is_paused, ui_mode
+        global ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE
 
         if key == ord("q") or key == 3:  # 3 = Ctrl+C 被 OpenCV 視窗攔截
             print("\n使用者中斷：q / Ctrl+C")
@@ -1530,6 +1909,13 @@ def main():
         if key == ord("i"):
             show_overlay_info = not show_overlay_info
             print(f"\n資訊面板: {'顯示' if show_overlay_info else '隱藏'}")
+            return "handled"
+        if key == ord("g"):
+            # 執行期切換 ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE（模組層級全域變數，
+            # compute_head_body_target_geometry() 每幀都會讀取這個全域值，故這裡
+            # 用 global 直接改寫即可生效，不需要額外傳參數）。
+            ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE = not ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE
+            print(f"\n耳距長度門檻 (g): {'開啟' if ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE else '關閉'}")
             return "handled"
         if key == ord("m"):
             ui_mode = UI_MODE_DET_ONLY if ui_mode == UI_MODE_FULL else UI_MODE_FULL
@@ -1786,6 +2172,13 @@ def main():
                         dist_norm = dist_px / body_scale
             else:
                 ema_kpts = None
+                # 貓完全消失（非暫時的 front_view_guard）才重置梯形方向歷史，
+                # 避免下次貓重新出現時沿用一段時間前、已經過時的方向
+                prev_trap_perp = None
+                prev_trap_dir = None
+                trap_perp_flip_streak = 0
+                trap_dir_wrong_streak = 0
+                body_len_window.clear()
                 state_history.append(STATE_NO_CAT)
 
             # 僅在 DET_ONLY 模式下才需要此副本（用於暫停畫面）
@@ -1799,7 +2192,27 @@ def main():
 
             target_geom = None
             if not front_view_guard and full_ui_mode:
-                target_geom = compute_head_body_target_geometry(kpts, kpt_conf)
+                # 用「目前累積的視窗」（不含這一幀，這一幀的 body_len 還沒算出來）
+                # 算出穩定體長參考，餵給這一幀的幾何計算決定梯形/四肢區域大小；
+                # 晚一幀才反映最新樣本，但體長變化本來就是緩慢的，這個延遲可忽略。
+                stable_body_len = (
+                    float(np.percentile(body_len_window, BODY_LEN_STABLE_PERCENTILE))
+                    if len(body_len_window) >= BODY_LEN_STABLE_MIN_SAMPLES
+                    else None
+                )
+                target_geom = compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=stable_body_len)
+                if target_geom is not None:
+                    body_len_window.append(target_geom["body_len"])  # 這一幀的原始值，供下一幀使用
+                    (
+                        stable_trapezoid,
+                        prev_trap_perp,
+                        prev_trap_dir,
+                        trap_perp_flip_streak,
+                        trap_dir_wrong_streak,
+                    ) = stabilize_nose_trapezoid_geometry(
+                        target_geom, prev_trap_perp, prev_trap_dir, trap_perp_flip_streak, trap_dir_wrong_streak,
+                    )
+                    target_geom["nose_contact_trapezoid"] = stable_trapezoid
 
             if kpts is not None and kpt_conf is not None:
                 if front_view_guard:
@@ -1900,6 +2313,10 @@ def main():
             th_shadow = max(2, int(3 * _ov))
 
             norm_value = f"{dist_norm:.5f}" if valid_norm else "N/A"
+            ear_line_text = "EAR_LINE:N/A"
+            ear_line_color = (130, 130, 130)
+            curve_boost_text = "CURVE_BOOST:1.00x"
+            curve_boost_color = (130, 130, 130)
             head_ear_angle_text = "NEA:N/A"
             lick_zone = LICK_ZONE_NO_TARGET
             lick_axis_score = float("nan")
@@ -1931,6 +2348,28 @@ def main():
                 body_c = target_geom["body_center"]
                 region_rx = float(target_geom["region_rx"])
                 region_ry = float(target_geom["region_ry"])
+
+                # 耳距佔 eff_len 的百分比，跟 TRAP_PERP_MIN_EAR_LINE_NORM_RATIO
+                # 門檻對照顯示，方便觀察耳線抖動與梯形方向切換的關係。
+                _ear_pct = target_geom.get("ear_line_length_pct", float("nan"))
+                if np.isfinite(_ear_pct):
+                    _used_ear = bool(target_geom.get("used_ear_line_for_trap_perp"))
+                    ear_line_text = (
+                        f"EAR_LINE:{_ear_pct:.1f}%/min{TRAP_PERP_MIN_EAR_LINE_NORM_RATIO * 100:.0f}% "
+                        f"gate:{'ON' if ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE else 'OFF'} "
+                        f"used:{'Y' if _used_ear else 'N'}"
+                    )
+                    ear_line_color = (120, 255, 120) if _used_ear else (255, 180, 120)
+
+                # mid_back 到 chest-hip 中點的距離 / body_len，純顯示用，
+                # 不影響任何判定邏輯。改成直接標在畫面上 mid_back 關鍵點旁邊
+                # （見下方 draw_ui 區塊），不再放進文字面板。
+                _mb_pct = target_geom.get("mid_back_dist_pct", float("nan"))
+
+                # 梯形彎曲回補倍率：1.0 = 未調整（mid_back 信心不足時恒為 1.0）
+                _cboost = target_geom.get("curvature_boost", 1.0)
+                curve_boost_text = f"CURVE_BOOST:{_cboost:.2f}x"
+                curve_boost_color = (140, 255, 220) if abs(_cboost - 1.0) > 1e-6 else (130, 130, 130)
 
                 # 目標判定以鼻子梯形與各區域交集為準；若同時命中多區域，取最近區域。
                 nearest_target_label, nearest_target_t, nearest_target_hit = infer_nearest_nose_region(target_geom)
@@ -1976,6 +2415,20 @@ def main():
                     cv2.circle(display, body_pt, max(3, int(4 * _ov)), (255, 255, 255), -1, cv2.LINE_AA)
                     cv2.circle(display, body_pt, max(2, int(2 * _ov)), (0, 180, 255), -1, cv2.LINE_AA)
 
+                    # mid_back 偏離百分比：直接標在該關鍵點旁邊（取代原本文字
+                    # 面板的 MID_BACK 那一行），信心不足或算不出來時不畫。
+                    if kpt_conf[KP_MID_BACK] > EAR_CONF_THRESHOLD and np.isfinite(_mb_pct):
+                        mb_kpt = kpts[KP_MID_BACK]
+                        mb_x = int(mb_kpt[0] * sx + 10 * _ov)
+                        mb_y = int(mb_kpt[1] * sy - 14 * _ov)
+                        mb_text = f"{_mb_pct:.1f}%"
+                        mb_fs = 0.65 * _ov
+                        # 黑色描邊不受 heavy_fx 開關限制、一律都畫，確保在任何背景
+                        # 顏色下都看得清楚（之前只在 heavy_fx 開啟時才畫描邊，預設
+                        # ENABLE_HEAVY_VISUAL_EFFECTS=False 時反而沒有描邊、太淺）
+                        cv2.putText(display, mb_text, (mb_x, mb_y), cv2.FONT_HERSHEY_SIMPLEX, mb_fs, (0, 0, 0), max(3, int(4 * _ov)), cv2.LINE_AA)
+                        cv2.putText(display, mb_text, (mb_x, mb_y), cv2.FONT_HERSHEY_SIMPLEX, mb_fs, (255, 40, 220), max(1, int(2 * _ov)), cv2.LINE_AA)
+
                     # 局部身體區域（半透明橢圓）
                     region_center = body_pt
                     axes = (max(2, int(region_rx * sx)), max(2, int(region_ry * sy)))
@@ -1986,6 +2439,24 @@ def main():
                     body_is_nearest = nearest_target_hit and nearest_target_label == LICK_ZONE_CENTER
                     fill_color = (30, 210, 80) if body_is_nearest else (80, 120, 240)
                     cv2.ellipse(region_overlay, region_center, axes, angle_deg, 0, 360, fill_color, -1, cv2.LINE_AA)
+
+                    # 尾巴（TAIL）：與 FL/FR/HL/HR/BODY 同等地位的正式命中區域，
+                    # 命中/待命雙態切換比照 _PAW_COLORS 慣例。
+                    # ref_poly_borders 項目： (pts, border_color, label_text, label_pos)
+                    ref_poly_borders = []
+                    tail_is_nearest = nearest_target_hit and nearest_target_label == LICK_ZONE_TAIL
+
+                    tail_fill = _TAIL_COLOR[0] if tail_is_nearest else _TAIL_COLOR[2]
+                    tail_border = _TAIL_COLOR[1] if tail_is_nearest else _TAIL_COLOR[3]
+                    tail_strips = target_geom.get("tail_strip_targets", [])
+                    for i, strip in enumerate(tail_strips):
+                        corners = strip.get("corners")
+                        if corners is None or len(corners) != 4:
+                            continue
+                        pts = np.array([[int(p[0] * sx), int(p[1] * sy)] for p in corners], dtype=np.int32)
+                        cv2.fillConvexPoly(region_overlay, pts, tail_fill, cv2.LINE_AA)
+                        label_pos = (int(strip["p0"][0] * sx), int(strip["p0"][1] * sy)) if i == 0 else None
+                        ref_poly_borders.append((pts, tail_border, "TAIL" if label_pos else None, label_pos))
 
                     limb_targets = target_geom.get("limb_targets", [])
                     limb_strip_targets = target_geom.get("limb_strip_targets", [])
@@ -2017,21 +2488,38 @@ def main():
                         zone_group = str(limb.get("group", ""))
                         is_nearest_limb = nearest_target_hit and nearest_target_label == zone_group
 
-                        fill = (40, 40, 255) if is_nearest_limb else (110, 110, 110)
-                        border = (30, 240, 255) if is_nearest_limb else (180, 180, 180)
-
-                        cv2.circle(region_overlay, (cx, cy), rr, fill, -1, cv2.LINE_AA)
-                        limb_draw_data.append(((cx, cy), rr, border))
+                        cols = _PAW_COLORS.get(zone_group, _PAW_DEFAULT)
+                        fill = cols[0] if is_nearest_limb else cols[2]
+                        border = cols[1] if is_nearest_limb else cols[3]
+                        limb_draw_data.append(((cx, cy), rr, fill, border, is_nearest_limb))
 
                     # 區域半透明圖層一次混合，避免每幀多次 copy/addWeighted。
+                    # 腳掌圈不併入這層淡混合（0.35），改用下方獨立的高透明度
+                    # 混合，避免四肢代表色被跟身體橢圓/四肢長條同等程度稀釋
+                    # 而難以分辨（與主專案 overlay.py 的 paw_ov 二次混合設計一致）。
                     cv2.addWeighted(region_overlay, 0.35, display, 0.76, 0, display)
                     cv2.ellipse(display, region_center, axes, angle_deg, 0, 360, (230, 230, 230), max(1, int(1 * _ov)), cv2.LINE_AA)
                     for pts, border in strip_draw_data:
                         cv2.polylines(display, [pts], True, border, max(1, int(1 * _ov)), cv2.LINE_AA)
 
-                    for center_px, rr, border in limb_draw_data:
-                        cx, cy = center_px
-                        cv2.circle(display, (cx, cy), rr, border, max(1, int(1 * _ov)), cv2.LINE_AA)
+                    # 尾巴邊框與固定小標籤
+                    for pts, border, label, label_pos in ref_poly_borders:
+                        cv2.polylines(display, [pts], True, border, max(1, int(1 * _ov)), cv2.LINE_AA)
+                        if label and label_pos is not None:
+                            lx, ly = label_pos
+                            cv2.putText(display, label, (lx + int(6 * _ov), ly), cv2.FONT_HERSHEY_SIMPLEX, 0.38 * _ov, (0, 0, 0), max(2, int(2 * _ov)), cv2.LINE_AA)
+                            cv2.putText(display, label, (lx + int(6 * _ov), ly), cv2.FONT_HERSHEY_SIMPLEX, 0.38 * _ov, border, max(1, int(1 * _ov)), cv2.LINE_AA)
+
+                    if limb_draw_data:
+                        paw_ov = display.copy()
+                        for (cx, cy), rr, fill, _border, _is_nearest in limb_draw_data:
+                            cv2.circle(paw_ov, (cx, cy), rr, fill, -1, cv2.LINE_AA)
+                        cv2.addWeighted(paw_ov, 0.72, display, 0.28, 0, display)
+                        for (cx, cy), rr, _fill, border, is_nearest_limb in limb_draw_data:
+                            thick = max(2, int(2 * _ov)) if is_nearest_limb else max(1, int(1 * _ov))
+                            cv2.circle(display, (cx, cy), rr, border, thick, cv2.LINE_AA)
+                            # 白色細邊圈，確保在任何背景色下都能與四肢代表色區隔
+                            cv2.circle(display, (cx, cy), rr + max(1, int(1 * _ov)), (255, 255, 255), 1, cv2.LINE_AA)
 
                     if trap_draw is not None:
                         fill_final = (80, 255, 170) if nearest_target_hit else (60, 170, 255)
@@ -2159,6 +2647,8 @@ def main():
             if draw_overlay_info:
                 info_lines = [
                     (f"N:{norm_value}", (40, 230, 40) if valid_norm else (0, 140, 255)),
+                    (ear_line_text, ear_line_color),
+                    (curve_boost_text, curve_boost_color),
                     (
                         f"VIEW_GUARD:{front_view_guard_reason} bs_norm:{body_scale_norm:.4f} be_ratio:{body_ear_ratio:.3f}"
                         if front_view_guard and np.isfinite(body_scale_norm)
@@ -2181,60 +2671,24 @@ def main():
                     cv2.putText(display, line_text, (info_x, y), cv2.FONT_HERSHEY_SIMPLEX, info_fs, line_color, th_main, cv2.LINE_AA)
 
             # 左下角統計面板：碼表 + 狀態 + 各區域次數/時長/sec-per-hit
-            body_hits = int(target_entry_count)
-            fl_hits = int(limb_entry_count_fl)
-            fr_hits = int(limb_entry_count_fr)
-            hl_hits = int(limb_entry_count_hl)
-            hr_hits = int(limb_entry_count_hr)
-
-            body_sph = _safe_sec_per_hit(lick_time_body_sec, body_hits)
-            fl_sph = _safe_sec_per_hit(lick_time_fl_sec, fl_hits)
-            fr_sph = _safe_sec_per_hit(lick_time_fr_sec, fr_hits)
-            hl_sph = _safe_sec_per_hit(lick_time_hl_sec, hl_hits)
-            hr_sph = _safe_sec_per_hit(lick_time_hr_sec, hr_hits)
-            total_lick_time_sec = (
-                lick_time_body_sec + lick_time_fl_sec + lick_time_fr_sec + lick_time_hl_sec + lick_time_hr_sec
-            )
-            body_pref_pct = _safe_pref_pct(lick_time_body_sec, total_lick_time_sec)
-            fl_pref_pct = _safe_pref_pct(lick_time_fl_sec, total_lick_time_sec)
-            fr_pref_pct = _safe_pref_pct(lick_time_fr_sec, total_lick_time_sec)
-            hl_pref_pct = _safe_pref_pct(lick_time_hl_sec, total_lick_time_sec)
-            hr_pref_pct = _safe_pref_pct(lick_time_hr_sec, total_lick_time_sec)
+            # （BODY/FL/FR/HL/HR/CHEST/TAIL，見 ZONE_STAT_KEYS）
+            hits = {k: int(entry_count[k]) for k in ZONE_STAT_KEYS}
+            sph = {k: _safe_sec_per_hit(lick_time_sec[k], hits[k]) for k in ZONE_STAT_KEYS}
+            total_lick_time_sec = sum(lick_time_sec[k] for k in ZONE_STAT_KEYS)
+            pref_pct = {k: _safe_pref_pct(lick_time_sec[k], total_lick_time_sec) for k in ZONE_STAT_KEYS}
 
             if draw_overlay_info:
                 timer_line = (f"TIMER {time_sec:7.2f}s", (255, 250, 120))
-                panel_lines = [
-                    (
-                        f"BODY  C:{body_hits:3d}  T:{lick_time_body_sec:6.2f}s  PREF:{body_pref_pct:5.1f}%"
-                        if np.isfinite(body_pref_pct)
-                        else f"BODY  C:{body_hits:3d}  T:{lick_time_body_sec:6.2f}s  PREF:N/A",
-                        (255, 255, 165),
-                    ),
-                    (
-                        f"FL    C:{fl_hits:3d}  T:{lick_time_fl_sec:6.2f}s  PREF:{fl_pref_pct:5.1f}%"
-                        if np.isfinite(fl_pref_pct)
-                        else f"FL    C:{fl_hits:3d}  T:{lick_time_fl_sec:6.2f}s  PREF:N/A",
-                        (130, 230, 255),
-                    ),
-                    (
-                        f"FR    C:{fr_hits:3d}  T:{lick_time_fr_sec:6.2f}s  PREF:{fr_pref_pct:5.1f}%"
-                        if np.isfinite(fr_pref_pct)
-                        else f"FR    C:{fr_hits:3d}  T:{lick_time_fr_sec:6.2f}s  PREF:N/A",
-                        (130, 230, 255),
-                    ),
-                    (
-                        f"HL    C:{hl_hits:3d}  T:{lick_time_hl_sec:6.2f}s  PREF:{hl_pref_pct:5.1f}%"
-                        if np.isfinite(hl_pref_pct)
-                        else f"HL    C:{hl_hits:3d}  T:{lick_time_hl_sec:6.2f}s  PREF:N/A",
-                        (130, 230, 255),
-                    ),
-                    (
-                        f"HR    C:{hr_hits:3d}  T:{lick_time_hr_sec:6.2f}s  PREF:{hr_pref_pct:5.1f}%"
-                        if np.isfinite(hr_pref_pct)
-                        else f"HR    C:{hr_hits:3d}  T:{lick_time_hr_sec:6.2f}s  PREF:N/A",
-                        (130, 230, 255),
-                    ),
-                ]
+                panel_lines = []
+                for k in ZONE_STAT_KEYS:
+                    disp, col = _PANEL_ZONE_DISPLAY[k]
+                    p = pref_pct[k]
+                    line = (
+                        f"{disp} C:{hits[k]:3d}  T:{lick_time_sec[k]:6.2f}s  PREF:{p:5.1f}%"
+                        if np.isfinite(p)
+                        else f"{disp} C:{hits[k]:3d}  T:{lick_time_sec[k]:6.2f}s  PREF:N/A"
+                    )
+                    panel_lines.append((line, col))
 
                 panel_pad_x = int(3 * _ov)
                 panel_pad_y = int(6 * _ov)
@@ -2292,26 +2746,30 @@ def main():
                         "limb_hit_fr_frame": limb_hit_fr,
                         "limb_hit_hl_frame": limb_hit_hl,
                         "limb_hit_hr_frame": limb_hit_hr,
-                        "limb_entry_count_fl": int(limb_entry_count_fl),
-                        "limb_entry_count_fr": int(limb_entry_count_fr),
-                        "limb_entry_count_hl": int(limb_entry_count_hl),
-                        "limb_entry_count_hr": int(limb_entry_count_hr),
-                        "target_entry_count": int(target_entry_count),
-                        "lick_time_body_sec": round(lick_time_body_sec, 4),
-                        "lick_time_fl_sec": round(lick_time_fl_sec, 4),
-                        "lick_time_fr_sec": round(lick_time_fr_sec, 4),
-                        "lick_time_hl_sec": round(lick_time_hl_sec, 4),
-                        "lick_time_hr_sec": round(lick_time_hr_sec, 4),
-                        "lick_sec_per_hit_body": round(body_sph, 6) if np.isfinite(body_sph) else "",
-                        "lick_sec_per_hit_fl": round(fl_sph, 6) if np.isfinite(fl_sph) else "",
-                        "lick_sec_per_hit_fr": round(fr_sph, 6) if np.isfinite(fr_sph) else "",
-                        "lick_sec_per_hit_hl": round(hl_sph, 6) if np.isfinite(hl_sph) else "",
-                        "lick_sec_per_hit_hr": round(hr_sph, 6) if np.isfinite(hr_sph) else "",
-                        "lick_pref_pct_body": round(body_pref_pct, 6) if np.isfinite(body_pref_pct) else "",
-                        "lick_pref_pct_fl": round(fl_pref_pct, 6) if np.isfinite(fl_pref_pct) else "",
-                        "lick_pref_pct_fr": round(fr_pref_pct, 6) if np.isfinite(fr_pref_pct) else "",
-                        "lick_pref_pct_hl": round(hl_pref_pct, 6) if np.isfinite(hl_pref_pct) else "",
-                        "lick_pref_pct_hr": round(hr_pref_pct, 6) if np.isfinite(hr_pref_pct) else "",
+                        "limb_entry_count_fl": int(entry_count["FL"]),
+                        "limb_entry_count_fr": int(entry_count["FR"]),
+                        "limb_entry_count_hl": int(entry_count["HL"]),
+                        "limb_entry_count_hr": int(entry_count["HR"]),
+                        "target_entry_count": int(entry_count["BODY"]),
+                        "tail_entry_count": int(entry_count["TAIL"]),
+                        "lick_time_body_sec": round(lick_time_sec["BODY"], 4),
+                        "lick_time_fl_sec": round(lick_time_sec["FL"], 4),
+                        "lick_time_fr_sec": round(lick_time_sec["FR"], 4),
+                        "lick_time_hl_sec": round(lick_time_sec["HL"], 4),
+                        "lick_time_hr_sec": round(lick_time_sec["HR"], 4),
+                        "lick_time_tail_sec": round(lick_time_sec["TAIL"], 4),
+                        "lick_sec_per_hit_body": round(sph["BODY"], 6) if np.isfinite(sph["BODY"]) else "",
+                        "lick_sec_per_hit_fl": round(sph["FL"], 6) if np.isfinite(sph["FL"]) else "",
+                        "lick_sec_per_hit_fr": round(sph["FR"], 6) if np.isfinite(sph["FR"]) else "",
+                        "lick_sec_per_hit_hl": round(sph["HL"], 6) if np.isfinite(sph["HL"]) else "",
+                        "lick_sec_per_hit_hr": round(sph["HR"], 6) if np.isfinite(sph["HR"]) else "",
+                        "lick_sec_per_hit_tail": round(sph["TAIL"], 6) if np.isfinite(sph["TAIL"]) else "",
+                        "lick_pref_pct_body": round(pref_pct["BODY"], 6) if np.isfinite(pref_pct["BODY"]) else "",
+                        "lick_pref_pct_fl": round(pref_pct["FL"], 6) if np.isfinite(pref_pct["FL"]) else "",
+                        "lick_pref_pct_fr": round(pref_pct["FR"], 6) if np.isfinite(pref_pct["FR"]) else "",
+                        "lick_pref_pct_hl": round(pref_pct["HL"], 6) if np.isfinite(pref_pct["HL"]) else "",
+                        "lick_pref_pct_hr": round(pref_pct["HR"], 6) if np.isfinite(pref_pct["HR"]) else "",
+                        "lick_pref_pct_tail": round(pref_pct["TAIL"], 6) if np.isfinite(pref_pct["TAIL"]) else "",
                         "nose_detected": int(nose_ok),
                         "gaze_forward_norm": round(gaze_forward_norm, 4) if np.isfinite(gaze_forward_norm) else "",
                         "gaze_lateral_norm": round(gaze_lateral_norm, 4) if np.isfinite(gaze_lateral_norm) else "",
@@ -2385,74 +2843,44 @@ def main():
         # 影片結束前收斂尚未關閉的 bout
         _close_active_bout()
 
-        # 每影片摘要（一支影片一列）
+        # 每影片摘要（一支影片一列，BODY/FL/FR/HL/HR/CHEST/TAIL 共 7 區）
         video_elapsed_sec = processed_frame_idx / max(model_input_fps, 1e-6)
-        total_lick_time_sec_video = (
-            lick_time_body_sec + lick_time_fl_sec + lick_time_fr_sec + lick_time_hl_sec + lick_time_hr_sec
-        )
-        body_pref_pct_video = _safe_pref_pct(lick_time_body_sec, total_lick_time_sec_video)
-        fl_pref_pct_video = _safe_pref_pct(lick_time_fl_sec, total_lick_time_sec_video)
-        fr_pref_pct_video = _safe_pref_pct(lick_time_fr_sec, total_lick_time_sec_video)
-        hl_pref_pct_video = _safe_pref_pct(lick_time_hl_sec, total_lick_time_sec_video)
-        hr_pref_pct_video = _safe_pref_pct(lick_time_hr_sec, total_lick_time_sec_video)
+        total_lick_time_sec_video = sum(lick_time_sec[k] for k in ZONE_STAT_KEYS)
+        pref_pct_video = {
+            k: _safe_pref_pct(lick_time_sec[k], total_lick_time_sec_video) for k in ZONE_STAT_KEYS
+        }
+        mean_bout_sec = {
+            k: _safe_mean(bout_time_sec[k], bout_count[k]) for k in ZONE_STAT_KEYS
+        }
 
-        pref_candidates = [
-            ("BODY", body_pref_pct_video),
-            ("FL", fl_pref_pct_video),
-            ("FR", fr_pref_pct_video),
-            ("HL", hl_pref_pct_video),
-            ("HR", hr_pref_pct_video),
-        ]
-        pref_candidates_valid = [x for x in pref_candidates if np.isfinite(x[1])]
+        pref_candidates_valid = [(k, pref_pct_video[k]) for k in ZONE_STAT_KEYS if np.isfinite(pref_pct_video[k])]
         if pref_candidates_valid:
             dominant_pref_zone, dominant_pref_pct = max(pref_candidates_valid, key=lambda x: x[1])
         else:
             dominant_pref_zone, dominant_pref_pct = LICK_ZONE_NO_TARGET, float("nan")
 
-        body_mean_bout_sec = _safe_mean(bout_time_body_sec, bout_count_body)
-        fl_mean_bout_sec = _safe_mean(bout_time_fl_sec, bout_count_fl)
-        fr_mean_bout_sec = _safe_mean(bout_time_fr_sec, bout_count_fr)
-        hl_mean_bout_sec = _safe_mean(bout_time_hl_sec, bout_count_hl)
-        hr_mean_bout_sec = _safe_mean(bout_time_hr_sec, bout_count_hr)
+        summary_row = {
+            "video_idx": current_video_idx + 1,
+            "video_path": str(video_path),
+            "source_fps": round(source_fps, 6),
+            "model_input_fps": round(model_input_fps, 6),
+            "processed_frames": int(processed_frame_idx),
+            "video_elapsed_sec": round(video_elapsed_sec, 6),
+            "total_lick_time_sec": round(total_lick_time_sec_video, 6),
+            "dominant_pref_zone": dominant_pref_zone,
+            "dominant_pref_pct": round(dominant_pref_pct, 6) if np.isfinite(dominant_pref_pct) else "",
+        }
+        for key, prefix in (("BODY", "body"), ("FL", "fl"), ("FR", "fr"), ("HL", "hl"),
+                            ("HR", "hr"), ("TAIL", "tail")):
+            pp = pref_pct_video[key]
+            mb = mean_bout_sec[key]
+            summary_row[f"{prefix}_hits"] = int(entry_count[key])
+            summary_row[f"{prefix}_lick_time_sec"] = round(lick_time_sec[key], 6)
+            summary_row[f"{prefix}_pref_pct"] = round(pp, 6) if np.isfinite(pp) else ""
+            summary_row[f"{prefix}_bout_count"] = int(bout_count[key])
+            summary_row[f"{prefix}_mean_bout_sec"] = round(mb, 6) if np.isfinite(mb) else ""
 
-        summary_rows.append(
-            {
-                "video_idx": current_video_idx + 1,
-                "video_path": str(video_path),
-                "source_fps": round(source_fps, 6),
-                "model_input_fps": round(model_input_fps, 6),
-                "processed_frames": int(processed_frame_idx),
-                "video_elapsed_sec": round(video_elapsed_sec, 6),
-                "total_lick_time_sec": round(total_lick_time_sec_video, 6),
-                "dominant_pref_zone": dominant_pref_zone,
-                "dominant_pref_pct": round(dominant_pref_pct, 6) if np.isfinite(dominant_pref_pct) else "",
-                "body_hits": int(target_entry_count),
-                "body_lick_time_sec": round(lick_time_body_sec, 6),
-                "body_pref_pct": round(body_pref_pct_video, 6) if np.isfinite(body_pref_pct_video) else "",
-                "body_bout_count": int(bout_count_body),
-                "body_mean_bout_sec": round(body_mean_bout_sec, 6) if np.isfinite(body_mean_bout_sec) else "",
-                "fl_hits": int(limb_entry_count_fl),
-                "fl_lick_time_sec": round(lick_time_fl_sec, 6),
-                "fl_pref_pct": round(fl_pref_pct_video, 6) if np.isfinite(fl_pref_pct_video) else "",
-                "fl_bout_count": int(bout_count_fl),
-                "fl_mean_bout_sec": round(fl_mean_bout_sec, 6) if np.isfinite(fl_mean_bout_sec) else "",
-                "fr_hits": int(limb_entry_count_fr),
-                "fr_lick_time_sec": round(lick_time_fr_sec, 6),
-                "fr_pref_pct": round(fr_pref_pct_video, 6) if np.isfinite(fr_pref_pct_video) else "",
-                "fr_bout_count": int(bout_count_fr),
-                "fr_mean_bout_sec": round(fr_mean_bout_sec, 6) if np.isfinite(fr_mean_bout_sec) else "",
-                "hl_hits": int(limb_entry_count_hl),
-                "hl_lick_time_sec": round(lick_time_hl_sec, 6),
-                "hl_pref_pct": round(hl_pref_pct_video, 6) if np.isfinite(hl_pref_pct_video) else "",
-                "hl_bout_count": int(bout_count_hl),
-                "hl_mean_bout_sec": round(hl_mean_bout_sec, 6) if np.isfinite(hl_mean_bout_sec) else "",
-                "hr_hits": int(limb_entry_count_hr),
-                "hr_lick_time_sec": round(lick_time_hr_sec, 6),
-                "hr_pref_pct": round(hr_pref_pct_video, 6) if np.isfinite(hr_pref_pct_video) else "",
-                "hr_bout_count": int(bout_count_hr),
-                "hr_mean_bout_sec": round(hr_mean_bout_sec, 6) if np.isfinite(hr_mean_bout_sec) else "",
-            }
-        )
+        summary_rows.append(summary_row)
 
         if stop_all:
             break

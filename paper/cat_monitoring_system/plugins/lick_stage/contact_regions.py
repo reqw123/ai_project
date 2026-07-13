@@ -144,6 +144,22 @@ def trap_dir_from_perp(trap_perp):
     return d
 
 
+def _curvature_size_boost(mid_back_dist_pct: float) -> float:
+    """依 mid_back_dist_pct（脊椎彎曲程度）線性內插出梯形縮放倍率。
+
+    純函式：輸入 NaN 或無效值時回傳 1.0（不縮放），維持與未量測 mid_back
+    時完全一致的既有行為。內插區間見 config.py 的 CURVATURE_* 常數說明。
+    """
+    if mid_back_dist_pct is None or not math.isfinite(mid_back_dist_pct):
+        return 1.0
+    span = _C.CURVATURE_PCT_MAX - _C.CURVATURE_PCT_MIN
+    if span <= 1e-9:
+        return 1.0
+    t = (mid_back_dist_pct - _C.CURVATURE_PCT_MIN) / span
+    t = max(0.0, min(1.0, t))
+    return _C.CURVATURE_BOOST_MIN + t * (_C.CURVATURE_BOOST_MAX - _C.CURVATURE_BOOST_MIN)
+
+
 def build_nose_trapezoid(nose, trap_perp, trap_dir, trap_top_half, trap_bot_half, trap_height):
     """Pure helper: rebuild the 4 trapezoid corners from already-decided direction
     vectors. Exposed so callers (e.g. LickAnalyzer) can recompute the trapezoid
@@ -303,15 +319,9 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
         left_ear  = np.asarray(kpts[_C.KP_LEFT_EAR],  dtype=np.float64)
         right_ear = np.asarray(kpts[_C.KP_RIGHT_EAR], dtype=np.float64)
         ear_center = 0.5 * (left_ear + right_ear)
-        head_vec   = nose - ear_center
-        head_norm  = math.hypot(float(head_vec[0]), float(head_vec[1]))
-        head_dir   = head_vec / head_norm if head_norm > 1e-6 else np.zeros(2, dtype=np.float64)
     else:
         left_ear = right_ear = None
         ear_center = nose.copy()
-        head_vec   = np.zeros(2, dtype=np.float64)
-        head_dir   = np.zeros(2, dtype=np.float64)
-        head_norm  = 0.0
 
     body_axis = hip - chest
     body_len  = math.hypot(float(body_axis[0]), float(body_axis[1]))
@@ -324,12 +334,24 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
     region_rx = max(1e-6, 0.5 * _C.BODY_ELLIPSE_W_RATIO * body_len)
     region_ry = max(1e-6, 0.5 * _C.BODY_ELLIPSE_H_RATIO * body_len)
 
+    # mid_back 偏離 chest-hip 中點的正規化距離百分比（脊椎彎曲程度指標）。
+    # mid_back 信心不足時視為無法判斷彎曲程度，boost 退回 1.0（不縮放）。
+    mid_back_ok = float(kpt_conf[_C.KP_MID_BACK]) > _C.EAR_CONF_THRESHOLD
+    if mid_back_ok:
+        mid_back = np.asarray(kpts[_C.KP_MID_BACK], dtype=np.float64)
+        mid_back_dist_pct = 100.0 * math.hypot(
+            float(mid_back[0] - body_center[0]), float(mid_back[1] - body_center[1])
+        ) / body_len
+    else:
+        mid_back_dist_pct = float("nan")
+    curvature_boost = _curvature_size_boost(mid_back_dist_pct)
+
     # Nose contact trapezoid
     eff_len       = max(_C.CONTACT_BODY_LEN_MIN_PX, min(_C.CONTACT_BODY_LEN_MAX_PX, body_len))
     px_per_cm     = max(eff_len / max(_C.CAT_BODY_LENGTH_CM, 1e-6), 1e-6)
-    trap_height   = max(1e-6, _C.NOSE_TRAP_THICKNESS_CM * _C.NOSE_TRAP_THICKNESS_SCALE * px_per_cm)
-    trap_top_half = max(1e-6, 0.5 * _C.NOSE_TRAP_TOP_W_RATIO * _C.NOSE_TRAP_W_SCALE * eff_len)
-    trap_bot_half = max(1e-6, 0.5 * _C.NOSE_TRAP_BOT_W_RATIO * _C.NOSE_TRAP_W_SCALE * eff_len)
+    trap_height   = max(1e-6, _C.NOSE_TRAP_THICKNESS_CM * _C.NOSE_TRAP_THICKNESS_SCALE * px_per_cm * curvature_boost)
+    trap_top_half = max(1e-6, 0.5 * _C.NOSE_TRAP_TOP_W_RATIO * _C.NOSE_TRAP_W_SCALE * eff_len * curvature_boost)
+    trap_bot_half = max(1e-6, 0.5 * _C.NOSE_TRAP_BOT_W_RATIO * _C.NOSE_TRAP_W_SCALE * eff_len * curvature_boost)
 
     if left_ok and right_ok:
         ear_line      = right_ear - left_ear
@@ -353,6 +375,8 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
         "body_normal":            body_normal,
         "body_axis_unit":         body_axis_unit,
         "body_len":               body_len,
+        "mid_back_dist_pct":      mid_back_dist_pct,
+        "curvature_boost":        curvature_boost,
         "region_rx":              region_rx,
         "region_ry":              region_ry,
         "nose_contact_trapezoid": nose_trap,

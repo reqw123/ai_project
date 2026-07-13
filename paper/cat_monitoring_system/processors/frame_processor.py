@@ -97,6 +97,12 @@ class _LatestFrameGrabber:
         self._thread.join(timeout=2.0)
 
 
+# 舔舐二階段處理（plugins/lick_stage 系列）僅在 ST-GCN 已「成功」判定為
+# lick（即信心值 >= STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD，見下方判定式）
+# 時才啟動，避免在 walk/scratch/shake/stop 或低信心期間空跑鼻部接觸幾何。
+_LICK_BEHAVIOR_ID = BEHAVIOR_CLASSES.index("lick")
+
+
 class FrameProcessor:
     def __init__(self, yolo_model_path, stgcn_model_path, video_path,
                  nodered_url=None, device='cuda', imgsz=640, conf_thres=0.5, sequence_length=STGCNConfig.SEQUENCE_LENGTH,
@@ -255,9 +261,21 @@ class FrameProcessor:
             raw_kpts = kpts.copy()
 
             # === Plugin notification (raw keypoints, before any smoothing) ===
+            # 舔舐二階段（plugins/lick_stage）只在 ST-GCN 目前已確認判定為 lick
+            # 時才餵入真實關鍵點；否則比照「貓咪不在畫面」的方式傳 (None, None)，
+            # 讓 plugin 內部走既有的 NO_TARGET 重置路徑——這樣 dt_sec 會正確算進
+            # NO_TARGET，而不是把 walk/scratch 等非舔舐期間的時間誤計進某個部位
+            # 的理毛時長，同時也會重置梯形方向平滑等跨幀狀態，避免用陳舊姿態接續。
+            is_lick_behavior = (
+                behavior_id == _LICK_BEHAVIOR_ID
+                and confidence >= BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
+            )
             for _plugin in self._plugins:
                 try:
-                    _plugin.update(raw_kpts, kpt_conf)
+                    if is_lick_behavior:
+                        _plugin.update(raw_kpts, kpt_conf)
+                    else:
+                        _plugin.update(None, None)
                 except Exception:
                     pass
 

@@ -4,6 +4,7 @@ class LickConfig:
     KP_LEFT_EAR  = 1   # 左耳
     KP_RIGHT_EAR = 2   # 右耳
     KP_CHEST     = 3   # 胸部
+    KP_MID_BACK  = 4   # 背部中心（標記於背部最高點，非 chest-hip 連線中點）
     KP_HIP       = 5   # 髖部
 
     # LIMB_SEGMENTS: (群組標籤, 膝關節索引, 腳掌索引)
@@ -65,6 +66,19 @@ class LickConfig:
     NOSE_TRAP_W_SCALE         = 1.15  # 梯形整體寬度額外放大係數
     CAT_BODY_LENGTH_CM        = 40.0  # 貓咪標準身體長度（公分），用於像素/公分換算
 
+    # ── 梯形彎曲自適應（mid_back 偏離 chest-hip 中點的比例，驅動梯形縮放）──
+    # mid_back 標記在貓咪背部最高點（非 chest-hip 連線中點）。貓咪拱背/蜷曲
+    # 理毛時，該點會明顯偏離 chest-hip 直線，此時 body_len（chest-hip 直線
+    # 距離）會因姿態彎曲而低估「真實」身體尺度，導致鼻子接觸梯形在最需要
+    # 精準判定的姿態下反而系統性偏小。用 mid_back_dist_pct（mid_back 到
+    # chest-hip 中點的正規化距離百分比）線性內插出一個縮放倍率，只套用在
+    # 梯形尺寸上（不影響身體橢圓/四肢區域，那些量測的是「當下真實」幾何，
+    # 不該被歷史或姿態推測放大縮小）。
+    CURVATURE_PCT_MIN   = 0.0   # mid_back_dist_pct 下限：脊椎接近打直
+    CURVATURE_PCT_MAX   = 30.0  # mid_back_dist_pct 上限：明顯拱背/蜷曲
+    CURVATURE_BOOST_MIN = 0.85  # 對應 CURVATURE_PCT_MIN 時的梯形縮放倍率（打直時縮小）
+    CURVATURE_BOOST_MAX = 1.20  # 對應 CURVATURE_PCT_MAX 時的梯形縮放倍率（拱背時放大）
+
     # ── 接觸幾何尺寸夾鉗（防止極端姿勢下幾何爆炸） ──────────────────────
     CONTACT_BODY_LEN_MIN_PX = 300.0   # 身體長度像素下限，低於此值夾鉗到此
     CONTACT_BODY_LEN_MAX_PX = 650.0   # 身體長度像素上限，高於此值夾鉗到此
@@ -107,6 +121,17 @@ class LickConfig:
     # 正規化（除以趨近 0 的長度）會把方向放大成任意雜訊，反而更不穩定。
     TRAP_DIR_EMA_ALPHA    = 0.12
     TRAP_DIR_FLIP_MARGIN  = 0.15
+
+    # trap_dir 的「長期方向卡死」安全網：上面的純 EMA 追蹤完全信任
+    # _prev_trap_dir 這個歷史錨點，只要初始化那一刻（或貓消失重新出現後
+    # 重新初始化那一次）trap_dir_from_perp() 定出的方向剛好不符合直覺
+    # （鼻子/短邊在上、身體/長邊在下），後續就會一路「穩定地」錯下去，
+    # 因為 EMA 只追求跟前一幀連續、不會主動驗證 y>=0 這個物理假設。
+    # 這裡不做「每幀強制」（那樣會在梯形接近水平時造成硬性翻轉抖動，
+    # 見上方 trap_dir 段落說明），而是隔離成一道獨立的安全網：只有連續
+    # 好幾幀都偏離 y>=0（不是臨界抖動，是真的卡在錯誤方向）才強制拉回，
+    # 平常的水平抖動只會讓計數器歸零，不會觸發翻轉。
+    TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES = 10
 
     # ── 區域標籤 ─────────────────────────────────────────────────────────
     ZONE_NO_TARGET = "NO_TARGET"    # 鼻子未命中任何區域

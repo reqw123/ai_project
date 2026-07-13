@@ -43,6 +43,9 @@ class LickAnalyzer:
         self._prev_trap_dir:  Optional[np.ndarray] = None
         # 連續「反向」讀數的計數（僅 trap_perp 使用），用來分辨單幀雜訊 vs. 真正的方向改變
         self._trap_perp_flip_streak = 0
+        # 連續「trap_dir 偏離 y>=0（物理上不該發生）」的計數，用來分辨臨界水平
+        # 抖動 vs. 真的卡在錯誤方向；見 _stabilize_nose_trapezoid() 說明
+        self._trap_dir_wrong_streak = 0
         # Last-frame overlay state (consumed by manager.draw_overlay)
         self.last_trap_pts:    Optional[np.ndarray] = None  # (4,2) float64 or None
         self.last_hit:         bool = False
@@ -70,6 +73,7 @@ class LickAnalyzer:
         self._prev_trap_perp = None
         self._prev_trap_dir  = None
         self._trap_perp_flip_streak = 0
+        self._trap_dir_wrong_streak = 0
 
     # ── Private helpers ───────────────────────────────────────────────
 
@@ -78,6 +82,7 @@ class LickAnalyzer:
         self._prev_trap_perp = None
         self._prev_trap_dir  = None
         self._trap_perp_flip_streak = 0
+        self._trap_dir_wrong_streak = 0
         self.last_trap_pts = None
         self.last_hit      = False
         self.last_geom     = None
@@ -135,6 +140,13 @@ class LickAnalyzer:
         雜訊來源。「短邊保證在上面」因此是初始化時就決定好、且在正常小幅
         抖動下會一路保持的強穩定狀態，而非每幀都重新驗證的絕對數學保證
         ——真要讓貓整個轉一圈頭部持續轉向的極端情況，才可能讓它跟著轉。
+
+        但純 EMA 追蹤完全信任 _prev_trap_dir 這個歷史錨點，若初始化那一刻
+        剛好定出不符合直覺的方向，後續會一路「穩定地」錯下去、沒有機制
+        自我修正。因此在 EMA 之後另外加一道獨立安全網：連續好幾幀
+        （TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES）都偏離 y>=0 時才強制翻轉拉回，
+        平常的臨界水平抖動只會讓計數器歸零、不會觸發翻轉，不影響上述
+        「不每幀強制」想保留的穩定性。
         """
         if target_geom is None:
             return
@@ -149,11 +161,21 @@ class LickAnalyzer:
 
         if self._prev_trap_dir is None:
             stable_dir = trap_dir_from_perp(stable_perp)
+            self._trap_dir_wrong_streak = 0
         else:
             dir_candidate = np.array([-float(stable_perp[1]), float(stable_perp[0])], dtype=np.float64)
             stable_dir = stabilize_direction_vector(
                 dir_candidate, self._prev_trap_dir, _C.TRAP_DIR_EMA_ALPHA, _C.TRAP_DIR_FLIP_MARGIN,
             )
+            # 安全網：純 EMA 追蹤不會主動驗證 y>=0，只有連續多幀持續偏離
+            # （非臨界水平抖動，是真的卡在錯誤方向）才強制翻轉拉回正確半球
+            if float(stable_dir[1]) < 0.0:
+                self._trap_dir_wrong_streak += 1
+                if self._trap_dir_wrong_streak >= _C.TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES:
+                    stable_dir = -stable_dir
+                    self._trap_dir_wrong_streak = 0
+            else:
+                self._trap_dir_wrong_streak = 0
         self._prev_trap_dir = stable_dir
 
         target_geom["trap_perp"] = stable_perp

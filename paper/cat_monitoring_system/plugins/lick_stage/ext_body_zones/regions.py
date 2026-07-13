@@ -147,10 +147,11 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
 
 def classify_zone(nose_pt, targets: Optional[dict]) -> Tuple[int, str, float]:
     """
-    Test the nose point against all 7 zone targets.
+    Test the nose point against the zone targets.
 
     Priority (most specific first): limb paw circles > limb strips >
-    tail strip > head > neck/chest > torso half (side/back vs abdomen).
+    tail strip > head (disabled) > neck/chest (disabled) >
+    torso half (side/back vs abdomen).
 
     Returns (zone_id, zone_name, confidence).
     """
@@ -179,15 +180,22 @@ def classify_zone(nose_pt, targets: Optional[dict]) -> Tuple[int, str, float]:
             conf = max(0.0, min(1.0, 1.0 - perp / max(targets["tail_strip_hw"], 1e-6)))
             return _C.ZONE_TAIL, _C.ZONE_NAMES[_C.ZONE_TAIL], conf
 
-    hit, d = _point_in_circle(pt, targets["head_center"], targets["head_radius"])
-    if hit:
-        conf = max(0.0, min(1.0, 1.0 - d / max(targets["head_radius"], 1e-6)))
-        return _C.ZONE_HEAD, _C.ZONE_NAMES[_C.ZONE_HEAD], conf
+    # 頭部區域的判定刻意停用：head_center/head_radius 以耳朵中點（或鼻子本身）
+    # 為圓心，鼻子幾乎必然落在自己頭部的圓圈內——不管貓有沒有在舔頭部，只要
+    # 沒有明顯把頭伸向其他部位，這裡都會誤判命中。這不是「舔頭部的時間」，
+    # 而是「頭沒有轉向其他部位的時間」，統計上沒有意義，故直接跳過此判定，
+    # 讓鼻子落在頭部圓圈內、又不在四肢/尾巴範圍內時歸類為 NO_TARGET。
+    # （head_center/head_radius 仍保留在 targets 內，供未來需要時使用。）
 
-    hit, d = _point_in_circle(pt, targets["neck_center"], targets["neck_radius"])
-    if hit:
-        conf = max(0.0, min(1.0, 1.0 - d / max(targets["neck_radius"], 1e-6)))
-        return _C.ZONE_NECK_CHEST, _C.ZONE_NAMES[_C.ZONE_NECK_CHEST], conf
+    # 胸口區域的判定同樣刻意停用：本系統的關鍵點設計裡沒有獨立的「頸部」點，
+    # 鼻子在骨架連結上直接接到胸口（BODY_LINKS: nose(0)->chest(3)），neck_center
+    # 就是 KP_CHEST 本身，跟鼻子只隔一節骨架連結、距離天生就很近。只要貓咪
+    # 低頭理毛——不管實際舔的是四肢以外的哪個部位（軀幹、腹部、側背都需要
+    # 頭部前傾）——鼻子在移動路徑上幾乎必然會先經過胸口附近，導致這裡誤判
+    # 命中、把本該算在軀幹（ABDOMEN/SIDE_BACK）的接觸時間搶走。跟上面 HEAD
+    # 停用是同一種「判定點天生緊貼參考點」的結構性偏誤，故一併跳過此判定，
+    # 讓鼻子落在胸口圓圈內、又不在四肢/尾巴範圍內時改落到下方軀幹橢圓判定
+    # （neck_center/neck_radius 仍保留在 targets 內，供未來需要時使用）。
 
     rel = pt - targets["torso_center"]
     u = float(np.dot(rel, targets["body_axis_unit"]))

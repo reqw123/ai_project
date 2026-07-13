@@ -41,9 +41,23 @@ class LickResult:
     nose_xy: list = field(default_factory=list)    # [x, y] or []
 
     def to_payload(self) -> dict:
+        # 佔比（%）：以 5 區累積時間總和為分母，在 Python 端算好直接送給
+        # Node-RED，Node 端只負責顯示，不重複做這個算術（模組化原則）。
+        total_time = (
+            self.body.time_sec + self.fl.time_sec + self.fr.time_sec
+            + self.hl.time_sec + self.hr.time_sec
+        )
+
+        def _pct(t: float) -> float:
+            return round(t / total_time * 100, 2) if total_time > 1e-9 else 0.0
+
+        _zone_map = {"BODY": self.body, "FL": self.fl, "FR": self.fr, "HL": self.hl, "HR": self.hr}
+        _best_stat = _zone_map.get(self.best_zone)
+
         return {
             "current_zone":    self.current_zone,
             "best_zone":       self.best_zone,
+            "best_pct":        _pct(_best_stat.time_sec) if _best_stat is not None else None,
             "body_time":       round(self.body.time_sec, 2),
             "fl_time":         round(self.fl.time_sec,   2),
             "fr_time":         round(self.fr.time_sec,   2),
@@ -54,6 +68,12 @@ class LickResult:
             "fr_hits":         self.fr.hits,
             "hl_hits":         self.hl.hits,
             "hr_hits":         self.hr.hits,
+            "body_pct":        _pct(self.body.time_sec),
+            "fl_pct":          _pct(self.fl.time_sec),
+            "fr_pct":          _pct(self.fr.time_sec),
+            "hl_pct":          _pct(self.hl.time_sec),
+            "hr_pct":          _pct(self.hr.time_sec),
+            "total_lick_time": round(total_time, 2),
             "face_state":      self.face_state,
             "state_stability": round(self.state_stability, 3),
             "valid":           self.valid,
