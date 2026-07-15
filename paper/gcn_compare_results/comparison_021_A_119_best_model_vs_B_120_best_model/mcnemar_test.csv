@@ -1,0 +1,7 @@
+pair,scope,b,c,n_discordant,statistic,p_value,method,significant(p<0.05)
+119_best_model_vs_120_best_model,overall,6,25,31,10.4516,0.0012,chi2_corrected,YES
+119_best_model_vs_120_best_model,walk,0,7,7,0.0000,0.0156,exact_binomial,YES
+119_best_model_vs_120_best_model,lick,0,13,13,0.0000,0.0002,exact_binomial,YES
+119_best_model_vs_120_best_model,scratch,0,2,2,0.0000,0.5000,exact_binomial,
+119_best_model_vs_120_best_model,shake,0,3,3,0.0000,0.2500,exact_binomial,
+119_best_model_vs_120_best_model,stop,6,0,6,0.0000,0.0312,exact_binomial,YES

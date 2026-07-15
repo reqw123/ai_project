@@ -1,0 +1,7 @@
+pair,scope,b,c,n_discordant,statistic,p_value,method,significant(p<0.05)
+104_best_model_vs_107_best_model,overall,20,12,32,1.5312,0.2159,chi2_corrected,
+104_best_model_vs_107_best_model,walk,14,0,14,0.0000,0.0001,exact_binomial,YES
+104_best_model_vs_107_best_model,lick,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
+104_best_model_vs_107_best_model,scratch,6,0,6,0.0000,0.0312,exact_binomial,YES
+104_best_model_vs_107_best_model,shake,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
+104_best_model_vs_107_best_model,stop,0,12,12,0.0000,0.0005,exact_binomial,YES

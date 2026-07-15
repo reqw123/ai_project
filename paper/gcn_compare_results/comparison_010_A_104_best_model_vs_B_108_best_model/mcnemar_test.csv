@@ -1,0 +1,7 @@
+pair,scope,b,c,n_discordant,statistic,p_value,method,significant(p<0.05)
+104_best_model_vs_108_best_model,overall,2,16,18,2.0000,0.0013,exact_binomial,YES
+104_best_model_vs_108_best_model,walk,0,12,12,0.0000,0.0005,exact_binomial,YES
+104_best_model_vs_108_best_model,lick,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
+104_best_model_vs_108_best_model,scratch,2,3,5,2.0000,1.0000,exact_binomial,
+104_best_model_vs_108_best_model,shake,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
+104_best_model_vs_108_best_model,stop,0,1,1,0.0000,1.0000,exact_binomial,

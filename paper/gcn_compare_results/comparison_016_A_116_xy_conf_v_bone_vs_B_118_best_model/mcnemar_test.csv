@@ -1,0 +1,7 @@
+pair,scope,b,c,n_discordant,statistic,p_value,method,significant(p<0.05)
+116_xy_conf_v_bone_T16_att_on_vs_118_best_model,overall,17,30,47,3.0638,0.0801,chi2_corrected,
+116_xy_conf_v_bone_T16_att_on_vs_118_best_model,walk,3,5,8,3.0000,0.7266,exact_binomial,
+116_xy_conf_v_bone_T16_att_on_vs_118_best_model,lick,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
+116_xy_conf_v_bone_T16_att_on_vs_118_best_model,scratch,7,0,7,0.0000,0.0156,exact_binomial,YES
+116_xy_conf_v_bone_T16_att_on_vs_118_best_model,shake,5,1,6,1.0000,0.2188,exact_binomial,
+116_xy_conf_v_bone_T16_att_on_vs_118_best_model,stop,2,24,26,16.9615,0.0000,chi2_corrected,YES

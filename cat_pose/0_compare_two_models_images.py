@@ -9,12 +9,12 @@ import shutil
 # =====================================================
 MODELS = {
     "640.1": {
-        "path": r"C:\ai_project\cat_pose\v11s_127.pt",
+        "path": r"C:\ai_project\cat_pose\v11s_128.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     },
     "640.2": {
-        "path": r"C:\ai_project\cat_pose\v11s_127.pt",
+        "path": r"C:\ai_project\cat_pose\v11s_128.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     }

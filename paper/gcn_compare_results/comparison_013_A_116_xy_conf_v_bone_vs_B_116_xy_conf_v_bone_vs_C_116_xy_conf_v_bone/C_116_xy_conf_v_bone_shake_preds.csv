@@ -1,0 +1,4 @@
+frame,time,pred_class,conf,prob_walk,prob_lick,prob_scratch,prob_shake,prob_stop
+32,1.067,shake,0.9976,0.0016,0.0000,0.0003,0.9976,0.0004
+32,1.067,shake,0.9968,0.0016,0.0001,0.0002,0.9968,0.0013
+32,1.067,shake,0.9996,0.0002,0.0000,0.0000,0.9996,0.0001

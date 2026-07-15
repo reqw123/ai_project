@@ -70,7 +70,7 @@ BEHAVIOR_PREFIXES:
 # 模型輸入關節數：
 #   17 = 完整骨架（預設）
 #   14 = 忽略尾巴三點 tail_base(14)/tail_mid(15)/tail_tip(16)，用於消融實驗
-NUM_JOINTS: 14
+NUM_JOINTS: 17
 # 輸入模型的序列長度（幀數）
 SEQUENCE_LENGTH: 16
 # 訓練資料滑動視窗步長（幀數）；建議 SEQUENCE_LENGTH // 2（50% 重疊）

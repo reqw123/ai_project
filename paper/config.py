@@ -154,7 +154,7 @@ class ModelPaths:
     """模型和資料檔案路徑"""
     
     # YOLO 模型
-    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_124.pt")
+    YOLO_MODEL = _env_str("CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_128.pt")
     
     # ST-GCN 模型
     STGCN_MODEL = _env_str("CAT_MONITORING_STGCN_MODEL", r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth")
@@ -315,6 +315,36 @@ class AnomalyDetectionConfig:
     ROLLING_WINDOW_SIZE = 30     # 滾動均值視窗大小（幀數，30fps ≈ 1 秒）
     STILL_MOTION_THRESHOLD = 3.0    # 滾動均值低於此值（body_fraction×100）判為靜止；呼吸抖動約 < 2
 
+# ==================== Skeleton Quality Assessment（骨架品質雙重判定）====================
+class SQAConfig:
+    """「GCN 分類為主、幾何判斷為輔」雙重判定總開關。
+
+    ENABLE_SQA_DUAL_JUDGMENT=True 時，FrameProcessor 會在每次 ST-GCN
+    推論同一個窗口後，額外呼叫 skeleton_quality_assessment.evaluate_
+    window() 做幾何合理性檢查；只要被判定為不可信，就把該幀的分類結果
+    覆蓋成 LOW_CONF（信心值歸零）——跟診斷腳本 test_bone_length_
+    stability.py（模式2）驗證過的覆蓋規則一致。
+
+    這是唯一的總開關；3 項個別指標（midback_offset_ratio/midback_angle/
+    body_axis_score_jitter）各自要不要參與判定，由
+    cat_monitoring_system/processors/skeleton_quality_assessment.py 模組內的
+    ENABLE_MIDBACK_OFFSET_CHECK/ENABLE_MIDBACK_ANGLE_CHECK/
+    ENABLE_SCORE_JITTER_CHECK 三個變數各自控制，不在這裡設定——刻意保持
+    低耦合：config.py 只決定「要不要啟用這整套機制」，機制內部的細節
+    門檻/開關留在模組自己的檔案裡管理，兩者不互相知道對方的存在。
+
+    evaluate_window() 本身是 fail-safe（任何內部錯誤都回傳
+    reliable=True，等同不覆蓋），FrameProcessor 呼叫端也會再包一層
+    try/except——即使這個模組完全壞掉或被整個刪除，都不會影響主系統
+    其餘功能運行，最多只是這個雙重判定不生效。
+
+    預設 False：這是還在校準門檻階段的新機制（門檻值目前只用少量影片
+    校準過），正式套用前建議先在 GUI 模式肉眼比對過覆蓋規則是否合理，
+    確認沒問題後再開啟。
+    """
+    ENABLE_SQA_DUAL_JUDGMENT = _env_bool("CAT_MONITORING_ENABLE_SQA_DUAL_JUDGMENT", True)
+
+
 # ==================== 執行模式參數 ====================
 class RunModeConfig:
     """控制 main.py 啟動時走哪一種模式，整體處理架構（FrameProcessor 等）不受影響。
@@ -322,7 +352,7 @@ class RunModeConfig:
     "server"（預設）：現行行為，啟動 Flask HTTP 伺服器 + Node-RED 上線通知
     "gui"           ：不啟動 Flask/Node-RED，直接用同一套 FrameProcessor 開本地視窗顯示
     """
-    MODE = _env_str("CAT_MONITORING_RUN_MODE", "server")
+    MODE = _env_str("CAT_MONITORING_RUN_MODE", "gui")
 
     # server 模式下，處理管線（開影片、載入 YOLO/ST-GCN、tracker 統計、CSV、Node-RED 推送）
     # 原本要等第一個打到 /stream 等路由的 HTTP 請求才會啟動（見 routes.py 的
@@ -590,6 +620,10 @@ def get_config_summary():
       - 關鍵點信心門檻    : {AnomalyDetectionConfig.KP_CONF_THRES}
       - 滾動視窗大小      : {AnomalyDetectionConfig.ROLLING_WINDOW_SIZE} 幀
       - 靜止動作門檻      : {AnomalyDetectionConfig.STILL_MOTION_THRESHOLD}  （body_fraction×100；呼吸抖動約 < 2）
+
+    🔬 Skeleton Quality Assessment（骨架品質雙重判定）
+      - 總開關 ENABLE_SQA_DUAL_JUDGMENT: {SQAConfig.ENABLE_SQA_DUAL_JUDGMENT}
+        （個別指標開關在 cat_monitoring_system/processors/skeleton_quality_assessment.py 模組內設定，此處不重複顯示）
 
     🕐 執行模式與排程
       - 執行模式          : {RunModeConfig.MODE}  ("server" 或 "gui")

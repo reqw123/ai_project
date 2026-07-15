@@ -1,0 +1,7 @@
+pair,scope,b,c,n_discordant,statistic,p_value,method,significant(p<0.05)
+122_best_model_vs_124_best_model,overall,4,5,9,4.0000,1.0000,exact_binomial,
+122_best_model_vs_124_best_model,walk,2,0,2,0.0000,0.5000,exact_binomial,
+122_best_model_vs_124_best_model,lick,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
+122_best_model_vs_124_best_model,scratch,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
+122_best_model_vs_124_best_model,shake,2,0,2,0.0000,0.5000,exact_binomial,
+122_best_model_vs_124_best_model,stop,0,5,5,0.0000,0.0625,exact_binomial,

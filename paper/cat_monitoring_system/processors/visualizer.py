@@ -20,8 +20,8 @@ except ImportError:  # pragma: no cover - Pillow is available in the configured 
     ImageFont = None
 
 
-HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / r"C:\cat_paper_code-main\paper\cat_monitoring_system\h6bxw-tkcsv.gif"
-HIP_IMAGE_ALPHA_BOOST = 1.6
+HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent.parent / r"C:\ai_project\paper\cat_monitoring_system\tools\h6bxw-tkcsv.gif"
+HIP_IMAGE_ALPHA_BOOST = 1.6 #透明度
 HIP_IMAGE_SCALE = 0  # float | None — None=跟隨 bbox 動態計算；浮點數=原圖等比例倍率（1.0=原尺寸、2.0=放大兩倍）
 
 

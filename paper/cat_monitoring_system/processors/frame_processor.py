@@ -18,7 +18,15 @@ from logutils.csv_logger import CSVLogger, BehaviorSegmentLogger
 from utils.helpers import get_ip, get_behavior_name, resolve_video_source, is_stream_url
 from utils.constants import *
 from models.stgcn_model import interpolate_missing
-from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig, SystemInfo, VisualizationConfig
+from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig, SystemInfo, VisualizationConfig, SQAConfig
+
+# Skeleton Quality Assessment（GCN 分類為主、幾何判斷為輔雙重判定）：獨立
+# 模組，import 失敗時整套機制自動停用（_sqa_evaluate_window 保持 None），
+# 不會讓主系統啟動失敗——這個模組也可以整個被刪除，不影響其餘功能。
+try:
+    from processors.skeleton_quality_assessment import evaluate_window as _sqa_evaluate_window
+except Exception:
+    _sqa_evaluate_window = None
 
 
 class _LatestFrameGrabber:
@@ -313,6 +321,25 @@ class FrameProcessor:
                     new_conf = 0.0
                 elif new_conf < BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD:
                     new_bid = LOW_CONF_ID
+
+                # === Skeleton Quality Assessment（GCN 分類為主、幾何判斷為輔）===
+                # 用跟 ST-GCN 同一個窗口的「原始（未插值）」關鍵點座標
+                # kpts_arr/conf_arr（不是上面已經插值過、給 ST-GCN 用的
+                # seq_array——evaluate_window 內部會自己做一次插值，避免
+                # 跟診斷腳本 test_bone_length_stability.py 的前處理路徑不一致）。
+                # 獨立模組、獨立總開關（SQAConfig.ENABLE_SQA_DUAL_JUDGMENT），
+                # evaluate_window() 本身承諾不拋例外，這裡再包一層 try/except
+                # 是防禦性寫法（跟現有 plugin 呼叫慣例一致）——任何錯誤都只會
+                # 讓這次覆蓋不生效，不會中斷 process()。
+                if SQAConfig.ENABLE_SQA_DUAL_JUDGMENT and _sqa_evaluate_window is not None:
+                    try:
+                        _sqa_reliable, _sqa_details = _sqa_evaluate_window(kpts_arr, conf_arr)
+                        if not _sqa_reliable:
+                            new_bid = LOW_CONF_ID
+                            new_conf = 0.0
+                    except Exception:
+                        pass
+
                 # 更新持久化結果，本幀也立即採用
                 self._last_behavior_id = new_bid
                 self._last_confidence = new_conf

@@ -6,8 +6,8 @@ import time
 import matplotlib.pyplot as plt
 
 # ==================== 基本設定 ====================
-MODEL_PATH = r"C:\cat_pose\no_aug.pt"
-VIDEO_PATH = r"C:\cat_pose\模型測試影片\cat5.mp4"
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_128.pt"
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
 
 IMGSZ = 640
 CONF_THRES = 0.5
