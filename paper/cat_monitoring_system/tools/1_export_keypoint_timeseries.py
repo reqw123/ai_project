@@ -118,8 +118,6 @@ def _compute_body_scale(keypoint_arr, conf_arr, conf_threshold):
     if keypoint_arr.size == 0 or conf_arr.size == 0:
         return 1.0
 
-    chest_xy = keypoint_arr[:, 4, :]
-    hip_xy = keypoint_arr[:, 5, :]
     mid_back_xy = keypoint_arr[:, 4, :]
     hip_xy = keypoint_arr[:, 5, :]
     mid_back_conf = conf_arr[:, 4]

@@ -65,11 +65,9 @@ import sys
 import csv
 import cv2
 import numpy as np
-import time
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -184,68 +182,6 @@ _EDGE_COLORS = [
     (255, 170, 34), (255, 170, 34), (0, 153, 255), (0, 153, 255),
     (80, 200, 160), (60, 170, 130), (40, 140, 100),
 ]
-
-SUPPORTED_VIDEO_EXTS = {
-    ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".m4v", ".mpg", ".mpeg", ".webm"
-}
-
-
-# ── 工具函數（沿用自 base 腳本）────────────────────────────────────────
-def _is_stream_url(path_str: str) -> bool:
-    lowered = str(path_str).lower()
-    return lowered.startswith(("http://", "https://", "rtsp://", "rtsps://", "rtmp://"))
-
-
-def open_video_capture_with_retry(path, retries=5, delay=3):
-    for attempt in range(retries):
-        cap = cv2.VideoCapture(path)
-        if cap.isOpened():
-            return cap
-        try:
-            cap.release()
-        except Exception:
-            pass
-        print(f"⚠ 無法開啟串流或影片 {path} (嘗試 {attempt+1}/{retries})，{delay}秒後重試...")
-        time.sleep(delay)
-    return None
-
-
-def resolve_video_paths(video_sources: Iterable[str]):
-    resolved = []
-    seen = set()
-    for src in video_sources:
-        if _is_stream_url(src):
-            key = str(src).strip().lower()
-            if key not in seen:
-                seen.add(key)
-                resolved.append(str(src).strip())
-            continue
-        p = Path(src).expanduser()
-        if p.is_file():
-            if p.suffix.lower() in SUPPORTED_VIDEO_EXTS:
-                key = str(p.resolve()).lower()
-                if key not in seen:
-                    seen.add(key)
-                    resolved.append(str(p))
-            continue
-        if p.is_dir():
-            try:
-                matched = sorted([
-                    f for f in p.rglob("*")
-                    if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS
-                ])
-            except Exception as e:
-                print(f"⚠ 掃描資料夾出錯，已略過: {p} ({e})")
-                matched = []
-            for f in matched:
-                key = str(f.resolve()).lower()
-                if key not in seen:
-                    seen.add(key)
-                    resolved.append(str(f))
-            continue
-        print(f"⚠ 路徑不存在，略過: {p}")
-    return resolved
-
 
 @lru_cache(maxsize=16)
 def compute_ui_scale(width, height, base_width=1920.0, base_height=1080.0):

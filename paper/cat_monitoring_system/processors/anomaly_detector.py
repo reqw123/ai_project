@@ -17,13 +17,14 @@
 """
 
 from collections import deque
+
 import numpy as np
 from config import AnomalyDetectionConfig
 
-_CHEST_IDX    = 3
-_HIP_IDX      = 5
-_TAIL_JOINTS  = (14, 15, 16)
-_MAX_MISS_FRAMES = 5   # 超過此連續遺失幀數才清空 prev_kpts
+_CHEST_IDX = 3
+_HIP_IDX = 5
+_TAIL_JOINTS = (14, 15, 16)
+_MAX_MISS_FRAMES = 5  # 超過此連續遺失幀數才清空 prev_kpts
 
 
 class AnomalyDetector:
@@ -38,34 +39,40 @@ class AnomalyDetector:
     still_threshold / rolling_window 可覆寫 config 預設值，方便測試腳本獨立調整。
     """
 
-    def __init__(self, still_threshold=None, rolling_window=None,
-                 kp_conf_thres=None, stride=None):
-        self.prev_kpts         = None
-        self._miss_count       = 0      # 連續偵測遺失幀計數
+    def __init__(
+        self, still_threshold=None, rolling_window=None, kp_conf_thres=None, stride=None
+    ):
+        self.prev_kpts = None
+        self._miss_count = 0  # 連續偵測遺失幀計數
         self.last_motion_score = 0.0
 
-        window_size = (int(rolling_window) if rolling_window is not None
-                       else AnomalyDetectionConfig.ROLLING_WINDOW_SIZE)
+        window_size = (
+            int(rolling_window)
+            if rolling_window is not None
+            else AnomalyDetectionConfig.ROLLING_WINDOW_SIZE
+        )
         self._motion_window: deque = deque(maxlen=window_size)
         self._still_threshold = (
-            float(still_threshold) if still_threshold is not None
+            float(still_threshold)
+            if still_threshold is not None
             else float(AnomalyDetectionConfig.STILL_MOTION_THRESHOLD)
         )
         self._kp_conf_thres = (
-            float(kp_conf_thres) if kp_conf_thres is not None
+            float(kp_conf_thres)
+            if kp_conf_thres is not None
             else float(AnomalyDetectionConfig.KP_CONF_THRES)
         )
-        self._stride       = max(1, int(stride)) if stride is not None else 1
+        self._stride = max(1, int(stride)) if stride is not None else 1
         self._stride_count = 0
 
     def reset(self):
         """清空所有累積狀態（motion_window、prev_kpts 等），保留門檻與視窗大小設定。
         切換影片或回到影片開頭時呼叫，確保前段資料不污染新段判斷。"""
-        self.prev_kpts         = None
-        self._miss_count       = 0
+        self.prev_kpts = None
+        self._miss_count = 0
         self.last_motion_score = 0.0
         self._motion_window.clear()
-        self._stride_count     = 0
+        self._stride_count = 0
 
     # ── 內部工具 ──────────────────────────────────────────────────────────────
 
@@ -73,14 +80,20 @@ class AnomalyDetector:
         """依現有視窗內容判斷靜止狀態；視窗未暖機時預設非靜止。"""
         if len(self._motion_window) < 2:
             return False
-        return (sum(self._motion_window) / len(self._motion_window)) < self._still_threshold
+        return (
+            sum(self._motion_window) / len(self._motion_window)
+        ) < self._still_threshold
 
     def _body_size(self, kpts_xy: np.ndarray, valid: np.ndarray) -> float:
         """胸(3)→髖(5) 距離 ÷ 100 作為正規化分母，與訓練管線一致。
         除以 100 使 motion_score 放大 100 倍，數值更易閱讀與設定門檻。
         信心不足時回傳 0.01（保持相同縮放比例）。"""
-        if (_CHEST_IDX < len(valid) and _HIP_IDX < len(valid)
-                and valid[_CHEST_IDX] and valid[_HIP_IDX]):
+        if (
+            _CHEST_IDX < len(valid)
+            and _HIP_IDX < len(valid)
+            and valid[_CHEST_IDX]
+            and valid[_HIP_IDX]
+        ):
             d = float(np.linalg.norm(kpts_xy[_CHEST_IDX] - kpts_xy[_HIP_IDX]))
             if d > 1.0:
                 return d / 100.0
@@ -96,7 +109,7 @@ class AnomalyDetector:
         if kpts is None or kpt_conf is None:
             self._miss_count += 1
             if self._miss_count > _MAX_MISS_FRAMES:
-                self.prev_kpts = None   # 長時間遺失→清空，防止跨段假大位移
+                self.prev_kpts = None  # 長時間遺失→清空，防止跨段假大位移
             # 遺失期間依現有視窗狀態判斷，不強制回 False
             return self._is_still_from_window(), 0
 
@@ -104,7 +117,7 @@ class AnomalyDetector:
         if kpts_xy.ndim == 2 and kpts_xy.shape[1] > 2:
             kpts_xy = kpts_xy[:, :2]
 
-        valid   = np.asarray(kpt_conf) > self._kp_conf_thres
+        valid = np.asarray(kpt_conf) > self._kp_conf_thres
         body_sz = self._body_size(kpts_xy, valid)
 
         if self.prev_kpts is not None:
@@ -119,7 +132,7 @@ class AnomalyDetector:
             if np.any(core_valid):
                 motion_score = float(np.mean(disp[core_valid])) / body_sz
             elif np.any(valid):
-                motion_score = float(np.mean(disp[valid])) / body_sz   # fallback
+                motion_score = float(np.mean(disp[valid])) / body_sz  # fallback
             else:
                 motion_score = 0.0
 
@@ -128,11 +141,13 @@ class AnomalyDetector:
             if self._stride_count % self._stride == 0:
                 self._motion_window.append(motion_score)
 
-        self.prev_kpts   = kpts_xy.copy()
+        self.prev_kpts = kpts_xy.copy()
         self._miss_count = 0
 
-        is_still       = self._is_still_from_window()
-        norm_motion    = min(self.last_motion_score / max(AnomalyDetectionConfig.MAX_MOTION, 1e-6), 1.0)
+        is_still = self._is_still_from_window()
+        norm_motion = min(
+            self.last_motion_score / max(AnomalyDetectionConfig.MAX_MOTION, 1e-6), 1.0
+        )
         activity_value = int(norm_motion * 100)
 
         return is_still, activity_value

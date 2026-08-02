@@ -47,38 +47,45 @@ for the Poisson path, ``sigma_equivalent`` is the z-score of a standard
 normal that would have the same one-sided tail probability
 (``scipy``-free implementation, see ``_norm_isf`` below).
 """
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
 from typing import Optional
 
-from analytics.baseline import Baseline, CONTINUOUS_METRICS, COUNT_METRICS
+from analytics.baseline import CONTINUOUS_METRICS, COUNT_METRICS, Baseline
 
-MAD_SCALE = 1.4826          # consistency constant so MAD ≈ std under normal
+MAD_SCALE = 1.4826  # consistency constant so MAD ≈ std under normal
 MIN_VARIABILITY_MAD = 1e-9  # below this, treat MAD as "degenerate"
 COUNT_OVERDISPERSION_RATIO = 1.5  # variance/mean above this → use NB not Poisson
-RATE_SMOOTHING_PRIOR = 0.25       # Bayesian-ish additive smoothing for λ, avoids
-                                   # λ=0 producing an infinite/undefined tail prob
-                                   # after an all-zero baseline window
+RATE_SMOOTHING_PRIOR = 0.25  # Bayesian-ish additive smoothing for λ, avoids
+# λ=0 producing an infinite/undefined tail prob
+# after an all-zero baseline window
 
 
 @dataclass
 class MetricDeviation:
+    """單一指標「今日值」相對基線的偏差評估結果。"""
+
     metric: str
     today: float
-    model: str                       # "robust_z" | "poisson_tail" | "nbinom_tail" | "insufficient_variability"
+    model: (
+        str  # "robust_z" | "poisson_tail" | "nbinom_tail" | "insufficient_variability"
+    )
     sigma_equivalent: Optional[float]  # signed; None if not computable
-    tail_p: Optional[float] = None     # only set for count models
+    tail_p: Optional[float] = None  # only set for count models
     deviation_score: Optional[float] = None  # 0-100, same scale as before
     note: str = ""
 
 
 @dataclass
 class DeviationResult:
+    """一次偏差分析的完整結果：各指標的 MetricDeviation 集合。"""
+
     baseline_days: int
     confidence: str
-    metrics: dict = field(default_factory=dict)   # name -> MetricDeviation
+    metrics: dict = field(default_factory=dict)  # name -> MetricDeviation
 
 
 def _norm_isf(p: float) -> float:
@@ -100,27 +107,53 @@ def _norm_ppf(p: float) -> float:
     if p >= 1.0:
         return math.inf
     # Acklam's algorithm coefficients.
-    a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
-         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00]
-    b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
-         6.680131188771972e+01, -1.328068155288572e+01]
-    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
-         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00]
-    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
-         3.754408661907416e+00]
+    a = [
+        -3.969683028665376e01,
+        2.209460984245205e02,
+        -2.759285104469687e02,
+        1.383577518672690e02,
+        -3.066479806614716e01,
+        2.506628277459239e00,
+    ]
+    b = [
+        -5.447609879822406e01,
+        1.615858368580409e02,
+        -1.556989798598866e02,
+        6.680131188771972e01,
+        -1.328068155288572e01,
+    ]
+    c = [
+        -7.784894002430293e-03,
+        -3.223964580411365e-01,
+        -2.400758277161838e00,
+        -2.549732539343734e00,
+        4.374664141464968e00,
+        2.938163982698783e00,
+    ]
+    d = [
+        7.784695709041462e-03,
+        3.224671290700398e-01,
+        2.445134137142996e00,
+        3.754408661907416e00,
+    ]
     p_low, p_high = 0.02425, 1 - 0.02425
     if p < p_low:
         q = math.sqrt(-2 * math.log(p))
-        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / \
-               ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
+        )
     if p <= p_high:
         q = p - 0.5
         r = q * q
-        return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / \
-               (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)
+        return (
+            (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5])
+            * q
+            / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
+        )
     q = math.sqrt(-2 * math.log(1 - p))
-    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / \
-            ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+        (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
+    )
 
 
 def _log_poisson_pmf(k: int, lam: float) -> float:
@@ -153,8 +186,11 @@ def _poisson_lower_tail(k: int, lam: float) -> float:
 def _log_nbinom_pmf(k: int, r: float, p: float) -> float:
     # r = size (number of "successes"), p = P(success); mean = r(1-p)/p
     return (
-        math.lgamma(k + r) - math.lgamma(r) - math.lgamma(k + 1)
-        + r * math.log(p) + k * math.log(1 - p)
+        math.lgamma(k + r)
+        - math.lgamma(r)
+        - math.lgamma(k + 1)
+        + r * math.log(p)
+        + k * math.log(1 - p)
     )
 
 
@@ -186,7 +222,7 @@ def _fit_count_model(daily_counts: list) -> tuple:
     if mean <= 0 or var / max(mean, 1e-9) < COUNT_OVERDISPERSION_RATIO:
         return ("poisson", max(mean_smoothed, RATE_SMOOTHING_PRIOR))
     # Method-of-moments NB fit: var = mean + mean^2 / r  =>  r = mean^2/(var-mean)
-    r = mean_smoothed ** 2 / max(var - mean, 1e-6)
+    r = mean_smoothed**2 / max(var - mean, 1e-6)
     p = r / (r + mean_smoothed)
     return ("nbinom", r, p)
 
@@ -210,7 +246,9 @@ def _deviate_continuous(metric: str, today: float, stats) -> MetricDeviation:
     scaled_mad = stats.mad * MAD_SCALE
     if scaled_mad < MIN_VARIABILITY_MAD:
         return MetricDeviation(
-            metric=metric, today=today, model="insufficient_variability",
+            metric=metric,
+            today=today,
+            model="insufficient_variability",
             sigma_equivalent=None,
             note=(
                 "基線在此指標上幾乎沒有波動（MAD≈0），無法計算穩健 z-score；"
@@ -219,13 +257,17 @@ def _deviate_continuous(metric: str, today: float, stats) -> MetricDeviation:
         )
     z = (today - stats.median) / scaled_mad
     return MetricDeviation(
-        metric=metric, today=today, model="robust_z",
+        metric=metric,
+        today=today,
+        model="robust_z",
         sigma_equivalent=round(z, 3),
         deviation_score=_deviation_score(z),
     )
 
 
-def _deviate_count(metric: str, today: float, stats, history_counts: list) -> MetricDeviation:
+def _deviate_count(
+    metric: str, today: float, stats, history_counts: list
+) -> MetricDeviation:
     """Two-sided: unusually *high* counts (e.g. excess scratching) and
     unusually *low* counts (e.g. a normally-active cat suddenly not
     grooming at all, which can itself be a health signal) both produce a
@@ -252,9 +294,13 @@ def _deviate_count(metric: str, today: float, stats, history_counts: list) -> Me
     sigma_eq = sign * _norm_isf(max(min(p, 1.0), 1e-300))
 
     return MetricDeviation(
-        metric=metric, today=today, model=f"{model[0]}_tail",
-        sigma_equivalent=round(sigma_eq, 3), tail_p=round(p, 5),
-        deviation_score=_deviation_score(sigma_eq), note=note,
+        metric=metric,
+        today=today,
+        model=f"{model[0]}_tail",
+        sigma_equivalent=round(sigma_eq, 3),
+        tail_p=round(p, 5),
+        deviation_score=_deviation_score(sigma_eq),
+        note=note,
     )
 
 
@@ -281,8 +327,13 @@ def compute_deviation(
         than the one baked into ``baseline`` (e.g. in tests). Merged on
         top of ``baseline.count_histories``, taking precedence per-metric.
     """
-    history_counts_by_metric = {**baseline.count_histories, **(history_counts_by_metric or {})}
-    result = DeviationResult(baseline_days=baseline.days_count, confidence=baseline.confidence)
+    history_counts_by_metric = {
+        **baseline.count_histories,
+        **(history_counts_by_metric or {}),
+    }
+    result = DeviationResult(
+        baseline_days=baseline.days_count, confidence=baseline.confidence
+    )
 
     for metric, stats in baseline.metrics.items():
         cur = float(today.get(metric, 0) or 0)
@@ -292,7 +343,9 @@ def compute_deviation(
             counts = history_counts_by_metric.get(metric)
             if not counts:
                 result.metrics[metric] = MetricDeviation(
-                    metric=metric, today=cur, model="insufficient_variability",
+                    metric=metric,
+                    today=cur,
+                    model="insufficient_variability",
                     sigma_equivalent=None,
                     note="缺少每日計數歷史，無法擬合尾機率模型。",
                 )

@@ -9,6 +9,13 @@ import time
 import csv
 import math
 
+from constants import (
+    WHITE, BLACK, COLOR_HEAD, COLOR_BODY, COLOR_TAIL,
+    COLOR_LEFT_FRONT, COLOR_RIGHT_FRONT, COLOR_LEFT_HIND, COLOR_RIGHT_HIND,
+    HEAD_LINKS, BODY_LINKS, TAIL_LINKS,
+    LEFT_FRONT_LINKS, RIGHT_FRONT_LINKS, LEFT_HIND_LINKS, RIGHT_HIND_LINKS,
+)
+
 # ==================== Configuration ====================
 MODEL_PATH = r"C:\ai_project\cat_pose\v11s_128.pt"
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
@@ -25,30 +32,12 @@ MIN_BODY_SCALE = 1e-3
 STABILITY_K = 4.0
 
 # ==================== Colors ====================
-BLACK = (0, 0, 0)
+# 一般用途顏色（非骨架配色，不放進共用模組）
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
-BLUE = (255, 0, 0)
 YELLOW = (0, 255, 255)
-WHITE = (255, 255, 255)
 
-COLOR_HEAD = (255, 255, 0)
-COLOR_BODY = (0, 255, 0)
-COLOR_LIMB = (255, 0, 0)
-COLOR_TAIL = (255, 0, 255)
-
-# Four legs colors (Left Front, Right Front, Left Hind, Right Hind)
-COLOR_LEFT_FRONT  = (255, 0, 255)   # Magenta
-COLOR_RIGHT_FRONT = (0, 255, 255)   # Cyan
-COLOR_LEFT_HIND   = (255, 165, 0)   # Orange
-COLOR_RIGHT_HIND  = (0, 255, 0)     # Green
-
-# ==================== Skeleton Links ====================
-HEAD_LINKS = [(0,1), (0,2), (1,2)]
-BODY_LINKS = [(0,3), (3,4), (4,5)]
-FRONT_LIMBS = [(3,6), (6,7), (3,8), (8,9)]
-HIND_LIMBS = [(5,10), (10,11), (5,12), (12,13)]
-TAIL_LINKS = [(5,14), (14,15), (15,16)]
+# 骨架顏色/連結定義統一從 constants.py import（見檔案開頭）
 
 # ==================== Fast Drawing Functions ====================
 def draw_links_fast(frame, kpts, conf, links, color):
@@ -66,10 +55,10 @@ def draw_skeleton_fast(frame, kpts, conf):
     draw_links_fast(frame, kpts, conf, BODY_LINKS, COLOR_BODY)
     
     # Four legs with different colors
-    draw_links_fast(frame, kpts, conf, [(3,6), (6,7)], COLOR_LEFT_FRONT)   # Left front
-    draw_links_fast(frame, kpts, conf, [(3,8), (8,9)], COLOR_RIGHT_FRONT)  # Right front
-    draw_links_fast(frame, kpts, conf, [(5,10), (10,11)], COLOR_LEFT_HIND)   # Left hind
-    draw_links_fast(frame, kpts, conf, [(5,12), (12,13)], COLOR_RIGHT_HIND)  # Right hind
+    draw_links_fast(frame, kpts, conf, LEFT_FRONT_LINKS, COLOR_LEFT_FRONT)
+    draw_links_fast(frame, kpts, conf, RIGHT_FRONT_LINKS, COLOR_RIGHT_FRONT)
+    draw_links_fast(frame, kpts, conf, LEFT_HIND_LINKS, COLOR_LEFT_HIND)
+    draw_links_fast(frame, kpts, conf, RIGHT_HIND_LINKS, COLOR_RIGHT_HIND)
     
     draw_links_fast(frame, kpts, conf, TAIL_LINKS, COLOR_TAIL)
     

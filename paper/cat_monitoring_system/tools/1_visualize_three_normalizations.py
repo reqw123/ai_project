@@ -5,6 +5,7 @@
     f = flip_normalize（翻轉統一朝向）
     o = orientation_normalize（旋轉至身體朝上）
     n = normalize_skeleton_coords（置中＋依體型縮放）
+    m = 置中步驟是否以 mid_back 為基準（僅 n=ON 時有作用；OFF 時 coord 正規化跳過置中，只做縮放）
     p = raw/正規化 overlay 切換（原始影像+原始骨架 vs 黑底+正規化骨架）
 另含 EMA 關鍵點平滑（本檔預設 EMA_ALPHA=1.0，即關閉，不影響三步驟正規化的示範）。
 """
@@ -32,13 +33,11 @@ from models.stgcn_model import (
     interpolate_missing,
     flip_normalize,
     orientation_normalize,
-    normalize_skeleton_coords,
     build_feature_tensor,
     get_in_channels_for_mode,
 )
 from utils.constants import (
     BEHAVIOR_CLASSES,
-    BEHAVIOR_TEXT_MAP,
     BEHAVIOR_COLORS,
     LOW_CONF_ID,
     BLACK,
@@ -59,7 +58,7 @@ FOLDER_STOP    = rf"{_BASE}\stop"
 FOLDER_MAP = {
     'z': (FOLDER_WALK,    "WALK"),
     'x': (FOLDER_LICK,    "LICK"),
-    'c': (FOLDER_SCRATCH, "SCRATCH"),
+    'c': (FOLDER_SCRATCH, "SCRATCH"),   
     'v': (FOLDER_SHAKE,   "SHAKE"),
     'b': (FOLDER_STOP,    "STOP"),
 }
@@ -69,7 +68,7 @@ DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
 FOLDER_TEST_MODE = 'single'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試"  # 'single' 模式使用的扁平資料夾
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Videos\NVIDIA\Desktop\Desktop 2026.07.21 - 16.55.41.05.mp4" # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
@@ -103,12 +102,22 @@ ENABLE_FPS_DOWNSAMPLE = True  # 只要不是 30fps，就把模型時基統一到
 CLASSIFY_STRIDE = 2  # 每幾個處理幀做一次分類（1=每幀）
 DISPLAY_WINDOW = True
 WINDOW_NAME = "Cat Behavior Inference (EMA)"
-DISPLAY_SIZE = (1080, 720)  # 視窗顯示解析度（寬, 高），設為 None 維持原始解析度
+DISPLAY_RESOLUTION = "1080p"  # "720p" 或 "1080p"，控制 GUI 視窗顯示解析度
+_DISPLAY_RESOLUTION_PRESETS = {
+    "720p": (1280, 720),
+    "1080p": (1920, 1080),
+}
+DISPLAY_SIZE = _DISPLAY_RESOLUTION_PRESETS[DISPLAY_RESOLUTION]  # 視窗顯示解析度（寬, 高）
 LOOP_PLAYBACK = True  # 是否循環播放
 
 # ===== 關鍵點顯示門檻 =====
 DRAW_KP_CONF_THRESHOLD = 0.25  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
 SHOW_PROBABILITY_BARS = False  # 關閉機率條可減少每幀繪圖負載
+
+# ===== 按鍵狀態提示文字（畫面正上方短暫顯示後淡出）=====
+STATUS_MESSAGE_HOLD_SEC = 1.2   # 全亮顯示的秒數
+STATUS_MESSAGE_FADE_SEC = 0.8   # 接著淡出的秒數（淡出結束即完全消失）
+STATUS_MESSAGE_DURATION_SEC = STATUS_MESSAGE_HOLD_SEC + STATUS_MESSAGE_FADE_SEC
 
 # ===== EMA 平滑設定 =====
 # alpha 越大 → 越貼近原始偵測值（響應快、平滑少）
@@ -120,6 +129,10 @@ EMA_ALPHA = 1.0  # 須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致
 NORM_FLIP   = False  # f 鍵：flip_normalize       翻轉統一方向
 NORM_ORIENT = False  # o 鍵：orientation_normalize 旋轉至 y 軸正向
 NORM_COORD  = False  # n 鍵：normalize_skeleton_coords 中心化＋體型縮放
+# m 鍵：coord 正規化的置中步驟是否以 mid_back(4) 為基準點（僅 NORM_COORD=True 時有作用）。
+# True  = 用 mid_back 位置置中（跟正式 pipeline 的 normalize_skeleton_coords 一致）
+# False = 跳過置中，只做體型縮放，方便直接對照「置中 vs 不置中」的視覺差異
+NORM_MID_BACK_CENTER = True
 # ===== Overlay 模式（p 鍵切換）=====
 # False = 黑底 + 正規化骨架（檢視正規化效果）
 # True  = 原始影像 + 原始骨架（檢視 YOLO 偵測結果）
@@ -144,27 +157,6 @@ KEYPOINT_NAMES = [
     "Tail_Root",      # 14: 尾根
     "Tail_Mid",       # 15: 尾中
     "Tail_Tip",       # 16: 尾尖
-]
-
-# 17 關鍵點中文名稱
-KEYPOINT_NAMES_ZH = [
-    "鼻子",              # 0: nose
-    "左耳尖",           # 1: left_ear_tip
-    "右耳尖",           # 2: right_ear_tip
-    "胸口",             # 3: 前胸（前肢附著點）
-    "中背",             # 4: 身體中背
-    "臀部",             # 5: hip
-    "左前腿肘部",       # 6: left_front_elbow
-    "左前爪",           # 7: left_front_paw
-    "右前腿肘部",       # 8: right_front_elbow
-    "右前爪",           # 9: right_front_paw
-    "左後腿膝部",       # 10: left_hind_knee
-    "左後爪",           # 11: left_hind_paw
-    "右後腿膝部",       # 12: right_hind_knee
-    "右後爪",           # 13: right_hind_paw
-    "尾巴根部",         # 14: tail_base
-    "尾巴中段",         # 15: tail_mid
-    "尾巴尖端",         # 16: tail_tip
 ]
 
 # ===== test2.py 骨架視覺樣式 =====
@@ -318,6 +310,25 @@ def scale_kpts_and_bbox_for_letterbox(kpts, bbox, scale, crop_x, crop_y):
             y2 * scale - crop_y,
         ], dtype=np.float32)
     return scaled_kpts, scaled_bbox
+
+
+def normalize_skeleton_coords_with_center_toggle(
+    sequence, apply_center=True, center_joint=4, chest_joint=3, lower_body_joint=5
+):
+    """normalize_skeleton_coords() 的教學用變體：置中步驟（減去 mid_back 座標）
+    可透過 apply_center 開關，縮放步驟不受影響，方便直接對照「以 mid_back 置中」
+    與「不置中、只縮放」兩種結果的視覺差異。apply_center=True 時跟正式
+    pipeline 的 normalize_skeleton_coords() 行為完全一致。"""
+    seq = sequence.copy()
+    if apply_center:
+        seq[:, :, :2] -= seq[:, center_joint : center_joint + 1, :2]
+    body_sizes = np.linalg.norm(
+        seq[:, chest_joint, :2] - seq[:, lower_body_joint, :2], axis=1
+    )
+    avg_body_size = np.mean(body_sizes)
+    if avg_body_size > 1e-6:
+        seq[:, :, :2] /= avg_body_size
+    return seq
 
 
 def draw_no_cat_overlay(frame, text="No cat detected"):
@@ -481,7 +492,6 @@ def draw_test2_style_overlay(
     """使用 test2.py 的骨架外觀，並沿用既有行為資訊 HUD。"""
     h, w = frame.shape[:2]
     ui_scale = compute_ui_scale(w, h)
-    bbox_thickness = scale_px(1, ui_scale, min_px=1)
     edge_thickness = scale_px(2, ui_scale, min_px=1)
     kp_outer_radius = scale_px(4, ui_scale, min_px=2)
     kp_inner_radius = max(1, kp_outer_radius - 1)
@@ -1192,6 +1202,16 @@ def main():
     # Sliding Window Lab（w 鍵）狀態
     window_viz_mode = False
 
+    # 按鍵狀態提示文字：全亮顯示 STATUS_MESSAGE_HOLD_SEC 秒，接著在
+    # STATUS_MESSAGE_FADE_SEC 秒內線性淡出後完全消失
+    _status_text = ""
+    _status_set_t = 0.0
+
+    def _set_status(text):
+        nonlocal _status_text, _status_set_t
+        _status_text = text
+        _status_set_t = time.time()
+
     def _hit_test_graph_node(x, y):
         for idx, (nx, ny) in enumerate(graph_nodes):
             if (nx - x) ** 2 + (ny - y) ** 2 <= GRAPH_HIT_RADIUS_PX ** 2:
@@ -1252,10 +1272,11 @@ def main():
 
     # 正規化消融 + overlay 模式（可於播放中即時切換）
     norm_state = {
-        'flip':        NORM_FLIP,
-        'orient':      NORM_ORIENT,
-        'coord':       NORM_COORD,
-        'overlay_raw': OVERLAY_RAW,
+        'flip':            NORM_FLIP,
+        'orient':          NORM_ORIENT,
+        'coord':           NORM_COORD,
+        'mid_back_center': NORM_MID_BACK_CENTER,
+        'overlay_raw':     OVERLAY_RAW,
     }
 
     # 即時顯示狀態
@@ -1358,7 +1379,7 @@ def main():
         print(f"時長: {duration:.1f} 秒")
         print("控制: q=退出  space=暫停  r=重置  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  u=全部面板  h=關鍵點標記開關（點擊左上角 KEY JOINTS 展開/收合數值）")
         print("教學: g=Graph Lab（點畫布=節點/邊，e=清空，s=疊模型真實骨架圖對照）  w=Sliding Window Lab（滑動視窗切幀動畫）")
-        print("消融: f=flip  o=orient  n=coord  p=raw/norm overlay")
+        print("消融: f=flip  o=orient  n=coord  m=coord置中基準(mid_back開關)  p=raw/norm overlay")
         if loop_playback:
             print("🔁 循環播放模式（當前影片播完會重播）")
         print("-" * 60)
@@ -1477,7 +1498,9 @@ def main():
                         # 顯示骨架的真實位置與大小，讓教授直觀看見正規化的效果
                         _last_prenorm_kpts = seq_array[-1].copy()
                         if norm_state['coord']:
-                            seq_array = normalize_skeleton_coords(seq_array)
+                            seq_array = normalize_skeleton_coords_with_center_toggle(
+                                seq_array, apply_center=norm_state['mid_back_center']
+                            )
                     else:
                         _last_prenorm_kpts = seq_array[-1].copy()
                     _last_norm_kpts = seq_array[-1].copy()   # 17 點（含尾巴），純顯示用
@@ -1589,8 +1612,11 @@ def main():
                         _disp_kpts, _disp_bbox = scale_kpts_and_bbox_for_letterbox(
                             _last_raw_kpts, bbox, _lb_scale, _lb_cx, _lb_cy)
                         _disp_conf = _last_raw_kconf
-                    elif not _use_raw and not norm_state['coord'] and _last_prenorm_kpts is not None:
-                        # n=OFF：用 flip+orient 後的像素座標（隨貓移動，大小反映距離）
+                    elif not _use_raw and (not norm_state['coord'] or not norm_state['mid_back_center']) and _last_prenorm_kpts is not None:
+                        # n=OFF，或 n=ON 但 m=OFF（未置中）：都用 flip+orient 後、尚未置中
+                        # 的真實像素座標畫在黑底上（隨貓移動，大小反映距離），因為
+                        # _norm_kpts_to_display() 硬性假設座標已「以 mid_back 置中」，
+                        # 沒置中時直接套用會讓骨架跑到畫面外。
                         _disp_kpts, _disp_bbox = scale_kpts_and_bbox_for_letterbox(
                             _last_prenorm_kpts, None, _lb_scale, _lb_cx, _lb_cy)
                         _disp_conf = _last_norm_kconf
@@ -1638,6 +1664,11 @@ def main():
                     if _use_raw and _last_raw_kpts is not None:
                         _disp_kpts = _last_raw_kpts
                         _disp_conf = _last_raw_kconf
+                    elif not _use_raw and (not norm_state['coord'] or not norm_state['mid_back_center']) and _last_prenorm_kpts is not None:
+                        # n=OFF，或 n=ON 但 m=OFF（未置中）：同上一個分支的理由，
+                        # 用未置中的真實像素座標，避免 _norm_kpts_to_display() 把骨架推出畫面外
+                        _disp_kpts = _last_prenorm_kpts
+                        _disp_conf = _last_norm_kconf
                     elif not _use_raw and _last_norm_kpts is not None:
                         _disp_kpts = _norm_kpts_to_display(_last_norm_kpts, show_frame.shape[0], show_frame.shape[1])
                         _disp_conf = _last_norm_kconf
@@ -1724,6 +1755,7 @@ def main():
                     f"[f]flip:{'ON' if _ns['flip'] else 'OFF'}  "
                     f"[o]orient:{'ON' if _ns['orient'] else 'OFF'}  "
                     f"[n]coord:{'ON' if _ns['coord'] else 'OFF'}  "
+                    f"[m]mid_back:{'ON' if _ns['mid_back_center'] else 'OFF'}  "
                     f"[p]raw:{'ON' if _ns['overlay_raw'] else 'OFF'}  "
                     f"[h]highlight:{'ON' if show_joint_highlight else 'OFF'}"
                 )
@@ -1747,6 +1779,39 @@ def main():
                         show_frame, len(keypoints_buffer), SEQUENCE_LENGTH, CLASSIFY_STRIDE,
                         just_classified, _lab_ui_scale,
                     )
+                # 按鍵狀態提示文字（畫面正上方置中，全亮顯示一段時間後淡出消失）
+                if _status_text:
+                    _elapsed = time.time() - _status_set_t
+                    if _elapsed < STATUS_MESSAGE_DURATION_SEC:
+                        if _elapsed <= STATUS_MESSAGE_HOLD_SEC:
+                            _alpha = 1.0
+                        else:
+                            _fade_t = _elapsed - STATUS_MESSAGE_HOLD_SEC
+                            _alpha = max(0.0, 1.0 - _fade_t / STATUS_MESSAGE_FADE_SEC)
+                        if _alpha > 0.0:
+                            _sh, _sw = show_frame.shape[:2]
+                            _s_ui = compute_ui_scale(_sw, _sh)
+                            _s_fs = 0.62 * _s_ui
+                            _s_th = scale_px(2, _s_ui, min_px=1)
+                            (_s_tw, _s_th_px), _ = cv2.getTextSize(
+                                _status_text, cv2.FONT_HERSHEY_SIMPLEX, _s_fs, _s_th)
+                            _s_pad = scale_px(10, _s_ui, min_px=6)
+                            _s_x0 = max(0, (_sw - _s_tw) // 2 - _s_pad)
+                            _s_y0 = scale_px(14, _s_ui, min_px=8)
+                            _s_x1 = min(_sw, _s_x0 + _s_tw + _s_pad * 2)
+                            _s_y1 = _s_y0 + _s_th_px + _s_pad * 2
+                            _roi = show_frame[_s_y0:_s_y1, _s_x0:_s_x1]
+                            if _roi.size > 0:
+                                _plate = np.full_like(_roi, 15)
+                                cv2.addWeighted(_roi, 1.0 - 0.75 * _alpha, _plate, 0.75 * _alpha, 0, _roi)
+                                show_frame[_s_y0:_s_y1, _s_x0:_s_x1] = _roi
+                            _s_tx = _s_x0 + _s_pad
+                            _s_ty = _s_y1 - _s_pad
+                            _s_col = tuple(int(c * _alpha) for c in (255, 255, 255))
+                            cv2.putText(show_frame, _status_text, (_s_tx, _s_ty),
+                                        cv2.FONT_HERSHEY_SIMPLEX, _s_fs, (0, 0, 0), _s_th + 1, cv2.LINE_AA)
+                            cv2.putText(show_frame, _status_text, (_s_tx, _s_ty),
+                                        cv2.FONT_HERSHEY_SIMPLEX, _s_fs, _s_col, _s_th, cv2.LINE_AA)
                 cv2.imshow(WINDOW_NAME, show_frame)
 
             if display_window:
@@ -1768,49 +1833,65 @@ def main():
                 if key == ord('i'):
                     show_overlay_info = not show_overlay_info
                     print(f"\n資訊面板: {'顯示' if show_overlay_info else '隱藏'}")
+                    _set_status(f"INFO PANEL: {'ON' if show_overlay_info else 'OFF'}")
                     continue
                 if key == ord('u'):
                     show_all_panels = not show_all_panels
                     print(f"\n所有面板: {'顯示' if show_all_panels else '隱藏'}")
+                    _set_status(f"ALL PANELS: {'ON' if show_all_panels else 'OFF'}")
                     continue
                 if key == ord('h'):
                     show_joint_highlight = not show_joint_highlight
                     print(f"\n關鍵點高亮動畫: {'顯示' if show_joint_highlight else '隱藏'}")
+                    _set_status(f"JOINT HIGHLIGHT: {'ON' if show_joint_highlight else 'OFF'}")
                     continue
                 if key == ord('g'):
                     graph_mode = not graph_mode
                     print(f"\nGraph Lab: {'開啟' if graph_mode else '關閉'}"
                           f"（點空白處=新增節點  點兩個節點=連邊  右鍵節點=刪除  e=清空  s=顯示/隱藏模型真實骨架圖）")
+                    _set_status(f"GRAPH LAB: {'ON' if graph_mode else 'OFF'}")
                     continue
                 if key == ord('e'):
                     graph_nodes.clear()
                     graph_edges.clear()
                     graph_selected = None
                     print("\nGraph Lab: 已清空節點與邊")
+                    _set_status("GRAPH LAB: cleared")
                     continue
                 if key == ord('s'):
                     show_real_graph = not show_real_graph
                     print(f"\nGraph Lab 疊圖對照（模型真實骨架）: {'顯示' if show_real_graph else '隱藏'}")
+                    _set_status(f"GRAPH LAB real skeleton overlay: {'ON' if show_real_graph else 'OFF'}")
                     continue
                 if key == ord('w'):
                     window_viz_mode = not window_viz_mode
                     print(f"\nSliding Window Lab: {'開啟' if window_viz_mode else '關閉'}")
+                    _set_status(f"SLIDING WINDOW LAB: {'ON' if window_viz_mode else 'OFF'}")
                     continue
                 if key == ord('f'):
                     norm_state['flip'] = not norm_state['flip']
                     print(f"\n[消融] flip_normalize: {'ON' if norm_state['flip'] else 'OFF'}")
+                    _set_status(f"[ablation] flip_normalize: {'ON' if norm_state['flip'] else 'OFF'}")
                     continue
                 if key == ord('o'):
                     norm_state['orient'] = not norm_state['orient']
                     print(f"\n[消融] orientation_normalize: {'ON' if norm_state['orient'] else 'OFF'}")
+                    _set_status(f"[ablation] orientation_normalize: {'ON' if norm_state['orient'] else 'OFF'}")
                     continue
                 if key == ord('n'):
                     norm_state['coord'] = not norm_state['coord']
                     print(f"\n[消融] normalize_skeleton_coords: {'ON' if norm_state['coord'] else 'OFF'}")
+                    _set_status(f"[ablation] normalize_skeleton_coords: {'ON' if norm_state['coord'] else 'OFF'}")
+                    continue
+                if key == ord('m'):
+                    norm_state['mid_back_center'] = not norm_state['mid_back_center']
+                    print(f"\n[消融] coord 置中基準 mid_back: {'ON（以 mid_back 置中）' if norm_state['mid_back_center'] else 'OFF（不置中，只縮放）'}")
+                    _set_status(f"[ablation] center-on-mid_back: {'ON (centered)' if norm_state['mid_back_center'] else 'OFF (real position)'}")
                     continue
                 if key == ord('p'):
                     norm_state['overlay_raw'] = not norm_state['overlay_raw']
                     print(f"\n[Overlay] {'原始影像 + 原始骨架' if norm_state['overlay_raw'] else '黑底 + 正規化骨架'}")
+                    _set_status(f"[Overlay] {'RAW frame + raw skeleton' if norm_state['overlay_raw'] else 'BLACK bg + normalized skeleton'}")
                     continue
                 if _go_next:
                     switch_delta = 1
@@ -1818,6 +1899,7 @@ def main():
                         switched_before_first_pass_complete = True
                     reset_video_runtime_state()
                     print("\n切換到下一部影片")
+                    _set_status("Next video")
                     break
                 if _go_prev:
                     switch_delta = -1
@@ -1825,6 +1907,7 @@ def main():
                         switched_before_first_pass_complete = True
                     reset_video_runtime_state()
                     print("\n切換到上一部影片")
+                    _set_status("Previous video")
                     break
                 # z/x/c/v/b 切換行為資料夾
                 if chr(key & 0xFF) in FOLDER_MAP and chr(key & 0xFF) != current_folder_key:
@@ -1833,6 +1916,7 @@ def main():
                         switched_before_first_pass_complete = True
                     reset_video_runtime_state()
                     print(f"\n切換資料夾 → {FOLDER_MAP[switch_folder_key][1]} [{switch_folder_key}]")
+                    _set_status(f"Folder -> {FOLDER_MAP[switch_folder_key][1]} [{switch_folder_key}]")
                     break
                 if key == ord('r'):
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -1841,6 +1925,7 @@ def main():
                     switched_before_first_pass_complete = False
                     reset_video_runtime_state()
                     print("\n↺ 已重置：回到影片開頭並清空偵測狀態")
+                    _set_status("Reset: back to start")
                     continue
                 if key == ord(' '):
                     paused = not paused
@@ -1863,38 +1948,53 @@ def main():
                         elif k2 == ord('i'):
                             show_overlay_info = not show_overlay_info
                             print(f"\n資訊面板: {'顯示' if show_overlay_info else '隱藏'}")
+                            _set_status(f"INFO PANEL: {'ON' if show_overlay_info else 'OFF'}")
                         elif k2 == ord('u'):
                             show_all_panels = not show_all_panels
                             print(f"\n所有面板: {'顯示' if show_all_panels else '隱藏'}")
+                            _set_status(f"ALL PANELS: {'ON' if show_all_panels else 'OFF'}")
                         elif k2 == ord('h'):
                             show_joint_highlight = not show_joint_highlight
                             print(f"\n關鍵點高亮動畫: {'顯示' if show_joint_highlight else '隱藏'}")
+                            _set_status(f"JOINT HIGHLIGHT: {'ON' if show_joint_highlight else 'OFF'}")
                         elif k2 == ord('g'):
                             graph_mode = not graph_mode
                             print(f"\nGraph Lab: {'開啟' if graph_mode else '關閉'}")
+                            _set_status(f"GRAPH LAB: {'ON' if graph_mode else 'OFF'}")
                         elif k2 == ord('e'):
                             graph_nodes.clear()
                             graph_edges.clear()
                             graph_selected = None
                             print("\nGraph Lab: 已清空節點與邊")
+                            _set_status("GRAPH LAB: cleared")
                         elif k2 == ord('s'):
                             show_real_graph = not show_real_graph
                             print(f"\nGraph Lab 疊圖對照（模型真實骨架）: {'顯示' if show_real_graph else '隱藏'}")
+                            _set_status(f"GRAPH LAB real skeleton overlay: {'ON' if show_real_graph else 'OFF'}")
                         elif k2 == ord('w'):
                             window_viz_mode = not window_viz_mode
                             print(f"\nSliding Window Lab: {'開啟' if window_viz_mode else '關閉'}")
+                            _set_status(f"SLIDING WINDOW LAB: {'ON' if window_viz_mode else 'OFF'}")
                         elif k2 == ord('f'):
                             norm_state['flip'] = not norm_state['flip']
                             print(f"\n[消融] flip_normalize: {'ON' if norm_state['flip'] else 'OFF'}")
+                            _set_status(f"[ablation] flip_normalize: {'ON' if norm_state['flip'] else 'OFF'}")
                         elif k2 == ord('o'):
                             norm_state['orient'] = not norm_state['orient']
                             print(f"\n[消融] orientation_normalize: {'ON' if norm_state['orient'] else 'OFF'}")
+                            _set_status(f"[ablation] orientation_normalize: {'ON' if norm_state['orient'] else 'OFF'}")
                         elif k2 == ord('n'):
                             norm_state['coord'] = not norm_state['coord']
                             print(f"\n[消融] normalize_skeleton_coords: {'ON' if norm_state['coord'] else 'OFF'}")
+                            _set_status(f"[ablation] normalize_skeleton_coords: {'ON' if norm_state['coord'] else 'OFF'}")
+                        elif k2 == ord('m'):
+                            norm_state['mid_back_center'] = not norm_state['mid_back_center']
+                            print(f"\n[消融] coord 置中基準 mid_back: {'ON（以 mid_back 置中）' if norm_state['mid_back_center'] else 'OFF（不置中，只縮放）'}")
+                            _set_status(f"[ablation] center-on-mid_back: {'ON (centered)' if norm_state['mid_back_center'] else 'OFF (real position)'}")
                         elif k2 == ord('p'):
                             norm_state['overlay_raw'] = not norm_state['overlay_raw']
                             print(f"\n[Overlay] {'原始影像 + 原始骨架' if norm_state['overlay_raw'] else '黑底 + 正規化骨架'}")
+                            _set_status(f"[Overlay] {'RAW frame + raw skeleton' if norm_state['overlay_raw'] else 'BLACK bg + normalized skeleton'}")
                         elif _p_next:
                             paused = False
                             switch_delta = 1
@@ -1902,6 +2002,7 @@ def main():
                                 switched_before_first_pass_complete = True
                             reset_video_runtime_state()
                             print("\n切換到下一部影片")
+                            _set_status("Next video")
                             break
                         elif _p_prev:
                             paused = False
@@ -1910,6 +2011,7 @@ def main():
                                 switched_before_first_pass_complete = True
                             reset_video_runtime_state()
                             print("\n切換到上一部影片")
+                            _set_status("Previous video")
                             break
                         elif chr(k2 & 0xFF) in FOLDER_MAP and chr(k2 & 0xFF) != current_folder_key:
                             paused = False
@@ -1918,6 +2020,7 @@ def main():
                                 switched_before_first_pass_complete = True
                             reset_video_runtime_state()
                             print(f"\n切換資料夾 → {FOLDER_MAP[switch_folder_key][1]} [{switch_folder_key}]")
+                            _set_status(f"Folder -> {FOLDER_MAP[switch_folder_key][1]} [{switch_folder_key}]")
                             break
                         elif k2 == ord('r'):
                             paused = False
@@ -1927,6 +2030,7 @@ def main():
                             switched_before_first_pass_complete = False
                             reset_video_runtime_state()
                             print("\n↺ 已重置：回到影片開頭並清空偵測狀態")
+                            _set_status("Reset: back to start")
                             break
 
             if stop_requested or switch_delta != 0:

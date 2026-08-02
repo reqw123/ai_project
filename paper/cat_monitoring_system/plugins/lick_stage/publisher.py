@@ -1,9 +1,11 @@
 """Non-blocking HTTP publisher to Node-RED."""
+
 import concurrent.futures
 import logging
 
 try:
     import requests as _requests
+
     _HAS_REQUESTS = True
 except ImportError:
     _requests = None
@@ -22,18 +24,20 @@ class NodeRedPublisher:
     """
 
     def __init__(self, url: str, timeout: float = _C.NODERED_TIMEOUT):
-        self._url     = url
+        self._url = url
         self._timeout = timeout
-        self._pool    = concurrent.futures.ThreadPoolExecutor(
+        self._pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="lick_nr"
         )
 
     def publish(self, payload: dict) -> None:
+        """提交一筆 JSON payload 到背景執行緒發送，立即返回。"""
         if not _HAS_REQUESTS or not self._url:
             return
         self._pool.submit(self._post, payload)
 
     def close(self) -> None:
+        """關閉背景執行緒池（不等待進行中的請求完成）。"""
         self._pool.shutdown(wait=False)
 
     def _post(self, payload: dict) -> None:

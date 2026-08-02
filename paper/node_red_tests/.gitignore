@@ -1,0 +1,8 @@
+# 這幾個檔案是執行 fetch_real_history.py / render_baseline_ui_preview.js /
+# fake_history_gen.py 產生的輸出，real_history_snapshot.json 跟
+# baseline_ui_preview.html 會內嵌真實貓咪行為資料（即使已經濾掉
+# discord_webhook 等機密欄位，仍屬個人資料），不應該進版控。
+real_history_snapshot.json
+baseline_ui_preview.html
+fake_scenarios.json
+__pycache__/

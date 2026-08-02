@@ -23,6 +23,8 @@ Files:
 import argparse
 import csv
 import re
+import time
+from datetime import datetime
 from pathlib import Path
 from collections import deque
 
@@ -1280,10 +1282,40 @@ def print_final_summary(metrics_list, names):
     print('\n'.join(lines))
 
 
+def format_elapsed(seconds: float) -> str:
+    """把秒數格式化成 HH:MM:SS（>=1 小時才顯示小時），並附上總秒數方便精確比對。"""
+    seconds = max(0.0, float(seconds))
+    total_sec = int(round(seconds))
+    h, rem = divmod(total_sec, 3600)
+    m, s = divmod(rem, 60)
+    hms = f"{h:d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
+    return f"{hms}（共 {seconds:.1f} 秒）"
+
+
+def append_run_history(out_root: Path, run_tag: str, labels: list, total_elapsed_sec: float) -> Path:
+    """把本次執行花費的總時間附加寫進跨執行的歷史紀錄檔（.log），放在 out_root
+    根目錄（不是本次執行的 run_tag 子資料夾），讓每次執行都能累積在同一個檔案裡。"""
+    path = out_root / "comparison_history.log"
+    dt_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sep = "=" * 60
+    lines = [
+        sep,
+        f"日期時間　：{dt_str}",
+        f"比較編號　：#{run_tag}",
+        f"比較模型　：{' vs '.join(labels)}",
+        f"總花費時間：{format_elapsed(total_elapsed_sec)}",
+        sep, "",
+    ]
+    with path.open("a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════
 def main():
+    run_start_time = time.time()
     parser = argparse.ArgumentParser(
         description='Compare 2~5 ST-GCN models on behavior video folders.'
     )
@@ -1503,6 +1535,11 @@ def main():
     print_final_summary(metrics_list, labels)
     print_mcnemar_summary(mcnemar_results, labels, BEHAVIOR_CLASSES, evaluated_cls)
     print_per_video_accuracy(per_video_acc, labels, BEHAVIOR_CLASSES)
+
+    total_elapsed_sec = time.time() - run_start_time
+    history_path = append_run_history(out_root, run_tag, labels, total_elapsed_sec)
+    print(f"\n本次執行總花費時間：{format_elapsed(total_elapsed_sec)}")
+    print(f"已附加到執行歷史紀錄：{history_path}")
 
 
 if __name__ == '__main__':

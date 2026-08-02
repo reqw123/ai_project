@@ -5,35 +5,25 @@ Cat Pose Video Annotation Tool - Interactive Editing Version
 Press Space to freeze frame and edit, Press S to save and continue playing
 """
 
-import os
+import sys
 import cv2
 import numpy as np
 import shutil
 from ultralytics import YOLO
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from constants import (
+    WHITE, COLOR_HEAD, COLOR_BODY, COLOR_TAIL,
+    COLOR_LEFT_FRONT, COLOR_RIGHT_FRONT, COLOR_LEFT_HIND, COLOR_RIGHT_HIND,
+    HEAD_LINKS, BODY_LINKS, TAIL_LINKS,
+    LEFT_FRONT_LINKS, RIGHT_FRONT_LINKS, LEFT_HIND_LINKS, RIGHT_HIND_LINKS,
+)
 
-# ==================== Colors and Skeleton Links ====================
-BLACK = (0, 0, 0)
+# ==================== Colors（一般用途，不放進共用模組） ====================
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
-BLUE = (255, 0, 0)
 YELLOW = (0, 255, 255)
-WHITE = (255, 255, 255)
-
-COLOR_HEAD = (255, 255, 0)
-COLOR_BODY = (0, 255, 0)
-COLOR_LIMB = (255, 0, 0)
-COLOR_TAIL = (255, 0, 255)
-
-COLOR_LEFT_FRONT  = (255, 0, 255)
-COLOR_RIGHT_FRONT = (0, 255, 255)
-COLOR_LEFT_HIND   = (255, 165, 0)
-COLOR_RIGHT_HIND  = (0, 255, 0)
-
-HEAD_LINKS = [(0,1), (0,2), (1,2)]
-BODY_LINKS = [(0,3), (3,4), (4,5)]
-TAIL_LINKS = [(5,14), (14,15), (15,16)]
 
 
 # ==================== Skeleton Drawing Functions ====================
@@ -54,10 +44,10 @@ def draw_skeleton_fast(frame, kpts, visibility, thickness=2):
     
     draw_links_fast(frame, kpts, visibility, HEAD_LINKS, COLOR_HEAD, thickness)
     draw_links_fast(frame, kpts, visibility, BODY_LINKS, COLOR_BODY, thickness)
-    draw_links_fast(frame, kpts, visibility, [(3,6), (6,7)], COLOR_LEFT_FRONT, thickness)
-    draw_links_fast(frame, kpts, visibility, [(3,8), (8,9)], COLOR_RIGHT_FRONT, thickness)
-    draw_links_fast(frame, kpts, visibility, [(5,10), (10,11)], COLOR_LEFT_HIND, thickness)
-    draw_links_fast(frame, kpts, visibility, [(5,12), (12,13)], COLOR_RIGHT_HIND, thickness)
+    draw_links_fast(frame, kpts, visibility, LEFT_FRONT_LINKS, COLOR_LEFT_FRONT, thickness)
+    draw_links_fast(frame, kpts, visibility, RIGHT_FRONT_LINKS, COLOR_RIGHT_FRONT, thickness)
+    draw_links_fast(frame, kpts, visibility, LEFT_HIND_LINKS, COLOR_LEFT_HIND, thickness)
+    draw_links_fast(frame, kpts, visibility, RIGHT_HIND_LINKS, COLOR_RIGHT_HIND, thickness)
     draw_links_fast(frame, kpts, visibility, TAIL_LINKS, COLOR_TAIL, thickness)
     
     # Draw keypoints

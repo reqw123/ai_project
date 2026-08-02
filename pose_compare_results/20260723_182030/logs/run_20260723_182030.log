@@ -1,0 +1,1236 @@
+[INFO] ====================================================
+[INFO] YOLO Pose Model Comparison  [20260723_182030]
+[INFO]   Old : C:\ai_project\cat_pose\v11s_128.pt
+[INFO]   New : C:\ai_project\cat_pose\v11s_137.pt
+[INFO]   Data[stop]: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\stop
+[INFO]   Out : C:\ai_project\pose_compare_results\20260723_182030  Device: cuda
+[INFO] ====================================================
+[INFO] Loading old model...
+[INFO] Loading new model...
+[WARNING]   ⚠ 跳過 [walk] （未列入 BENCHMARK_DIRS，已略過）
+[WARNING]   ⚠ 跳過 [lick] （未列入 BENCHMARK_DIRS，已略過）
+[WARNING]   ⚠ 跳過 [scratch] （未列入 BENCHMARK_DIRS，已略過）
+[WARNING]   ⚠ 跳過 [shake] （未列入 BENCHMARK_DIRS，已略過）
+[INFO] Benchmark videos: 165
+[INFO]   walk: 0
+[INFO]   lick: 0
+[INFO]   scratch: 0
+[INFO]   shake: 0
+[INFO]   stop: 165
+[INFO] 
+--- OLD MODEL: v11s_128.pt  (EMA α=1.0) ---
+[INFO] Processing: stop/stop_1.mp4
+[INFO]   Frames: 118 | Inference Time: 6.07 sec | Confidence=0.999 Jitter=0.55
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_10.mp4
+[INFO]   Frames: 339 | Inference Time: 7.64 sec | Confidence=0.994 Jitter=2.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_101.mp4
+[INFO]   Frames: 53 | Inference Time: 1.28 sec | Confidence=0.998 Jitter=0.92
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_103.mp4
+[INFO]   Frames: 57 | Inference Time: 1.38 sec | Confidence=0.984 Jitter=1.19
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_104.mp4
+[INFO]   Frames: 30 | Inference Time: 0.70 sec | Confidence=0.990 Jitter=1.24
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_105.mp4
+[INFO]   Frames: 73 | Inference Time: 1.84 sec | Confidence=0.996 Jitter=0.69
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_106.mp4
+[INFO]   Frames: 32 | Inference Time: 0.94 sec | Confidence=0.975 Jitter=0.99
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_107.mp4
+[INFO]   Frames: 44 | Inference Time: 1.11 sec | Confidence=0.992 Jitter=0.65
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_109.mp4
+[INFO]   Frames: 33 | Inference Time: 0.79 sec | Confidence=0.997 Jitter=0.84
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_110.mp4
+[INFO]   Frames: 41 | Inference Time: 1.02 sec | Confidence=0.986 Jitter=1.73
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_111.mp4
+[INFO]   Frames: 42 | Inference Time: 1.09 sec | Confidence=0.919 Jitter=2.89
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_112.mp4
+[INFO]   Frames: 55 | Inference Time: 1.42 sec | Confidence=0.980 Jitter=2.18
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_113.mp4
+[INFO]   Frames: 31 | Inference Time: 0.92 sec | Confidence=0.982 Jitter=2.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_114.mp4
+[INFO]   Frames: 46 | Inference Time: 1.23 sec | Confidence=0.990 Jitter=0.94
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_115.mp4
+[INFO]   Frames: 57 | Inference Time: 1.52 sec | Confidence=0.980 Jitter=1.32
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_116.mp4
+[INFO]   Frames: 30 | Inference Time: 0.80 sec | Confidence=0.992 Jitter=0.50
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_118.mp4
+[INFO]   Frames: 29 | Inference Time: 0.72 sec | Confidence=0.886 Jitter=3.28
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_119.mp4
+[INFO]   Frames: 44 | Inference Time: 1.27 sec | Confidence=0.998 Jitter=1.65
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_12.mp4
+[INFO]   Frames: 107 | Inference Time: 2.62 sec | Confidence=0.997 Jitter=0.96
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_120.mp4
+[INFO]   Frames: 52 | Inference Time: 1.30 sec | Confidence=0.996 Jitter=0.50
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_121.mp4
+[INFO]   Frames: 31 | Inference Time: 0.79 sec | Confidence=0.999 Jitter=0.93
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_122.mp4
+[INFO]   Frames: 37 | Inference Time: 0.98 sec | Confidence=0.957 Jitter=0.50
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_123.mp4
+[INFO]   Frames: 31 | Inference Time: 0.84 sec | Confidence=0.992 Jitter=1.51
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_124.mp4
+[INFO]   Frames: 12 | Inference Time: 0.32 sec | Confidence=0.991 Jitter=1.38
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_125.mp4
+[INFO]   Frames: 33 | Inference Time: 0.90 sec | Confidence=0.995 Jitter=2.35
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_126.mp4
+[INFO]   Frames: 30 | Inference Time: 0.69 sec | Confidence=0.992 Jitter=0.59
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_127.mp4
+[INFO]   Frames: 30 | Inference Time: 1.04 sec | Confidence=0.987 Jitter=1.56
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_128.mp4
+[INFO]   Frames: 31 | Inference Time: 1.10 sec | Confidence=0.974 Jitter=1.63
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_13.mp4
+[INFO]   Frames: 129 | Inference Time: 3.72 sec | Confidence=0.991 Jitter=3.03
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_130.mp4
+[INFO]   Frames: 38 | Inference Time: 1.13 sec | Confidence=0.997 Jitter=1.62
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_131.mp4
+[INFO]   Frames: 26 | Inference Time: 0.68 sec | Confidence=0.996 Jitter=2.01
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_132.mp4
+[INFO]   Frames: 53 | Inference Time: 1.54 sec | Confidence=0.988 Jitter=0.79
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_133.mp4
+[INFO]   Frames: 32 | Inference Time: 0.83 sec | Confidence=0.983 Jitter=1.47
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_134.mp4
+[INFO]   Frames: 30 | Inference Time: 0.71 sec | Confidence=0.953 Jitter=1.24
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_135.mp4
+[INFO]   Frames: 39 | Inference Time: 1.01 sec | Confidence=0.988 Jitter=0.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_136.mp4
+[INFO]   Frames: 70 | Inference Time: 1.67 sec | Confidence=0.997 Jitter=0.52
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_137.mp4
+[INFO]   Frames: 29 | Inference Time: 0.68 sec | Confidence=0.970 Jitter=2.47
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_138.mp4
+[INFO]   Frames: 35 | Inference Time: 0.86 sec | Confidence=0.980 Jitter=4.25
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_139.mp4
+[INFO]   Frames: 40 | Inference Time: 0.99 sec | Confidence=0.967 Jitter=4.05
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_14.mp4
+[INFO]   Frames: 169 | Inference Time: 4.41 sec | Confidence=0.946 Jitter=4.83
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_140.mp4
+[INFO]   Frames: 35 | Inference Time: 1.16 sec | Confidence=0.985 Jitter=1.19
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_141.mp4
+[INFO]   Frames: 33 | Inference Time: 0.90 sec | Confidence=0.988 Jitter=3.42
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_142.mp4
+[INFO]   Frames: 37 | Inference Time: 0.98 sec | Confidence=0.949 Jitter=2.45
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_144.mp4
+[INFO]   Frames: 70 | Inference Time: 1.78 sec | Confidence=0.994 Jitter=1.79
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_145.mp4
+[INFO]   Frames: 72 | Inference Time: 1.88 sec | Confidence=0.986 Jitter=2.79
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_146.mp4
+[INFO]   Frames: 62 | Inference Time: 1.60 sec | Confidence=0.992 Jitter=1.69
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_147.mp4
+[INFO]   Frames: 44 | Inference Time: 1.13 sec | Confidence=0.994 Jitter=1.19
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_148.mp4
+[INFO]   Frames: 56 | Inference Time: 1.45 sec | Confidence=0.996 Jitter=1.49
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_149.mp4
+[INFO]   Frames: 46 | Inference Time: 1.28 sec | Confidence=0.999 Jitter=1.59
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_15.mp4
+[INFO]   Frames: 346 | Inference Time: 8.21 sec | Confidence=0.856 Jitter=8.51
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_150.mp4
+[INFO]   Frames: 35 | Inference Time: 1.00 sec | Confidence=0.992 Jitter=2.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_151.mp4
+[INFO]   Frames: 30 | Inference Time: 0.87 sec | Confidence=0.997 Jitter=2.49
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_152.mp4
+[INFO]   Frames: 51 | Inference Time: 1.42 sec | Confidence=0.991 Jitter=1.00
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_153.mp4
+[INFO]   Frames: 49 | Inference Time: 1.26 sec | Confidence=0.988 Jitter=0.49
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_154.mp4
+[INFO]   Frames: 52 | Inference Time: 1.33 sec | Confidence=0.964 Jitter=1.83
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_155.mp4
+[INFO]   Frames: 58 | Inference Time: 1.52 sec | Confidence=0.997 Jitter=0.85
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_156.mp4
+[INFO]   Frames: 48 | Inference Time: 1.26 sec | Confidence=0.955 Jitter=1.05
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_157.mp4
+[INFO]   Frames: 57 | Inference Time: 1.47 sec | Confidence=0.972 Jitter=2.27
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_158.mp4
+[INFO]   Frames: 53 | Inference Time: 1.49 sec | Confidence=0.994 Jitter=1.66
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_159.mp4
+[INFO]   Frames: 36 | Inference Time: 1.01 sec | Confidence=0.999 Jitter=1.73
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_16.mp4
+[INFO]   Frames: 439 | Inference Time: 11.23 sec | Confidence=0.982 Jitter=2.62
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_160.mp4
+[INFO]   Frames: 59 | Inference Time: 1.54 sec | Confidence=0.950 Jitter=1.33
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_161.mp4
+[INFO]   Frames: 38 | Inference Time: 0.98 sec | Confidence=0.996 Jitter=1.82
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_162.mp4
+[INFO]   Frames: 59 | Inference Time: 1.61 sec | Confidence=0.986 Jitter=1.42
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_163.mp4
+[INFO]   Frames: 61 | Inference Time: 1.70 sec | Confidence=0.996 Jitter=1.68
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_164.mp4
+[INFO]   Frames: 73 | Inference Time: 2.03 sec | Confidence=0.982 Jitter=2.50
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_165.mp4
+[INFO]   Frames: 57 | Inference Time: 1.65 sec | Confidence=0.993 Jitter=0.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_166.mp4
+[INFO]   Frames: 41 | Inference Time: 1.26 sec | Confidence=0.986 Jitter=0.77
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_167.mp4
+[INFO]   Frames: 54 | Inference Time: 1.52 sec | Confidence=0.989 Jitter=0.84
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_168.mp4
+[INFO]   Frames: 56 | Inference Time: 2.00 sec | Confidence=0.994 Jitter=1.96
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_169.mp4
+[INFO]   Frames: 71 | Inference Time: 1.97 sec | Confidence=0.777 Jitter=0.55
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_17.mp4
+[INFO]   Frames: 122 | Inference Time: 3.30 sec | Confidence=0.998 Jitter=3.54
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_170.mp4
+[INFO]   Frames: 62 | Inference Time: 1.76 sec | Confidence=0.996 Jitter=0.58
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_171.mp4
+[INFO]   Frames: 51 | Inference Time: 1.39 sec | Confidence=0.997 Jitter=0.58
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_172.mp4
+[INFO]   Frames: 60 | Inference Time: 1.66 sec | Confidence=0.997 Jitter=0.64
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_173.mp4
+[INFO]   Frames: 62 | Inference Time: 1.75 sec | Confidence=0.982 Jitter=1.14
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_174.mp4
+[INFO]   Frames: 59 | Inference Time: 1.67 sec | Confidence=0.980 Jitter=1.36
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_175.mp4
+[INFO]   Frames: 49 | Inference Time: 1.39 sec | Confidence=0.999 Jitter=1.71
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_18.mp4
+[INFO]   Frames: 337 | Inference Time: 8.46 sec | Confidence=0.995 Jitter=2.21
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_19.mp4
+[INFO]   Frames: 54 | Inference Time: 1.60 sec | Confidence=0.992 Jitter=2.51
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_2.mp4
+[INFO]   Frames: 397 | Inference Time: 9.99 sec | Confidence=0.981 Jitter=4.86
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_20.mp4
+[INFO]   Frames: 208 | Inference Time: 5.28 sec | Confidence=0.993 Jitter=2.31
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_21.mp4
+[INFO]   Frames: 304 | Inference Time: 9.04 sec | Confidence=0.974 Jitter=1.89
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_22.mp4
+[INFO]   Frames: 199 | Inference Time: 6.05 sec | Confidence=0.994 Jitter=1.76
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_23.mp4
+[INFO]   Frames: 115 | Inference Time: 3.03 sec | Confidence=0.998 Jitter=0.65
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_24.mp4
+[INFO]   Frames: 313 | Inference Time: 8.38 sec | Confidence=0.952 Jitter=1.64
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_25.mp4
+[INFO]   Frames: 52 | Inference Time: 1.67 sec | Confidence=0.904 Jitter=2.95
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_26.mp4
+[INFO]   Frames: 55 | Inference Time: 1.49 sec | Confidence=0.972 Jitter=0.57
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_27.mp4
+[INFO]   Frames: 52 | Inference Time: 1.46 sec | Confidence=0.989 Jitter=1.46
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_28.mp4
+[INFO]   Frames: 52 | Inference Time: 1.48 sec | Confidence=0.969 Jitter=0.59
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_29.mp4
+[INFO]   Frames: 51 | Inference Time: 1.35 sec | Confidence=0.996 Jitter=0.59
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_3.mp4
+[INFO]   Frames: 248 | Inference Time: 5.90 sec | Confidence=0.962 Jitter=2.64
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_30.mp4
+[INFO]   Frames: 40 | Inference Time: 1.07 sec | Confidence=0.978 Jitter=2.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_31.mp4
+[INFO]   Frames: 54 | Inference Time: 1.39 sec | Confidence=0.934 Jitter=1.22
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_32.mp4
+[INFO]   Frames: 49 | Inference Time: 1.71 sec | Confidence=0.992 Jitter=0.50
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_33.mp4
+[INFO]   Frames: 55 | Inference Time: 1.85 sec | Confidence=0.978 Jitter=5.84
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_34.mp4
+[INFO]   Frames: 196 | Inference Time: 5.12 sec | Confidence=0.994 Jitter=0.99
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_35.mp4
+[INFO]   Frames: 50 | Inference Time: 1.32 sec | Confidence=0.992 Jitter=1.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_36.mp4
+[INFO]   Frames: 50 | Inference Time: 1.77 sec | Confidence=0.998 Jitter=0.90
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_37.mp4
+[INFO]   Frames: 45 | Inference Time: 1.52 sec | Confidence=0.972 Jitter=0.58
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_38.mp4
+[INFO]   Frames: 52 | Inference Time: 1.38 sec | Confidence=0.874 Jitter=0.38
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_39.mp4
+[INFO]   Frames: 57 | Inference Time: 1.51 sec | Confidence=0.997 Jitter=0.54
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_4.mp4
+[INFO]   Frames: 268 | Inference Time: 7.26 sec | Confidence=0.960 Jitter=2.38
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_40.mp4
+[INFO]   Frames: 56 | Inference Time: 1.45 sec | Confidence=0.995 Jitter=2.01
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_41.mp4
+[INFO]   Frames: 51 | Inference Time: 1.44 sec | Confidence=0.933 Jitter=0.80
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_42.mp4
+[INFO]   Frames: 49 | Inference Time: 1.50 sec | Confidence=0.994 Jitter=0.84
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_43.mp4
+[INFO]   Frames: 56 | Inference Time: 1.60 sec | Confidence=0.973 Jitter=1.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_44.mp4
+[INFO]   Frames: 70 | Inference Time: 1.76 sec | Confidence=0.998 Jitter=0.58
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_45.mp4
+[INFO]   Frames: 127 | Inference Time: 2.99 sec | Confidence=0.992 Jitter=1.31
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_46.mp4
+[INFO]   Frames: 51 | Inference Time: 1.28 sec | Confidence=0.972 Jitter=0.97
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_47.mp4
+[INFO]   Frames: 51 | Inference Time: 1.24 sec | Confidence=0.997 Jitter=0.46
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_48.mp4
+[INFO]   Frames: 55 | Inference Time: 1.45 sec | Confidence=0.989 Jitter=2.32
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_49.mp4
+[INFO]   Frames: 53 | Inference Time: 1.38 sec | Confidence=0.997 Jitter=0.86
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_5.mp4
+[INFO]   Frames: 316 | Inference Time: 7.25 sec | Confidence=0.992 Jitter=4.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_50.mp4
+[INFO]   Frames: 52 | Inference Time: 1.28 sec | Confidence=0.984 Jitter=1.32
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_51.mp4
+[INFO]   Frames: 55 | Inference Time: 1.31 sec | Confidence=0.977 Jitter=1.47
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_52.mp4
+[INFO]   Frames: 51 | Inference Time: 1.28 sec | Confidence=0.998 Jitter=1.85
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_53.mp4
+[INFO]   Frames: 31 | Inference Time: 0.82 sec | Confidence=0.979 Jitter=1.45
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_54.mp4
+[INFO]   Frames: 51 | Inference Time: 1.50 sec | Confidence=0.992 Jitter=0.76
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_55.mp4
+[INFO]   Frames: 46 | Inference Time: 1.26 sec | Confidence=0.996 Jitter=1.55
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_56.mp4
+[INFO]   Frames: 62 | Inference Time: 1.77 sec | Confidence=0.994 Jitter=7.06
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_57.mp4
+[INFO]   Frames: 54 | Inference Time: 1.34 sec | Confidence=0.938 Jitter=1.12
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_58.mp4
+[INFO]   Frames: 351 | Inference Time: 7.81 sec | Confidence=0.925 Jitter=1.66
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_59.mp4
+[INFO]   Frames: 250 | Inference Time: 5.82 sec | Confidence=0.990 Jitter=2.05
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_6.mp4
+[INFO]   Frames: 285 | Inference Time: 7.86 sec | Confidence=0.997 Jitter=0.52
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_60.mp4
+[INFO]   Frames: 259 | Inference Time: 6.15 sec | Confidence=0.848 Jitter=4.99
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_61.mp4
+[INFO]   Frames: 168 | Inference Time: 4.69 sec | Confidence=0.932 Jitter=2.71
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_62.mp4
+[INFO]   Frames: 63 | Inference Time: 1.77 sec | Confidence=0.970 Jitter=3.03
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_63.mp4
+[INFO]   Frames: 153 | Inference Time: 4.24 sec | Confidence=0.999 Jitter=0.97
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_64.mp4
+[INFO]   Frames: 179 | Inference Time: 4.32 sec | Confidence=0.995 Jitter=1.21
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_65.mp4
+[INFO]   Frames: 93 | Inference Time: 2.83 sec | Confidence=0.989 Jitter=1.70
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_66.mp4
+[INFO]   Frames: 126 | Inference Time: 3.90 sec | Confidence=0.998 Jitter=1.16
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_67.mp4
+[INFO]   Frames: 167 | Inference Time: 4.73 sec | Confidence=0.978 Jitter=5.27
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_68.mp4
+[INFO]   Frames: 84 | Inference Time: 2.02 sec | Confidence=0.997 Jitter=1.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_69.mp4
+[INFO]   Frames: 135 | Inference Time: 3.46 sec | Confidence=0.996 Jitter=0.87
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_7.mp4
+[INFO]   Frames: 175 | Inference Time: 4.12 sec | Confidence=0.998 Jitter=1.55
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_70.mp4
+[INFO]   Frames: 126 | Inference Time: 3.28 sec | Confidence=0.999 Jitter=0.85
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_71.mp4
+[INFO]   Frames: 92 | Inference Time: 2.31 sec | Confidence=0.995 Jitter=1.26
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_72.mp4
+[INFO]   Frames: 104 | Inference Time: 2.94 sec | Confidence=0.998 Jitter=1.27
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_73.mp4
+[INFO]   Frames: 449 | Inference Time: 10.43 sec | Confidence=0.909 Jitter=3.88
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_74.mp4
+[INFO]   Frames: 92 | Inference Time: 2.56 sec | Confidence=0.997 Jitter=0.61
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_75.mp4
+[INFO]   Frames: 230 | Inference Time: 5.63 sec | Confidence=0.853 Jitter=6.90
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_76.mp4
+[INFO]   Frames: 283 | Inference Time: 6.64 sec | Confidence=0.898 Jitter=2.85
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_77.mp4
+[INFO]   Frames: 61 | Inference Time: 1.41 sec | Confidence=0.996 Jitter=0.59
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_78.mp4
+[INFO]   Frames: 58 | Inference Time: 1.55 sec | Confidence=0.964 Jitter=2.27
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_79.mp4
+[INFO]   Frames: 55 | Inference Time: 1.44 sec | Confidence=0.983 Jitter=0.47
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_8.mp4
+[INFO]   Frames: 269 | Inference Time: 6.05 sec | Confidence=0.994 Jitter=3.28
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_80.mp4
+[INFO]   Frames: 56 | Inference Time: 1.28 sec | Confidence=0.979 Jitter=1.47
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_81.mp4
+[INFO]   Frames: 60 | Inference Time: 1.43 sec | Confidence=0.937 Jitter=1.44
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_83.mp4
+[INFO]   Frames: 58 | Inference Time: 1.42 sec | Confidence=0.979 Jitter=5.54
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_84.mp4
+[INFO]   Frames: 56 | Inference Time: 1.31 sec | Confidence=0.953 Jitter=2.77
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_85.mp4
+[INFO]   Frames: 53 | Inference Time: 1.29 sec | Confidence=0.971 Jitter=1.20
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_86.mp4
+[INFO]   Frames: 54 | Inference Time: 1.28 sec | Confidence=0.949 Jitter=1.79
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_87.mp4
+[INFO]   Frames: 52 | Inference Time: 1.17 sec | Confidence=0.962 Jitter=1.23
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_88.mp4
+[INFO]   Frames: 49 | Inference Time: 1.20 sec | Confidence=0.996 Jitter=1.90
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_89.mp4
+[INFO]   Frames: 35 | Inference Time: 0.80 sec | Confidence=0.962 Jitter=0.64
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_9.mp4
+[INFO]   Frames: 245 | Inference Time: 5.48 sec | Confidence=0.878 Jitter=1.03
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_90.mp4
+[INFO]   Frames: 56 | Inference Time: 1.24 sec | Confidence=0.979 Jitter=1.12
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_91.mp4
+[INFO]   Frames: 54 | Inference Time: 1.27 sec | Confidence=0.991 Jitter=1.31
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_92.mp4
+[INFO]   Frames: 55 | Inference Time: 1.27 sec | Confidence=0.992 Jitter=2.43
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_93.mp4
+[INFO]   Frames: 63 | Inference Time: 1.44 sec | Confidence=0.984 Jitter=1.51
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_94.mp4
+[INFO]   Frames: 55 | Inference Time: 1.28 sec | Confidence=0.933 Jitter=1.38
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_95.mp4
+[INFO]   Frames: 56 | Inference Time: 1.28 sec | Confidence=0.997 Jitter=0.49
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_96.mp4
+[INFO]   Frames: 54 | Inference Time: 1.20 sec | Confidence=0.998 Jitter=0.72
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_99.mp4
+[INFO]   Frames: 55 | Inference Time: 1.26 sec | Confidence=0.997 Jitter=0.50
+[INFO] --------------------------------
+[INFO] 
+--- NEW MODEL: v11s_137.pt  (EMA α=1.0) ---
+[INFO] Processing: stop/stop_1.mp4
+[INFO]   Frames: 118 | Inference Time: 2.66 sec | Confidence=0.999 Jitter=0.61
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_10.mp4
+[INFO]   Frames: 339 | Inference Time: 7.08 sec | Confidence=0.997 Jitter=2.78
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_101.mp4
+[INFO]   Frames: 53 | Inference Time: 1.12 sec | Confidence=0.998 Jitter=1.00
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_103.mp4
+[INFO]   Frames: 57 | Inference Time: 1.20 sec | Confidence=0.994 Jitter=1.23
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_104.mp4
+[INFO]   Frames: 30 | Inference Time: 0.64 sec | Confidence=0.993 Jitter=1.15
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_105.mp4
+[INFO]   Frames: 73 | Inference Time: 1.56 sec | Confidence=0.997 Jitter=0.83
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_106.mp4
+[INFO]   Frames: 32 | Inference Time: 0.73 sec | Confidence=0.985 Jitter=0.97
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_107.mp4
+[INFO]   Frames: 44 | Inference Time: 0.95 sec | Confidence=0.992 Jitter=0.58
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_109.mp4
+[INFO]   Frames: 33 | Inference Time: 0.70 sec | Confidence=0.996 Jitter=0.91
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_110.mp4
+[INFO]   Frames: 41 | Inference Time: 0.87 sec | Confidence=0.991 Jitter=1.75
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_111.mp4
+[INFO]   Frames: 42 | Inference Time: 0.88 sec | Confidence=0.960 Jitter=2.30
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_112.mp4
+[INFO]   Frames: 55 | Inference Time: 1.17 sec | Confidence=0.971 Jitter=1.60
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_113.mp4
+[INFO]   Frames: 31 | Inference Time: 0.66 sec | Confidence=0.991 Jitter=1.78
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_114.mp4
+[INFO]   Frames: 46 | Inference Time: 0.96 sec | Confidence=0.995 Jitter=0.87
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_115.mp4
+[INFO]   Frames: 57 | Inference Time: 1.21 sec | Confidence=0.971 Jitter=1.07
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_116.mp4
+[INFO]   Frames: 30 | Inference Time: 0.64 sec | Confidence=0.986 Jitter=0.51
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_118.mp4
+[INFO]   Frames: 29 | Inference Time: 0.61 sec | Confidence=0.884 Jitter=1.41
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_119.mp4
+[INFO]   Frames: 44 | Inference Time: 0.91 sec | Confidence=0.997 Jitter=2.14
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_12.mp4
+[INFO]   Frames: 107 | Inference Time: 2.19 sec | Confidence=0.996 Jitter=0.71
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_120.mp4
+[INFO]   Frames: 52 | Inference Time: 1.14 sec | Confidence=0.997 Jitter=0.57
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_121.mp4
+[INFO]   Frames: 31 | Inference Time: 0.68 sec | Confidence=0.998 Jitter=1.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_122.mp4
+[INFO]   Frames: 37 | Inference Time: 0.76 sec | Confidence=0.952 Jitter=0.91
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_123.mp4
+[INFO]   Frames: 31 | Inference Time: 0.71 sec | Confidence=0.986 Jitter=1.53
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_124.mp4
+[INFO]   Frames: 12 | Inference Time: 0.26 sec | Confidence=0.988 Jitter=1.38
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_125.mp4
+[INFO]   Frames: 33 | Inference Time: 0.68 sec | Confidence=0.995 Jitter=1.95
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_126.mp4
+[INFO]   Frames: 30 | Inference Time: 0.64 sec | Confidence=0.994 Jitter=1.45
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_127.mp4
+[INFO]   Frames: 30 | Inference Time: 0.68 sec | Confidence=0.996 Jitter=0.87
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_128.mp4
+[INFO]   Frames: 31 | Inference Time: 0.68 sec | Confidence=0.978 Jitter=1.24
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_13.mp4
+[INFO]   Frames: 129 | Inference Time: 2.66 sec | Confidence=0.990 Jitter=2.75
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_130.mp4
+[INFO]   Frames: 38 | Inference Time: 0.78 sec | Confidence=0.990 Jitter=1.71
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_131.mp4
+[INFO]   Frames: 26 | Inference Time: 0.55 sec | Confidence=0.998 Jitter=1.42
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_132.mp4
+[INFO]   Frames: 53 | Inference Time: 1.19 sec | Confidence=0.997 Jitter=0.71
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_133.mp4
+[INFO]   Frames: 32 | Inference Time: 0.66 sec | Confidence=0.993 Jitter=0.98
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_134.mp4
+[INFO]   Frames: 30 | Inference Time: 0.77 sec | Confidence=0.936 Jitter=1.14
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_135.mp4
+[INFO]   Frames: 39 | Inference Time: 0.91 sec | Confidence=0.987 Jitter=1.30
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_136.mp4
+[INFO]   Frames: 70 | Inference Time: 1.40 sec | Confidence=0.997 Jitter=0.55
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_137.mp4
+[INFO]   Frames: 29 | Inference Time: 0.61 sec | Confidence=0.974 Jitter=1.55
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_138.mp4
+[INFO]   Frames: 35 | Inference Time: 0.75 sec | Confidence=0.959 Jitter=3.37
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_139.mp4
+[INFO]   Frames: 40 | Inference Time: 0.90 sec | Confidence=0.991 Jitter=2.35
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_14.mp4
+[INFO]   Frames: 169 | Inference Time: 3.56 sec | Confidence=0.940 Jitter=5.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_140.mp4
+[INFO]   Frames: 35 | Inference Time: 0.73 sec | Confidence=0.978 Jitter=1.35
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_141.mp4
+[INFO]   Frames: 33 | Inference Time: 0.69 sec | Confidence=0.983 Jitter=3.53
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_142.mp4
+[INFO]   Frames: 37 | Inference Time: 0.77 sec | Confidence=0.946 Jitter=3.15
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_144.mp4
+[INFO]   Frames: 70 | Inference Time: 1.48 sec | Confidence=0.989 Jitter=2.01
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_145.mp4
+[INFO]   Frames: 72 | Inference Time: 1.59 sec | Confidence=0.972 Jitter=2.16
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_146.mp4
+[INFO]   Frames: 62 | Inference Time: 1.32 sec | Confidence=0.992 Jitter=0.91
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_147.mp4
+[INFO]   Frames: 44 | Inference Time: 0.97 sec | Confidence=0.987 Jitter=1.33
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_148.mp4
+[INFO]   Frames: 56 | Inference Time: 1.18 sec | Confidence=0.991 Jitter=1.21
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_149.mp4
+[INFO]   Frames: 46 | Inference Time: 0.95 sec | Confidence=0.999 Jitter=1.38
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_15.mp4
+[INFO]   Frames: 346 | Inference Time: 7.58 sec | Confidence=0.810 Jitter=8.18
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_150.mp4
+[INFO]   Frames: 35 | Inference Time: 0.77 sec | Confidence=0.995 Jitter=1.76
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_151.mp4
+[INFO]   Frames: 30 | Inference Time: 0.66 sec | Confidence=0.997 Jitter=2.54
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_152.mp4
+[INFO]   Frames: 51 | Inference Time: 1.10 sec | Confidence=0.995 Jitter=1.67
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_153.mp4
+[INFO]   Frames: 49 | Inference Time: 1.11 sec | Confidence=0.995 Jitter=0.53
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_154.mp4
+[INFO]   Frames: 52 | Inference Time: 1.14 sec | Confidence=0.935 Jitter=1.40
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_155.mp4
+[INFO]   Frames: 58 | Inference Time: 1.29 sec | Confidence=0.996 Jitter=1.00
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_156.mp4
+[INFO]   Frames: 48 | Inference Time: 1.03 sec | Confidence=0.919 Jitter=1.33
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_157.mp4
+[INFO]   Frames: 57 | Inference Time: 1.29 sec | Confidence=0.996 Jitter=3.58
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_158.mp4
+[INFO]   Frames: 53 | Inference Time: 1.22 sec | Confidence=0.997 Jitter=1.52
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_159.mp4
+[INFO]   Frames: 36 | Inference Time: 0.80 sec | Confidence=0.999 Jitter=1.45
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_16.mp4
+[INFO]   Frames: 439 | Inference Time: 9.74 sec | Confidence=0.976 Jitter=2.86
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_160.mp4
+[INFO]   Frames: 59 | Inference Time: 1.28 sec | Confidence=0.947 Jitter=1.37
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_161.mp4
+[INFO]   Frames: 38 | Inference Time: 0.81 sec | Confidence=0.997 Jitter=2.12
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_162.mp4
+[INFO]   Frames: 59 | Inference Time: 1.29 sec | Confidence=0.967 Jitter=2.26
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_163.mp4
+[INFO]   Frames: 61 | Inference Time: 1.37 sec | Confidence=0.997 Jitter=1.57
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_164.mp4
+[INFO]   Frames: 73 | Inference Time: 1.64 sec | Confidence=0.994 Jitter=2.44
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_165.mp4
+[INFO]   Frames: 57 | Inference Time: 1.28 sec | Confidence=0.997 Jitter=1.01
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_166.mp4
+[INFO]   Frames: 41 | Inference Time: 0.97 sec | Confidence=0.998 Jitter=0.93
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_167.mp4
+[INFO]   Frames: 54 | Inference Time: 1.21 sec | Confidence=0.994 Jitter=0.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_168.mp4
+[INFO]   Frames: 56 | Inference Time: 1.28 sec | Confidence=0.991 Jitter=2.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_169.mp4
+[INFO]   Frames: 71 | Inference Time: 1.58 sec | Confidence=0.895 Jitter=0.83
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_17.mp4
+[INFO]   Frames: 122 | Inference Time: 2.78 sec | Confidence=0.997 Jitter=3.20
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_170.mp4
+[INFO]   Frames: 62 | Inference Time: 1.34 sec | Confidence=0.999 Jitter=0.60
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_171.mp4
+[INFO]   Frames: 51 | Inference Time: 1.09 sec | Confidence=0.996 Jitter=0.32
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_172.mp4
+[INFO]   Frames: 60 | Inference Time: 1.32 sec | Confidence=0.997 Jitter=0.61
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_173.mp4
+[INFO]   Frames: 62 | Inference Time: 1.36 sec | Confidence=0.988 Jitter=0.96
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_174.mp4
+[INFO]   Frames: 59 | Inference Time: 1.29 sec | Confidence=0.992 Jitter=0.90
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_175.mp4
+[INFO]   Frames: 49 | Inference Time: 1.04 sec | Confidence=0.999 Jitter=1.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_18.mp4
+[INFO]   Frames: 337 | Inference Time: 7.40 sec | Confidence=0.997 Jitter=3.33
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_19.mp4
+[INFO]   Frames: 54 | Inference Time: 1.20 sec | Confidence=0.993 Jitter=2.52
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_2.mp4
+[INFO]   Frames: 397 | Inference Time: 8.48 sec | Confidence=0.977 Jitter=5.01
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_20.mp4
+[INFO]   Frames: 208 | Inference Time: 4.65 sec | Confidence=0.987 Jitter=1.96
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_21.mp4
+[INFO]   Frames: 304 | Inference Time: 6.65 sec | Confidence=0.972 Jitter=2.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_22.mp4
+[INFO]   Frames: 199 | Inference Time: 4.39 sec | Confidence=0.989 Jitter=1.82
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_23.mp4
+[INFO]   Frames: 115 | Inference Time: 2.47 sec | Confidence=0.998 Jitter=0.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_24.mp4
+[INFO]   Frames: 313 | Inference Time: 6.85 sec | Confidence=0.963 Jitter=1.43
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_25.mp4
+[INFO]   Frames: 52 | Inference Time: 1.22 sec | Confidence=0.904 Jitter=0.99
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_26.mp4
+[INFO]   Frames: 55 | Inference Time: 1.22 sec | Confidence=0.980 Jitter=0.67
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_27.mp4
+[INFO]   Frames: 52 | Inference Time: 1.18 sec | Confidence=0.985 Jitter=1.37
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_28.mp4
+[INFO]   Frames: 52 | Inference Time: 1.15 sec | Confidence=0.992 Jitter=0.62
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_29.mp4
+[INFO]   Frames: 51 | Inference Time: 1.11 sec | Confidence=0.999 Jitter=0.80
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_3.mp4
+[INFO]   Frames: 248 | Inference Time: 5.59 sec | Confidence=0.965 Jitter=2.61
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_30.mp4
+[INFO]   Frames: 40 | Inference Time: 0.91 sec | Confidence=0.979 Jitter=1.72
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_31.mp4
+[INFO]   Frames: 54 | Inference Time: 1.21 sec | Confidence=0.940 Jitter=1.18
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_32.mp4
+[INFO]   Frames: 49 | Inference Time: 1.09 sec | Confidence=0.993 Jitter=0.53
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_33.mp4
+[INFO]   Frames: 55 | Inference Time: 1.22 sec | Confidence=0.994 Jitter=2.19
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_34.mp4
+[INFO]   Frames: 196 | Inference Time: 4.29 sec | Confidence=0.993 Jitter=1.13
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_35.mp4
+[INFO]   Frames: 50 | Inference Time: 1.13 sec | Confidence=0.992 Jitter=1.71
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_36.mp4
+[INFO]   Frames: 50 | Inference Time: 1.13 sec | Confidence=0.997 Jitter=0.74
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_37.mp4
+[INFO]   Frames: 45 | Inference Time: 1.03 sec | Confidence=0.980 Jitter=0.68
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_38.mp4
+[INFO]   Frames: 52 | Inference Time: 1.23 sec | Confidence=0.840 Jitter=0.40
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_39.mp4
+[INFO]   Frames: 57 | Inference Time: 1.26 sec | Confidence=0.998 Jitter=0.54
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_4.mp4
+[INFO]   Frames: 268 | Inference Time: 6.00 sec | Confidence=0.922 Jitter=1.96
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_40.mp4
+[INFO]   Frames: 56 | Inference Time: 1.26 sec | Confidence=0.997 Jitter=1.61
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_41.mp4
+[INFO]   Frames: 51 | Inference Time: 1.12 sec | Confidence=0.951 Jitter=0.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_42.mp4
+[INFO]   Frames: 49 | Inference Time: 1.13 sec | Confidence=0.997 Jitter=0.94
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_43.mp4
+[INFO]   Frames: 56 | Inference Time: 1.32 sec | Confidence=0.972 Jitter=1.36
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_44.mp4
+[INFO]   Frames: 70 | Inference Time: 1.78 sec | Confidence=0.998 Jitter=0.59
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_45.mp4
+[INFO]   Frames: 127 | Inference Time: 3.26 sec | Confidence=0.996 Jitter=1.23
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_46.mp4
+[INFO]   Frames: 51 | Inference Time: 1.69 sec | Confidence=0.920 Jitter=2.08
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_47.mp4
+[INFO]   Frames: 51 | Inference Time: 1.35 sec | Confidence=0.991 Jitter=0.46
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_48.mp4
+[INFO]   Frames: 55 | Inference Time: 1.42 sec | Confidence=0.978 Jitter=1.78
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_49.mp4
+[INFO]   Frames: 53 | Inference Time: 1.34 sec | Confidence=0.996 Jitter=0.98
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_5.mp4
+[INFO]   Frames: 316 | Inference Time: 7.31 sec | Confidence=0.987 Jitter=4.20
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_50.mp4
+[INFO]   Frames: 52 | Inference Time: 1.24 sec | Confidence=0.982 Jitter=1.10
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_51.mp4
+[INFO]   Frames: 55 | Inference Time: 1.36 sec | Confidence=0.987 Jitter=3.13
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_52.mp4
+[INFO]   Frames: 51 | Inference Time: 1.26 sec | Confidence=0.998 Jitter=1.79
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_53.mp4
+[INFO]   Frames: 31 | Inference Time: 0.74 sec | Confidence=0.989 Jitter=1.63
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_54.mp4
+[INFO]   Frames: 51 | Inference Time: 1.25 sec | Confidence=0.986 Jitter=0.81
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_55.mp4
+[INFO]   Frames: 46 | Inference Time: 1.12 sec | Confidence=0.996 Jitter=1.19
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_56.mp4
+[INFO]   Frames: 62 | Inference Time: 1.57 sec | Confidence=0.993 Jitter=6.04
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_57.mp4
+[INFO]   Frames: 54 | Inference Time: 1.31 sec | Confidence=0.939 Jitter=1.12
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_58.mp4
+[INFO]   Frames: 351 | Inference Time: 8.63 sec | Confidence=0.945 Jitter=1.59
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_59.mp4
+[INFO]   Frames: 250 | Inference Time: 5.98 sec | Confidence=0.971 Jitter=1.93
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_6.mp4
+[INFO]   Frames: 285 | Inference Time: 6.42 sec | Confidence=0.999 Jitter=0.56
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_60.mp4
+[INFO]   Frames: 259 | Inference Time: 5.87 sec | Confidence=0.834 Jitter=4.46
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_61.mp4
+[INFO]   Frames: 168 | Inference Time: 3.87 sec | Confidence=0.941 Jitter=2.37
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_62.mp4
+[INFO]   Frames: 63 | Inference Time: 1.60 sec | Confidence=0.959 Jitter=2.87
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_63.mp4
+[INFO]   Frames: 153 | Inference Time: 3.33 sec | Confidence=0.999 Jitter=1.23
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_64.mp4
+[INFO]   Frames: 179 | Inference Time: 3.88 sec | Confidence=0.996 Jitter=1.16
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_65.mp4
+[INFO]   Frames: 93 | Inference Time: 2.11 sec | Confidence=0.991 Jitter=1.34
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_66.mp4
+[INFO]   Frames: 126 | Inference Time: 2.79 sec | Confidence=0.998 Jitter=1.45
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_67.mp4
+[INFO]   Frames: 167 | Inference Time: 4.08 sec | Confidence=0.975 Jitter=6.45
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_68.mp4
+[INFO]   Frames: 84 | Inference Time: 1.88 sec | Confidence=0.998 Jitter=1.31
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_69.mp4
+[INFO]   Frames: 135 | Inference Time: 3.04 sec | Confidence=0.998 Jitter=0.77
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_7.mp4
+[INFO]   Frames: 175 | Inference Time: 3.94 sec | Confidence=0.997 Jitter=1.16
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_70.mp4
+[INFO]   Frames: 126 | Inference Time: 2.77 sec | Confidence=0.999 Jitter=0.83
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_71.mp4
+[INFO]   Frames: 92 | Inference Time: 2.05 sec | Confidence=0.996 Jitter=1.44
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_72.mp4
+[INFO]   Frames: 104 | Inference Time: 3.17 sec | Confidence=0.999 Jitter=1.51
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_73.mp4
+[INFO]   Frames: 449 | Inference Time: 12.33 sec | Confidence=0.921 Jitter=6.06
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_74.mp4
+[INFO]   Frames: 92 | Inference Time: 2.48 sec | Confidence=0.996 Jitter=0.67
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_75.mp4
+[INFO]   Frames: 230 | Inference Time: 6.22 sec | Confidence=0.827 Jitter=1.88
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_76.mp4
+[INFO]   Frames: 283 | Inference Time: 7.69 sec | Confidence=0.911 Jitter=1.65
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_77.mp4
+[INFO]   Frames: 61 | Inference Time: 1.66 sec | Confidence=0.999 Jitter=0.76
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_78.mp4
+[INFO]   Frames: 58 | Inference Time: 1.62 sec | Confidence=0.991 Jitter=1.50
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_79.mp4
+[INFO]   Frames: 55 | Inference Time: 1.53 sec | Confidence=0.993 Jitter=0.53
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_8.mp4
+[INFO]   Frames: 269 | Inference Time: 6.92 sec | Confidence=0.997 Jitter=3.48
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_80.mp4
+[INFO]   Frames: 56 | Inference Time: 1.37 sec | Confidence=0.980 Jitter=1.00
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_81.mp4
+[INFO]   Frames: 60 | Inference Time: 1.46 sec | Confidence=0.941 Jitter=1.18
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_83.mp4
+[INFO]   Frames: 58 | Inference Time: 1.48 sec | Confidence=0.994 Jitter=2.15
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_84.mp4
+[INFO]   Frames: 56 | Inference Time: 1.41 sec | Confidence=0.953 Jitter=2.89
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_85.mp4
+[INFO]   Frames: 53 | Inference Time: 1.30 sec | Confidence=0.982 Jitter=0.99
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_86.mp4
+[INFO]   Frames: 54 | Inference Time: 1.29 sec | Confidence=0.968 Jitter=1.18
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_87.mp4
+[INFO]   Frames: 52 | Inference Time: 1.33 sec | Confidence=0.956 Jitter=1.39
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_88.mp4
+[INFO]   Frames: 49 | Inference Time: 1.22 sec | Confidence=0.998 Jitter=1.37
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_89.mp4
+[INFO]   Frames: 35 | Inference Time: 0.93 sec | Confidence=0.990 Jitter=0.70
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_9.mp4
+[INFO]   Frames: 245 | Inference Time: 6.05 sec | Confidence=0.935 Jitter=1.54
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_90.mp4
+[INFO]   Frames: 56 | Inference Time: 1.37 sec | Confidence=0.975 Jitter=2.19
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_91.mp4
+[INFO]   Frames: 54 | Inference Time: 1.33 sec | Confidence=0.993 Jitter=1.55
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_92.mp4
+[INFO]   Frames: 55 | Inference Time: 1.39 sec | Confidence=0.997 Jitter=1.58
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_93.mp4
+[INFO]   Frames: 63 | Inference Time: 1.61 sec | Confidence=0.955 Jitter=1.13
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_94.mp4
+[INFO]   Frames: 55 | Inference Time: 1.37 sec | Confidence=0.922 Jitter=1.35
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_95.mp4
+[INFO]   Frames: 56 | Inference Time: 1.42 sec | Confidence=0.997 Jitter=1.12
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_96.mp4
+[INFO]   Frames: 54 | Inference Time: 1.76 sec | Confidence=0.999 Jitter=1.14
+[INFO] --------------------------------
+[INFO] Processing: stop/stop_99.mp4
+[INFO]   Frames: 55 | Inference Time: 1.64 sec | Confidence=0.997 Jitter=0.70
+[INFO] --------------------------------
+[INFO] 
+Aggregating metrics...
+[INFO] 
+Writing CSV files...
+[INFO] Generating figures...
+[INFO] Writing reports...
+[INFO] Appended to comparison history: C:\ai_project\pose_compare_results\comparison_history.log
+[INFO] 
+[INFO] =====================================================================================================
+[INFO] 逐影片比較結果
+[INFO] =====================================================================================================
+[INFO] 行為       影片                               舊信心   新信心      信心Δ   舊抖動   新抖動      抖動Δ
+[INFO] -----------------------------------------------------------------------------------------------------
+[INFO] stop       stop_1.mp4                          0.999    0.999    +0.001↑     0.55     0.61     +0.06↑
+[INFO] stop       stop_10.mp4                         0.994    0.997    +0.003↑     2.81     2.78     -0.03↓
+[INFO] stop       stop_101.mp4                        0.998    0.998    +0.000↑     0.92     1.00     +0.08↑
+[INFO] stop       stop_103.mp4                        0.984    0.994    +0.010↑     1.19     1.23     +0.03↑
+[INFO] stop       stop_104.mp4                        0.990    0.993    +0.002↑     1.24     1.15     -0.09↓
+[INFO] stop       stop_105.mp4                        0.996    0.997    +0.000↑     0.69     0.83     +0.14↑
+[INFO] stop       stop_106.mp4                        0.975    0.985    +0.009↑     0.99     0.97     -0.03↓
+[INFO] stop       stop_107.mp4                        0.992    0.992    +0.000↑     0.65     0.58     -0.08↓
+[INFO] stop       stop_109.mp4                        0.997    0.996    -0.001↓     0.84     0.91     +0.07↑
+[INFO] stop       stop_110.mp4                        0.986    0.991    +0.005↑     1.73     1.75     +0.02↑
+[INFO] stop       stop_111.mp4                        0.919    0.960    +0.041↑     2.89     2.30     -0.59↓
+[INFO] stop       stop_112.mp4                        0.980    0.971    -0.009↓     2.18     1.60     -0.58↓
+[INFO] stop       stop_113.mp4                        0.982    0.991    +0.009↑     2.04     1.78     -0.26↓
+[INFO] stop       stop_114.mp4                        0.990    0.995    +0.005↑     0.94     0.87     -0.07↓
+[INFO] stop       stop_115.mp4                        0.980    0.971    -0.009↓     1.32     1.07     -0.25↓
+[INFO] stop       stop_116.mp4                        0.992    0.986    -0.006↓     0.50     0.51     +0.01↑
+[INFO] stop       stop_118.mp4                        0.886    0.884    -0.002↓     3.28     1.41     -1.87↓
+[INFO] stop       stop_119.mp4                        0.998    0.997    -0.001↓     1.65     2.14     +0.49↑
+[INFO] stop       stop_12.mp4                         0.997    0.996    -0.001↓     0.96     0.71     -0.25↓
+[INFO] stop       stop_120.mp4                        0.996    0.997    +0.001↑     0.50     0.57     +0.07↑
+[INFO] stop       stop_121.mp4                        0.999    0.998    -0.000↓     0.93     1.04     +0.11↑
+[INFO] stop       stop_122.mp4                        0.957    0.952    -0.005↓     0.50     0.91     +0.41↑
+[INFO] stop       stop_123.mp4                        0.992    0.986    -0.006↓     1.51     1.53     +0.02↑
+[INFO] stop       stop_124.mp4                        0.991    0.988    -0.003↓     1.38     1.38     -0.00↓
+[INFO] stop       stop_125.mp4                        0.995    0.995    -0.000↓     2.35     1.95     -0.40↓
+[INFO] stop       stop_126.mp4                        0.992    0.994    +0.002↑     0.59     1.45     +0.86↑
+[INFO] stop       stop_127.mp4                        0.987    0.996    +0.009↑     1.56     0.87     -0.69↓
+[INFO] stop       stop_128.mp4                        0.974    0.978    +0.003↑     1.63     1.24     -0.39↓
+[INFO] stop       stop_13.mp4                         0.991    0.990    -0.001↓     3.03     2.75     -0.28↓
+[INFO] stop       stop_130.mp4                        0.997    0.990    -0.008↓     1.62     1.71     +0.08↑
+[INFO] stop       stop_131.mp4                        0.996    0.998    +0.002↑     2.01     1.42     -0.58↓
+[INFO] stop       stop_132.mp4                        0.988    0.997    +0.009↑     0.79     0.71     -0.08↓
+[INFO] stop       stop_133.mp4                        0.983    0.993    +0.010↑     1.47     0.98     -0.49↓
+[INFO] stop       stop_134.mp4                        0.953    0.936    -0.017↓     1.24     1.14     -0.10↓
+[INFO] stop       stop_135.mp4                        0.988    0.987    -0.001↓     0.81     1.30     +0.49↑
+[INFO] stop       stop_136.mp4                        0.997    0.997    -0.000↓     0.52     0.55     +0.03↑
+[INFO] stop       stop_137.mp4                        0.970    0.974    +0.003↑     2.47     1.55     -0.93↓
+[INFO] stop       stop_138.mp4                        0.980    0.959    -0.021↓     4.25     3.37     -0.88↓
+[INFO] stop       stop_139.mp4                        0.967    0.991    +0.024↑     4.05     2.35     -1.70↓
+[INFO] stop       stop_14.mp4                         0.946    0.940    -0.006↓     4.83     5.04     +0.21↑
+[INFO] stop       stop_140.mp4                        0.985    0.978    -0.006↓     1.19     1.35     +0.16↑
+[INFO] stop       stop_141.mp4                        0.988    0.983    -0.005↓     3.42     3.53     +0.11↑
+[INFO] stop       stop_142.mp4                        0.949    0.946    -0.003↓     2.45     3.15     +0.70↑
+[INFO] stop       stop_144.mp4                        0.994    0.989    -0.005↓     1.79     2.01     +0.23↑
+[INFO] stop       stop_145.mp4                        0.986    0.972    -0.014↓     2.79     2.16     -0.63↓
+[INFO] stop       stop_146.mp4                        0.992    0.992    -0.000↓     1.69     0.91     -0.78↓
+[INFO] stop       stop_147.mp4                        0.994    0.987    -0.007↓     1.19     1.33     +0.15↑
+[INFO] stop       stop_148.mp4                        0.996    0.991    -0.005↓     1.49     1.21     -0.28↓
+[INFO] stop       stop_149.mp4                        0.999    0.999    +0.000↑     1.59     1.38     -0.21↓
+[INFO] stop       stop_15.mp4                         0.856    0.810    -0.046↓     8.51     8.18     -0.32↓
+[INFO] stop       stop_150.mp4                        0.992    0.995    +0.004↑     2.04     1.76     -0.28↓
+[INFO] stop       stop_151.mp4                        0.997    0.997    -0.000↓     2.49     2.54     +0.05↑
+[INFO] stop       stop_152.mp4                        0.991    0.995    +0.003↑     1.00     1.67     +0.67↑
+[INFO] stop       stop_153.mp4                        0.988    0.995    +0.007↑     0.49     0.53     +0.04↑
+[INFO] stop       stop_154.mp4                        0.964    0.935    -0.029↓     1.83     1.40     -0.43↓
+[INFO] stop       stop_155.mp4                        0.997    0.996    -0.001↓     0.85     1.00     +0.15↑
+[INFO] stop       stop_156.mp4                        0.955    0.919    -0.036↓     1.05     1.33     +0.28↑
+[INFO] stop       stop_157.mp4                        0.972    0.996    +0.023↑     2.27     3.58     +1.31↑
+[INFO] stop       stop_158.mp4                        0.994    0.997    +0.003↑     1.66     1.52     -0.14↓
+[INFO] stop       stop_159.mp4                        0.999    0.999    +0.000↑     1.73     1.45     -0.29↓
+[INFO] stop       stop_16.mp4                         0.982    0.976    -0.006↓     2.62     2.86     +0.24↑
+[INFO] stop       stop_160.mp4                        0.950    0.947    -0.004↓     1.33     1.37     +0.05↑
+[INFO] stop       stop_161.mp4                        0.996    0.997    +0.000↑     1.82     2.12     +0.30↑
+[INFO] stop       stop_162.mp4                        0.986    0.967    -0.019↓     1.42     2.26     +0.84↑
+[INFO] stop       stop_163.mp4                        0.996    0.997    +0.000↑     1.68     1.57     -0.11↓
+[INFO] stop       stop_164.mp4                        0.982    0.994    +0.012↑     2.50     2.44     -0.06↓
+[INFO] stop       stop_165.mp4                        0.993    0.997    +0.004↑     0.81     1.01     +0.20↑
+[INFO] stop       stop_166.mp4                        0.986    0.998    +0.011↑     0.77     0.93     +0.16↑
+[INFO] stop       stop_167.mp4                        0.989    0.994    +0.006↑     0.84     0.81     -0.04↓
+[INFO] stop       stop_168.mp4                        0.994    0.991    -0.003↓     1.96     2.04     +0.08↑
+[INFO] stop       stop_169.mp4                        0.777    0.895    +0.118↑     0.55     0.83     +0.28↑
+[INFO] stop       stop_17.mp4                         0.998    0.997    -0.000↓     3.54     3.20     -0.34↓
+[INFO] stop       stop_170.mp4                        0.996    0.999    +0.003↑     0.58     0.60     +0.02↑
+[INFO] stop       stop_171.mp4                        0.997    0.996    -0.001↓     0.58     0.32     -0.26↓
+[INFO] stop       stop_172.mp4                        0.997    0.997    +0.000↑     0.64     0.61     -0.03↓
+[INFO] stop       stop_173.mp4                        0.982    0.988    +0.007↑     1.14     0.96     -0.19↓
+[INFO] stop       stop_174.mp4                        0.980    0.992    +0.012↑     1.36     0.90     -0.46↓
+[INFO] stop       stop_175.mp4                        0.999    0.999    +0.000↑     1.71     1.04     -0.67↓
+[INFO] stop       stop_18.mp4                         0.995    0.997    +0.002↑     2.21     3.33     +1.12↑
+[INFO] stop       stop_19.mp4                         0.992    0.993    +0.001↑     2.51     2.52     +0.00↑
+[INFO] stop       stop_2.mp4                          0.981    0.977    -0.003↓     4.86     5.01     +0.15↑
+[INFO] stop       stop_20.mp4                         0.993    0.987    -0.005↓     2.31     1.96     -0.35↓
+[INFO] stop       stop_21.mp4                         0.974    0.972    -0.003↓     1.89     2.04     +0.15↑
+[INFO] stop       stop_22.mp4                         0.994    0.989    -0.006↓     1.76     1.82     +0.06↑
+[INFO] stop       stop_23.mp4                         0.998    0.998    +0.000↑     0.65     0.81     +0.16↑
+[INFO] stop       stop_24.mp4                         0.952    0.963    +0.010↑     1.64     1.43     -0.20↓
+[INFO] stop       stop_25.mp4                         0.904    0.904    -0.000↓     2.95     0.99     -1.95↓
+[INFO] stop       stop_26.mp4                         0.972    0.980    +0.007↑     0.57     0.67     +0.09↑
+[INFO] stop       stop_27.mp4                         0.989    0.985    -0.004↓     1.46     1.37     -0.10↓
+[INFO] stop       stop_28.mp4                         0.969    0.992    +0.023↑     0.59     0.62     +0.03↑
+[INFO] stop       stop_29.mp4                         0.996    0.999    +0.003↑     0.59     0.80     +0.21↑
+[INFO] stop       stop_3.mp4                          0.962    0.965    +0.004↑     2.64     2.61     -0.03↓
+[INFO] stop       stop_30.mp4                         0.978    0.979    +0.001↑     2.04     1.72     -0.32↓
+[INFO] stop       stop_31.mp4                         0.934    0.940    +0.006↑     1.22     1.18     -0.04↓
+[INFO] stop       stop_32.mp4                         0.992    0.993    +0.000↑     0.50     0.53     +0.03↑
+[INFO] stop       stop_33.mp4                         0.978    0.994    +0.015↑     5.84     2.19     -3.65↓
+[INFO] stop       stop_34.mp4                         0.994    0.993    -0.001↓     0.99     1.13     +0.14↑
+[INFO] stop       stop_35.mp4                         0.992    0.992    -0.000↓     1.81     1.71     -0.10↓
+[INFO] stop       stop_36.mp4                         0.998    0.997    -0.001↓     0.90     0.74     -0.16↓
+[INFO] stop       stop_37.mp4                         0.972    0.980    +0.007↑     0.58     0.68     +0.10↑
+[INFO] stop       stop_38.mp4                         0.874    0.840    -0.034↓     0.38     0.40     +0.02↑
+[INFO] stop       stop_39.mp4                         0.997    0.998    +0.002↑     0.54     0.54     +0.00↑
+[INFO] stop       stop_4.mp4                          0.960    0.922    -0.039↓     2.38     1.96     -0.42↓
+[INFO] stop       stop_40.mp4                         0.995    0.997    +0.002↑     2.01     1.61     -0.40↓
+[INFO] stop       stop_41.mp4                         0.933    0.951    +0.018↑     0.80     0.81     +0.02↑
+[INFO] stop       stop_42.mp4                         0.994    0.997    +0.003↑     0.84     0.94     +0.10↑
+[INFO] stop       stop_43.mp4                         0.973    0.972    -0.001↓     1.81     1.36     -0.45↓
+[INFO] stop       stop_44.mp4                         0.998    0.998    +0.000↑     0.58     0.59     +0.01↑
+[INFO] stop       stop_45.mp4                         0.992    0.996    +0.004↑     1.31     1.23     -0.08↓
+[INFO] stop       stop_46.mp4                         0.972    0.920    -0.052↓     0.97     2.08     +1.10↑
+[INFO] stop       stop_47.mp4                         0.997    0.991    -0.005↓     0.46     0.46     +0.00↑
+[INFO] stop       stop_48.mp4                         0.989    0.978    -0.010↓     2.32     1.78     -0.54↓
+[INFO] stop       stop_49.mp4                         0.997    0.996    -0.001↓     0.86     0.98     +0.12↑
+[INFO] stop       stop_5.mp4                          0.992    0.987    -0.006↓     4.04     4.20     +0.16↑
+[INFO] stop       stop_50.mp4                         0.984    0.982    -0.002↓     1.32     1.10     -0.22↓
+[INFO] stop       stop_51.mp4                         0.977    0.987    +0.010↑     1.47     3.13     +1.66↑
+[INFO] stop       stop_52.mp4                         0.998    0.998    -0.000↓     1.85     1.79     -0.06↓
+[INFO] stop       stop_53.mp4                         0.979    0.989    +0.010↑     1.45     1.63     +0.18↑
+[INFO] stop       stop_54.mp4                         0.992    0.986    -0.007↓     0.76     0.81     +0.05↑
+[INFO] stop       stop_55.mp4                         0.996    0.996    +0.000↑     1.55     1.19     -0.37↓
+[INFO] stop       stop_56.mp4                         0.994    0.993    -0.000↓     7.06     6.04     -1.01↓
+[INFO] stop       stop_57.mp4                         0.938    0.939    +0.001↑     1.12     1.12     +0.01↑
+[INFO] stop       stop_58.mp4                         0.925    0.945    +0.019↑     1.66     1.59     -0.06↓
+[INFO] stop       stop_59.mp4                         0.990    0.971    -0.019↓     2.05     1.93     -0.12↓
+[INFO] stop       stop_6.mp4                          0.997    0.999    +0.002↑     0.52     0.56     +0.04↑
+[INFO] stop       stop_60.mp4                         0.848    0.834    -0.014↓     4.99     4.46     -0.54↓
+[INFO] stop       stop_61.mp4                         0.932    0.941    +0.009↑     2.71     2.37     -0.34↓
+[INFO] stop       stop_62.mp4                         0.970    0.959    -0.011↓     3.03     2.87     -0.17↓
+[INFO] stop       stop_63.mp4                         0.999    0.999    -0.000↓     0.97     1.23     +0.27↑
+[INFO] stop       stop_64.mp4                         0.995    0.996    +0.001↑     1.21     1.16     -0.04↓
+[INFO] stop       stop_65.mp4                         0.989    0.991    +0.001↑     1.70     1.34     -0.36↓
+[INFO] stop       stop_66.mp4                         0.998    0.998    +0.000↑     1.16     1.45     +0.29↑
+[INFO] stop       stop_67.mp4                         0.978    0.975    -0.002↓     5.27     6.45     +1.18↑
+[INFO] stop       stop_68.mp4                         0.997    0.998    +0.001↑     1.04     1.31     +0.27↑
+[INFO] stop       stop_69.mp4                         0.996    0.998    +0.001↑     0.87     0.77     -0.10↓
+[INFO] stop       stop_7.mp4                          0.998    0.997    -0.000↓     1.55     1.16     -0.39↓
+[INFO] stop       stop_70.mp4                         0.999    0.999    +0.000↑     0.85     0.83     -0.02↓
+[INFO] stop       stop_71.mp4                         0.995    0.996    +0.001↑     1.26     1.44     +0.18↑
+[INFO] stop       stop_72.mp4                         0.998    0.999    +0.001↑     1.27     1.51     +0.23↑
+[INFO] stop       stop_73.mp4                         0.909    0.921    +0.012↑     3.88     6.06     +2.18↑
+[INFO] stop       stop_74.mp4                         0.997    0.996    -0.001↓     0.61     0.67     +0.06↑
+[INFO] stop       stop_75.mp4                         0.853    0.827    -0.025↓     6.90     1.88     -5.01↓
+[INFO] stop       stop_76.mp4                         0.898    0.911    +0.013↑     2.85     1.65     -1.20↓
+[INFO] stop       stop_77.mp4                         0.996    0.999    +0.003↑     0.59     0.76     +0.17↑
+[INFO] stop       stop_78.mp4                         0.964    0.991    +0.027↑     2.27     1.50     -0.78↓
+[INFO] stop       stop_79.mp4                         0.983    0.993    +0.010↑     0.47     0.53     +0.06↑
+[INFO] stop       stop_8.mp4                          0.994    0.997    +0.002↑     3.28     3.48     +0.20↑
+[INFO] stop       stop_80.mp4                         0.979    0.980    +0.001↑     1.47     1.00     -0.48↓
+[INFO] stop       stop_81.mp4                         0.937    0.941    +0.005↑     1.44     1.18     -0.26↓
+[INFO] stop       stop_83.mp4                         0.979    0.994    +0.015↑     5.54     2.15     -3.39↓
+[INFO] stop       stop_84.mp4                         0.953    0.953    -0.000↓     2.77     2.89     +0.12↑
+[INFO] stop       stop_85.mp4                         0.971    0.982    +0.011↑     1.20     0.99     -0.22↓
+[INFO] stop       stop_86.mp4                         0.949    0.968    +0.019↑     1.79     1.18     -0.61↓
+[INFO] stop       stop_87.mp4                         0.962    0.956    -0.006↓     1.23     1.39     +0.16↑
+[INFO] stop       stop_88.mp4                         0.996    0.998    +0.002↑     1.90     1.37     -0.53↓
+[INFO] stop       stop_89.mp4                         0.962    0.990    +0.029↑     0.64     0.70     +0.06↑
+[INFO] stop       stop_9.mp4                          0.878    0.935    +0.057↑     1.03     1.54     +0.51↑
+[INFO] stop       stop_90.mp4                         0.979    0.975    -0.004↓     1.12     2.19     +1.07↑
+[INFO] stop       stop_91.mp4                         0.991    0.993    +0.003↑     1.31     1.55     +0.24↑
+[INFO] stop       stop_92.mp4                         0.992    0.997    +0.005↑     2.43     1.58     -0.86↓
+[INFO] stop       stop_93.mp4                         0.984    0.955    -0.029↓     1.51     1.13     -0.38↓
+[INFO] stop       stop_94.mp4                         0.933    0.922    -0.011↓     1.38     1.35     -0.03↓
+[INFO] stop       stop_95.mp4                         0.997    0.997    -0.001↓     0.49     1.12     +0.63↑
+[INFO] stop       stop_96.mp4                         0.998    0.999    +0.000↑     0.72     1.14     +0.42↑
+[INFO] stop       stop_99.mp4                         0.997    0.997    +0.000↑     0.50     0.70     +0.20↑
+[INFO] 
+[INFO] =================================================================================================
+[INFO] 行為類別摘要
+[INFO] =================================================================================================
+[INFO] 行為         舊信心   新信心   信心改善   舊抖動   新抖動   抖動改善   舊缺失   新缺失   缺失改善
+[INFO] -------------------------------------------------------------------------------------------------
+[INFO] walk          0.000    0.000     +0.00%     0.00     0.00     +0.00%     0.0%     0.0%     +0.00%
+[INFO] lick          0.000    0.000     +0.00%     0.00     0.00     +0.00%     0.0%     0.0%     +0.00%
+[INFO] scratch       0.000    0.000     +0.00%     0.00     0.00     +0.00%     0.0%     0.0%     +0.00%
+[INFO] shake         0.000    0.000     +0.00%     0.00     0.00     +0.00%     0.0%     0.0%     +0.00%
+[INFO] stop          0.968    0.968     +0.00%     2.23     2.18     +2.23%     0.0%     0.0%     +0.00%
+[INFO] 
+[INFO] =================================================================================================
+[INFO] ★★★ 主指標：P95 Jitter（尾部抖動，數值越小越穩定） ★★★
+[INFO] =================================================================================================
+[INFO] 行為       舊P95抖動 新P95抖動       改善
+[INFO] -------------------------------------------------------------------------------------------------
+[INFO] walk           0.00     0.00     +0.00%
+[INFO] lick           0.00     0.00     +0.00%
+[INFO] scratch        0.00     0.00     +0.00%
+[INFO] shake          0.00     0.00     +0.00%
+[INFO] stop           8.47     7.81     +7.74%
+[INFO] -------------------------------------------------------------------------------------------------
+[INFO] 整體           8.47     7.81     +7.74%
+[INFO] 
+[INFO]   ★ 主指標結論：v11s_137.pt 尾部抖動較小（Δ0.66px）— 依你指定的主指標，優先選它
+[INFO] =================================================================================================
+[INFO] 
+[INFO] =================================================================================================
+[INFO] [參考，非主指標] 整體比較結果（複合分數）
+[INFO] =================================================================================================
+[INFO] 舊模型        v11s_128.pt   複合分數 97.32
+[INFO] 新模型        v11s_137.pt   複合分數 97.35
+[INFO] 
+[INFO] 平均信心值    0.968  →  0.968    改善 +0.00%
+[INFO] 平均抖動      2.23 px  →  2.18 px    改善 +2.23%
+[INFO] 缺失比率      0.0%  →  0.0%    改善 +0.00%
+[INFO] 尾尖缺失      10.3%  →  13.9%
+[INFO] 
+[INFO] 綜合改善分數  +0.78%
+[INFO] 進步最多行為  stop  （+7.7%）
+[INFO] 退步最多行為  walk  （+0.0%）
+[INFO] 
+[INFO] 結論          v11s_137.pt  相較  v11s_128.pt  →  BETTER（較優）  [參考用複合分數]
+[INFO] =================================================================================================

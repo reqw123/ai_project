@@ -1,3 +1,5 @@
+"""ExtBodyZonePlugin 的資料結構：單一身體分區統計與每幀完整分析結果。"""
+
 import math
 from dataclasses import dataclass, field
 
@@ -11,25 +13,30 @@ def _jf(v, digits: int = 3):
 
 @dataclass
 class ZoneStat:
+    """單一身體分區的累積命中次數與時長。"""
+
     hits: int = 0
     time_sec: float = 0.0
 
 
 @dataclass
 class ExtZoneResult:
-    current_zone: int = 0          # 0=NO_TARGET, 1..7 per ExtZoneConfig.ZONE_*
+    """單一影格的完整 7 區身體分區分析結果，含各區累積統計。"""
+
+    current_zone: int = 0  # 0=NO_TARGET, 1..7 per ExtZoneConfig.ZONE_*
     zone_name: str = "NO_TARGET"
     confidence: float = 0.0
     valid: bool = False
     frame: int = 0
     time_sec: float = 0.0
-    hits: int = 0                  # cumulative hits for current_zone
-    zone_time_sec: float = 0.0     # cumulative time_sec for current_zone
+    hits: int = 0  # cumulative hits for current_zone
+    zone_time_sec: float = 0.0  # cumulative time_sec for current_zone
     # Per-zone breakdown for all 7 zones — {zone_name: ZoneStat}, for the
     # Node-RED "部位時長統計" table (mirrors plugins/lick_stage's per-zone fields)
     zone_breakdown: dict = field(default_factory=dict)
 
     def to_payload(self) -> dict:
+        """組成可直接 POST 給 Node-RED 的 JSON-safe payload dict。"""
         # 佔比（%）與「今日理毛之最」都在 Python 端算好，Node-RED 只負責顯示，
         # 不重複做這個算術（模組化原則；分母＝7 區累積時間總和）。
         total = sum(st.time_sec for st in self.zone_breakdown.values())
@@ -39,8 +46,10 @@ class ExtZoneResult:
 
         dominant_zone, dominant_pct = None, 0.0
         if total > 1e-9:
-            dominant_zone = max(self.zone_breakdown, key=lambda k: self.zone_breakdown[k].time_sec)
-            dominant_pct  = _pct(self.zone_breakdown[dominant_zone].time_sec)
+            dominant_zone = max(
+                self.zone_breakdown, key=lambda k: self.zone_breakdown[k].time_sec
+            )
+            dominant_pct = _pct(self.zone_breakdown[dominant_zone].time_sec)
 
         # Face(Wash) 對照指標：文獻 Eckstein & Hart (2000) 的 Face(Wash) zone
         # 定義是「頭部＋前肢」合計 31%。但本系統的頭部判定（鼻子點是否落在
@@ -49,23 +58,29 @@ class ExtZoneResult:
         # regions.py 的 classify_zone() 已停用頭部判定，HEAD 區恒為 0。
         # 這裡改用判定較可靠的前肢（需要鼻子明確伸向膝蓋/爪子附近才會命中）
         # 佔比，近似對照文獻的 31%，非嚴格對應文獻定義，僅供合理性參考。
-        face_wash_proxy_pct = _pct(self.zone_breakdown.get("FORELIMB", ZoneStat()).time_sec)
+        face_wash_proxy_pct = _pct(
+            self.zone_breakdown.get("FORELIMB", ZoneStat()).time_sec
+        )
 
         return {
-            "current_zone":  self.current_zone,
-            "zone_name":     self.zone_name,
-            "confidence":    _jf(self.confidence, 3),
-            "valid":         self.valid,
-            "frame":         self.frame,
-            "time_sec":      round(self.time_sec, 2),
-            "hits":          self.hits,
+            "current_zone": self.current_zone,
+            "zone_name": self.zone_name,
+            "confidence": _jf(self.confidence, 3),
+            "valid": self.valid,
+            "frame": self.frame,
+            "time_sec": round(self.time_sec, 2),
+            "hits": self.hits,
             "zone_time_sec": round(self.zone_time_sec, 2),
-            "total_lick_time":         round(total, 2),
-            "dominant_zone":           dominant_zone,
-            "dominant_pct":            dominant_pct,
-            "face_wash_proxy_pct":     face_wash_proxy_pct,
+            "total_lick_time": round(total, 2),
+            "dominant_zone": dominant_zone,
+            "dominant_pct": dominant_pct,
+            "face_wash_proxy_pct": face_wash_proxy_pct,
             "zones": {
-                name: {"hits": st.hits, "time_sec": round(st.time_sec, 2), "pct": _pct(st.time_sec)}
+                name: {
+                    "hits": st.hits,
+                    "time_sec": round(st.time_sec, 2),
+                    "pct": _pct(st.time_sec),
+                }
                 for name, st in self.zone_breakdown.items()
             },
         }

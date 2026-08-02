@@ -199,11 +199,8 @@ def draw_velocity_overlay_panel(frame, ovl, keypoint_names=None):
     return frame
 
 
-WHITE = (255, 255, 255)
 BLACK = (100, 50, 0)
 GREEN = (0, 255, 0)
-RED = (0, 0, 255)
-BLUE = (255, 0, 0)
 
 COLOR_HEAD = (25, 25, 0)
 COLOR_BODY = (0, 255, 0)
@@ -312,7 +309,6 @@ DRAW_KP_CONF_THRESHOLD = 0.5   # 畫骨架線段與關鍵點圓點用門檻（>�
 SCRATCH_NOSE_IDX = 0
 SCRATCH_CHEST_IDX = 3
 SCRATCH_HIP_IDX = 5
-SCRATCH_FRONT_PAW_IDXS = (7, 9)
 SCRATCH_HIND_PAW_IDXS = (11, 13)
 SCRATCH_DISTANCE_THRESHOLD_NORM = 0.5
 SCRATCH_DISTANCE_CONF_THRESHOLD = 0.5
@@ -569,7 +565,7 @@ def main():
         height = max(240, int(base_win_h * window_scale))
         cv2.resizeWindow(WINDOW_NAME, width, height)
 
-    def _handle_key(key, cap_obj=None, in_pause_loop=False):
+    def _handle_key(key, cap_obj=None):
         nonlocal window_scale, switch_delta, stop_all, is_paused, raw_frame_idx, ema_kpts, keypoints_buffer, _vel_smooth_scores, _vel_smooth_peak
 
         def _seek_display_frame(direction):
@@ -852,7 +848,7 @@ def main():
             if DISPLAY_WINDOW:
                 cv2.imshow(WINDOW_NAME, display)
                 key = cv2.waitKey(1) & 0xFF
-                action = _handle_key(key, cap_obj=cap, in_pause_loop=False)
+                action = _handle_key(key, cap_obj=cap)
                 if action == "break":
                     break
                 if is_paused:
@@ -871,7 +867,7 @@ def main():
                         )
                         cv2.imshow(WINDOW_NAME, pause_img)
                         key2 = cv2.waitKey(50) & 0xFF
-                        pause_action = _handle_key(key2, cap_obj=cap, in_pause_loop=True)
+                        pause_action = _handle_key(key2, cap_obj=cap)
                         if pause_action == "seek":
                             # keep paused, but let the outer loop fetch/render the new frame immediately
                             break

@@ -1,13 +1,25 @@
 """
 YOLO Pose 關鍵點檢測封裝
 """
+
 from pathlib import Path
-from ultralytics import YOLO
+
 import numpy as np
+from ultralytics import YOLO
+
 
 class KeypointDetector:
-    def __init__(self, model_path, device='cuda', imgsz=640, conf_thres=0.5,
-                 track_iou_thres=0.3, track_max_missed=10):
+    """封裝 YOLO-Pose 推論，並在多隻貓同框時以 IoU 追蹤延續同一隻貓的鎖定目標。"""
+
+    def __init__(
+        self,
+        model_path,
+        device="cuda",
+        imgsz=640,
+        conf_thres=0.5,
+        track_iou_thres=0.3,
+        track_max_missed=10,
+    ):
         """
         track_iou_thres:  多隻貓同框時，與上一幀鎖定 bbox 的 IoU 需 ≥ 此值才視為同一隻貓延續追蹤；
                           否則放棄追蹤，改選信心最高的偵測（等同重新鎖定目標）。
@@ -20,7 +32,7 @@ class KeypointDetector:
         try:
             self.model.to(device)
             # FP16 只在 CUDA 上有效；若 to() 成功且 device 是 CUDA，啟用 half
-            if str(device).lower().startswith('cuda'):
+            if str(device).lower().startswith("cuda"):
                 self._use_half = True
         except Exception:
             pass
@@ -49,10 +61,24 @@ class KeypointDetector:
         union = area_a + area_b - inter
         return inter / union if union > 1e-9 else 0.0
 
-    def detect(self, frame):
+    def detect(self, frame, return_all_instances=False):
+        """對單一影格跑 YOLO-Pose 推論，回傳 (keypoints, keypoint_conf, bbox, bbox_conf)；
+        沒有偵測到目標時回傳全 None。
+
+        return_all_instances=True 時，額外多回傳第 5 個值：這一幀所有偵測到的貓
+        （含被追蹤鎖定機制篩掉、沒被選為前 4 個回傳值的那些），每筆為
+        (kpts, kpt_conf, bbox, bbox_conf)；沒有任何偵測時為空 list。這個參數
+        只是把同一次 YOLO 推論裡本來就算出來、但預設會被丟棄的其餘偵測結果
+        一併回傳，不會多跑一次推論，也完全不影響前 4 個值的追蹤/選取邏輯——
+        單純給呼叫端（例如多貓同框時的畫面視覺化）用，預設 False 時行為與
+        既有呼叫端完全一致。
+        """
         results = self.model.predict(
-            frame, imgsz=self.imgsz, conf=self.conf_thres,
-            quantize=16 if self._use_half else None, verbose=False
+            frame,
+            imgsz=self.imgsz,
+            conf=self.conf_thres,
+            quantize=16 if self._use_half else None,
+            verbose=False,
         )[0]
         if results.keypoints is not None and len(results.keypoints.xy) > 0:
             n = len(results.keypoints.xy)
@@ -86,10 +112,25 @@ class KeypointDetector:
             # 明確轉為 Python float，避免 0-d ndarray 流入 JSON 序列化
             conf = float(results.boxes.conf[best].cpu().numpy()) if has_boxes else None
 
+            all_instances = None
+            if return_all_instances:
+                all_instances = []
+                for i in range(n):
+                    _kpts_i = results.keypoints.xy[i].cpu().numpy()
+                    if results.keypoints.conf is not None:
+                        _kconf_i = results.keypoints.conf[i].cpu().numpy()
+                    else:
+                        _kconf_i = np.ones(_kpts_i.shape[0], dtype=np.float32)
+                    _bbox_i = results.boxes.xyxy[i].cpu().numpy() if has_boxes and i < len(results.boxes) else None
+                    _bconf_i = float(results.boxes.conf[i].cpu().numpy()) if has_boxes and i < len(results.boxes) else None
+                    all_instances.append((_kpts_i, _kconf_i, _bbox_i, _bconf_i))
+
             if bbox is not None:
                 self._prev_bbox = bbox
                 self._missed_count = 0
 
+            if return_all_instances:
+                return kpts, kpt_conf, bbox, conf, all_instances
             return kpts, kpt_conf, bbox, conf
 
         # 這幀沒偵測到任何目標：累積遺失幀數，超過門檻才放棄先前鎖定的目標
@@ -97,4 +138,6 @@ class KeypointDetector:
         self._missed_count += 1
         if self._missed_count > self.track_max_missed:
             self._prev_bbox = None
+        if return_all_instances:
+            return None, None, None, None, []
         return None, None, None, None

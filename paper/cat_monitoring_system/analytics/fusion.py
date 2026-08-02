@@ -16,6 +16,7 @@ problem and are out of scope for this redesign. ``compute_fusion`` accepts
 pre-computed Class C sub-scores as plain floats so it can be called either
 from a full Python pipeline or bridged from Node-RED during migration.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -23,24 +24,33 @@ from typing import Optional
 
 from analytics.deviation import DeviationResult
 
-LEVELS = ["Normal", "Mild Behavioral Deviation", "Moderate Behavioral Deviation", "Severe Behavioral Deviation"]
-LEVEL_MIN_SCORE = {"Normal": 0, "Mild Behavioral Deviation": 20,
-                    "Moderate Behavioral Deviation": 45, "Severe Behavioral Deviation": 70}
+LEVELS = [
+    "Normal",
+    "Mild Behavioral Deviation",
+    "Moderate Behavioral Deviation",
+    "Severe Behavioral Deviation",
+]
+LEVEL_MIN_SCORE = {
+    "Normal": 0,
+    "Mild Behavioral Deviation": 20,
+    "Moderate Behavioral Deviation": 45,
+    "Severe Behavioral Deviation": 70,
+}
 
 # metric name (as produced by deviation.py) -> (weight, threshold_mild, threshold_mod, threshold_severe)
 CLASS_A_FEATURES = {
-    "lick_time":      {"weight": 0.30, "label": "Lick Duration"},
-    "lick_count":      {"weight": 0.15, "label": "Lick Frequency"},
-    "scratch_time":    {"weight": 0.30, "label": "Scratch Duration"},
-    "scratch_count":   {"weight": 0.10, "label": "Scratch Frequency"},
+    "lick_time": {"weight": 0.30, "label": "Lick Duration"},
+    "lick_count": {"weight": 0.15, "label": "Lick Frequency"},
+    "scratch_time": {"weight": 0.30, "label": "Scratch Duration"},
+    "scratch_count": {"weight": 0.10, "label": "Scratch Frequency"},
 }
 CLASS_A_THRESHOLDS = {"mild": 2.5, "moderate": 3.0, "severe": 4.0}
 CLASS_A_WEIGHT_SUM = sum(f["weight"] for f in CLASS_A_FEATURES.values())  # 0.85
 
 CLASS_B_FEATURES = {
     "shake_count": {"weight": 0.40, "label": "Head Shake"},
-    "walk_time":   {"weight": 0.30, "label": "Walk Duration"},
-    "stop_time":   {"weight": 0.30, "label": "Inactive Duration"},
+    "walk_time": {"weight": 0.30, "label": "Walk Duration"},
+    "stop_time": {"weight": 0.30, "label": "Inactive Duration"},
 }
 
 FUSION_WEIGHTS = {"class_a": 0.45, "class_b": 0.25, "class_c": 0.30}
@@ -48,6 +58,8 @@ FUSION_WEIGHTS = {"class_a": 0.45, "class_b": 0.25, "class_c": 0.30}
 
 @dataclass
 class FusionResult:
+    """跨類別（A/B/C）證據融合後的最終健康風險評估結果。"""
+
     score: float
     level: str
     class_a_score: float
@@ -55,7 +67,9 @@ class FusionResult:
     class_c_score: float
     class_a_triggered: bool
     class_a_override: Optional[str]
-    top_contributors: list = field(default_factory=list)  # [(metric, sigma), ...] desc by |sigma|
+    top_contributors: list = field(
+        default_factory=list
+    )  # [(metric, sigma), ...] desc by |sigma|
 
 
 def _sigma(dev: DeviationResult, metric: str) -> float:
@@ -87,7 +101,10 @@ def compute_fusion(
     analysis is unchanged from the Node-RED original and out of scope here.
     """
     sigmas_a = {k: _sigma(deviation, k) for k in CLASS_A_FEATURES}
-    class_a_weighted = sum(abs(sigmas_a[k]) * f["weight"] for k, f in CLASS_A_FEATURES.items()) / CLASS_A_WEIGHT_SUM
+    class_a_weighted = (
+        sum(abs(sigmas_a[k]) * f["weight"] for k, f in CLASS_A_FEATURES.items())
+        / CLASS_A_WEIGHT_SUM
+    )
     class_a_score = min(100.0, class_a_weighted * 25)
 
     max_abs_a = max((abs(v) for v in sigmas_a.values()), default=0.0)
@@ -101,7 +118,9 @@ def compute_fusion(
     class_a_triggered = override is not None
 
     sigmas_b = {k: _sigma(deviation, k) for k in CLASS_B_FEATURES}
-    class_b_weighted = sum(abs(sigmas_b[k]) * f["weight"] for k, f in CLASS_B_FEATURES.items())
+    class_b_weighted = sum(
+        abs(sigmas_b[k]) * f["weight"] for k, f in CLASS_B_FEATURES.items()
+    )
     class_b_score = min(100.0, class_b_weighted * 25)
 
     class_c_score = max(0.0, min(100.0, class_c_score))
@@ -125,9 +144,12 @@ def compute_fusion(
     top = sorted(all_sigmas.items(), key=lambda kv: abs(kv[1]), reverse=True)
 
     return FusionResult(
-        score=round(final_score, 1), level=final_level,
-        class_a_score=round(class_a_score, 1), class_b_score=round(class_b_score, 1),
+        score=round(final_score, 1),
+        level=final_level,
+        class_a_score=round(class_a_score, 1),
+        class_b_score=round(class_b_score, 1),
         class_c_score=round(class_c_score, 1),
-        class_a_triggered=class_a_triggered, class_a_override=override,
+        class_a_triggered=class_a_triggered,
+        class_a_override=override,
         top_contributors=top,
     )

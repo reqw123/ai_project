@@ -2,8 +2,10 @@
 
 No side effects, no I/O, no overlay drawing — this module only computes.
 """
+
 import math
 from typing import Optional, Tuple
+
 import numpy as np
 
 from .config import ExtZoneConfig as _C
@@ -35,10 +37,10 @@ def _point_on_strip(pt, p0, p1, half_width: float) -> Tuple[bool, float]:
     if seg_len < 1e-6:
         return False, float("inf")
     axis = seg / seg_len
-    rel  = np.asarray(pt, dtype=np.float64) - p0
-    t    = float(np.dot(rel, axis))
+    rel = np.asarray(pt, dtype=np.float64) - p0
+    t = float(np.dot(rel, axis))
     perp = float(np.dot(rel, _perp(axis)))
-    hit  = (0.0 <= t <= seg_len) and (abs(perp) <= half_width)
+    hit = (0.0 <= t <= seg_len) and (abs(perp) <= half_width)
     return hit, abs(perp)
 
 
@@ -54,13 +56,13 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
         return None
 
     chest = np.asarray(kpts[_C.KP_CHEST], dtype=np.float64)
-    hip   = np.asarray(kpts[_C.KP_HIP],   dtype=np.float64)
+    hip = np.asarray(kpts[_C.KP_HIP], dtype=np.float64)
     body_axis = hip - chest
-    body_len  = _norm(body_axis)
+    body_len = _norm(body_axis)
     if body_len < 1e-6:
         return None
     body_axis_unit = body_axis / body_len
-    body_normal    = _perp(body_axis_unit)
+    body_normal = _perp(body_axis_unit)
     eff_len = max(_C.BODY_LEN_MIN_PX, min(_C.BODY_LEN_MAX_PX, body_len))
 
     if _conf_ok(kpt_conf, _C.KP_MID_BACK):
@@ -69,11 +71,13 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
         torso_center = 0.5 * (chest + hip)
 
     # Head target
-    left_ok  = _conf_ok(kpt_conf, _C.KP_LEFT_EAR)
+    left_ok = _conf_ok(kpt_conf, _C.KP_LEFT_EAR)
     right_ok = _conf_ok(kpt_conf, _C.KP_RIGHT_EAR)
     if left_ok and right_ok:
-        head_center = 0.5 * (np.asarray(kpts[_C.KP_LEFT_EAR], dtype=np.float64)
-                              + np.asarray(kpts[_C.KP_RIGHT_EAR], dtype=np.float64))
+        head_center = 0.5 * (
+            np.asarray(kpts[_C.KP_LEFT_EAR], dtype=np.float64)
+            + np.asarray(kpts[_C.KP_RIGHT_EAR], dtype=np.float64)
+        )
     elif _conf_ok(kpt_conf, _C.KP_NOSE):
         head_center = np.asarray(kpts[_C.KP_NOSE], dtype=np.float64)
     else:
@@ -85,11 +89,16 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
     # angle, so the average confident-knee side of the spine axis is
     # "abdomen"; the opposite side is "side/back".
     knee_idxs = (_C.KP_FL_KNEE, _C.KP_FR_KNEE, _C.KP_HL_KNEE, _C.KP_HR_KNEE)
-    knee_pts = [np.asarray(kpts[i], dtype=np.float64)
-                for i in knee_idxs if _conf_ok(kpt_conf, i, _C.LIMB_CONF_THRESHOLD)]
+    knee_pts = [
+        np.asarray(kpts[i], dtype=np.float64)
+        for i in knee_idxs
+        if _conf_ok(kpt_conf, i, _C.LIMB_CONF_THRESHOLD)
+    ]
     if knee_pts:
         avg_knee = np.mean(knee_pts, axis=0)
-        ventral_sign = 1.0 if float(np.dot(avg_knee - torso_center, body_normal)) >= 0.0 else -1.0
+        ventral_sign = (
+            1.0 if float(np.dot(avg_knee - torso_center, body_normal)) >= 0.0 else -1.0
+        )
     else:
         ventral_sign = 1.0
 
@@ -102,16 +111,17 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
         "HINDLIMB": ((_C.KP_HL_KNEE, _C.KP_HL_PAW), (_C.KP_HR_KNEE, _C.KP_HR_PAW)),
     }
     limb_strip_hw = eff_len * _C.LIMB_STRIP_HW_RATIO
-    paw_radius    = eff_len * _C.LIMB_PAW_RADIUS_RATIO
+    paw_radius = eff_len * _C.LIMB_PAW_RADIUS_RATIO
 
     limbs = {}
     for group, pairs in limb_groups.items():
         segments, paws = [], []
         for knee_idx, paw_idx in pairs:
-            if (_conf_ok(kpt_conf, knee_idx, _C.LIMB_CONF_THRESHOLD)
-                    and _conf_ok(kpt_conf, paw_idx, _C.LIMB_CONF_THRESHOLD)):
+            if _conf_ok(kpt_conf, knee_idx, _C.LIMB_CONF_THRESHOLD) and _conf_ok(
+                kpt_conf, paw_idx, _C.LIMB_CONF_THRESHOLD
+            ):
                 knee = np.asarray(kpts[knee_idx], dtype=np.float64)
-                paw  = np.asarray(kpts[paw_idx],  dtype=np.float64)
+                paw = np.asarray(kpts[paw_idx], dtype=np.float64)
                 segments.append((knee, paw))
                 paws.append(paw)
         limbs[group] = {"segments": segments, "paws": paws}
@@ -121,27 +131,27 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
     tail_idxs = (_C.KP_TAIL_ROOT, _C.KP_TAIL_MID, _C.KP_TAIL_TIP)
     if all(_conf_ok(kpt_conf, i, _C.LIMB_CONF_THRESHOLD) for i in tail_idxs):
         root = np.asarray(kpts[_C.KP_TAIL_ROOT], dtype=np.float64)
-        mid  = np.asarray(kpts[_C.KP_TAIL_MID],  dtype=np.float64)
-        tip  = np.asarray(kpts[_C.KP_TAIL_TIP],  dtype=np.float64)
+        mid = np.asarray(kpts[_C.KP_TAIL_MID], dtype=np.float64)
+        tip = np.asarray(kpts[_C.KP_TAIL_TIP], dtype=np.float64)
         tail_segs = [(root, mid), (mid, tip)]
     tail_strip_hw = eff_len * _C.TAIL_STRIP_HW_RATIO
 
     return {
         "body_axis_unit": body_axis_unit,
-        "body_normal":    body_normal,
-        "torso_center":   torso_center,
-        "torso_ru":       torso_ru,
-        "torso_rv":       torso_rv,
-        "ventral_sign":   ventral_sign,
-        "head_center":    head_center,
-        "head_radius":    head_radius,
-        "neck_center":    chest,
-        "neck_radius":    neck_radius,
-        "limbs":          limbs,
-        "limb_strip_hw":  limb_strip_hw,
-        "paw_radius":     paw_radius,
-        "tail_segs":      tail_segs,
-        "tail_strip_hw":  tail_strip_hw,
+        "body_normal": body_normal,
+        "torso_center": torso_center,
+        "torso_ru": torso_ru,
+        "torso_rv": torso_rv,
+        "ventral_sign": ventral_sign,
+        "head_center": head_center,
+        "head_radius": head_radius,
+        "neck_center": chest,
+        "neck_radius": neck_radius,
+        "limbs": limbs,
+        "limb_strip_hw": limb_strip_hw,
+        "paw_radius": paw_radius,
+        "tail_segs": tail_segs,
+        "tail_strip_hw": tail_strip_hw,
     }
 
 
@@ -160,18 +170,26 @@ def classify_zone(nose_pt, targets: Optional[dict]) -> Tuple[int, str, float]:
 
     pt = np.asarray(nose_pt, dtype=np.float64)
 
-    for group, zone_id in (("FORELIMB", _C.ZONE_FORELIMB), ("HINDLIMB", _C.ZONE_HINDLIMB)):
+    for group, zone_id in (
+        ("FORELIMB", _C.ZONE_FORELIMB),
+        ("HINDLIMB", _C.ZONE_HINDLIMB),
+    ):
         for paw in targets["limbs"][group]["paws"]:
             hit, d = _point_in_circle(pt, paw, targets["paw_radius"])
             if hit:
                 conf = max(0.0, min(1.0, 1.0 - d / max(targets["paw_radius"], 1e-6)))
                 return zone_id, _C.ZONE_NAMES[zone_id], conf
 
-    for group, zone_id in (("FORELIMB", _C.ZONE_FORELIMB), ("HINDLIMB", _C.ZONE_HINDLIMB)):
+    for group, zone_id in (
+        ("FORELIMB", _C.ZONE_FORELIMB),
+        ("HINDLIMB", _C.ZONE_HINDLIMB),
+    ):
         for p0, p1 in targets["limbs"][group]["segments"]:
             hit, perp = _point_on_strip(pt, p0, p1, targets["limb_strip_hw"])
             if hit:
-                conf = max(0.0, min(1.0, 1.0 - perp / max(targets["limb_strip_hw"], 1e-6)))
+                conf = max(
+                    0.0, min(1.0, 1.0 - perp / max(targets["limb_strip_hw"], 1e-6))
+                )
                 return zone_id, _C.ZONE_NAMES[zone_id], conf
 
     for p0, p1 in targets["tail_segs"]:
@@ -228,7 +246,11 @@ def targets_to_geometry_payload(targets: Optional[dict]) -> dict:
         return {"p0": _xy(p0), "p1": _xy(p1)}
 
     def _circle(center, radius) -> dict:
-        return {"cx": round(float(center[0]), 1), "cy": round(float(center[1]), 1), "r": round(float(radius), 1)}
+        return {
+            "cx": round(float(center[0]), 1),
+            "cy": round(float(center[1]), 1),
+            "r": round(float(radius), 1),
+        }
 
     forelimb = targets["limbs"]["FORELIMB"]
     hindlimb = targets["limbs"]["HINDLIMB"]
@@ -251,7 +273,7 @@ def targets_to_geometry_payload(targets: Optional[dict]) -> dict:
         "forelimb_paws": [_circle(p, targets["paw_radius"]) for p in forelimb["paws"]],
         "hindlimb_segs": [_strip(p0, p1) for p0, p1 in hindlimb["segments"]],
         "hindlimb_paws": [_circle(p, targets["paw_radius"]) for p in hindlimb["paws"]],
-        "tail_segs":     [_strip(p0, p1) for p0, p1 in targets["tail_segs"]],
-        "limb_hw":       round(float(targets["limb_strip_hw"]), 1),
-        "tail_hw":       round(float(targets["tail_strip_hw"]), 1),
+        "tail_segs": [_strip(p0, p1) for p0, p1 in targets["tail_segs"]],
+        "limb_hw": round(float(targets["limb_strip_hw"]), 1),
+        "tail_hw": round(float(targets["tail_strip_hw"]), 1),
     }

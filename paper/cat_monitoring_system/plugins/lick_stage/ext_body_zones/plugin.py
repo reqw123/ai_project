@@ -15,18 +15,23 @@ mirrors the existing plugins/lick_stage registration in server/routes.py —
 frame_processor.py already calls plugin.update(kpts, kpt_conf) and
 plugin.close() on every registered plugin without reading a return value.
 """
+
 import logging
 import time
 
 from .config import ExtZoneConfig as _C
 from .models import ExtZoneResult, ZoneStat
+from .output import ZoneCsvWriter, ZoneHttpPublisher, ZoneMqttPublisher
 from .regions import build_zone_targets, classify_zone, targets_to_geometry_payload
-from .output import ZoneCsvWriter, ZoneMqttPublisher, ZoneHttpPublisher
 
 _log = logging.getLogger(__name__)
 
 
 class ExtBodyZonePlugin:
+    """獨立插件：7 區身體分區偵測（HEAD/NECK_CHEST/SIDE_BACK/ABDOMEN/
+    FORELIMB/HINDLIMB/TAIL），結果可選擇性寫入 CSV、發布至 MQTT 或
+    Node-RED。與 plugins/lick_stage 的既有插件並行、互不依賴。"""
+
     def __init__(
         self,
         csv_path: str = _C.OUTPUT_CSV_PATH,
@@ -36,13 +41,15 @@ class ExtBodyZonePlugin:
         self._frame_count = 0
         self._elapsed_sec = 0.0
         self._last_wall_t = time.monotonic()
-        self._zone_stats = {zid: ZoneStat() for zid in _C.ZONE_NAMES if zid != _C.ZONE_NO_TARGET}
-        self._prev_zone  = _C.ZONE_NO_TARGET
+        self._zone_stats = {
+            zid: ZoneStat() for zid in _C.ZONE_NAMES if zid != _C.ZONE_NO_TARGET
+        }
+        self._prev_zone = _C.ZONE_NO_TARGET
         self._last_log_t = -1e9
         self._last_geo_t = -1e9
 
-        self._csv     = None
-        self._mqtt    = None
+        self._csv = None
+        self._mqtt = None
         self._nodered = None
         try:
             if _C.OUTPUT_ENABLED:
@@ -54,24 +61,16 @@ class ExtBodyZonePlugin:
         except Exception as exc:
             _log.debug("ExtBodyZonePlugin output init failed: %s", exc)
 
-    # ── Public API (spec naming: process(frame, skeleton, nose_pt)) ────────
-    def process(self, frame=None, keypoints=None, nose_pt=None) -> None:
-        """Fail-safe entry point. Always returns None by design — results
-        are persisted internally, never handed back to the caller."""
-        try:
-            self._run(keypoints, None, nose_pt)
-        except Exception as exc:
-            _log.debug("ExtBodyZonePlugin.process error: %s", exc)
-        return None
-
     # ── Drop-in hook matching frame_processor's existing plugin protocol ──
     def update(self, kpts, kpt_conf) -> None:
+        """Fail-safe 進入點，符合 FrameProcessor 既有的 plugin 呼叫慣例。"""
         try:
             self._run(kpts, kpt_conf, None)
         except Exception as exc:
             _log.debug("ExtBodyZonePlugin.update error: %s", exc)
 
     def close(self) -> None:
+        """關閉所有已啟用的輸出端（CSV/MQTT/Node-RED）。"""
         try:
             if self._csv is not None:
                 self._csv.close()
@@ -84,9 +83,9 @@ class ExtBodyZonePlugin:
 
     # ── Internal ────────────────────────────────────────────────────────
     def _run(self, kpts, kpt_conf, nose_pt_override) -> None:
-        now    = time.monotonic()
+        now = time.monotonic()
         dt_sec = max(0.0, now - self._last_wall_t)
-        self._last_wall_t  = now
+        self._last_wall_t = now
         self._frame_count += 1
         self._elapsed_sec += dt_sec
 
@@ -115,7 +114,9 @@ class ExtBodyZonePlugin:
             time_sec=self._elapsed_sec,
             hits=stat.hits if stat is not None else 0,
             zone_time_sec=stat.time_sec if stat is not None else 0.0,
-            zone_breakdown={_C.ZONE_NAMES[zid]: st for zid, st in self._zone_stats.items()},
+            zone_breakdown={
+                _C.ZONE_NAMES[zid]: st for zid, st in self._zone_stats.items()
+            },
         )
         self._persist(result)
         self._publish_geometry(result, targets, nose_pt)
@@ -145,8 +146,12 @@ class ExtBodyZonePlugin:
         self._last_geo_t = self._elapsed_sec
         try:
             payload = result.to_payload()
-            payload["nose_xy"] = [round(float(nose_pt[0]), 1), round(float(nose_pt[1]), 1)] if nose_pt is not None else []
-            payload["shapes"]  = targets_to_geometry_payload(targets)
+            payload["nose_xy"] = (
+                [round(float(nose_pt[0]), 1), round(float(nose_pt[1]), 1)]
+                if nose_pt is not None
+                else []
+            )
+            payload["shapes"] = targets_to_geometry_payload(targets)
             self._nodered.publish(payload)
         except Exception as exc:
             _log.debug("ExtBodyZonePlugin geometry publish failed: %s", exc)

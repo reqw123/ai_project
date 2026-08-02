@@ -1,11 +1,12 @@
 """LickStagePlugin — public facade for the lick stage plugin."""
-import time
+
 import logging
+import time
 
 from plugins.lick_stage.analyzer import LickAnalyzer
-from plugins.lick_stage.publisher import NodeRedPublisher
 from plugins.lick_stage.config import LickConfig as _C
 from plugins.lick_stage.overlay import draw_all_overlays
+from plugins.lick_stage.publisher import NodeRedPublisher
 
 _log = logging.getLogger(__name__)
 
@@ -28,23 +29,24 @@ class LickStagePlugin:
     """
 
     def __init__(self, nodered_url: str = _C.NODERED_URL):
-        self._analyzer  = LickAnalyzer()
+        self._analyzer = LickAnalyzer()
         self._publisher = NodeRedPublisher(nodered_url) if nodered_url else None
-        self._frame_count  = 0
-        self._elapsed_sec  = 0.0
-        self._last_wall_t  = time.monotonic()
+        self._frame_count = 0
+        self._elapsed_sec = 0.0
+        self._last_wall_t = time.monotonic()
 
     def update(self, kpts, kpt_conf) -> None:
         """Fail-safe entry point. Never raises."""
         try:
-            now    = time.monotonic()
+            now = time.monotonic()
             dt_sec = max(0.0, now - self._last_wall_t)
-            self._last_wall_t   = now
-            self._frame_count  += 1
-            self._elapsed_sec  += dt_sec
+            self._last_wall_t = now
+            self._frame_count += 1
+            self._elapsed_sec += dt_sec
 
             result = self._analyzer.analyze(
-                kpts, kpt_conf,
+                kpts,
+                kpt_conf,
                 self._frame_count,
                 self._elapsed_sec,
                 dt_sec,
@@ -74,5 +76,6 @@ class LickStagePlugin:
             _log.debug("LickStagePlugin.draw_overlay error: %s", exc)
 
     def close(self) -> None:
+        """關閉底層 Node-RED 發送器（若有啟用）。"""
         if self._publisher is not None:
             self._publisher.close()

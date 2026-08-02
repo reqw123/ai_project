@@ -6,6 +6,8 @@ import sys
 import os
 import csv
 import shutil
+import queue
+import threading
 import cv2
 import numpy as np
 import time
@@ -46,7 +48,7 @@ from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
 # ── 五個行為資料夾（按 z/x/c/v/b 切換）────────────────────────────────
-_BASE = r"C:\Users\homec\Downloads\istock\class"
+_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
 FOLDER_WALK    = rf"{_BASE}\walk"
 FOLDER_LICK    = rf"{_BASE}\lick"
 FOLDER_SCRATCH = rf"{_BASE}\scratch"
@@ -74,12 +76,12 @@ RATING_LETTERS = ("A", "B", "C", "D", "E")
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
 FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\shake_標記區"  # 'single' 模式使用的扁平資料夾
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\22"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_128.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth"
+YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_144.pt"
+STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_124_xy_conf_v_bone_att_on\124_best_model.pth"
 INFERENCE_DEVICE = 'cuda'   
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 STGCN_NORMALIZE = True
@@ -111,7 +113,12 @@ ENABLE_FPS_DOWNSAMPLE = True  # 只要不是 30fps，就把模型時基統一到
 CLASSIFY_STRIDE = 2  # 每幾個處理幀做一次分類（1=每幀）
 DISPLAY_WINDOW = True
 WINDOW_NAME = "Cat Behavior Inference (EMA)"
-DISPLAY_SIZE = (1080, 720)  # 視窗顯示解析度（寬, 高），設為 None 維持原始解析度
+DISPLAY_RESOLUTION = "720p"  # "720p" 或 "1080p"，控制 GUI 視窗顯示解析度
+_DISPLAY_RESOLUTION_PRESETS = {
+    "720p": (1280, 720),
+    "1080p": (1920, 1080),
+}
+DISPLAY_SIZE = _DISPLAY_RESOLUTION_PRESETS[DISPLAY_RESOLUTION]  # 視窗顯示解析度（寬, 高）
 LOOP_PLAYBACK = True  # 是否循環播放
 
 # ===== 音訊同步播放（可選，需先 pip install pygame）=====
@@ -122,7 +129,6 @@ AUDIO_PATH = r"C:\Users\homec\Downloads\7月2日.mp3"  # 從影片抽出的音�
 
 REPORT_OUTPUT_PATH = r"C:\paper\output\inference_analysis_report_ema.csv"  # 最終 CSV 報告
 RUN_MODE = 0  # 0: 啟動時選擇, 1: 只生成統計, 2: 只做視窗測試
-JITTER_WARNING_THRESHOLD = 30.0  # 像素抖動警告閾值
 
 # ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
 YOLO_CONF_THRESHOLD = 0.5       # YOLO bbox 偵測信心門檻（KeypointDetector 內部過濾用）
@@ -167,48 +173,6 @@ SQA_ACTIVE_BONE_IDS = [i for i in range(1, 17) if i not in SQA_EXCLUDED_KEYPOINT
 # alpha 越大 .→ 越貼近原始偵測值（響應快、平滑少）
 # alpha 越小 → 越平滑（延遲多、噪音少）
 EMA_ALPHA = 1.0  # 須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致
-
-# 17 關鍵點名稱映射（根據 YOLO-Pose v11 cat skeleton）
-KEYPOINT_NAMES = [
-    "Nose",           # 0: 鼻尖
-    "Left_Ear",       # 1: 左耳
-    "Right_Ear",      # 2: 右耳
-    "Chest",          # 3: 前胸
-    "Mid_Back",       # 4: 中背
-    "Hip",            # 5: 髖部
-    "LF_Elbow",       # 6: 左前肢肘
-    "LF_Paw",         # 7: 左前肢掌
-    "RF_Elbow",       # 8: 右前肢肘
-    "RF_Paw",         # 9: 右前肢掌
-    "LH_Knee",        # 10: 左後肢膝
-    "LH_Paw",         # 11: 左後肢掌
-    "RH_Knee",        # 12: 右後肢膝
-    "RH_Paw",         # 13: 右後肢掌
-    "Tail_Root",      # 14: 尾根
-    "Tail_Mid",       # 15: 尾中
-    "Tail_Tip",       # 16: 尾尖
-]
-
-# 17 關鍵點中文名稱
-KEYPOINT_NAMES_ZH = [
-    "鼻子",              # 0: nose
-    "左耳尖",           # 1: left_ear_tip
-    "右耳尖",           # 2: right_ear_tip
-    "胸口",             # 3: 前胸（前肢附著點）
-    "中背",             # 4: 身體中背
-    "臀部",             # 5: hip
-    "左前腿肘部",       # 6: left_front_elbow
-    "左前爪",           # 7: left_front_paw
-    "右前腿肘部",       # 8: right_front_elbow
-    "右前爪",           # 9: right_front_paw
-    "左後腿膝部",       # 10: left_hind_knee
-    "左後爪",           # 11: left_hind_paw
-    "右後腿膝部",       # 12: right_hind_knee
-    "右後爪",           # 13: right_hind_paw
-    "尾巴根部",         # 14: tail_base
-    "尾巴中段",         # 15: tail_mid
-    "尾巴尖端",         # 16: tail_tip
-]
 
 # ===== test2.py 骨架視覺樣式 =====
 _SKELETON_EDGES = [
@@ -311,6 +275,32 @@ def resolve_video_paths(video_sources: Iterable[str]):
         print(f"⚠ 路徑不存在，略過: {p}")
 
     return resolved
+
+
+def draw_extra_cat_instance_boxes(frame, instances, ui_scale=1.0, scale=1.0, crop_x=0, crop_y=0):
+    """把 keypoint_detector.detect(frame, return_all_instances=True) 額外回傳、
+    但不是目前 ST-GCN 追蹤鎖定那隻的貓，用簡單的框＋信心值畫出來（呼叫端需先把
+    追蹤中的那隻從 instances 篩掉，避免跟 draw_test2_style_overlay() 畫的主框
+    重複）。scale/crop_x/crop_y 用於畫面有做 letterbox 縮放時，把原始解析度座標
+    換算成顯示座標，跟 scale_kpts_and_bbox_for_letterbox() 用的是同一套換算公式。"""
+    thickness = scale_px(2, ui_scale, min_px=1)
+    color = (60, 220, 220)
+    label_fs = 0.5 * ui_scale
+    label_th = max(1, int(round(ui_scale)))
+    for _kpts_i, _kconf_i, bbox_i, bconf_i in instances:
+        if bbox_i is None:
+            continue
+        x1 = int(bbox_i[0] * scale - crop_x)
+        y1 = int(bbox_i[1] * scale - crop_y)
+        x2 = int(bbox_i[2] * scale - crop_x)
+        y2 = int(bbox_i[3] * scale - crop_y)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+        if bconf_i is not None:
+            label = f"{bconf_i:.2f}"
+            (tw, th), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, label_fs, label_th)
+            ty = (y1 - 6) if (y1 - 6 - th) > 0 else (y2 + th + 6)
+            cv2.putText(frame, label, (x1, ty), cv2.FONT_HERSHEY_SIMPLEX, label_fs, color, label_th, cv2.LINE_AA)
+    return frame
 
 
 def move_video_to_rating_folder(video_path, rating_letter):
@@ -542,7 +532,6 @@ def draw_test2_style_overlay(
     """使用 test2.py 的骨架外觀，並沿用既有行為資訊 HUD。"""
     h, w = frame.shape[:2]
     ui_scale = compute_ui_scale(w, h)
-    bbox_thickness = scale_px(1, ui_scale, min_px=1)
     edge_thickness = scale_px(2, ui_scale, min_px=1)
     kp_outer_radius = scale_px(4, ui_scale, min_px=2)
     kp_inner_radius = max(1, kp_outer_radius - 1)
@@ -892,15 +881,20 @@ def resolve_run_mode():
     print("\n請選擇執行模式:")
     print("  1) 只生成統計結果（不開視窗）")
     print("  2) 只測試模型效果（開視窗）")
-    try:
-        choice = input("輸入模式 (1/2, 預設=2): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print("\n未輸入模式，預設使用模式 2（只測試模型效果，開視窗）")
-        return 2
+    while True:
+        try:
+            choice = input("輸入模式 (1/2, 預設=2): ").strip()
+        except EOFError:
+            print("\n未輸入模式，預設使用模式 2（只測試模型效果，開視窗）")
+            return 2
 
-    if choice == "1":
-        return 1
-    return 2
+        if choice == "":
+            return 2
+        if choice == "1":
+            return 1
+        if choice == "2":
+            return 2
+        print(f"⚠ 輸入無效「{choice}」，請輸入 1 或 2（直接按 Enter 預設為 2）")
 
 def main():
     run_mode = resolve_run_mode()
@@ -1069,6 +1063,31 @@ def main():
     current_video_idx = 0
     show_overlay_info = True
 
+    # a/d 逐幀瀏覽（僅暫停時可用）：用畫面快取往回捲動，不重新呼叫模型
+    # pipeline——如果反著重新推論，EMA/keypoints_buffer 等跨幀狀態會被錯誤的
+    # 時間順序污染，畫面反而看起來更詭異。往回看只能瀏覽「本次播放已經播過、
+    # 還留在快取裡」的幀；已經在快取最新幀時按 d，改成往前正常推進一幀
+    # （跟一般播放走同一條處理路徑，順序未被打亂，不影響 EMA/keypoints_buffer
+    # 狀態），處理完自動再次暫停在這一幀。兩者合起來，只要逐格走，就能到達
+    # 影片中任何一幀（影片長度上限 5 分鐘，逐格前進可接受）。
+    # 快取筆數不設上限（可回捲到本次播放最早一幀），但每幀改存 JPEG 壓縮後
+    # 的 bytes、顯示時才解壓，避免長影片直接存未壓縮畫面陣列把記憶體塞爆
+    # （例如 1080p 原始陣列每幀約 6MB，10 分鐘影片就要上百 GB；JPEG 壓縮後
+    # 通常只要 1/20~1/40 大小，同樣長度大概幾 GB，可接受得多）。
+    FRAME_HISTORY_JPEG_QUALITY = 90
+    frame_history = deque()
+    history_back_steps = 0  # 0 = 目前顯示最新幀；>0 代表往回看了幾幀
+    step_one_frame_and_repause = False  # d 在快取最新幀時觸發：推進一幀後自動重新暫停
+
+    def _encode_frame_for_history(frame):
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, FRAME_HISTORY_JPEG_QUALITY])
+        return buf if ok else None
+
+    def _show_history_frame(idx):
+        buf = frame_history[idx]
+        if buf is not None:
+            cv2.imshow(WINDOW_NAME, cv2.imdecode(buf, cv2.IMREAD_COLOR))
+
     # 即時顯示狀態
     behavior_id = LOW_CONF_ID
     confidence = 0.0
@@ -1135,9 +1154,13 @@ def main():
         nonlocal local_behavior_occurrence_counts, local_last_behavior_for_occurrence
         nonlocal _cat_missing_streak, _last_known_kpts, _last_known_kpt_conf
         nonlocal _last_known_bbox, _last_known_bbox_conf
+        nonlocal history_back_steps, step_one_frame_and_repause
 
         keypoints_buffer.clear()
         bbox_buffer.clear()
+        frame_history.clear()
+        history_back_steps = 0
+        step_one_frame_and_repause = False
         prev_kpts = None
         prev_kpt_conf = None
         ema_kpts = None
@@ -1292,6 +1315,7 @@ def main():
         prev_kpt_conf = None
         first_pass_completed = False
         switched_before_first_pass_complete = False
+        consecutive_read_failures = 0
 
         reset_behavior_display_state()
 
@@ -1343,6 +1367,14 @@ def main():
                     break
                 # 影片播放完畢
                 if loop_playback and not stop_requested:
+                    if local_loop_count == 0 and raw_frames_read == 0:
+                        # 連續讀取失敗（一幀都沒成功讀過就一直跳回開頭），代表影片
+                        # 疑似損毀而非正常播完，避免無 waitKey 的忙迴圈卡死
+                        consecutive_read_failures += 1
+                        if consecutive_read_failures >= 3:
+                            print(f"\n❌ 影片疑似損毀，連續 {consecutive_read_failures} 次讀取失敗，跳過: {video_path}")
+                            switch_delta = 1
+                            break
                     if local_loop_count == 0:
                         first_pass_completed = True
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -1365,8 +1397,21 @@ def main():
 
             frame_time_sec = raw_frames_read / source_fps if source_fps > 0 else 0.0
 
-            # YOLO-Pose 偵測
-            kpts, kpt_conf, bbox, bbox_conf = keypoint_detector.detect(frame)
+            # YOLO-Pose 偵測（單一追蹤目標，供 ST-GCN 行為分類/統計使用，行為不變）。
+            # 多貓偵測（純顯示用）：以前是另外對同一幀再跑一次 YOLO 取得所有實例
+            # （detect_all_instances()，已移除），等於同一幀重複推論兩次；
+            # keypoint_detector.detect() 內部本來就會算出這一幀所有偵測到的貓，
+            # 只是預設只挑「追蹤鎖定」的那隻回傳、其餘結果直接丟棄。改用
+            # return_all_instances=True 讓它把本來就算好的其餘實例一併回傳，
+            # 只在開視窗（display_window）時才要求多回傳這份資料，行為分類/
+            # CSV 統計仍然只跟著前 4 個回傳值（單一追蹤目標）走，跟原本完全一致。
+            if display_window:
+                kpts, kpt_conf, bbox, bbox_conf, all_cat_instances = keypoint_detector.detect(
+                    frame, return_all_instances=True
+                )
+            else:
+                kpts, kpt_conf, bbox, bbox_conf = keypoint_detector.detect(frame)
+                all_cat_instances = []
             # velocity_overlay removed
 
             # 貓咪偵測消失容忍：連續漏偵測沒超過門檻前，沿用最後一次偵測到的姿態，
@@ -1564,6 +1609,7 @@ def main():
                     local_last_behavior_for_occurrence = LOW_CONF_ID
 
             if display_window:
+                preview_scale, preview_pad_x, preview_pad_y = 1.0, 0, 0
                 if DISPLAY_SIZE is not None:
                     show_frame, preview_scale, preview_pad_x, preview_pad_y = resize_with_letterbox(frame, DISPLAY_SIZE)
                     if kpts is not None:
@@ -1609,13 +1655,24 @@ def main():
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
                         draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts)
+                _h, _w = show_frame.shape[:2]
+                _ui = compute_ui_scale(_w, _h)
+                # 多貓畫框：把這一幀偵測到、但不是目前追蹤鎖定目標的貓也畫出來
+                # （簡單框＋信心值，跟主要那隻的完整骨架/行為標籤區分開）。
+                _extra_instances = [
+                    inst for inst in all_cat_instances
+                    if inst[2] is None or bbox is None or not np.allclose(inst[2], bbox, atol=1.0)
+                ]
+                if _extra_instances:
+                    draw_extra_cat_instance_boxes(
+                        show_frame, _extra_instances,
+                        ui_scale=_ui, scale=preview_scale, crop_x=preview_pad_x, crop_y=preview_pad_y,
+                    )
                 # 資料夾名稱 + 影片進度條（左上角）
                 _fn  = FOLDER_MAP.get(current_folder_key, ("", "?"))[1]
                 _nav = (f"[{current_folder_key.upper()}]{_fn}  "
                         f"{current_video_idx + 1}/{len(video_paths)}  "
-                        f"| z WALK  x LICK  c SCRATCH  v SHAKE  b STOP  | Shift+A~E 評分")
-                _h, _w = show_frame.shape[:2]
-                _ui = compute_ui_scale(_w, _h)
+                        f"| z WALK  x LICK  c SCRATCH  v SHAKE  b STOP  | Shift+A~E 評分  | a/d 逐幀")
                 _fs = 0.42 * _ui
                 _th = max(1, int(_ui))
                 # Compute text size to ensure background rectangle fully covers label
@@ -1630,6 +1687,18 @@ def main():
                 cv2.putText(show_frame, _nav, (x_pos, text_y),
                             cv2.FONT_HERSHEY_SIMPLEX, _fs, (160, 210, 255), _th, cv2.LINE_AA)
                 cv2.imshow(WINDOW_NAME, show_frame)
+                # 進來的都是「新推進」的一幀（scrub 瀏覽只重播快取，不會走到這裡），
+                # 所以每次都重置回捲位置到最新，跟 reset_video_runtime_state() 的
+                # 用意一致：history_back_steps 只在暫停瀏覽時才有意義。
+                frame_history.append(_encode_frame_for_history(show_frame))
+                history_back_steps = 0
+
+                # 暫停時按 d 走到快取最新幀觸發的「推進一幀」：這一幀處理完就補上，
+                # 立刻重新暫停，不會繼續往下播放
+                if step_one_frame_and_repause:
+                    step_one_frame_and_repause = False
+                    paused = True
+                    print(f"\n⏭ 已推進至下一幀（第 {raw_frames_read} 幀）")
 
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
@@ -1692,6 +1761,21 @@ def main():
                             pygame.mixer.music.pause() if paused else pygame.mixer.music.unpause()
                         except Exception:
                             pass
+                # a/d 逐幀：播放中按下時先暫停在目前這幀（跟按空白鍵一樣鎖住畫面），
+                # 再視按鍵決定要不要往回捲一步；已經暫停時交給下面 while paused 迴圈裡
+                # 的 k2 分支處理，這裡的 not paused 門檻避免重複觸發。
+                if key in (ord('a'), ord('d')) and not paused:
+                    paused = True
+                    if audio_enabled:
+                        try:
+                            pygame.mixer.music.pause()
+                        except Exception:
+                            pass
+                    if key == ord('a') and history_back_steps < len(frame_history) - 1:
+                        history_back_steps += 1
+                        _show_history_frame(len(frame_history) - 1 - history_back_steps)
+                    # key == 'd'：剛從即時播放暫停下來就已經是快取最新幀，沒有更前面可跳，略過即可
+                if paused:
                     while paused:
                         k2 = cv2.waitKey(50) & 0xFF
                         if k2 == ord(' '):
@@ -1709,6 +1793,21 @@ def main():
                         elif k2 == ord('i'):
                             show_overlay_info = not show_overlay_info
                             print(f"\n資訊面板: {'顯示' if show_overlay_info else '隱藏'}")
+                        elif k2 == ord('a'):
+                            if history_back_steps < len(frame_history) - 1:
+                                history_back_steps += 1
+                                _show_history_frame(len(frame_history) - 1 - history_back_steps)
+                            else:
+                                print("\n⏮ 已經是本次播放最早的一幀")
+                        elif k2 == ord('d'):
+                            if history_back_steps > 0:
+                                history_back_steps -= 1
+                                _show_history_frame(len(frame_history) - 1 - history_back_steps)
+                            else:
+                                # 已在快取最新幀：往前正常推進一幀（沿用一般播放的處理路徑，
+                                # 順序未被打亂），處理完在外層自動重新暫停
+                                step_one_frame_and_repause = True
+                                paused = False
                         elif k2 == ord('2'):
                             paused = False
                             switch_delta = 1
@@ -1986,4 +2085,13 @@ def main():
     print("\n" + "="*60)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n⚠ 已收到中斷（Ctrl+C），正在關閉視窗與釋放資源...")
+        cv2.destroyAllWindows()
+        try:
+            import pygame
+            pygame.mixer.quit()
+        except Exception:
+            pass

@@ -51,7 +51,7 @@
         "type": "function",
         "z": "f374f5debb3b6a37",
         "name": "建立GPT分析請求",
-        "func": "const apiKey = env.get('OPENAI_API_KEY');\n\nif (!apiKey) {\n    node.error('找不到 OPENAI_API_KEY');\n    return null;\n}\n\nlet csvData = msg.payload;\n\nmsg.url = 'https://api.openai.com/v1/chat/completions';\nmsg.method = 'POST';\n\nmsg.headers = {\n    'Authorization': 'Bearer ' + apiKey,\n    'Content-Type': 'application/json'\n};\n\nmsg.payload = {\n    model: 'gpt-4.1-mini',\n\n    messages: [\n        {\n            role: 'system',\n            content:\n`你是一套貓咪行為健康分析系統的核心分析引擎。\n\n【系統背景】\n\n本資料來自一套以電腦視覺為基礎的貓咪即時監測系統。\n系統使用 YOLO-Pose 擷取貓咪骨架關鍵點（17 個關節），經過 EMA 平滑與時序正規化後，送入 ST-GCN 時空圖卷積神經網路進行行為辨識。\n系統僅統計高信心行為結果，低於信心閾值的結果不納入分析。\n\n【行為定義】\n\n目前辨識以下五種行為：\n\nwalk：\n貓咪正常移動與活動。\n\nlick：\n舔舐行為。\n過度舔舐可能代表：\n壓力、焦慮、皮膚問題、皮膚搔癢或強迫行為。\n\nscratch：\n搔抓行為。\n過度搔抓可能代表：\n皮膚疾病、寄生蟲或局部不適。\n\nshake：\n甩頭行為。\n頻繁甩頭可能代表：\n耳道感染、耳朵異物或神經異常。\n\nstop：\n靜止不動（模型高信心判定為靜止）。\n長時間 stop 可能代表：\n身體不適、精神萎靡或活動力下降。\n\n【行為時間欄位語意說明】\n\nactive_time：五種行為（walk/lick/scratch/shake/stop）的累積時間總和。\nrest_time：YOLO 偵測到貓但 ST-GCN 信心不足的時間（無法確定行為，非代表真正休息）。\nnot_detected_time：YOLO 未偵測到貓的時間（貓不在畫面中，不納入健康分析）。\n\n【CSV 欄位定義】\n\n你收到的是 CSV 原始文字，可能包含多筆紀錄。\n每一列代表一筆統計紀錄，欄位名稱完全如下：\n\ntimestamp：紀錄時間\nwalk：行走次數\nwalk_time：行走時間（秒）\nlick：舔舐次數\nlick_time：舔舐時間（秒）\nscratch：搔抓次數\nscratch_time：搔抓時間（秒）\nshake：甩頭次數\nshake_time：甩頭時間（秒）\nstop：靜止次數\nstop_time：靜止時間（秒）\nactive_time：五種行為累積時間（秒）\nrest_time：低信心幀時間（秒，非代表真正休息）\nnot_detected_time：貓不在畫面的時間（秒）\nactivity_score：活動力分數（0–100）\nhealth_score：健康分數（0–100）\n\n【分析原則】\n\n1. 請先解析 CSV 內容，逐列讀出欄位數值。\n2. 若有多筆資料，請優先以最新一列作為當前狀態，並可同時參考整體趨勢。\n3. 不可使用 total_walk、total_lick、avg_health_score 這類不存在於 CSV 的欄位名稱。\n4. 必須直接引用 CSV 中實際存在的數值，不可捏造不存在的數據。\n5. 若某欄位缺值，請明確說明缺值，不要自行補成 0。\n\n【分析項目】\n\n一、異常舔舐評估\n請分析 lick 與 lick_time。\n若 lick_time > 10 秒，請評估異常程度，並說明可能代表：\n壓力、焦慮、皮膚過敏、皮膚搔癢或強迫舔舐行為。\n\n二、活動力與靜止評估\n請分析 active_time、stop_time、walk_time、activity_score。\n請計算 stop_ratio = stop_time / active_time；\n若 stop_ratio > 0.5，請判斷是否有長時間靜止或活動力不足的情況。\n注意：rest_time 代表信心不足幀，not_detected_time 代表貓不在畫面，兩者均不應視為「休息」。\n\n三、異常甩頭評估\n請分析 shake 與 shake_time。\n若 shake > 10 次，請說明可能代表耳道感染、耳朵異物、神經異常或不適反應。\n\n四、整體健康風險評估\n請綜合 health_score、activity_score、lick、scratch、shake 進行判斷。\n若 health_score ≥ 80，視為低風險；\n50–79 視為中風險；\n< 50 視為高風險。\n若單一異常明顯超標或多項異常同時偏高，也應提高風險等級。\n\n【輸出格式要求】\n\n請使用繁體中文。\n每個分析項目需有明確標題。\n必須引用 CSV 內實際數值。\n不可捏造不存在的數據。\n語氣需專業但容易理解。\n請在最後提供：\n健康總結、風險說明、飼主建議。\n`\n        },\n        {\n            role: 'user',\n            content:\n`以下是貓咪本次監測的統計 CSV 資料，請根據系統定義進行分析：\n\n${csvData}`\n        }\n    ],\n\n    temperature: 0.2,\n    max_tokens: 1500\n};\n\nreturn msg;",
+        "func": "const apiKey = env.get('OPENAI_API_KEY');\n\nif (!apiKey) {\n    node.error('找不到 OPENAI_API_KEY');\n    return null;\n}\n\nlet csvData = msg.payload;\n\nmsg.url = 'https://api.openai.com/v1/chat/completions';\nmsg.method = 'POST';\n\nmsg.headers = {\n    'Authorization': 'Bearer ' + apiKey,\n    'Content-Type': 'application/json'\n};\n\nmsg.payload = {\n    model: 'gpt-4.1-mini',\n\n    messages: [\n        {\n            role: 'system',\n            content:\n`你是一套貓咪行為健康分析系統的核心分析引擎。\n\n【系統背景】\n\n本資料來自一套以電腦視覺為基礎的貓咪即時監測系統。\n系統使用 YOLO-Pose 擷取貓咪骨架關鍵點（17 個關節），經過 EMA 平滑與時序正規化後，送入 ST-GCN 時空圖卷積神經網路進行行為辨識。\n系統僅統計高信心行為結果，低於信心閾值的結果不納入分析。\n\n【行為定義】\n\n目前辨識以下五種行為：\n\nwalk：\n貓咪正常移動與活動。\n\nlick：\n舔舐行為。\n過度舔舐可能代表：\n壓力、焦慮、皮膚問題、皮膚搔癢或強迫行為。\n\nscratch：\n搔抓行為。\n過度搔抓可能代表：\n皮膚疾病、寄生蟲或局部不適。\n\nshake：\n甩頭行為。\n頻繁甩頭可能代表：\n耳道感染、耳朵異物或神經異常。\n\nstop：\n靜止不動（模型高信心判定為靜止）。\n長時間 stop 可能代表：\n身體不適、精神萎靡或活動力下降。\n\n【行為時間欄位語意說明】\n\nactive_time：五種行為（walk/lick/scratch/shake/stop）的累積時間總和。\nlow_conf_time：YOLO 偵測到貓但 ST-GCN 信心不足的累積時間（無法確定行為，非代表真正休息）；low_conf 則是對應的次數。\nnot_detected_time：YOLO 未偵測到貓的時間（貓不在畫面中，不納入健康分析）。\n\n【CSV 欄位定義】\n\n你收到的是 CSV 原始文字，可能包含多筆紀錄。\n每一列代表一筆統計紀錄，欄位名稱完全如下：\n\ntimestamp：紀錄時間\nwalk：行走次數\nwalk_time：行走時間（秒）\nlick：舔舐次數\nlick_time：舔舐時間（秒）\nscratch：搔抓次數\nscratch_time：搔抓時間（秒）\nshake：甩頭次數\nshake_time：甩頭時間（秒）\nstop：靜止次數\nstop_time：靜止時間（秒）\nactive_time：五種行為累積時間（秒）\nlow_conf：低信心幀次數\nlow_conf_time：低信心幀累積時間（秒，非代表真正休息）\nnot_detected_time：貓不在畫面的時間（秒）\nactivity_score：活動力分數（0–100）\n\n【分析原則】\n\n1. 請先解析 CSV 內容，逐列讀出欄位數值。\n2. 若有多筆資料，請優先以最新一列作為當前狀態，並可同時參考整體趨勢。\n3. 不可使用 total_walk、total_lick、avg_health_score 這類不存在於 CSV 的欄位名稱。\n4. 必須直接引用 CSV 中實際存在的數值，不可捏造不存在的數據。\n5. 若某欄位缺值，請明確說明缺值，不要自行補成 0。\n\n【分析項目】\n\n一、異常舔舐評估\n請分析 lick 與 lick_time。\n若 lick_time > 10 秒，請評估異常程度，並說明可能代表：\n壓力、焦慮、皮膚過敏、皮膚搔癢或強迫舔舐行為。\n\n二、活動力與靜止評估\n請分析 active_time、stop_time、walk_time、activity_score。\n請計算 stop_ratio = stop_time / active_time；\n若 stop_ratio > 0.5，請判斷是否有長時間靜止或活動力不足的情況。\n注意：low_conf_time 代表信心不足幀，not_detected_time 代表貓不在畫面，兩者均不應視為「休息」。\n\n三、異常甩頭評估\n請分析 shake 與 shake_time。\n若 shake > 10 次，請說明可能代表耳道感染、耳朵異物、神經異常或不適反應。\n\n四、整體健康風險評估\n本系統的 CSV 不含現成的健康分數欄位，請你依上述各項分析結果，綜合 activity_score、lick_time、scratch_time、shake、stop_ratio、low_conf_time 自行判斷整體風險等級（低／中／高），並說明理由。\n若多項異常同時偏高（例如舔舐／搔抓／甩頭同時超標，或活動力偏低合併靜止佔比過高），應提高風險等級；僅單一輕微異常則列為低風險。\n\n【輸出格式要求】\n\n請使用繁體中文。\n每個分析項目需有明確標題。\n必須引用 CSV 內實際數值。\n不可捏造不存在的數據。\n語氣需專業但容易理解。\n請在最後提供：\n健康總結、風險說明、飼主建議。\n`\n        },\n        {\n            role: 'user',\n            content:\n`以下是貓咪本次監測的統計 CSV 資料，請根據系統定義進行分析：\n\n${csvData}`\n        }\n    ],\n\n    temperature: 0.2,\n    max_tokens: 1500\n};\n\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -287,11 +287,6 @@
             },
             {
                 "t": "eq",
-                "v": "/status",
-                "vt": "str"
-            },
-            {
-                "t": "eq",
                 "v": "/日報",
                 "vt": "str"
             },
@@ -301,7 +296,7 @@
         ],
         "checkall": "false",
         "repair": false,
-        "outputs": 6,
+        "outputs": 5,
         "x": 600,
         "y": 460,
         "wires": [
@@ -313,9 +308,6 @@
             ],
             [
                 "fa2b3c4d5e6f7081"
-            ],
-            [
-                "ab3c4d5e6f708192"
             ],
             [],
             [
@@ -613,7 +605,7 @@
         "type": "function",
         "z": "f374f5debb3b6a37",
         "name": "/help",
-        "func": "let token = global.get('FB_TOKEN');\n\n// ── 指令清單 ──────────────────────────────\nlet cmdList = [\n  '🐱 貓咪監測系統 · 可用指令',\n  '─────────────────',\n  '哈基米　→ AI 健康分析報告（需 10–20 秒）',\n  '/camera → 錄製最近 5 秒行為影片',\n  '/status → 查詢即時行為與今日統計',\n  '/help　 → 顯示此說明'\n].join('\\n');\n\n// ── 公告欄（自訂內容） ──────────────────────\nlet bulletin = [\n  '',\n  '📌 公告欄 · 致即將畢業的你',\n  '─────────────────',\n  '你從零蓋了一套端對端系統：',\n  'YOLO-Pose → ST-GCN → Node-RED → GPT',\n  '連貓咪都受到 AI 守護，厲害了。',\n  '',\n  '🔔 畢業前最後叮嚀',\n  '□ 消融實驗數字整理進論文了嗎？',\n  '□ Dashboard 截圖放投影片了嗎？',\n  '□ 教授 feedback 都回應了嗎？',\n  '□ 論文初稿交前記得備份三份！',\n  '',\n  '終點就在前面了，',\n  '論文寫完的那天，貓咪陪你慶祝 🎓'\n].join('\\n');\n\nlet fullText = cmdList + bulletin;\n\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\nmsg.payload = { recipient: { id: msg.sender }, message: { text: fullText } };\nreturn msg;",
+        "func": "let token = global.get('FB_TOKEN');\n\n// ── 指令清單 ──────────────────────────────\nlet cmdList = [\n  '🐱 貓咪監測系統 · 可用指令',\n  '─────────────────',\n  '哈基米　→ AI 健康分析報告（需 10–20 秒）',\n  '/camera → 錄製最近 5 秒行為影片',\n  '/help　 → 顯示此說明'\n].join('\\n');\n\n// ── 公告欄（自訂內容） ──────────────────────\nlet bulletin = [\n  '',\n  '📌 公告欄 · 致即將畢業的你',\n  '─────────────────',\n  '你從零蓋了一套端對端系統：',\n  'YOLO-Pose → ST-GCN → Node-RED → GPT',\n  '連貓咪都受到 AI 守護，厲害了。',\n  '',\n  '🔔 畢業前最後叮嚀',\n  '□ 消融實驗數字整理進論文了嗎？',\n  '□ Dashboard 截圖放投影片了嗎？',\n  '□ 教授 feedback 都回應了嗎？',\n  '□ 論文初稿交前記得備份三份！',\n  '',\n  '終點就在前面了，',\n  '論文寫完的那天，貓咪陪你慶祝 🎓'\n].join('\\n');\n\nlet fullText = cmdList + bulletin;\n\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\nmsg.payload = { recipient: { id: msg.sender }, message: { text: fullText } };\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -622,70 +614,6 @@
         "libs": [],
         "x": 790,
         "y": 580,
-        "wires": [
-            [
-                "df2b0efdd5d80d32"
-            ]
-        ]
-    },
-    {
-        "id": "ab3c4d5e6f708192",
-        "type": "function",
-        "z": "f374f5debb3b6a37",
-        "name": "/status 組請求",
-        "func": "let ip = global.get('python_ip') || '127.0.0.1';\nmsg.url = 'http://' + ip + ':5000/status';\nmsg.method = 'GET';\nmsg.headers = {};\nmsg._sender = msg.sender;\nreturn msg;",
-        "outputs": 1,
-        "timeout": "",
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 800,
-        "y": 700,
-        "wires": [
-            [
-                "bc4d5e6f70819203"
-            ]
-        ]
-    },
-    {
-        "id": "bc4d5e6f70819203",
-        "type": "http request",
-        "z": "f374f5debb3b6a37",
-        "name": "取得狀態",
-        "method": "use",
-        "ret": "obj",
-        "paytoqs": "ignore",
-        "url": "",
-        "tls": "",
-        "persist": false,
-        "proxy": "",
-        "insecureHTTPParser": false,
-        "authType": "",
-        "senderr": false,
-        "headers": [],
-        "x": 1000,
-        "y": 700,
-        "wires": [
-            [
-                "cd5e6f7081920314"
-            ]
-        ]
-    },
-    {
-        "id": "cd5e6f7081920314",
-        "type": "function",
-        "z": "f374f5debb3b6a37",
-        "name": "/status 回覆",
-        "func": "let d = msg.payload || {};\nlet stats = d.today_stats || {};\nlet behavior = ['走動','舔舐','搔抓','甩頭','靜止'];\nlet bId = d.latest_behavior;\nlet bName = (bId >= 0 && bId <= 4) ? behavior[bId] : '偵測中';\nlet conf = Math.round((d.latest_confidence || 0) * 100);\nlet score = d.activity_score || 0;\nlet lines = [\n  '📊 目前狀態',\n  '行為：' + bName + '（信心 ' + conf + '%）',\n  '活動力：' + score,\n  '',\n  '📋 今日統計',\n  '走動 ' + (stats.walk||0) + ' 次　舔舐 ' + (stats.lick||0) + ' 次',\n  '搔抓 ' + (stats.scratch||0) + ' 次　甩頭 ' + (stats.shake||0) + ' 次',\n  '靜止 ' + (stats.stop||0) + ' 次',\n  '活動時長 ' + Math.round((stats.active_time||0)/60) + ' 分'\n];\nlet token = global.get('FB_TOKEN');\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\nmsg.payload = { recipient: { id: msg._sender }, message: { text: lines.join('\\n') } };\nreturn msg;",
-        "outputs": 1,
-        "timeout": "",
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 1170,
-        "y": 700,
         "wires": [
             [
                 "df2b0efdd5d80d32"

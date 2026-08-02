@@ -4,6 +4,13 @@ import tkinter as tk
 from tkinter import filedialog
 import os
 
+from constants import (
+    COLOR_HEAD, COLOR_BODY, COLOR_TAIL, COLOR_KPT,
+    COLOR_LEFT_FRONT, COLOR_RIGHT_FRONT, COLOR_LEFT_HIND, COLOR_RIGHT_HIND,
+    HEAD_LINKS, BODY_LINKS, TAIL_LINKS,
+    LEFT_FRONT_LINKS, RIGHT_FRONT_LINKS, LEFT_HIND_LINKS, RIGHT_HIND_LINKS,
+)
+
 # ==================== 設定 ====================
 IMGSZ = 640
 CONF_THRES = 0.50
@@ -15,25 +22,6 @@ TOTAL_KPTS = 17
 GREEN = (0, 255, 0)
 RED   = (0, 0, 255)
 BLUE  = (255, 0, 0)
-
-COLOR_HEAD = (255, 255, 0)
-COLOR_BODY = (0, 255, 0)
-COLOR_TAIL = (255, 0, 255)
-COLOR_KPT  = (0, 0, 255)
-
-COLOR_LEFT_FRONT  = (255, 0, 255)   # 洋紅色 (magenta)
-COLOR_RIGHT_FRONT = (0, 255, 255)   # 青色 (cyan)
-COLOR_LEFT_HIND   = (255, 165, 0)   # 橙色 (orange)
-COLOR_RIGHT_HIND  = (0, 255, 0)     # 綠色 (green)
-
-# ==================== 骨架連結 ====================
-HEAD_LINKS  = [(0,1),(0,2),(1,2)]
-BODY_LINKS  = [(0,3),(3,4),(4,5)]
-TAIL_LINKS  = [(5,14),(14,15),(15,16)]
-LEFT_FRONT_LINKS  = [(3,6),(6,7)]
-RIGHT_FRONT_LINKS = [(3,8),(8,9)]
-LEFT_HIND_LINKS   = [(5,10),(10,11)]
-RIGHT_HIND_LINKS  = [(5,12),(12,13)]
 
 model = YOLO(r"C:\ai_project\cat_pose\v11s_121.pt")
 

@@ -1,11 +1,13 @@
 """
 MJPEG 串流管理
 """
+
 import logging
 import threading
-import cv2
 import time
 from collections import deque
+
+import cv2
 from config import FlaskConfig, STGCNConfig, VisualizationConfig
 
 _TARGET_MODEL_FPS = STGCNConfig.TARGET_MODEL_FPS
@@ -47,10 +49,12 @@ class SharedFrameStreamer:
         self.thread.start()
 
     def acquire_client(self) -> None:
+        """登記一個活躍的串流客戶端連線（用於決定是否需要編碼 JPEG）。"""
         with self._client_lock:
             self._client_count += 1
 
     def release_client(self) -> None:
+        """釋放一個串流客戶端連線。"""
         with self._client_lock:
             if self._client_count > 0:
                 self._client_count -= 1
@@ -83,7 +87,9 @@ class SharedFrameStreamer:
                         # 本機影片檔案已放完：不循環、不重試，直接停在這裡等待人工處理
                         # （例如換一支影片、重啟程式），避免統計被無限重播的相同片段疊加。
                         self.finished = True
-                        logging.info("SharedFrameStreamer: 本機影片檔案已播畢，停止處理（不自動循環）")
+                        logging.info(
+                            "SharedFrameStreamer: 本機影片檔案已播畢，停止處理（不自動循環）"
+                        )
                     continue
 
                 raw_frame_count += 1
@@ -97,11 +103,16 @@ class SharedFrameStreamer:
                     h, w = processed_frame.shape[:2]
                     tw, th = _STREAM_DISPLAY_SIZE
                     if w > 0 and h > 0 and tw > 0 and th > 0:
-                        display_frame = cv2.resize(processed_frame, _STREAM_DISPLAY_SIZE)
+                        display_frame = cv2.resize(
+                            processed_frame, _STREAM_DISPLAY_SIZE
+                        )
                     else:
                         logging.warning(
                             "SharedFrameStreamer: 跳過 resize，尺寸無效 frame=(%d,%d) target=(%d,%d)",
-                            w, h, tw, th,
+                            w,
+                            h,
+                            tw,
+                            th,
                         )
 
                 with self.clip_lock:
@@ -114,9 +125,9 @@ class SharedFrameStreamer:
                     continue
 
                 # 每幀只編碼一次；bytes 不可變，所有消費者共享同一物件
-                _, buf = cv2.imencode('.jpg', display_frame, _encode_param)
+                _, jpeg_buffer = cv2.imencode(".jpg", display_frame, _encode_param)
                 with self.lock:
-                    self.latest_jpeg = buf.tobytes()
+                    self.latest_jpeg = jpeg_buffer.tobytes()
 
             except Exception as e:
                 logging.error("SharedFrameStreamer._update_frame error: %s", e)
@@ -130,11 +141,6 @@ class SharedFrameStreamer:
             return self.latest_jpeg
 
     def get_clip_frames(self) -> list:
+        """回傳目前 ring buffer 中保存的所有畫面（供 /video_clip 使用）。"""
         with self.clip_lock:
             return list(self.clip_buffer)
-
-    def stop(self):
-        self.running = False
-        self.thread.join(timeout=5.0)
-        if self.thread.is_alive():
-            logging.warning("SharedFrameStreamer: _update_frame thread did not stop within 5 s")

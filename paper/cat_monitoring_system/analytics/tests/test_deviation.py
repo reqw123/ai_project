@@ -4,13 +4,15 @@ from datetime import date, timedelta
 import pytest
 
 from analytics.baseline import DailyRecord, compute_baseline
-from analytics.deviation import compute_deviation, _poisson_upper_tail, _norm_isf
+from analytics.deviation import _norm_isf, _poisson_upper_tail, compute_deviation
 
 
 def _mk_days(n, **overrides):
     days = []
     for i in range(n):
-        kwargs = dict(day=date(2026, 1, 1) + timedelta(days=i), monitoring_seconds=7200.0)
+        kwargs = dict(
+            day=date(2026, 1, 1) + timedelta(days=i), monitoring_seconds=7200.0
+        )
         for key, values in overrides.items():
             kwargs[key] = values[i]
         days.append(DailyRecord(**kwargs))
@@ -79,7 +81,9 @@ def test_sparse_count_still_flags_a_genuine_outbreak():
         history_counts_by_metric={"scratch_count": scratch_counts},
     )
     m = dev.metrics["scratch_count"]
-    assert m.sigma_equivalent >= 3.0, "a genuine 8x jump from a near-zero baseline should still flag"
+    assert (
+        m.sigma_equivalent >= 3.0
+    ), "a genuine 8x jump from a near-zero baseline should still flag"
 
 
 def test_count_deviation_is_two_sided_not_just_high():
@@ -97,8 +101,12 @@ def test_count_deviation_is_two_sided_not_just_high():
         history_counts_by_metric={"lick_count": lick_counts},
     )
     m = dev.metrics["lick_count"]
-    assert m.sigma_equivalent < 0, "an unusually low count should report a negative sigma, not be zeroed out"
-    assert abs(m.sigma_equivalent) >= 2.5, "going from ~12/day to 0 should register as at least a Mild deviation"
+    assert (
+        m.sigma_equivalent < 0
+    ), "an unusually low count should report a negative sigma, not be zeroed out"
+    assert (
+        abs(m.sigma_equivalent) >= 2.5
+    ), "going from ~12/day to 0 should register as at least a Mild deviation"
 
 
 def test_continuous_robust_z_resists_a_single_contaminating_day():
@@ -125,7 +133,9 @@ def test_continuous_robust_z_resists_a_single_contaminating_day():
     old_mean = sum(lick_times) / len(lick_times)
     old_std = (sum((v - old_mean) ** 2 for v in lick_times) / len(lick_times)) ** 0.5
     old_z = (today - old_mean) / old_std
-    assert abs(old_z) < 1.0, "sanity check: the contaminated mean/std masks this real anomaly"
+    assert (
+        abs(old_z) < 1.0
+    ), "sanity check: the contaminated mean/std masks this real anomaly"
 
     dev = compute_deviation(today={"lick_time": today}, baseline=baseline)
     m = dev.metrics["lick_time"]

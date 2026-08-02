@@ -6,9 +6,11 @@ Node-RED 通訊 — 非阻塞雙端點背景發送
   - v1 / v2 各自獨立 worker thread，互不影響
   - 佇列容量 = 1（drop-on-full）：永遠傳最新資料，不積壓舊訊息
 """
+
 import logging
 import queue
 import threading
+
 import requests
 from config import NodeRedConfig
 
@@ -45,11 +47,11 @@ class _EndpointWorker:
 
     def _run(self) -> None:
         while True:
-            item = self._q.get()
-            if item is None:
+            payload = self._q.get()
+            if payload is None:
                 break
             try:
-                requests.post(self.url, json=item, timeout=NodeRedConfig.TIMEOUT)
+                requests.post(self.url, json=payload, timeout=NodeRedConfig.TIMEOUT)
             except Exception as exc:
                 logging.warning("NodeRedClient [%s] POST failed: %s", self.label, exc)
 

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p ~/.claude/skills)",
+      "Bash(cp -R ~/academic-research-skills/deep-research ~/.claude/skills/deep-research)",
+      "Bash(cp -R ~/academic-research-skills/academic-paper ~/.claude/skills/academic-paper)",
+      "Bash(cp -R ~/academic-research-skills/academic-paper-reviewer ~/.claude/skills/academic-paper-reviewer)",
+      "Bash(cp -R ~/academic-research-skills/academic-pipeline ~/.claude/skills/academic-pipeline)",
+      "WebSearch",
+      "WebFetch(domain:pmc.ncbi.nlm.nih.gov)",
+      "WebFetch(domain:dl.acm.org)",
+      "WebFetch(domain:www.frontiersin.org)",
+      "WebFetch(domain:www.sciencedirect.com)"
+    ]
+  }
+}

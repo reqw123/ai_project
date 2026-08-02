@@ -1,26 +1,28 @@
 """
 Flask 路由
 """
-from flask import Response, jsonify, request
-import time
-import sys
-import os
+
 import datetime
-import cv2
+import os
+import sys
+import time
 from pathlib import Path
+
+import cv2
+from flask import Response, jsonify, request
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 _project_root = str(Path(__file__).parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
-from config import ModelPaths as _ModelPaths
-from config import YOLOConfig as _YOLOConfig
-from config import STGCNConfig as _STGCNConfig
-from config import NodeRedConfig as _NodeRedConfig
 from config import FlaskConfig as _FlaskConfig
-from config import SystemInfo as _SystemInfo
+from config import ModelPaths as _ModelPaths
+from config import NodeRedConfig as _NodeRedConfig
 from config import RunModeConfig as _RunModeConfig
+from config import STGCNConfig as _STGCNConfig
+from config import SystemInfo as _SystemInfo
+from config import YOLOConfig as _YOLOConfig
 
 _KP_EMA_ALPHA = _STGCNConfig.KP_EMA_ALPHA
 _YOLO_MODEL_PATH = _ModelPaths.YOLO_MODEL
@@ -31,30 +33,29 @@ _IMAGE_SIZE = _YOLOConfig.IMAGE_SIZE
 _CONF_THRES = _YOLOConfig.CONFIDENCE_THRESHOLD
 _SEQUENCE_LENGTH = _STGCNConfig.SEQUENCE_LENGTH
 _PORT = _FlaskConfig.PORT
-from server.streaming import SharedFrameStreamer
-from processors.frame_processor import FrameProcessor
-from trackers.behavior_tracker import ImprovedBehaviorTracker
-from utils.constants import *
-from utils.helpers import get_ip
-from analytics.baseline import DailyRecord, compute_baseline, InsufficientDataError
+from analytics.baseline import DailyRecord, InsufficientDataError, compute_baseline
 from analytics.deviation import compute_deviation
 from analytics.fusion import compute_fusion
-
+from processors.frame_processor import FrameProcessor
+from server.streaming import SharedFrameStreamer
+from utils.constants import *
+from utils.helpers import get_ip
 
 frame_streamer = None
 frame_processor = None
-_init_lock = __import__('threading').Lock()
+_init_lock = __import__("threading").Lock()
 LOCAL_IP = get_ip() or "127.0.0.1"
 
 
-def _resolve_runtime_device(preferred='cuda'):
-    if preferred != 'cuda':
+def _resolve_runtime_device(preferred="cuda"):
+    if preferred != "cuda":
         return preferred
     try:
         import torch
-        return 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
     except Exception:
-        return 'cpu'
+        return "cpu"
 
 
 def _daily_record_from_dict(d):
@@ -67,17 +68,26 @@ def _daily_record_from_dict(d):
     behavior_segments_log.csv 已知有 ISO 與本地格式混用的 bug，此處
     寧可讓格式錯誤在這裡就明確報錯，而不是靜默解析錯誤造成基線算錯。
     """
-    raw_date = d.get('date')
+    raw_date = d.get("date")
     try:
         day = datetime.date.fromisoformat(str(raw_date)[:10])
     except (TypeError, ValueError):
         raise ValueError(f"date 必須是 ISO 格式 (YYYY-MM-DD)，收到: {raw_date!r}")
 
-    kwargs = {'day': day}
+    kwargs = {"day": day}
     for field_name in (
-        'monitoring_seconds', 'walk_time', 'walk_count', 'stop_time', 'stop_count',
-        'lick_time', 'lick_count', 'scratch_time', 'scratch_count', 'shake_count',
-        'active_time', 'rest_time',
+        "monitoring_seconds",
+        "walk_time",
+        "walk_count",
+        "stop_time",
+        "stop_count",
+        "lick_time",
+        "lick_count",
+        "scratch_time",
+        "scratch_count",
+        "shake_count",
+        "active_time",
+        "rest_time",
     ):
         if field_name in d:
             kwargs[field_name] = d[field_name]
@@ -86,13 +96,14 @@ def _daily_record_from_dict(d):
 
 def _dataclass_to_jsonable(obj):
     import dataclasses
+
     return dataclasses.asdict(obj)
 
 
 def _build_frame_processor(enable_nodered=True):
     """建立 FrameProcessor。enable_nodered=False 供本地 GUI 模式使用，
     避免在沒有 Node-RED/Flask 伺服器的情況下仍嘗試推送資料。"""
-    runtime_device = _resolve_runtime_device('cuda')
+    runtime_device = _resolve_runtime_device("cuda")
     return FrameProcessor(
         yolo_model_path=_YOLO_MODEL_PATH,
         stgcn_model_path=_STGCN_MODEL_PATH,
@@ -110,12 +121,11 @@ def _build_frame_processor(enable_nodered=True):
     )
 
 
-
-
 def _try_register_lick_stage(processor) -> None:
     """Optionally attach the Lick Stage plugin. Silently skipped if plugin is absent."""
     try:
         from plugins.lick_stage import LickStagePlugin as _LickStagePlugin
+
         processor.register_plugin(_LickStagePlugin())
     except ImportError:
         pass
@@ -124,7 +134,10 @@ def _try_register_lick_stage(processor) -> None:
 def _try_register_ext_body_zone(processor) -> None:
     """Optionally attach the extended 7-zone body plugin. Silently skipped if plugin is absent."""
     try:
-        from plugins.lick_stage.ext_body_zones import ExtBodyZonePlugin as _ExtBodyZonePlugin
+        from plugins.lick_stage.ext_body_zones import (
+            ExtBodyZonePlugin as _ExtBodyZonePlugin,
+        )
+
         processor.register_plugin(_ExtBodyZonePlugin())
     except ImportError:
         pass
@@ -160,35 +173,47 @@ def _pause_processing():
 
 
 def register_routes(app):
+    """向 Flask app 註冊所有 HTTP 路由（串流、快照、影片片段、狀態查詢等）。"""
 
-    @app.route('/stream')
+    @app.route("/stream")
     def stream():
+        """回傳 MJPEG 多部分串流（即時疊圖後畫面）。"""
         _ensure_processor_started()
         # _ensure_processor_started() 在排程時段外（或初始化競爭條件下）會
         # 直接不初始化 frame_streamer 就返回，這裡要跟 /snapshot 一致地擋掉，
         # 否則 mjpeg_stream() 內對 None 呼叫 acquire_client() 會直接拋
         # AttributeError（曾在排程開始時間的邊界撞到過）。
         if frame_streamer is None:
-            return Response(b'', status=503, mimetype='text/plain')
+            return Response(b"", status=503, mimetype="text/plain")
+
         def mjpeg_stream():
+            """逐幀產生 multipart/x-mixed-replace 格式的 JPEG 資料流。"""
             frame_streamer.acquire_client()
             try:
                 while True:
                     jpeg = frame_streamer.get_jpeg()
                     if jpeg is not None:
-                        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
+                        yield (
+                            b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                            + jpeg
+                            + b"\r\n"
+                        )
                     else:
                         time.sleep(0.01)
             finally:
                 # GeneratorExit（客戶端斷線）或任何例外都能正確釋放計數
                 frame_streamer.release_client()
-        return Response(mjpeg_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-    @app.route('/snapshot')
+        return Response(
+            mjpeg_stream(), mimetype="multipart/x-mixed-replace; boundary=frame"
+        )
+
+    @app.route("/snapshot")
     def snapshot():
+        """回傳目前最新一幀的單張 JPEG 快照。"""
         _ensure_processor_started()
         if frame_streamer is None:
-            return Response(b'', status=503, mimetype='image/jpeg')
+            return Response(b"", status=503, mimetype="image/jpeg")
         # 暫時佔用一個 client slot，確保 JPEG 編碼執行緒會產生最新幀
         frame_streamer.acquire_client()
         try:
@@ -196,22 +221,23 @@ def register_routes(app):
             while time.time() < deadline:
                 jpeg = frame_streamer.get_jpeg()
                 if jpeg:
-                    return Response(jpeg, mimetype='image/jpeg')
+                    return Response(jpeg, mimetype="image/jpeg")
                 time.sleep(0.02)
         finally:
             frame_streamer.release_client()
-        return Response(b'', status=503, mimetype='image/jpeg')
+        return Response(b"", status=503, mimetype="image/jpeg")
 
-    @app.route('/video_clip')
+    @app.route("/video_clip")
     def video_clip():
+        """將 ring buffer 中保存的最近幾秒畫面編碼成短片並回傳（含縮圖）。"""
         _ensure_processor_started()
         frames = frame_streamer.get_clip_frames() if frame_streamer else []
         if not frames:
-            return jsonify({'error': 'no frames available'}), 503
+            return jsonify({"error": "no frames available"}), 503
 
         ts_obj = datetime.datetime.now()
-        ts_file = ts_obj.strftime('%Y%m%d_%H%M%S')
-        ts_display = ts_obj.strftime('%Y/%m/%d %H:%M:%S')
+        ts_file = ts_obj.strftime("%Y%m%d_%H%M%S")
+        ts_display = ts_obj.strftime("%Y/%m/%d %H:%M:%S")
 
         save_dir = Path(_ModelPaths.OUTPUT_DIR)
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -221,11 +247,11 @@ def register_routes(app):
 
         # mp4v 在 Windows 無額外 codec 時 isOpened() 會為 False，fallback 到 MJPG+avi
         codecs = [
-            (str(save_dir / f'clip_{ts_file}.mp4'), cv2.VideoWriter_fourcc(*'mp4v')),
-            (str(save_dir / f'clip_{ts_file}.avi'), cv2.VideoWriter_fourcc(*'MJPG')),
+            (str(save_dir / f"clip_{ts_file}.mp4"), cv2.VideoWriter_fourcc(*"mp4v")),
+            (str(save_dir / f"clip_{ts_file}.avi"), cv2.VideoWriter_fourcc(*"MJPG")),
         ]
         writer = None
-        save_path = ''
+        save_path = ""
         for path, fourcc in codecs:
             w_ = cv2.VideoWriter(path, fourcc, fps, (w, h))
             if w_.isOpened():
@@ -235,7 +261,7 @@ def register_routes(app):
             w_.release()
 
         if writer is None:
-            return jsonify({'error': 'no usable video codec on this machine'}), 500
+            return jsonify({"error": "no usable video codec on this machine"}), 500
 
         for f in frames:
             writer.write(f)
@@ -243,45 +269,61 @@ def register_routes(app):
 
         # 最後一幀轉 base64 供 Dashboard 顯示縮圖
         import base64
+
         last_frame = frames[-1]
         jpeg_quality = max(1, min(int(_FlaskConfig.JPEG_QUALITY), 100))
-        _, buf = cv2.imencode('.jpg', last_frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
-        thumbnail = 'data:image/jpeg;base64,' + base64.b64encode(buf.tobytes()).decode()
+        _, jpeg_buffer = cv2.imencode(
+            ".jpg", last_frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
+        )
+        thumbnail = (
+            "data:image/jpeg;base64," + base64.b64encode(jpeg_buffer.tobytes()).decode()
+        )
 
         duration = round(len(frames) / fps, 1)
-        return jsonify({
-            'path': save_path,
-            'frames': len(frames),
-            'duration': duration,
-            'ts': ts_display,
-            'thumbnail': thumbnail,
-        })
+        return jsonify(
+            {
+                "path": save_path,
+                "frames": len(frames),
+                "duration": duration,
+                "ts": ts_display,
+                "thumbnail": thumbnail,
+            }
+        )
 
-    @app.route('/api/behavior_history')
+    @app.route("/api/behavior_history")
     def api_behavior_history():
         """回傳各行為區段與持續時間，供行為趨勢分析使用。支援 ?limit=200。"""
         _ensure_processor_started()
+        # 排程時段外（或初始化競爭條件下）frame_processor 可能仍是 None，
+        # 比照 /stream、/snapshot 的保護，避免對 None 呼叫方法直接 500
+        # （曾在排程開始時間的邊界撞到過）。
+        if frame_processor is None:
+            return jsonify({"count": 0, "segments": []}), 503
         try:
-            limit = max(1, min(int(request.args.get('limit', 200)), 1000))
+            limit = max(1, min(int(request.args.get("limit", 200)), 1000))
         except (TypeError, ValueError):
             limit = 200
         records = frame_processor.get_behavior_history_records(limit)
         segments = [
             {
                 "behavior_id": int(rec["gcn_behavior_id"]),
-                "behavior": BEHAVIOR_TEXT_MAP.get(rec["gcn_behavior_id"], rec["behavior"]),
+                "behavior": BEHAVIOR_TEXT_MAP.get(
+                    rec["gcn_behavior_id"], rec["behavior"]
+                ),
                 "timestamp": rec["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                 "duration_sec": round(float(rec["duration"]), 1),
                 "activity": int(rec.get("activity", 0)),
             }
             for rec in reversed(records)
         ]
-        return jsonify({
-            "count": len(segments),
-            "segments": segments,
-        })
+        return jsonify(
+            {
+                "count": len(segments),
+                "segments": segments,
+            }
+        )
 
-    @app.route('/api/deviation', methods=['POST'])
+    @app.route("/api/deviation", methods=["POST"])
     def api_deviation():
         """個體化基線 + 行為偏差評分橋接端點。
 
@@ -306,8 +348,8 @@ def register_routes(app):
             請求格式錯誤 → 400 {"error": "..."}
         """
         body = request.get_json(silent=True) or {}
-        raw_history = body.get('daily_history')
-        today = body.get('today')
+        raw_history = body.get("daily_history")
+        today = body.get("today")
         if not isinstance(raw_history, list) or not isinstance(today, dict):
             return jsonify({"error": "需要 daily_history(list) 與 today(dict)"}), 400
 
@@ -316,46 +358,52 @@ def register_routes(app):
         except (ValueError, TypeError, AttributeError) as e:
             return jsonify({"error": str(e)}), 400
 
-        excluded_dates = body.get('excluded_dates') or []
+        excluded_dates = body.get("excluded_dates") or []
         try:
-            min_baseline_days = int(body.get('min_baseline_days', 7))
+            min_baseline_days = int(body.get("min_baseline_days", 7))
         except (TypeError, ValueError):
             return jsonify({"error": "min_baseline_days 必須是整數"}), 400
         try:
-            class_c_score = float(body.get('class_c_score', 0.0))
+            class_c_score = float(body.get("class_c_score", 0.0))
         except (TypeError, ValueError):
             return jsonify({"error": "class_c_score 必須是數字"}), 400
 
         try:
             baseline = compute_baseline(
-                daily_records, min_days=min_baseline_days, excluded_dates=excluded_dates,
+                daily_records,
+                min_days=min_baseline_days,
+                excluded_dates=excluded_dates,
             )
         except InsufficientDataError as e:
-            return jsonify({
-                "status": "insufficient_data",
-                "current_days": e.current_days,
-                "required_days": e.required_days,
-            })
+            return jsonify(
+                {
+                    "status": "insufficient_data",
+                    "current_days": e.current_days,
+                    "required_days": e.required_days,
+                }
+            )
 
         deviation = compute_deviation(today=today, baseline=baseline)
         fusion = compute_fusion(deviation, class_c_score=class_c_score)
 
-        return jsonify({
-            "status": "ok",
-            "baseline": _dataclass_to_jsonable(baseline),
-            "deviation": _dataclass_to_jsonable(deviation),
-            "fusion": _dataclass_to_jsonable(fusion),
-        })
+        return jsonify(
+            {
+                "status": "ok",
+                "baseline": _dataclass_to_jsonable(baseline),
+                "deviation": _dataclass_to_jsonable(deviation),
+                "fusion": _dataclass_to_jsonable(fusion),
+            }
+        )
 
     def _cors(resp, status=200):
         """在回應上加 CORS header，讓 ui_template 的 fetch() 可跨 port 呼叫。"""
-        r = Response(resp.get_data(), status=status, mimetype='application/json')
-        r.headers['Access-Control-Allow-Origin']  = '*'
-        r.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-        r.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        r = Response(resp.get_data(), status=status, mimetype="application/json")
+        r.headers["Access-Control-Allow-Origin"] = "*"
+        r.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        r.headers["Access-Control-Allow-Headers"] = "Content-Type"
         return r
 
-    @app.route('/api/overlay', methods=['GET', 'POST', 'OPTIONS'])
+    @app.route("/api/overlay", methods=["GET", "POST", "OPTIONS"])
     def api_overlay():
         """讀取或更新畫面 overlay 顯示旗標。
         GET     → 回傳目前所有旗標狀態
@@ -364,31 +412,41 @@ def register_routes(app):
                   或 {"key": "...", "action": "toggle"} → server 自行翻轉，不需 client 追蹤狀態
                   master=true 時同時重置所有子旗標為 true。
         """
-        if request.method == 'OPTIONS':
+        if request.method == "OPTIONS":
             return _cors(jsonify({}))
 
         _ensure_processor_started()
-        if request.method == 'GET':
-            return _cors(jsonify({
-                "master":   frame_processor.overlay,
-                "skeleton": frame_processor.show_skeleton,
-                "label":    frame_processor.show_label,
-                "bbox":     frame_processor.show_bbox,
-            }))
+        # 排程時段外（或初始化競爭條件下）frame_processor 可能仍是 None，
+        # 比照 /stream、/snapshot 的保護，避免對 None 呼叫屬性直接 500
+        # （曾在排程開始時間的邊界撞到過）。
+        if frame_processor is None:
+            return _cors(jsonify({"error": "processor not started"}), 503)
 
-        body   = request.get_json(silent=True) or {}
-        key    = body.get('key')
-        value  = body.get('value')
-        action = body.get('action')
+        if request.method == "GET":
+            return _cors(
+                jsonify(
+                    {
+                        "master": frame_processor.overlay,
+                        "skeleton": frame_processor.show_skeleton,
+                        "label": frame_processor.show_label,
+                        "bbox": frame_processor.show_bbox,
+                    }
+                )
+            )
+
+        body = request.get_json(silent=True) or {}
+        key = body.get("key")
+        value = body.get("value")
+        action = body.get("action")
         if key is None:
             return _cors(jsonify({"error": "需要 key"}), 400)
 
-        if action == 'toggle':
+        if action == "toggle":
             current = {
-                'master':   frame_processor.overlay,
-                'skeleton': frame_processor.show_skeleton,
-                'label':    frame_processor.show_label,
-                'bbox':     frame_processor.show_bbox,
+                "master": frame_processor.overlay,
+                "skeleton": frame_processor.show_skeleton,
+                "label": frame_processor.show_label,
+                "bbox": frame_processor.show_bbox,
             }
             if key not in current:
                 return _cors(jsonify({"error": f"未知 key: {key!r}"}), 400)
@@ -397,39 +455,45 @@ def register_routes(app):
         if not isinstance(value, bool):
             return _cors(jsonify({"error": "需要 value(bool) 或 action='toggle'"}), 400)
 
-        if key == 'master':
+        if key == "master":
             frame_processor.overlay = value
             if value:
                 frame_processor.show_skeleton = True
-                frame_processor.show_label    = True
-                frame_processor.show_bbox     = True
-        elif key == 'skeleton':
+                frame_processor.show_label = True
+                frame_processor.show_bbox = True
+        elif key == "skeleton":
             frame_processor.show_skeleton = value
-        elif key == 'label':
+        elif key == "label":
             frame_processor.show_label = value
-        elif key == 'bbox':
+        elif key == "bbox":
             frame_processor.show_bbox = value
         else:
             return _cors(jsonify({"error": f"未知 key: {key!r}"}), 400)
 
-        return _cors(jsonify({
-            "ok": True, "key": key, "value": value,
-            "state": {
-                "master":   frame_processor.overlay,
-                "skeleton": frame_processor.show_skeleton,
-                "label":    frame_processor.show_label,
-                "bbox":     frame_processor.show_bbox,
-            }
-        }))
+        return _cors(
+            jsonify(
+                {
+                    "ok": True,
+                    "key": key,
+                    "value": value,
+                    "state": {
+                        "master": frame_processor.overlay,
+                        "skeleton": frame_processor.show_skeleton,
+                        "label": frame_processor.show_label,
+                        "bbox": frame_processor.show_bbox,
+                    },
+                }
+            )
+        )
 
-    @app.route('/')
+    @app.route("/")
     def index():
+        """回傳簡易首頁（含各端點連結），並確保處理管線已啟動。"""
         _ensure_processor_started()
         return Response(
             f"<html><body><p>{_SystemInfo.SYSTEM_NAME} {_SystemInfo.VERSION} &mdash; {LOCAL_IP}:{_PORT}</p>"
             f"<ul><li><a href='/stream'>stream</a></li>"
             f"<li><a href='/api/behavior_history?limit=500'>behavior history</a></li></ul>"
             f"</body></html>",
-            mimetype='text/html'
+            mimetype="text/html",
         )
-    

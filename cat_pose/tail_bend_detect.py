@@ -33,6 +33,9 @@ import csv
 from pathlib import Path
 
 from collections import deque
+
+from constants import EAR_DISTANCE_SKELETON_EDGES as SKEL_LINKS
+
 _USE_PIL = False  # Disable PIL for performance
 
 # ==================== 時間序列輸出設定 ====================
@@ -173,18 +176,8 @@ COLOR_ANGLE    = (255, 255, 255)   # 角度文字
 COLOR_BBOX     = (255, 160, 0)     # Bounding box（亮橘）
 COLOR_SKEL     = (80, 80, 80)      # 一般骨架（暗灰）
 
-# ==================== 完整骨架連結 ====================
-SKEL_LINKS = [
-    (0,1),(0,2),(1,2),          # 頭部
-    (0,3),(3,4),(4,5),          # 脊椎
-    (3,6),(6,7),                # 左前腿
-    (3,8),(8,9),                # 右前腿
-    (5,10),(10,11),             # 左後腿
-    (5,12),(12,13),             # 右後腿
-    (5,14),(14,15),(15,16),     # 尾巴
-]
-# 尾巴連結（用於特別強調）
-TAIL_LINKS = [(5,14),(14,15),(15,16)]
+# 完整骨架連結（SKEL_LINKS）改從 constants.py import（見檔案開頭），
+# 與其他共用腳本使用同一份 17-kpt 拓撲定義
 
 # ==================== 方向鍵 keycode ====================
 KEY_UP    = 2490368

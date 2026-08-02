@@ -3,7 +3,10 @@ from datetime import date, timedelta
 import pytest
 
 from analytics.baseline import (
-    DailyRecord, compute_baseline, compute_metric_stats, InsufficientDataError,
+    DailyRecord,
+    InsufficientDataError,
+    compute_baseline,
+    compute_metric_stats,
 )
 
 
@@ -12,7 +15,9 @@ def _mk_days(n, **overrides):
     zeroed metrics unless overridden by lists (index-aligned to day)."""
     days = []
     for i in range(n):
-        kwargs = dict(day=date(2026, 1, 1) + timedelta(days=i), monitoring_seconds=7200.0)
+        kwargs = dict(
+            day=date(2026, 1, 1) + timedelta(days=i), monitoring_seconds=7200.0
+        )
         for key, values in overrides.items():
             kwargs[key] = values[i]
         days.append(DailyRecord(**kwargs))
@@ -64,9 +69,17 @@ def test_excluded_dates_ignored_if_would_drop_below_min_days():
 
 def test_low_medium_high_confidence_bands():
     # thresholds (matches Node-RED calcConfidence): n<7 Low, n<30 Medium, else High
-    assert compute_baseline(_mk_days(6, walk_time=[1] * 6), min_days=3).confidence == "Low"
-    assert compute_baseline(_mk_days(10, walk_time=[1] * 10), min_days=7).confidence == "Medium"
-    assert compute_baseline(_mk_days(30, walk_time=[1] * 30), min_days=7).confidence == "High"
+    assert (
+        compute_baseline(_mk_days(6, walk_time=[1] * 6), min_days=3).confidence == "Low"
+    )
+    assert (
+        compute_baseline(_mk_days(10, walk_time=[1] * 10), min_days=7).confidence
+        == "Medium"
+    )
+    assert (
+        compute_baseline(_mk_days(30, walk_time=[1] * 30), min_days=7).confidence
+        == "High"
+    )
 
 
 def test_sanity_warning_fires_when_lick_baseline_absurdly_high():

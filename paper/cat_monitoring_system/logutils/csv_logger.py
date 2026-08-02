@@ -1,15 +1,28 @@
 """
 CSV 日誌記錄
 """
+
+import atexit
 import csv
 import threading
-import atexit
 from datetime import datetime
 from pathlib import Path
-from config import LoggingConfig, CatIdentityConfig
+
+from config import CatIdentityConfig, LoggingConfig
+
 
 class CSVLogger:
-    HEADER = ["Frame", "Timestamp", "Behavior", "GCN_Confidence", "Is_Still", "Motion_Score", "Cat_ID"]
+    """逐幀行為紀錄 CSV 寫入器（附加模式，重啟程式不會清空先前記錄）。"""
+
+    HEADER = [
+        "Frame",
+        "Timestamp",
+        "Behavior",
+        "GCN_Confidence",
+        "Is_Still",
+        "Motion_Score",
+        "Cat_ID",
+    ]
 
     def __init__(self, csv_path=None):
         if csv_path is None:
@@ -20,7 +33,7 @@ class CSVLogger:
         # 附加模式（跟 BehaviorSegmentLogger 一致）：先前用 'w' 截斷模式，伺服器
         # 每次重啟（crash/redeploy）都會把先前累積的逐幀記錄整個清空重寫。
         write_header = not path.exists() or path.stat().st_size == 0
-        self.csv_file = open(path, 'a', newline='', buffering=1)  # line-buffered
+        self.csv_file = open(path, "a", newline="", buffering=1)  # line-buffered
         try:
             self.csv_writer = csv.writer(self.csv_file)
             if write_header:
@@ -38,19 +51,23 @@ class CSVLogger:
         self.close()
 
     def log(self, frame_idx, behavior, confidence, is_still, motion_score):
+        """寫入一列逐幀紀錄並立即 flush。"""
         with self._lock:
-            self.csv_writer.writerow([
-                frame_idx,
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                behavior,
-                f"{confidence:.4f}",
-                "YES" if is_still else "NO",
-                f"{motion_score:.6f}",
-                CatIdentityConfig.CAT_ID,
-            ])
+            self.csv_writer.writerow(
+                [
+                    frame_idx,
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    behavior,
+                    f"{confidence:.4f}",
+                    "YES" if is_still else "NO",
+                    f"{motion_score:.6f}",
+                    CatIdentityConfig.CAT_ID,
+                ]
+            )
             self.csv_file.flush()
 
     def close(self):
+        """flush 並關閉 CSV 檔案（可重複呼叫）。"""
         with self._lock:
             if not self.csv_file.closed:
                 self.csv_file.flush()
@@ -66,7 +83,15 @@ class CSVLogger:
 class BehaviorSegmentLogger:
     """每段行為結束時寫入一筆 CSV，供行為趨勢分析使用。"""
 
-    HEADER = ["date", "time", "behavior_id", "behavior_name", "duration_sec", "activity", "cat_id"]
+    HEADER = [
+        "date",
+        "time",
+        "behavior_id",
+        "behavior_name",
+        "duration_sec",
+        "activity",
+        "cat_id",
+    ]
 
     def __init__(self, csv_path=None):
         if csv_path is None:
@@ -80,7 +105,7 @@ class BehaviorSegmentLogger:
     def _open(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         write_header = not self.path.exists() or self.path.stat().st_size == 0
-        self._file = open(self.path, 'a', newline='', encoding='utf-8', buffering=1)
+        self._file = open(self.path, "a", newline="", encoding="utf-8", buffering=1)
         self._writer = csv.writer(self._file)
         if write_header:
             self._writer.writerow(self.HEADER)
@@ -88,20 +113,24 @@ class BehaviorSegmentLogger:
         atexit.register(self._atexit_close)
 
     def log_segment(self, behavior_id, behavior_name, duration_sec, activity=0):
+        """寫入一筆已結束行為段落的紀錄並立即 flush。"""
         now = datetime.now()
         with self._lock:
-            self._writer.writerow([
-                now.strftime("%Y-%m-%d"),
-                now.strftime("%H:%M:%S"),
-                behavior_id,
-                behavior_name,
-                f"{duration_sec:.1f}",
-                activity,
-                CatIdentityConfig.CAT_ID,
-            ])
+            self._writer.writerow(
+                [
+                    now.strftime("%Y-%m-%d"),
+                    now.strftime("%H:%M:%S"),
+                    behavior_id,
+                    behavior_name,
+                    f"{duration_sec:.1f}",
+                    activity,
+                    CatIdentityConfig.CAT_ID,
+                ]
+            )
             self._file.flush()
 
     def close(self):
+        """flush 並關閉 CSV 檔案（可重複呼叫）。"""
         with self._lock:
             if self._file and not self._file.closed:
                 self._file.flush()

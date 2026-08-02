@@ -71,7 +71,7 @@ import torch
 import numpy as np
 import argparse
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import List, Tuple, Optional
 from dataclasses import dataclass, asdict
 import matplotlib
 matplotlib.use('Agg')  # 使用非互動式後端
@@ -308,24 +308,6 @@ class LabelQualityChecker:
                 features.append(0.0)
         
         return np.array(features, dtype=np.float32)
-    
-    def detect_outliers(self) -> Dict[str, list]:
-        """(已棄用) 使用 Local Outlier Factor 檢測離群樣本 (僅供參考)"""
-        valid_indices = [i for i, e in enumerate(self.embeddings) if e is not None]
-        valid_embeddings = [self.embeddings[i] for i in valid_indices]
-        if len(valid_embeddings) < 10:
-            print("⚠️ 樣本數量太少，跳過離群檢測")
-            return {'outliers': [], 'lof_scores': []}
-        scaler = StandardScaler()
-        embeddings_scaled = scaler.fit_transform(valid_embeddings)
-        lof = LocalOutlierFactor(n_neighbors=min(20, len(valid_embeddings) - 1), contamination=0.1)
-        outlier_labels = lof.fit_predict(embeddings_scaled)
-        lof_scores = -lof.negative_outlier_factor_
-        outlier_indices = [valid_indices[j] for j, lab in enumerate(outlier_labels) if lab == -1]
-        return {
-            'outliers': outlier_indices,
-            'lof_scores': lof_scores.tolist()
-        }
     
     # ==================== 輔助函數 ====================
     def _extract_keypoints(self, result) -> Optional[np.ndarray]:

@@ -4,17 +4,22 @@ import numpy as np
 from pathlib import Path
 import shutil
 
+from constants import (
+    EAR_DISTANCE_SKELETON_EDGES as SKELETON_EDGES,
+    EAR_DISTANCE_EDGE_COLORS as SKELETON_EDGE_COLORS,
+)
+
 # =====================================================
 # ⭐ 模型設定
 # =====================================================
 MODELS = {
     "640.1": {
-        "path": r"C:\ai_project\cat_pose\v11s_128.pt",
+        "path": r"C:\ai_project\cat_pose\v11s_133.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     },
     "640.2": {
-        "path": r"C:\ai_project\cat_pose\v11s_128.pt",
+        "path": r"C:\ai_project\cat_pose\v11s_133.pt",
         "imgsz": 640,
         # label will be set to the .pt filename below
     }
@@ -24,11 +29,12 @@ MODELS = {
 for cfg in MODELS.values():
     cfg["label"] = Path(cfg["path"]).name
 
-INPUT_DIR = r"C:\Users\homec\Downloads\453"
+INPUT_DIR = r"C:\Users\homec\OneDrive\圖片\Screenshots\cat_test_image"
 
 # 前處理：YOLO Pose 訓練時用 imgsz=640，這裡先把 INPUT_DIR 底下的圖片等比
-# 壓縮到最長邊 640px，直接覆寫回原檔案（不留備份，原始解析度會永久消失）；
-# 後續推論、存檔（compare_output / offset_dataset）全部沿用覆寫後的 640 版本。
+# 壓縮到最長邊 640px，寫進獨立的工作副本快取資料夾（RESIZED_CACHE_DIR），
+# 不動 INPUT_DIR 的原始檔案；後續推論、存檔（compare_output / offset_dataset）
+# 全部沿用這份 640 版本的工作副本。
 RESIZE_MAX_SIDE = 640
 
 CONF_THRES = 0.9
@@ -36,27 +42,10 @@ KP_CONF_THRES = 0.8       # 關鍵點信心門檻：低於此值的點不列入�
 DIFF_THRES_PERCENT = 2.0  # 偏移閾值：圖片對角線的百分比
 TOTAL_KPTS = 17
 
-# 是否在輸出圖上畫骨架連線（骨架定義與配色參考主專案
-# paper/cat_monitoring_system/utils/constants.py 的 ALL_SKELETON /
-# EAR_DISTANCE_EDGE_COLORS，17 個關鍵點索引順序與主專案一致）
+# 是否在輸出圖上畫骨架連線（骨架定義與配色改從 constants.py 統一 import，
+# 該檔案直接複製自 paper/cat_monitoring_system/utils/constants.py 目前使用中
+# 的版本，17 個關鍵點索引順序與主專案一致）
 DRAW_SKELETON_LINES = True
-
-# 17-kpt 骨架連線（索引對應 KEYPOINT_NAMES：nose/ear_tip*2/chest/mid_back/hip/
-# 前肢*2/後肢*2/tail_base/mid/tip），與主專案 ALL_SKELETON 相同
-SKELETON_EDGES = [
-    (0, 1), (0, 2), (1, 2),                    # 頭部
-    (0, 3), (3, 4), (4, 5),                    # 身體
-    (3, 6), (6, 7), (3, 8), (8, 9),             # 前肢
-    (5, 10), (10, 11), (5, 12), (12, 13),       # 後肢
-    (5, 14), (14, 15), (15, 16),                # 髖→尾根→尾中→尾尖
-]
-SKELETON_EDGE_COLORS = [
-    (255, 120, 60), (255, 120, 60), (255, 120, 60),
-    (220, 220, 60), (200, 220, 60), (160, 220, 60),
-    (102, 85, 255), (102, 85, 255), (255, 68, 204), (255, 68, 204),
-    (255, 170, 34), (255, 170, 34), (0, 153, 255), (0, 153, 255),
-    (80, 200, 160), (60, 170, 130), (40, 140, 100),
-]
 
 # True  = 推論前先將圖片等比縮放至最長邊 640px（模擬訓練解析度）
 # False = 直接傳原圖路徑，YOLO 內部自動 letterbox 縮放（預設行為）
@@ -71,6 +60,8 @@ MAX_OUTPUT_WIDTH = 3840
 BASE_DIR = Path(r"C:\cat_pose\cat_Compare")
 COMPARE_DIR = BASE_DIR / "compare_output"
 OFFSET_DIR = BASE_DIR / "offset_dataset"
+# 640px 工作副本快取（前處理縮圖寫在這裡，絕不動 INPUT_DIR 的原始檔案）
+RESIZED_CACHE_DIR = BASE_DIR / "_resized_640_cache"
 
 COMPARE_DIR.mkdir(parents=True, exist_ok=True)
 OFFSET_DIR.mkdir(parents=True, exist_ok=True)
@@ -432,24 +423,33 @@ if not src_paths:
     print("⚠ 找不到任何圖片")
     exit()
 
-print(f"🔧 前處理：壓縮 {len(src_paths)} 張圖片至最長邊 {RESIZE_MAX_SIDE}px（直接覆寫原檔，不留備份）...")
+print(f"🔧 前處理：壓縮 {len(src_paths)} 張圖片至最長邊 {RESIZE_MAX_SIDE}px（寫入工作副本，原始檔案不動）...")
 
+RESIZED_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+image_paths = []
 for src_path in src_paths:
     img = cv2.imread(str(src_path))
     if img is None:
         print(f"  ⚠ 無法讀取，略過: {src_path.name}")
         continue
-    cv2.imwrite(str(src_path), resize_to_fit(img, max_side=RESIZE_MAX_SIDE))
+    cache_path = RESIZED_CACHE_DIR / src_path.name
+    cv2.imwrite(str(cache_path), resize_to_fit(img, max_side=RESIZE_MAX_SIDE))
+    image_paths.append(cache_path)
 
-print(f"✅ 前處理完成，已覆寫: {INPUT_DIR}")
-
-image_paths = list(src_paths)
+print(f"✅ 前處理完成，工作副本存於: {RESIZED_CACHE_DIR}（{INPUT_DIR} 內的原始檔案未被修改）")
 
 # =====================================================
 # 主流程
 # =====================================================
 model_names = list(MODELS.keys())
 ref_name, cmp_name = model_names
+
+if MODELS[ref_name]["path"] == MODELS[cmp_name]["path"]:
+    print(
+        f"⚠️ MODELS 設定中「{ref_name}」與「{cmp_name}」目前指向同一個模型檔案"
+        f"（{MODELS[ref_name]['path']}），比較結果偏移量必然全為 0，等於沒有在做真正的比較。"
+        f"請把其中一個模型路徑改成你真正要比較的另一顆模型。"
+    )
 
 offset_hist = {i: 0 for i in range(TOTAL_KPTS + 1)}
 total_images = 0

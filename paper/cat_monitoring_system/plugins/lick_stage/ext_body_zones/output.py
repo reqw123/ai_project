@@ -3,6 +3,7 @@
 Pure side-effect sinks — never raise, never touch the caller's frame, and
 never return a value the main program is expected to read.
 """
+
 import concurrent.futures
 import csv
 import json
@@ -13,6 +14,7 @@ from datetime import datetime
 
 try:
     import requests as _requests
+
     _HAS_REQUESTS = True
 except ImportError:
     _requests = None
@@ -45,6 +47,7 @@ class ZoneCsvWriter:
             _log.debug("ZoneCsvWriter init failed: %s", exc)
 
     def write(self, zone: int, time_sec: float, hits: int) -> None:
+        """附加一列快照紀錄並立即 flush；初始化失敗時安靜地不做任何事。"""
         if not self._ready:
             return
         try:
@@ -55,6 +58,7 @@ class ZoneCsvWriter:
             _log.debug("ZoneCsvWriter.write failed: %s", exc)
 
     def close(self) -> None:
+        """關閉底層檔案（若已開啟）。"""
         try:
             if self._fh is not None:
                 self._fh.close()
@@ -65,12 +69,18 @@ class ZoneCsvWriter:
 class ZoneMqttPublisher:
     """Optional MQTT publisher. Silently disabled if paho-mqtt is unavailable."""
 
-    def __init__(self, host: str = _C.MQTT_HOST, port: int = _C.MQTT_PORT, topic: str = _C.MQTT_TOPIC):
-        self._topic  = topic
+    def __init__(
+        self,
+        host: str = _C.MQTT_HOST,
+        port: int = _C.MQTT_PORT,
+        topic: str = _C.MQTT_TOPIC,
+    ):
+        self._topic = topic
         self._client = None
-        self._lock   = threading.Lock()
+        self._lock = threading.Lock()
         try:
             import paho.mqtt.client as mqtt
+
             self._client = mqtt.Client()
             self._client.connect_async(host, port)
             self._client.loop_start()
@@ -79,6 +89,7 @@ class ZoneMqttPublisher:
             self._client = None
 
     def publish(self, payload: dict) -> None:
+        """發布一筆 JSON payload 到 MQTT topic；未連線時安靜地不做任何事。"""
         if self._client is None:
             return
         try:
@@ -88,6 +99,7 @@ class ZoneMqttPublisher:
             _log.debug("ZoneMqttPublisher.publish failed: %s", exc)
 
     def close(self) -> None:
+        """停止 MQTT 迴圈並中斷連線。"""
         try:
             if self._client is not None:
                 self._client.loop_stop()
@@ -102,18 +114,20 @@ class ZoneHttpPublisher:
     background thread so it can never stall the frame loop."""
 
     def __init__(self, url: str = _C.NODERED_URL, timeout: float = _C.NODERED_TIMEOUT):
-        self._url     = url
+        self._url = url
         self._timeout = timeout
-        self._pool    = concurrent.futures.ThreadPoolExecutor(
+        self._pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="ext_zone_nr"
         )
 
     def publish(self, payload: dict) -> None:
+        """提交一筆 JSON payload 到背景執行緒發送，立即返回。"""
         if not _HAS_REQUESTS or not self._url:
             return
         self._pool.submit(self._post, payload)
 
     def close(self) -> None:
+        """關閉背景執行緒池（不等待進行中的請求完成）。"""
         self._pool.shutdown(wait=False)
 
     def _post(self, payload: dict) -> None:

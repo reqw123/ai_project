@@ -36,7 +36,6 @@ JITTER_CONF_THRESHOLD = 0.3
 YOLO_CONF_THRESHOLD   = 0.5
 YOLO_IMGSZ            = 640
 
-NOSE_IDX     = [0]
 PAW_IDX      = [7, 9, 11, 13]
 TAIL_IDX     = [14, 15, 16]
 TAIL_TIP_IDX = 16
@@ -66,13 +65,32 @@ def _vrj(s: str, w: int) -> str:
 # ═══════════════════════════════════════════════════════
 #  設定區  ── 修改這裡，不需要命令列參數
 # ═══════════════════════════════════════════════════════
-OLD_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_127.pt"
-NEW_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_128.pt"
-BENCHMARK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試"
+OLD_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_135.pt"
+NEW_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_143.pt"
 OUTPUT_DIR       = r"C:\ai_project\pose_compare_results"
 INFERENCE_DEVICE = "cuda"   # "cuda" 或 "cpu"
 EMA_ALPHA_OLD    = 1.0      # Old model EMA 平滑係數（1.0 = 不平滑；0.5 = 半衰期平滑）
 EMA_ALPHA_NEW    = 1.0      # New model EMA 平滑係數
+
+# 各行為類別的測試影片資料夾（做法比照 eval_gcn_compare.py 的 HARD_VIDEO_*_DIR）。
+# 這幾個常數本身永遠保持定義（不要註解掉），否則下面 BENCHMARK_DIRS 會 NameError。
+BENCHMARK_WALK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\walk"
+BENCHMARK_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\lick"
+BENCHMARK_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
+BENCHMARK_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake"
+BENCHMARK_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
+
+# 實際要跑的行為清單：只想單獨測試某個行為（單一行為統計）時，把不要的行為
+# 那一行從下面的 BENCHMARK_DIRS 清單註解掉即可（例如只留 walk，其餘四行都加
+# # 註解）；全部保留則做綜合行為統計。不在清單中或資料夾不存在的行為會被
+# 自動跳過（該類別影片數與統計都是 0），不影響其餘行為正常執行。
+BENCHMARK_DIRS = [
+    ("walk", BENCHMARK_WALK_DIR),
+   #("lick", BENCHMARK_LICK_DIR),
+   # ("scratch", BENCHMARK_SCRATCH_DIR),
+   # ("shake", BENCHMARK_SHAKE_DIR),
+   # ("stop", BENCHMARK_STOP_DIR),
+]
 # ═══════════════════════════════════════════════════════
 
 
@@ -152,17 +170,31 @@ def infer_frame(model, frame: np.ndarray):
 
 
 # ─── Video Collection ─────────────────────────────────────────────
-def resolve_videos(videos_dir: Path) -> Dict[str, List[Path]]:
+def resolve_videos(
+    behavior_dirs: List[Tuple[str, str]],
+    logger: Optional[logging.Logger] = None,
+) -> Dict[str, List[Path]]:
+    """依 BENCHMARK_DIRS 清單收集各行為的測試影片。被註解掉（不在清單中）或
+    資料夾不存在的行為會被跳過（回傳空清單，不會報錯），跟 eval_gcn_compare.py
+    的「資料夾不存在或未設定時跳過」做法一致。"""
+    configured = dict(behavior_dirs)
     result: Dict[str, List[Path]] = {}
     for b in BEHAVIOR_CLASSES:
-        bdir = videos_dir / b
-        if bdir.is_dir():
+        p = configured.get(b)
+        bdir = Path(p) if p else None
+        if bdir is not None and bdir.is_dir():
             result[b] = sorted(
                 f for f in bdir.rglob("*")
                 if f.is_file() and f.suffix.lower() in SUPPORTED_EXTS
             )
         else:
             result[b] = []
+            reason = "（未列入 BENCHMARK_DIRS，已略過）" if p is None else f"（找不到資料夾: {p}）"
+            msg = f"  ⚠ 跳過 [{b}] {reason}"
+            if logger is not None:
+                logger.warning(msg)
+            else:
+                print(msg)
     return result
 
 
@@ -260,6 +292,7 @@ def process_video(model, video_path: Path, logger: logging.Logger,
 
 # ─── Aggregation ──────────────────────────────────────────────────
 _ZERO_AGG = {
+    "n_samples": 0,
     "mean_confidence": 0.0, "std_confidence": 0.0,
     "mean_jitter_px": 0.0,  "p95_jitter_px": 0.0,
     "missing_ratio": 0.0,   "nose_missing_ratio": 0.0,
@@ -297,6 +330,7 @@ def aggregate(results: List[Dict]) -> Dict:
     kpt_miss      = [float(np.mean([r["kpt_missing_ratio"][i] for r in valid])) for i in range(17)]
 
     return {
+        "n_samples": len(valid),
         "mean_confidence": float(np.mean(all_confs))  if all_confs   else 0.0,
         "std_confidence":  float(np.std(all_confs))   if all_confs   else 0.0,
         "mean_jitter_px":  float(np.mean(all_jitters)) if all_jitters else 0.0,
@@ -333,6 +367,16 @@ def improvement(old, new, higher_is_better=True, small_base_floor=SMALL_BASE_FLO
     return diff / abs(old) * 100.0
 
 
+def format_elapsed(seconds: float) -> str:
+    """把秒數格式化成 HH:MM:SS（>=1 小時才顯示小時），並附上總秒數方便精確比對。"""
+    seconds = max(0.0, float(seconds))
+    total_sec = int(round(seconds))
+    h, rem = divmod(total_sec, 3600)
+    m, s = divmod(rem, 60)
+    hms = f"{h:d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
+    return f"{hms}（共 {seconds:.1f} 秒）"
+
+
 def composite_score(m: Dict) -> float:
     conf_s    = m["mean_confidence"] * 100.0
     jitter_s  = max(0.0, 100.0 - m["mean_jitter_px"] * 2.0)
@@ -343,16 +387,40 @@ def composite_score(m: Dict) -> float:
 def best_worst_behavior(class_old: Dict, class_new: Dict) -> Tuple[str, float, str, float]:
     """依主指標（P95 Jitter，尾部抖動穩定度）評選各行為裡進步最多／退步最多的一個，
     不再用信心/抖動/缺失率的加權複合分數——複合分數會被 missing_ratio 這種小基期
-    指標的失真波動主導，跟「以抖動為主指標」的判斷邏輯不一致，容易誤導結論。"""
+    指標的失真波動主導，跟「以抖動為主指標」的判斷邏輯不一致，容易誤導結論。
+    兩邊模型都要有實際樣本（n_samples > 0）的行為才納入評選，避免兩模型皆無資料的
+    類別（aggregate() 對空清單回傳的全零 _ZERO_AGG）被當成 improvement=0 而在
+    min()/max() 的同分平局中被任意選中。"""
     scores = {
         b: improvement(class_old[b]["p95_jitter_px"], class_new[b]["p95_jitter_px"], False)
-        for b in BEHAVIOR_CLASSES if class_old.get(b) and class_new.get(b)
+        for b in BEHAVIOR_CLASSES
+        if class_old.get(b) and class_new.get(b)
+        and class_old[b]["n_samples"] > 0 and class_new[b]["n_samples"] > 0
     }
     if not scores:
         return "N/A", 0.0, "N/A", 0.0
     best  = max(scores, key=scores.get)
     worst = min(scores, key=scores.get)
     return best, scores[best], worst, scores[worst]
+
+
+def _zh_direction_note(score: float, want_positive: bool) -> str:
+    """best/worst 是候選集合裡的極值，不保證分數本身真的是正／負——只剩一個候選、
+    或全部行為同方向變動時，「進步最多」可能挑到負值、「退步最多」可能挑到正值，
+    字面上會自相矛盾，這裡附註提醒。"""
+    if want_positive and score <= 0:
+        return "（並未實際進步）"
+    if not want_positive and score >= 0:
+        return "（並未實際退步）"
+    return ""
+
+
+def _en_direction_note(score: float, want_positive: bool) -> str:
+    if want_positive and score <= 0:
+        return " [not an actual improvement]"
+    if not want_positive and score >= 0:
+        return " [not an actual regression]"
+    return ""
 
 
 # ─── CSV Writers ──────────────────────────────────────────────────
@@ -635,8 +703,8 @@ def plot_tail_paw_analysis(fig_dir, agg_old, agg_new):
         ax1.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.3,
                  f"{val:.1f}%", ha="center", va="bottom", fontsize=7)
 
-    b3 = ax2.bar(x-w/2, old_conf, w, label="Old", color=COLOR_OLD, alpha=0.85)
-    b4 = ax2.bar(x+w/2, new_conf, w, label="New", color=COLOR_NEW, alpha=0.85)
+    ax2.bar(x-w/2, old_conf, w, label="Old", color=COLOR_OLD, alpha=0.85)
+    ax2.bar(x+w/2, new_conf, w, label="New", color=COLOR_NEW, alpha=0.85)
     ax2.set_title("Mean Confidence"); ax2.set_xticks(x); ax2.set_xticklabels(labels, fontsize=8)
     ax2.set_ylabel("Confidence"); ax2.set_ylim(0, 1.15); ax2.legend(); ax2.grid(axis="y", alpha=0.3)
 
@@ -737,10 +805,10 @@ def write_model_report_txt(report_dir, old_name, new_name, total_videos,
         "Improvement:", f"{mi:+.2f} %", "",
         sep, "BIGGEST IMPROVEMENT", sep, "",
         "Behavior:", best_b.capitalize(), "",
-        "Improvement:", f"{best_s:+.1f} %", "",
+        "Improvement:", f"{best_s:+.2f} %{_en_direction_note(best_s, True)}", "",
         sep, "BIGGEST REGRESSION", sep, "",
         "Behavior:", worst_b.capitalize(), "",
-        "Degradation:", f"{worst_s:+.1f} %", "",
+        "Degradation:", f"{worst_s:+.2f} %{_en_direction_note(worst_s, False)}", "",
         sep, "TAIL ANALYSIS", sep, "",
         "Tail Tip Missing:",
         f"{agg_old['tail_tip_missing_ratio']*100:.1f} % → {agg_new['tail_tip_missing_ratio']*100:.1f} %", "",
@@ -754,35 +822,46 @@ def write_model_report_txt(report_dir, old_name, new_name, total_videos,
     return p
 
 
-def write_final_summary_log(log_dir, old_name, new_name, total_videos,
-                             agg_old, agg_new, class_old, class_new,
-                             overall_score, old_comp, new_comp):
-    ci = improvement(agg_old["mean_confidence"], agg_new["mean_confidence"], True)
-    ji = improvement(agg_old["mean_jitter_px"],  agg_new["mean_jitter_px"],  False)
-    mi = improvement(agg_old["missing_ratio"],   agg_new["missing_ratio"],   False)
-    p95i = improvement(agg_old["p95_jitter_px"], agg_new["p95_jitter_px"],  False)
-    best_b, _, worst_b, _ = best_worst_behavior(class_old, class_new)
-    sep = "================================================="
+def append_comparison_history(output_dir: Path, old_name, new_name, run_ts: str,
+                               agg_old: Dict, agg_new: Dict,
+                               overall_score: float,
+                               best_b: str, best_s: float,
+                               worst_b: str, worst_s: float,
+                               total_elapsed_sec: float) -> Path:
+    """把本次執行的最終比較結果，以文字區塊附加寫進跨執行的綜合歷史紀錄檔
+    （.log）。每次執行只新增一個區塊，不覆蓋先前的紀錄，讓 6/19、6/20、
+    6/21…不同天的執行結果都能累積在同一個檔案裡方便閱讀比較。檔案放在
+    OUTPUT_DIR 根目錄（不是各次執行的 run_ts 子資料夾），這樣才能跨執行
+    持續累加。"""
+    path = Path(output_dir) / "comparison_history.log"
+    if overall_score > 0:
+        verdict = f"NEW MODEL WINS（{Path(new_name).name}）"
+    elif overall_score < 0:
+        verdict = f"OLD MODEL WINS（{Path(old_name).name}）"
+    else:
+        verdict = "持平"
+
+    dt_str = datetime.strptime(run_ts, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+    elapsed_str = format_elapsed(total_elapsed_sec)
+    sep = "=" * 60
     lines = [
-        sep, "FINAL SUMMARY", sep, "",
-        "Videos Processed:", str(total_videos), "",
-        "[PRIMARY] P95 Jitter Improvement:", f"{p95i:+.2f}%", "",
-        "[PRIMARY] Decision:",
-        "NEW MODEL WINS" if agg_new["p95_jitter_px"] < agg_old["p95_jitter_px"] else "OLD MODEL WINS", "",
-        "[Reference] Old Model Composite Score:", f"{old_comp:.2f}", "",
-        "[Reference] New Model Composite Score:", f"{new_comp:.2f}", "",
-        "[Reference] Overall Improvement:", f"{overall_score:+.2f}%", "",
-        "[Reference] Decision:", "NEW MODEL WINS" if overall_score > 0 else "OLD MODEL WINS", "",
-        "Confidence:", f"{ci:+.2f}%", "",
-        "Jitter (mean):", f"{ji:+.2f}%", "",
-        "Missing Ratio:", f"{mi:+.2f}%", "",
-        "Largest Improvement:", best_b.capitalize(), "",
-        "Largest Regression:", worst_b.capitalize(), "",
-        "Finished Successfully.", sep,
+        sep,
+        f"日期時間　：{dt_str}",
+        f"比較模型　：{Path(old_name).name}  vs  {Path(new_name).name}",
+        f"平均信心值：{agg_old['mean_confidence']:.3f} → {agg_new['mean_confidence']:.3f}",
+        f"平均抖動　：{agg_old['mean_jitter_px']:.2f}px → {agg_new['mean_jitter_px']:.2f}px",
+        f"缺失比率　：{agg_old['missing_ratio']*100:.1f}% → {agg_new['missing_ratio']*100:.1f}%",
+        f"綜合改善分數：{overall_score:+.2f}%",
+        f"進步最多行為：{best_b} ({best_s:+.2f}%){_zh_direction_note(best_s, True)}",
+        f"退步最多行為：{worst_b} ({worst_s:+.2f}%){_zh_direction_note(worst_s, False)}",
+        f"結論　　　：{verdict}",
+        f"總花費時間：{elapsed_str}",
+        sep, "",
     ]
-    p = log_dir / "final_summary.log"
-    p.write_text("\n".join(lines), encoding="utf-8")
-    return p
+
+    with path.open("a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
 
 
 # ─── HTML Report ──────────────────────────────────────────────────
@@ -940,9 +1019,9 @@ Benchmark: {total_videos} videos | Weights: Conf {W_CONFIDENCE*100:.0f}% / Jitte
 
 # ─── Main ─────────────────────────────────────────────────────────
 def main():
+    run_start_time = time.time()
     old_path = OLD_MODEL_PATH
     new_path = NEW_MODEL_PATH
-    videos   = BENCHMARK_DIR
     device   = INFERENCE_DEVICE
 
     run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -956,56 +1035,38 @@ def main():
     logger.info(f"YOLO Pose Model Comparison  [{run_ts}]")
     logger.info(f"  Old : {old_path}")
     logger.info(f"  New : {new_path}")
-    logger.info(f"  Data: {videos}")
+    for b, p in BENCHMARK_DIRS:
+        logger.info(f"  Data[{b}]: {p}")
     logger.info(f"  Out : {out}  Device: {device}")
     logger.info("=" * 52)
 
-    # 路徑存在性檢查
-    skip_old = not Path(old_path).exists()
-    skip_new = not Path(new_path).exists()
-    if skip_old:
-        logger.warning(f"Old model not found, skipping: {old_path}")
-    if skip_new:
-        logger.warning(f"New model not found, skipping: {new_path}")
-    if skip_old and skip_new:
-        logger.error("Both model paths are missing. Nothing to compare.")
+    # 路徑存在性檢查：讀不到模型路徑就直接報錯中止，不做「跳過其中一個模型」的降級。
+    if not Path(old_path).exists():
+        logger.error(f"Old model not found: {old_path}")
+        raise FileNotFoundError(f"YOLO 模型檔案不存在: {old_path}")
+    if not Path(new_path).exists():
+        logger.error(f"New model not found: {new_path}")
+        raise FileNotFoundError(f"YOLO 模型檔案不存在: {new_path}")
+
+    if not BENCHMARK_DIRS:
+        logger.error("BENCHMARK_DIRS 是空的，至少要保留一個行為的資料夾設定。")
         sys.exit(1)
 
-    if not Path(videos).exists():
-        logger.error(f"BENCHMARK_DIR not found: {videos}")
-        sys.exit(1)
-
-    # Load models
-    old_model = new_model = None
-    if not skip_old:
-        logger.info("Loading old model...")
-        try:
-            old_model = load_yolo_model(old_path, device)
-        except Exception as e:
-            logger.warning(f"Failed to load old model ({e}), skipping.")
-            skip_old = True
-
-    if not skip_new:
-        logger.info("Loading new model...")
-        try:
-            new_model = load_yolo_model(new_path, device)
-        except Exception as e:
-            logger.warning(f"Failed to load new model ({e}), skipping.")
-            skip_new = True
-
-    if skip_old and skip_new:
-        logger.error("Both models failed to load. Exiting.")
-        sys.exit(1)
+    # Load models（load_yolo_model 內部也會檢查路徑；載入失敗直接讓例外往上拋出中止程式）
+    logger.info("Loading old model...")
+    old_model = load_yolo_model(old_path, device)
+    logger.info("Loading new model...")
+    new_model = load_yolo_model(new_path, device)
 
     # Discover videos
-    behavior_videos = resolve_videos(Path(videos))
+    behavior_videos = resolve_videos(BENCHMARK_DIRS, logger=logger)
     total_videos    = sum(len(v) for v in behavior_videos.values())
     logger.info(f"Benchmark videos: {total_videos}")
     for b, vids in behavior_videos.items():
         logger.info(f"  {b}: {len(vids)}")
 
     if total_videos == 0:
-        logger.error("No videos found. Check BENCHMARK_DIR and subfolder structure.")
+        logger.error("No videos found. Check BENCHMARK_DIRS paths and folder contents.")
         sys.exit(1)
 
     # Run inference for both models
@@ -1018,11 +1079,6 @@ def main():
     for mk, model in (("old", old_model), ("new", new_model)):
         mpath    = old_path if mk == "old" else new_path
         ema_alpha = EMA_ALPHA_OLD if mk == "old" else EMA_ALPHA_NEW
-        if model is None:
-            logger.warning(f"跳過 {mk} model（路徑不存在或載入失敗）: {mpath}")
-            for b in BEHAVIOR_CLASSES:
-                store[mk][b] = [None] * len(behavior_videos[b])
-            continue
         mname = Path(mpath).name
         logger.info(f"\n--- {mk.upper()} MODEL: {mname}  (EMA α={ema_alpha}) ---")
         for b in BEHAVIOR_CLASSES:
@@ -1077,12 +1133,20 @@ def main():
     write_model_report_txt(dirs["report"], old_path, new_path, total_videos,
                            agg_old, agg_new, class_old, class_new,
                            overall, old_comp, new_comp)
-    write_final_summary_log(dirs["logs"], old_path, new_path, total_videos,
-                            agg_old, agg_new, class_old, class_new,
-                            overall, old_comp, new_comp)
     write_html_report(dirs["report"], old_path, new_path, total_videos,
                       agg_old, agg_new, class_old, class_new,
                       overall, old_comp, new_comp)
+
+    # 綜合歷史紀錄檔（跨執行累加，放在 OUTPUT_DIR 根目錄）
+    best_b, best_s, worst_b, worst_s = best_worst_behavior(class_old, class_new)
+    total_elapsed_sec = time.time() - run_start_time
+    history_path = append_comparison_history(
+        OUTPUT_DIR, old_path, new_path, run_ts,
+        agg_old, agg_new, overall, best_b, best_s, worst_b, worst_s,
+        total_elapsed_sec,
+    )
+    logger.info(f"Appended to comparison history: {history_path}")
+    logger.info(f"本次執行總花費時間：{format_elapsed(total_elapsed_sec)}")
 
     # ── 逐影片對比表 ──────────────────────────────────────────────
     # 欄位視覺寬度定義
@@ -1250,8 +1314,8 @@ def main():
     )
     logger.info("")
     logger.info(_vlj("綜合改善分數", W_LBL) + f"{overall:+.2f}%")
-    logger.info(_vlj("進步最多行為", W_LBL) + f"{best_b}  （{best_s:+.1f}%）")
-    logger.info(_vlj("退步最多行為", W_LBL) + f"{worst_b}  （{worst_s:+.1f}%）")
+    logger.info(_vlj("進步最多行為", W_LBL) + f"{best_b}  （{best_s:+.2f}%）{_zh_direction_note(best_s, True)}")
+    logger.info(_vlj("退步最多行為", W_LBL) + f"{worst_b}  （{worst_s:+.2f}%）{_zh_direction_note(worst_s, False)}")
     logger.info("")
     verdict = "BETTER（較優）" if overall > 0 else "WORSE（較差）"
     composite_winner = Path(new_path).name if overall > 0 else (Path(old_path).name if overall < 0 else "=")

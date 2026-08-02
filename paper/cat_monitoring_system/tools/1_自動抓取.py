@@ -375,7 +375,6 @@ def main():
 
     print(f"\n本次影片將存放於：{RUN_DIR}/")
 
-    seen_hashes = set()
     if GLOBAL_DEDUP:
         print("GLOBAL_DEDUP = True，正在掃描 downloaded_videos/ 底下所有歷史影片建立去重複索引...")
         seen_hashes = build_existing_hash_index(DOWNLOAD_BASE_DIR)

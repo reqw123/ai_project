@@ -1,32 +1,52 @@
-
 """
 幀處理管道（整合 Node-RED、CSV、異常檢測、overlay 控制）
 """
+
 import os
-import numpy as np
-import cv2
-import time
 import threading
+import time
 from collections import deque
-from detectors.keypoint_detector import KeypointDetector
+
+import cv2
+import numpy as np
+from config import (
+    BehaviorTrackingConfig,
+    CatIdentityConfig,
+    NodeRedConfig,
+    SQAConfig,
+    STGCNConfig,
+    SystemInfo,
+    VisualizationConfig,
+)
+
+from communication.nodered_client import NodeRedClient
 from detectors.behavior_classifier import BehaviorClassifier
-from trackers.behavior_tracker import ImprovedBehaviorTracker
+from detectors.keypoint_detector import KeypointDetector
+from logutils.csv_logger import BehaviorSegmentLogger, CSVLogger
+from models.stgcn_model import interpolate_missing
 from processors.anomaly_detector import AnomalyDetector
 from processors.visualizer import Visualizer
-from communication.nodered_client import NodeRedClient
-from logutils.csv_logger import CSVLogger, BehaviorSegmentLogger
-from utils.helpers import get_ip, get_behavior_name, resolve_video_source, is_stream_url
+from trackers.behavior_tracker import ImprovedBehaviorTracker
 from utils.constants import *
-from models.stgcn_model import interpolate_missing
-from config import NodeRedConfig, BehaviorTrackingConfig, STGCNConfig, SystemInfo, VisualizationConfig, SQAConfig
+from utils.helpers import get_behavior_name, get_ip, is_stream_url, resolve_video_source
 
 # Skeleton Quality Assessment（GCN 分類為主、幾何判斷為輔雙重判定）：獨立
 # 模組，import 失敗時整套機制自動停用（_sqa_evaluate_window 保持 None），
 # 不會讓主系統啟動失敗——這個模組也可以整個被刪除，不影響其餘功能。
 try:
-    from processors.skeleton_quality_assessment import evaluate_window as _sqa_evaluate_window
+    from processors.skeleton_quality_assessment import (
+        evaluate_window as _sqa_evaluate_window,
+    )
 except Exception:
     _sqa_evaluate_window = None
+
+# 身分驗證（多貓辨識）：獨立模組，import 失敗時整套機制自動停用
+# （_IdentityVerifier 保持 None），不會讓主系統啟動失敗——這個模組也可以
+# 整個被刪除，不影響其餘偵測/分類流程（見 detectors/identity_verifier.py）。
+try:
+    from detectors.identity_verifier import IdentityVerifier as _IdentityVerifier
+except Exception:
+    _IdentityVerifier = None
 
 
 class _LatestFrameGrabber:
@@ -83,7 +103,10 @@ class _LatestFrameGrabber:
                 self._latest_ret = ret
                 self._latest_frame = frame
             if not ret:
-                if self._video_url is not None and consecutive_failures >= self.RECONNECT_FAILURE_THRESHOLD:
+                if (
+                    self._video_url is not None
+                    and consecutive_failures >= self.RECONNECT_FAILURE_THRESHOLD
+                ):
                     try:
                         self._cap.release()
                         self._cap.open(self._video_url)
@@ -97,10 +120,12 @@ class _LatestFrameGrabber:
                 time.sleep(remaining)
 
     def read(self):
+        """回傳背景執行緒目前保有的最新一幀 (ret, frame)。"""
         with self._lock:
             return self._latest_ret, self._latest_frame
 
     def stop(self):
+        """停止背景讀取執行緒並等待其結束。"""
         self._running = False
         self._thread.join(timeout=2.0)
 
@@ -112,10 +137,29 @@ _LICK_BEHAVIOR_ID = BEHAVIOR_CLASSES.index("lick")
 
 
 class FrameProcessor:
-    def __init__(self, yolo_model_path, stgcn_model_path, video_path,
-                 nodered_url=None, device='cuda', imgsz=640, conf_thres=0.5, sequence_length=STGCNConfig.SEQUENCE_LENGTH,
-                 overlay=True, width=None, height=None, normalize=True, kp_ema_alpha=STGCNConfig.KP_EMA_ALPHA,
-                 feature_mode=None, window_stride=None, plugins=None):
+    """整合單一影片/串流來源的完整處理管線：YOLO 關鍵點偵測 → ST-GCN 行為
+    分類 → 異常偵測 → 骨架品質雙重判定（SQA）→ 行為追蹤 → 視覺化疊圖 →
+    CSV 記錄 → Node-RED 推送，並管理選用插件（plugins）的呼叫時機。"""
+
+    def __init__(
+        self,
+        yolo_model_path,
+        stgcn_model_path,
+        video_path,
+        nodered_url=None,
+        device="cuda",
+        imgsz=640,
+        conf_thres=0.5,
+        sequence_length=STGCNConfig.SEQUENCE_LENGTH,
+        overlay=True,
+        width=None,
+        height=None,
+        normalize=True,
+        kp_ema_alpha=STGCNConfig.KP_EMA_ALPHA,
+        feature_mode=None,
+        window_stride=None,
+        plugins=None,
+    ):
         self.local_ip = get_ip()
         # YouTube 網頁網址無法直接餵給 cv2.VideoCapture，先用 yt_dlp 解析出
         # 實際的串流網址；非 YouTube 來源（檔案/攝影機 index/RTSP）原樣不變。
@@ -148,24 +192,54 @@ class FrameProcessor:
         # 即時網路串流才啟用「只保留最新幀」的背景讀取，避免推論跟不上時
         # 延遲隨執行時間持續累積；本機檔案維持原本同步讀取行為不變。放在
         # width/height 設定之後才啟動背景執行緒，避免和 cap.set() 競態。
-        self._grabber = _LatestFrameGrabber(self.cap, video_url=resolved_video_path) if is_stream_url(resolved_video_path) else None
+        self._grabber = (
+            _LatestFrameGrabber(self.cap, video_url=resolved_video_path)
+            if is_stream_url(resolved_video_path)
+            else None
+        )
         try:
-            self.keypoint_detector = KeypointDetector(yolo_model_path, device=device, imgsz=imgsz, conf_thres=conf_thres)
+            self.keypoint_detector = KeypointDetector(
+                yolo_model_path, device=device, imgsz=imgsz, conf_thres=conf_thres
+            )
             self.behavior_classifier = BehaviorClassifier(
-                stgcn_model_path, device=device, sequence_length=sequence_length,
-                normalize=normalize, feature_mode=feature_mode,
+                stgcn_model_path,
+                device=device,
+                sequence_length=sequence_length,
+                normalize=normalize,
+                feature_mode=feature_mode,
             )
         except Exception:
             if self._grabber is not None:
                 self._grabber.stop()
             self.cap.release()
             raise
+        # 身分驗證（多貓辨識）：獨立於上面 YOLO/ST-GCN 的 try/except 之外，
+        # 失敗（模組被刪除/基準檔不存在或損毀）只會停用這一層、不影響
+        # FrameProcessor 其餘功能——跟 SQA 同一套 fail-safe 慣例。
+        self.identity_verifier = None
+        # 只在「開始過濾非目標貓」／「目標貓恢復」這兩個狀態轉換的瞬間印
+        # console 訊息，不逐幀印——身分驗證是純統計過濾閘門，不會在 Node-RED
+        # 串流畫面上多畫框，這是唯一能即時確認它有沒有在運作的方式。
+        self._identity_filtering_active = False
+        if CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION and _IdentityVerifier is not None:
+            try:
+                self.identity_verifier = _IdentityVerifier(
+                    target_profile_path=CatIdentityConfig.TARGET_CAT_PROFILE_PATH,
+                    other_profile_path=CatIdentityConfig.OTHER_CAT_PROFILE_PATH,
+                )
+                print("✓ 身分驗證已啟用：只有判定為目標貓的偵測結果會計入統計")
+            except Exception as e:
+                print(f"⚠ 身分驗證初始化失敗，已停用（偵測到的貓將一律視為目標貓）：{e}")
+                self.identity_verifier = None
+
         self.tracker = ImprovedBehaviorTracker()
         self.anomaly_detector = AnomalyDetector()
         self.visualizer = Visualizer()
         self.keypoints_buffer = deque(maxlen=sequence_length)
         self.sequence_length = sequence_length
-        self.window_stride = window_stride if window_stride is not None else STGCNConfig.WINDOW_STRIDE
+        self.window_stride = (
+            window_stride if window_stride is not None else STGCNConfig.WINDOW_STRIDE
+        )
         self._infer_frame_count = 0  # 累積有效幀計數器，以 window_stride 取模決定推論時機（貓咪消失時重置，確保重新出現後推論時機從 0 對齊）
         self.overlay = overlay
         self.show_skeleton = True
@@ -239,11 +313,47 @@ class FrameProcessor:
         return list(self.tracker.behavior_history)[-limit:]
 
     def process(self, frame):
+        """處理單一影格：偵測、分類、追蹤、疊圖、記錄、推送，回傳疊圖後的畫面。"""
         self.frame_idx += 1
         current_time = time.time()
         self.prev_time = current_time
 
         kpts, kpt_conf, bbox, conf = self.keypoint_detector.detect(frame)
+
+        # 身分驗證（多貓辨識）：只驗證這一幀 YOLO 剛偵測到的貓，不驗證下面
+        # 消失容忍期間沿用的舊姿態（那是同一隻已經驗證過的貓在之前幀留下的
+        # 姿態，沒有新 bbox 可以重新驗證，也不需要）。判定不是目標貓時，把
+        # kpts 視為 None——後續完全比照「這一幀 YOLO 沒偵測到貓」處理，會
+        # 走既有的貓咪消失容忍/NOT_VISIBLE 路徑，不產生行為紀錄、不計入
+        # Node-RED 統計，等同把目標貓以外的貓完全忽略。fail-safe：驗證本身
+        # 出錯不擋掉這一幀，回退成原本「偵測到的貓一律視為目標貓」的行為。
+        if kpts is not None and self.identity_verifier is not None:
+            try:
+                is_target_cat, match_key, match_dist = self.identity_verifier.verify(
+                    frame, bbox
+                )
+            except Exception:
+                is_target_cat, match_key, match_dist = True, None, None
+
+            # 純視覺提示，跟下面的統計判斷（kpts=None）互相獨立：非目標貓的
+            # 情況下 Visualizer.draw() 完全不會被呼叫（kpts=None 會跳過整個
+            # 疊圖區塊），沒有這個小徽章的話畫面上什麼都不會畫，看起來就像
+            # 「什麼都沒偵測到」，沒辦法跟真的沒貓做視覺區分。
+            if self.overlay:
+                self._draw_identity_badge(frame, bbox, is_target_cat, match_key, match_dist)
+
+            if not is_target_cat:
+                if not self._identity_filtering_active:
+                    self._identity_filtering_active = True
+                    _dist_str = f"{match_dist:.3f}" if match_dist is not None else "N/A"
+                    print(
+                        f"🚫 身分驗證：畫面中的貓判定為「{match_key or '未知'}」"
+                        f"（距離={_dist_str}），非目標貓，本幀起已從統計中過濾"
+                    )
+                kpts = None
+            elif self._identity_filtering_active:
+                self._identity_filtering_active = False
+                print("✓ 身分驗證：目標貓重新出現，恢復計入統計")
 
         # 貓咪偵測消失容忍：連續漏偵測沒超過門檻前，沿用最後一次偵測到的姿態，
         # 避免單幀 YOLO 漏偵測就整個中斷分類/顯示（見 config.py 說明）
@@ -253,8 +363,11 @@ class FrameProcessor:
             self._last_known_kpt_conf = kpt_conf.copy()
             self._last_known_bbox = bbox
             self._last_known_bbox_conf = conf
-        elif (self._cat_missing_streak < BehaviorTrackingConfig.CAT_MISSING_TOLERANCE_FRAMES
-              and self._last_known_kpts is not None):
+        elif (
+            self._cat_missing_streak
+            < BehaviorTrackingConfig.CAT_MISSING_TOLERANCE_FRAMES
+            and self._last_known_kpts is not None
+        ):
             self._cat_missing_streak += 1
             kpts, kpt_conf = self._last_known_kpts, self._last_known_kpt_conf
             bbox, conf = self._last_known_bbox, self._last_known_bbox_conf
@@ -276,7 +389,8 @@ class FrameProcessor:
             # 的理毛時長，同時也會重置梯形方向平滑等跨幀狀態，避免用陳舊姿態接續。
             is_lick_behavior = (
                 behavior_id == _LICK_BEHAVIOR_ID
-                and confidence >= BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
+                and confidence
+                >= BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
             )
             for _plugin in self._plugins:
                 try:
@@ -292,34 +406,49 @@ class FrameProcessor:
             if self._ema_kpts is None:
                 self._ema_kpts = raw_kpts.copy()
             else:
-                self._ema_kpts = self.kp_ema_alpha * raw_kpts + (1.0 - self.kp_ema_alpha) * self._ema_kpts
+                self._ema_kpts = (
+                    self.kp_ema_alpha * raw_kpts
+                    + (1.0 - self.kp_ema_alpha) * self._ema_kpts
+                )
             display_kpts = self._ema_kpts.copy()
 
             # === 靜止偵測（使用 EMA 平滑後的關鍵點） ===
-            is_still, activity_value = self.anomaly_detector.detect(display_kpts, kpt_conf)
+            is_still, activity_value = self.anomaly_detector.detect(
+                display_kpts, kpt_conf
+            )
 
             # === ST-GCN 行為推論（buffer 儲存 raw kpts，與訓練前處理順序一致） ===
             self.keypoints_buffer.append((raw_kpts, kpt_conf))
             self._infer_frame_count += 1
-            should_infer = (
-                len(self.keypoints_buffer) >= self.sequence_length
-                and (self._infer_frame_count % max(1, self.window_stride) == 0)
+            should_infer = len(self.keypoints_buffer) >= self.sequence_length and (
+                self._infer_frame_count % max(1, self.window_stride) == 0
             )
             if should_infer:
-                kpts_arr = np.array([item[0] for item in self.keypoints_buffer])   # (T, 17, 2)
-                conf_arr = np.array([item[1] for item in self.keypoints_buffer])   # (T, 17)
+                kpts_arr = np.array(
+                    [item[0] for item in self.keypoints_buffer]
+                )  # (T, 17, 2)
+                conf_arr = np.array(
+                    [item[1] for item in self.keypoints_buffer]
+                )  # (T, 17)
                 seq_array = interpolate_missing(kpts_arr, conf_arr)
                 # Window-level EMA：STGCN 輸入的唯一平滑步驟，須與訓練時使用的 KP_EMA_ALPHA 一致
                 # alpha=1.0（預設）表示不平滑；調低時須確認訓練也用相同數值，切勿在此之外另加平滑
                 if self.kp_ema_alpha < 1.0:
                     for t in range(1, seq_array.shape[0]):
-                        seq_array[t] = (self.kp_ema_alpha * seq_array[t]
-                                        + (1.0 - self.kp_ema_alpha) * seq_array[t - 1])
-                new_bid, new_conf, new_probs = self.behavior_classifier.classify(seq_array, conf_arr)
+                        seq_array[t] = (
+                            self.kp_ema_alpha * seq_array[t]
+                            + (1.0 - self.kp_ema_alpha) * seq_array[t - 1]
+                        )
+                new_bid, new_conf, new_probs = self.behavior_classifier.classify(
+                    seq_array, conf_arr
+                )
                 if new_bid is None:
                     new_bid = LOW_CONF_ID
                     new_conf = 0.0
-                elif new_conf < BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD:
+                elif (
+                    new_conf
+                    < BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
+                ):
                     new_bid = LOW_CONF_ID
 
                 # === Skeleton Quality Assessment（GCN 分類為主、幾何判斷為輔）===
@@ -331,9 +460,14 @@ class FrameProcessor:
                 # evaluate_window() 本身承諾不拋例外，這裡再包一層 try/except
                 # 是防禦性寫法（跟現有 plugin 呼叫慣例一致）——任何錯誤都只會
                 # 讓這次覆蓋不生效，不會中斷 process()。
-                if SQAConfig.ENABLE_SQA_DUAL_JUDGMENT and _sqa_evaluate_window is not None:
+                if (
+                    SQAConfig.ENABLE_SQA_DUAL_JUDGMENT
+                    and _sqa_evaluate_window is not None
+                ):
                     try:
-                        _sqa_reliable, _sqa_details = _sqa_evaluate_window(kpts_arr, conf_arr)
+                        _sqa_reliable, _sqa_details = _sqa_evaluate_window(
+                            kpts_arr, conf_arr
+                        )
                         if not _sqa_reliable:
                             new_bid = LOW_CONF_ID
                             new_conf = 0.0
@@ -343,7 +477,11 @@ class FrameProcessor:
                 # 更新持久化結果，本幀也立即採用
                 self._last_behavior_id = new_bid
                 self._last_confidence = new_conf
-                self._last_class_probs = new_probs if new_probs is not None else [0.0] * STGCNConfig.NUM_CLASSES
+                self._last_class_probs = (
+                    new_probs
+                    if new_probs is not None
+                    else [0.0] * STGCNConfig.NUM_CLASSES
+                )
                 behavior_id = self._last_behavior_id
                 confidence = self._last_confidence
                 class_probs = self._last_class_probs
@@ -367,15 +505,29 @@ class FrameProcessor:
             # === Node-RED 資料推送（顯示用「目前行為」走 hysteresis 後的結果，
             # today_stats/behavior_log 等統計仍在 tracker 內部用未經處理的即時結果累積）===
             now = time.time()
-            if self.nodered and (now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL):
+            if self.nodered and (
+                now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL
+            ):
                 self.tracker.add_monitoring_seconds(now - self.last_send_time)
-                self.nodered.send_data(self._build_nodered_payload(self._display_behavior_id, self._display_confidence))
+                self.nodered.send_data(
+                    self._build_nodered_payload(
+                        self._display_behavior_id, self._display_confidence
+                    )
+                )
                 self.last_send_time = now
 
             # === CSV 日誌 ===
             # CSV 日誌只在貓咪活動中（非靜止）且行為信心足夠時寫入
-            if self.csv_logger and not is_still and float(confidence) >= BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD and behavior_id != LOW_CONF_ID:
-                behavior_name = get_behavior_name(behavior_id, use_text=False, fallback="未知", confidence=confidence)
+            if (
+                self.csv_logger
+                and not is_still
+                and float(confidence)
+                >= BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
+                and behavior_id != LOW_CONF_ID
+            ):
+                behavior_name = get_behavior_name(
+                    behavior_id, use_text=False, fallback="未知", confidence=confidence
+                )
                 self.csv_logger.log(
                     self.frame_idx,
                     behavior_name,
@@ -387,8 +539,14 @@ class FrameProcessor:
             # === Overlay 畫圖（走 hysteresis 後的顯示結果，避免單一視窗誤判閃爍）===
             if self.overlay:
                 frame = self.visualizer.draw(
-                    frame, kpts, kpt_conf, bbox, conf,
-                    self._display_behavior_id, self._display_confidence, self._display_class_probs,
+                    frame,
+                    kpts,
+                    kpt_conf,
+                    bbox,
+                    conf,
+                    self._display_behavior_id,
+                    self._display_confidence,
+                    self._display_class_probs,
                     show_skeleton=self.show_skeleton,
                     show_info=self.show_label,
                     show_bbox=self.show_bbox,
@@ -396,7 +554,7 @@ class FrameProcessor:
                 # Plugin overlays（e.g. lick-stage nose trapezoid）
                 _show_trap = VisualizationConfig.SHOW_NOSE_TRAPEZOID
                 for _plugin in self._plugins:
-                    if hasattr(_plugin, 'draw_overlay'):
+                    if hasattr(_plugin, "draw_overlay"):
                         _plugin.draw_overlay(frame, self.frame_idx, show=_show_trap)
 
         else:
@@ -423,7 +581,9 @@ class FrameProcessor:
             confidence = self._last_confidence
             class_probs = self._last_class_probs
             # 顯示層立即切換為「不在畫面」，不套用 hysteresis 延遲
-            self._update_display_hysteresis(NOT_VISIBLE_ID, 0.0, [0.0] * STGCNConfig.NUM_CLASSES)
+            self._update_display_hysteresis(
+                NOT_VISIBLE_ID, 0.0, [0.0] * STGCNConfig.NUM_CLASSES
+            )
             # 靜止偵測也走同一支介面：AnomalyDetector.detect(None, None) 內部有
             # 自己的短暫遺失容忍（_MAX_MISS_FRAMES），讓它接手判斷是否仍視為靜止，
             # 而不是在這裡硬寫死 False/0（此門檻與上面的貓消失容忍各自獨立管理）
@@ -431,17 +591,61 @@ class FrameProcessor:
             self.tracker.update(NOT_VISIBLE_ID, 0.0)
             # Node-RED 推送：通知貓咪不在畫面
             now = time.time()
-            if self.nodered and (now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL):
+            if self.nodered and (
+                now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL
+            ):
                 self.nodered.send_data(self._build_nodered_payload(NOT_VISIBLE_ID, 0.0))
                 self.last_send_time = now
 
-        return frame, self._display_behavior_id, self._display_confidence, self._display_class_probs, is_still, activity_value
+        return (
+            frame,
+            self._display_behavior_id,
+            self._display_confidence,
+            self._display_class_probs,
+            is_still,
+            activity_value,
+        )
 
     def register_plugin(self, plugin) -> None:
         """Register an optional plugin. Called before the first frame."""
         self._plugins.append(plugin)
 
-    def _update_display_hysteresis(self, candidate_id, candidate_confidence, candidate_probs):
+    def _draw_identity_badge(self, frame, bbox, is_target, match_key, match_dist):
+        """身分驗證結果的獨立視覺提示，跟 Visualizer.draw() 完全分開畫。
+
+        非目標貓的情況下 kpts 會被設成 None，process() 後段整個疊圖區塊
+        （包含 Visualizer.draw()）都不會執行，畫面上等於「什麼都沒畫」，
+        跟真的沒偵測到貓沒有視覺差異。這裡固定在 bbox 位置畫一個小徽章
+        （目標貓=綠色/其他=橘色），兩種狀態都畫，只讀不改 kpts/bbox，
+        不影響任何統計或分類邏輯。"""
+        if bbox is None:
+            return
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = (int(v) for v in bbox)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
+        if x2 <= x1 or y2 <= y1:
+            return
+
+        if is_target:
+            color = (0, 200, 0)
+            label = "ID: cat1 (target)"
+        else:
+            color = (0, 128, 255)
+            label = f"ID: {match_key or 'unknown'} (filtered)"
+        if match_dist is not None:
+            label += f" d={match_dist:.2f}"
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        text_y = y1 - 10 if y1 - 10 > 10 else y2 + 20
+        cv2.putText(
+            frame, label, (x1, text_y),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA,
+        )
+
+    def _update_display_hysteresis(
+        self, candidate_id, candidate_confidence, candidate_probs
+    ):
         """依候選類別各自的門檻（BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS[class_id]），
         連續達到該次數的分類視窗判同一類，才真的切換 overlay/Node-RED 顯示用的行為標籤，
         用來過濾單一視窗瞬間誤判（例如動作轉換瞬間）造成的畫面閃爍。tracker/CSV/
@@ -450,7 +654,9 @@ class FrameProcessor:
         if candidate_id in (LOW_CONF_ID, NOT_VISIBLE_ID):
             threshold = 1
         else:
-            threshold = BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS.get(candidate_id, 1)
+            threshold = BehaviorTrackingConfig.DISPLAY_HYSTERESIS_WINDOWS.get(
+                candidate_id, 1
+            )
 
         if threshold <= 1 or candidate_id in (LOW_CONF_ID, NOT_VISIBLE_ID):
             self._display_behavior_id = candidate_id
@@ -485,7 +691,8 @@ class FrameProcessor:
             gcn_confidence = 0.0
         else:
             is_low_conf = (behavior_id == LOW_CONF_ID) or (
-                float(confidence) < BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
+                float(confidence)
+                < BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
             )
             if is_low_conf:
                 current = {
@@ -499,7 +706,11 @@ class FrameProcessor:
                 current = {
                     "behavior_id": int(behavior_id),
                     "text": BEHAVIOR_TEXT_MAP.get(behavior_id, "未知"),
-                    "behavior": BEHAVIOR_CLASSES[int(behavior_id)] if 0 <= int(behavior_id) < len(BEHAVIOR_CLASSES) else "unknown",
+                    "behavior": (
+                        BEHAVIOR_CLASSES[int(behavior_id)]
+                        if 0 <= int(behavior_id) < len(BEHAVIOR_CLASSES)
+                        else "unknown"
+                    ),
                     "emoji": BEHAVIOR_EMOJI_MAP.get(behavior_id, "❓"),
                     "timestamp": time.strftime("%H:%M:%S"),
                 }
@@ -513,9 +724,11 @@ class FrameProcessor:
                 {
                     "behavior": rec["behavior"],
                     "gcn_id": rec["gcn_behavior_id"],
-                    "time": (rec["timestamp"].strftime("%H:%M:%S")
-                             if hasattr(rec["timestamp"], "strftime")
-                             else str(rec["timestamp"])),
+                    "time": (
+                        rec["timestamp"].strftime("%H:%M:%S")
+                        if hasattr(rec["timestamp"], "strftime")
+                        else str(rec["timestamp"])
+                    ),
                     "duration": rec["duration"],
                 }
                 for rec in list(self.tracker.behavior_history)[-10:]
@@ -530,6 +743,7 @@ class FrameProcessor:
         }
 
     def cleanup(self):
+        """釋放攝影機/串流資源，關閉 CSV 記錄器與 Node-RED 連線、通知所有插件關閉。"""
         if self._grabber is not None:
             self._grabber.stop()
         self.cap.release()

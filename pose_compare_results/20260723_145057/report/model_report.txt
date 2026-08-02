@@ -1,0 +1,105 @@
+=================================================
+YOLO POSE MODEL COMPARISON REPORT
+=================================================
+
+Old Model:
+v11s_128.pt
+
+New Model:
+v11s_137.pt
+
+Benchmark Videos:
+23
+
+=================================================
+PRIMARY METRIC: P95 JITTER (tail/occasional-spike stability)
+=================================================
+
+P95 Jitter:
+20.96 px -> 21.23 px
+
+Improvement:
+-1.27 %
+
+Primary Result:
+OLD MODEL IS MORE STABLE
+
+=================================================
+[REFERENCE] OVERALL COMPOSITE SCORE (not the primary metric)
+=================================================
+
+Overall Score:
+-1.34 %
+
+Result:
+NEW MODEL IS WORSE
+
+=================================================
+CONFIDENCE
+=================================================
+
+Mean Confidence:
+0.983 → 0.981
+
+Improvement:
+-0.21 %
+
+=================================================
+JITTER
+=================================================
+
+Mean Jitter:
+5.45 px → 5.64 px
+
+Improvement:
+-3.53 %
+
+=================================================
+MISSING KEYPOINT
+=================================================
+
+Missing Ratio:
+0.4 % → 0.5 %
+
+Improvement:
+-0.09 %
+
+=================================================
+BIGGEST IMPROVEMENT
+=================================================
+
+Behavior:
+Walk
+
+Improvement:
++5.1 %
+
+=================================================
+BIGGEST REGRESSION
+=================================================
+
+Behavior:
+Stop
+
+Degradation:
+-22.0 %
+
+=================================================
+TAIL ANALYSIS
+=================================================
+
+Tail Tip Missing:
+9.3 % → 8.2 %
+
+Improvement:
++11.14 %
+
+=================================================
+RECOMMENDATION
+=================================================
+
+Primary metric (P95 jitter): OLD MODEL IS MORE STABLE
+
+[Reference] Composite score: ✗ Keep old model.
+
+=================================================

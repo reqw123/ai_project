@@ -12,6 +12,13 @@ TOTAL_KPTS = 17          # 總關鍵點數量
 
 CSV_PATH = "eda_keypoint_jitter.csv"
 
+# 擷取異常幀影像用的影片/模型：必須跟 eda_motion_anomaly.py 產生 CSV_PATH
+# 當時所用的 VIDEO_PATH/MODEL_PATH 完全一致，否則 CSV 裡的 frame 編號會對到
+# 錯誤的畫面。目前跟 eda_motion_anomaly.py 目前的預設值保持同步；如果你改了
+# eda_motion_anomaly.py 的影片/模型重新產生 CSV，這裡也要跟著改。
+SOURCE_VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
+SOURCE_MODEL_PATH = r"C:\ai_project\cat_pose\v11s_128.pt"
+
 # ==================== 檢查檔案是否存在 ====================
 if not os.path.exists(CSV_PATH):
     print(f"ERROR: CSV file not found: {CSV_PATH}")
@@ -184,8 +191,9 @@ if abnormal_count > 0:
     from matplotlib import cm
     from matplotlib.colors import Normalize
     
-    # 從 CSV 檔名推測影片路徑（或硬編碼）
-    VIDEO_PATH = r"C:\cat_pose\模型測試影片\cat5.mp4"
+    # 影片/模型路徑統一在檔案開頭的 SOURCE_VIDEO_PATH/SOURCE_MODEL_PATH 設定，
+    # 確保跟產生 CSV_PATH 時用的來源一致（見上方參數區註解）
+    VIDEO_PATH = SOURCE_VIDEO_PATH
     OUTPUT_DIR = "abnormal_frames"
     
     # 關鍵點名稱
@@ -211,8 +219,8 @@ if abnormal_count > 0:
         else:
             # 載入 YOLO 模型以繪製關鍵點
             from ultralytics import YOLO
-            MODEL_PATH = r"C:\cat_pose\2222.pt"
-            
+            MODEL_PATH = SOURCE_MODEL_PATH
+
             if os.path.exists(MODEL_PATH):
                 model = YOLO(MODEL_PATH)
                 model.to("cuda")

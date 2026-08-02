@@ -7,6 +7,7 @@ imports. This lets `pytest` be invoked from any cwd (repo root, `paper/`,
 or `cat_monitoring_system/`) and still resolve `from analytics.baseline
 import ...` the same way the running application does.
 """
+
 import sys
 from pathlib import Path
 

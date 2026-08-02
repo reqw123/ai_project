@@ -999,7 +999,7 @@ def compute_limb_joint_targets(kpts, kpt_conf, body_len):
         eff_len * LIMB_PAW_CIRCLE_RADIUS_RATIO * LIMB_CONTACT_SCALE,
     )
     limb_targets = []
-    for label, knee_idx, paw_idx in LIMB_SEGMENTS:
+    for label, _knee_idx, paw_idx in LIMB_SEGMENTS:
         short_label = LIMB_LABEL_MAP.get(label, label)
         paw_ok = kpt_conf[paw_idx] > LIMB_CONF_THRESHOLD
 
@@ -2466,7 +2466,6 @@ def main():
                         if corners is None or len(corners) != 4:
                             continue
                         pts = np.array([[int(p[0] * sx), int(p[1] * sy)] for p in corners], dtype=np.int32)
-                        zone_label = str(strip.get("zone_label", "LIMB_STRIP"))
                         zone_group = str(strip.get("group", ""))
                         is_nearest_strip = nearest_target_hit and nearest_target_label == zone_group
                         fill = (70, 180, 220) if is_nearest_strip else (95, 95, 95)
@@ -2484,7 +2483,6 @@ def main():
                         cx = int(center[0] * sx)
                         cy = int(center[1] * sy)
                         rr = max(1, int(round(radius * 0.5 * (sx + sy))))
-                        zone_label = str(limb.get("zone_label", "LIMB"))
                         zone_group = str(limb.get("group", ""))
                         is_nearest_limb = nearest_target_hit and nearest_target_label == zone_group
 

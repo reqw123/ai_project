@@ -43,13 +43,13 @@
 | `cat_monitoring_system/server/routes.py` | 定義所有 Flask 路由（見「六、Flask 端點總表」），並在首次請求時（`_ensure_processor_started`）建立 `FrameProcessor`、註冊 `LickStagePlugin`／`ExtBodyZonePlugin` |
 | `cat_monitoring_system/server/streaming.py` | `SharedFrameStreamer`：管理 MJPEG 串流用的最新幀快取、client 計數、ring buffer（供 `/video_clip` 用） |
 
-### 3.2 資料流層（Data Layer）— YOLO 骨架擷取
+### 3.2 感知層（Perception Layer）— YOLO 骨架擷取
 
 | 路徑 | 職責 |
 |---|---|
 | `cat_monitoring_system/detectors/keypoint_detector.py` | `KeypointDetector`：封裝 YOLO-Pose 推論，輸出 `kpts (17,2)` / `kpt_conf (17,)` / bbox / 偵測信心 |
 
-### 3.3 模型流層（Model Layer）— ST-GCN 行為分類
+### 3.3 分析層（Analysis Layer）— ST-GCN 行為分類
 
 | 路徑 | 職責 |
 |---|---|
@@ -68,7 +68,7 @@
   - `Nose:2.0 + Left_Ear/Right_Ear:1.5 + LF_Paw/RF_Paw:1.5`（目前設定）：walk/scratch/shake 方向一致小幅改善、stop 小幅回檔，但 `n_discordant` 僅 2~5，**未達統計顯著**，需要多組 `RANDOM_SEED` 重複訓練＋彙總比較才能確認效果是否穩定。
   - 附註：scratch 類別的獨立測試集準確率偏低已確認主因是「搔抓片段佔比短、被大量非搔抓畫面稀釋」的評估方式問題（`max_true_prob`/`event_detected` 顯示模型仍抓到高信心事件），並非單純判別力不足，因此 scratch 相關的權重調整效果不能只看這個準確率數字判斷。
 
-### 3.4 服務流層（Service Layer）— 統計、記錄、推送、視覺化
+### 3.4 監測層（Monitoring Layer）— 統計、記錄、推送、視覺化
 
 | 路徑 | 職責 |
 |---|---|
@@ -84,14 +84,14 @@
 
 ### 3.4.1 Skeleton Quality Assessment（骨架品質雙重判定，2026-07 新增、預設關閉）
 
-- **設計動機**：ST-GCN 分類器有時會對明顯不合理的骨架（YOLO 誤檢背景棉被/枕頭、關鍵點嚴重飄移）給出高信心的錯誤分類。這個模組不取代 ST-GCN，而是額外算一組「這個窗口的骨架幾何合不合理」的獨立訊號，當幾何判斷認為不可信時，把該幀的分類結果覆蓋成 `LOW_CONF`——即「GCN 分類為主、幾何判斷為輔」。
+- **設計動機**：ST-GCN 分類器有時會對明顯不合理的骨架（YOLO 誤檢背景棉被/枕頭、關鍵點嚴V重飄移）給出高信心的錯誤分類。這個模組不取代 ST-GCN，而是額外算一組「這個窗口的骨架幾何合不合理」的獨立訊號，當幾何判斷認為不可信時，把該幀的分類結果覆蓋成 `LOW_CONF`——即「GCN 分類為主、幾何判斷為輔」。
 - **3 項指標**（皆從同一個 ST-GCN 推論窗口的原始關鍵點算出，不需要額外緩衝區）：
   - `midback_offset_ratio`：MidBack 偏離 Chest-Hip 虛擬中點的距離比例，超過解剖合理性上限視為可疑。
   - `midback_angle`：Chest-MidBack-Hip 夾角（取窗口最後一幀），太接近 180 度（幾乎共線）或太小（過尖）都視為可疑。
   - `body_axis_score_jitter`：身體主軸比例分數在窗口內的振幅，振幅過大代表骨架偵測反覆跳動、不穩定。
 - **移植來源**：邏輯移植自 `cat_monitoring_system/tools/test_bone_length_stability.py`（模式2/GUI 視覺偵測）——那支腳本仍保留、持續用來肉眼校準門檻，跟這裡的正式整合版本共用同一套公式。
 - **兩層開關**（刻意分開管理，保持低耦合）：
-  - 總開關：`config.py` 的 `SQAConfig.ENABLE_SQA_DUAL_JUDGMENT`（**預設 `False`**——門檻值目前僅用少量影片校準過，正式套用前建議先用 `tools/test_bone_length_stability.py` 或 GUI 模式肉眼比對覆蓋規則是否合理）。
+  - 總開關：`config.py` 的 `SQAConfig.ENABLE_SQA_DUAL_JUDGMENT`（**目前預設 `True`**——門檻值目前僅用少量影片校準過，套用前建議先用 `tools/test_bone_length_stability.py` 或 GUI 模式肉眼比對覆蓋規則是否合理）。
   - 個別指標開關：模組內的 `ENABLE_MIDBACK_OFFSET_CHECK`/`ENABLE_MIDBACK_ANGLE_CHECK`/`ENABLE_SCORE_JITTER_CHECK`，不在 `config.py` 設定。
 - **Fail-safe 保證**：唯一對外函式 `evaluate_window()` 保證不拋出例外，任何內部錯誤都回傳「可信、不覆蓋」；`FrameProcessor` 呼叫端（`processors/frame_processor.py`）的 import 與呼叫也都各自包一層防護，即使這個模組完全壞掉或被刪除，也不會影響主系統其餘功能運行。
 
@@ -173,9 +173,9 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 
 - 唯一 tab：「CSV AI分析系統」，**`"disabled": true`**——目前未在運行中的 Node-RED 實例內生效
 - **接收**：`GET/POST /messengerwebhook`（Facebook Messenger webhook 驗證與事件接收）、`POST /ui-trigger-health`、`POST /ui-trigger-record`
-- **對外呼叫**：`https://api.openai.com/v1/chat/completions`（GPT 生成健康報告）、`https://graph.facebook.com/v23.0/me/messages`（Messenger 回覆）、`http://<python_ip>:5000/video_clip`（`/camera` 指令觸發，**不是** `/snapshot`）、`http://<python_ip>:5000/status`（`/status` 指令觸發）
-- **文字指令**：哈基米（觸發 GPT 分析）、`/camera`（錄 5 秒短片）、`/status`（查詢即時狀態）、`/help`
-- ⚠️ **已知問題**：`/status` 指令呼叫的 Flask `/status` 路由**目前不存在**於 `server/routes.py`（只有 `/`, `/stream`, `/snapshot`, `/video_clip`, `/api/behavior_history`, `/api/overlay`），該指令會持續失敗
+- **對外呼叫**：`https://api.openai.com/v1/chat/completions`（GPT 生成健康報告）、`https://graph.facebook.com/v23.0/me/messages`（Messenger 回覆）、`http://<python_ip>:5000/video_clip`（`/camera` 指令觸發，**不是** `/snapshot`）
+- **文字指令**：哈基米（觸發 GPT 分析）、`/camera`（錄 5 秒短片）、`/help`
+- 2026-07 更新：原本的 `/status` 指令呼叫 Flask 端不存在的 `/status` 路由、會持續失敗，已將該指令從「指令分流」switch、對應的請求/回覆節點、以及 `/help` 說明文字中整個移除
 
 ### 5.4 `lick_stage2_nodered.json` —— 舔舐部位分析 Dashboard
 
@@ -202,7 +202,6 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 | `GET /stream` | 各 flow 的影像卡片 | 全部 |
 | `GET /snapshot` | （目前無 flow 使用；`GPT 健康報告.json` 改用 `/video_clip`） | — |
 | `GET /video_clip` | `GPT 健康報告.json` 的 `/camera` 指令 | `GPT 健康報告.json` |
-| `GET /status`（**不存在，會 404**） | `GPT 健康報告.json` 的 `/status` 指令 | `GPT 健康報告.json`（已知壞掉） |
 | `GET/POST /api/overlay` | 目前無 flow 使用 | — |
 | `GET /api/behavior_history` | 目前無 flow 使用 | — |
 
@@ -212,7 +211,7 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 
 ## 七、config.py 與各層的對應關係
 
-- `ModelPaths` / `YOLOConfig` / `STGCNConfig` → 影響「三、3.2/3.3」的資料流層與模型流層
+- `ModelPaths` / `YOLOConfig` / `STGCNConfig` → 影響「三、3.2/3.3」的感知層與分析層
 - `AnomalyDetectionConfig` / `BehaviorTrackingConfig` → 影響 `AnomalyDetector`、`ImprovedBehaviorTracker`（3.4）
 - `SQAConfig`（僅 `ENABLE_SQA_DUAL_JUDGMENT` 一個總開關）→ 影響 `processors/skeleton_quality_assessment.py` 是否被 `FrameProcessor` 呼叫（3.4.1）；3 項個別指標開關不在 `config.py`，在模組自己的檔案裡
 - `FlaskConfig` → 影響 `server/flask_app.py`、`server/routes.py`
@@ -226,9 +225,10 @@ lick_stage / ext_body_zones 插件**不吃** `config.py`，而是各自有獨立
 
 ## 八、目前已知問題（尚未修正）
 
-1. `GPT 健康報告.json` 的 `/status` 指令呼叫 Flask 不存在的 `/status` 路由，會持續失敗（見 0_進度彙整.md 的已知問題註記）。
-2. `GPT 健康報告.json` 整個 tab 目前是 `disabled: true`，Messenger/GPT 健康報告功能目前未啟用。
-3. `貓咪主控.json`（v1/`yolo_result`）與 `cat_health_v3_flow.json`（v2/`yolo_result_v2`）各自維護獨立的 Discord webhook 設定與告警邏輯，未來若要合併兩條 flow 需注意告警可能重複觸發。
+1. `GPT 健康報告.json` 整個 tab 目前是 `disabled: true`，Messenger/GPT 健康報告功能目前未啟用。
+2. `貓咪主控.json`（v1/`yolo_result`）與 `cat_health_v3_flow.json`（v2/`yolo_result_v2`）各自維護獨立的 Discord webhook 設定與告警邏輯，未來若要合併兩條 flow 需注意告警可能重複觸發。
+
+> 已修正：`GPT 健康報告.json` 原本的 `/status` 指令呼叫 Flask 不存在的 `/status` 路由會持續失敗，2026-07 已將該指令（switch 規則、對應請求/回覆節點、`/help` 說明文字）整個移除。
 
 ---
 
@@ -238,7 +238,8 @@ lick_stage / ext_body_zones 插件**不吃** `config.py`，而是各自有獨立
 
 - `0_AI_HANDOFF_FOR_ASSISTANT.md`：多處引用不存在的檔案（`cat_monitoring_system/mermaid.md`、`THREE_LAYER_FLOW.md`、`NODERED_UPDATE_GUIDE.md`、`MAIN_CONFIG_SCRIPT_CLASSIFICATION.md`、`SCRIPT_SYNC_SUMMARY.md`、`flows (7).json`、`ip取得.json`），且參數表寫 `NUM_JOINTS=17`／`WINDOW_STRIDE(推論)=16`，與現行 `config.py`（`NUM_JOINTS=14`、`WINDOW_STRIDE` 預設 2）不符。
 - `0_ARCHITECTURE_DESIGN.md`：架構圖與參數表同樣寫 `V=17`／`WINDOW_STRIDE(推論)=16`，與現況不符；其餘前處理管線順序描述仍正確可用。
-- `NODE_RED_FUNCTIONS.md`（2026-07 已從 `cat_monitoring_system/` 搬到 `paper/docs/`）：引用 `cat_monitoring_system/node-red.json` 與 `gpt_api.json`，這兩個檔案**目前不存在於該路徑**（現行 Node-RED flow 全部搬到 `paper/` 根目錄下，且檔名已改為本文件「五」所列的 4 個檔案）。
 - `貓咪個體化基線.md`：文件頭標註「對應檔案：`cat_health_v2_flow.json`」，但該檔案已不存在——現行對應檔案是 `cat_health_v3_flow.json`（v3）。內文的基線計算邏輯描述仍大致可參考，但檔名與部分流程細節建議以本文件「5.2」與實際 json 為準。
+
+`NODE_RED_FUNCTIONS.md` 已於 2026-07 依現行 `貓咪主控.json`／`GPT 健康報告.json` 逐節點重新校對（檔名、`/camera` 已改用 `/video_clip`、新增的健康風險評分引擎／CSV 寫入／行為時間軸引擎等皆已補上），可信任其內容；但它仍只涵蓋這 2 個 flow，另外 2 個 flow（`cat_health_v3_flow.json`／`lick_stage2_nodered.json`）請看本文件「五」。
 
 若要修正上述舊文件，建議另外開任務處理，避免與本次導覽文件的建立混在一起。

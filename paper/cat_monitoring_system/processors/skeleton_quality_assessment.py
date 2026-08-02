@@ -31,6 +31,7 @@ Fail-safe 承諾（呼叫端可以完全信任）：
     ST-GCN 原本的分類結果，等同這個功能不存在時的行為），絕不會讓主系統
     的推論管線中斷或跑出更糟的結果。
 """
+
 import numpy as np
 
 from models.stgcn_model import interpolate_missing
@@ -47,20 +48,20 @@ ENABLE_SCORE_JITTER_CHECK = True
 # ============================================================================
 # ===== 門檻/參考值常數（跟 test_bone_length_stability.py 目前使用的數值同步）=====
 # ============================================================================
-BONE_CONF_THRESHOLD = 0.3     # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
+BONE_CONF_THRESHOLD = 0.3  # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
 MIN_VALID_FRAMES_MIDBACK_OFFSET = 1  # midback_offset_ratio 至少要有幾幀有效才採信
 
 CANDIDATE_MIDBACK_OFFSET_THRESHOLD = 1.0  # 方向：越大越可疑
 
-CANDIDATE_MIDBACK_ANGLE_LOW_THRESHOLD = 20.0    # 度，低於此值視為夾角過尖，可疑
+CANDIDATE_MIDBACK_ANGLE_LOW_THRESHOLD = 20.0  # 度，低於此值視為夾角過尖，可疑
 CANDIDATE_MIDBACK_ANGLE_HIGH_THRESHOLD = 160.0  # 度，高於此值視為過直/接近共線，可疑
 
 BODY_AXIS_REFERENCE_RATIOS = {
-    "chest_midback": 0.75,   # Chest-MidBack / Chest-Hip
-    "midback_hip": 0.70,     # MidBack-Hip / Chest-Hip
+    "chest_midback": 0.75,  # Chest-MidBack / Chest-Hip
+    "midback_hip": 0.70,  # MidBack-Hip / Chest-Hip
 }
 BODY_AXIS_ERROR_SIGMA = 0.70  # geometry_error → body_axis_score 指數衰減的尺度常數
-BODY_AXIS_MIN_VALID_SAMPLES = 3          # 窗口內至少要有幾幀有效才採信振幅值
+BODY_AXIS_MIN_VALID_SAMPLES = 3  # 窗口內至少要有幾幀有效才採信振幅值
 BODY_AXIS_SCORE_JITTER_THRESHOLD = 20.0  # 方向：越大越可疑
 
 # 校準說明：以上門檻值目前是依 test_bone_length_stability.py 少量影片
@@ -78,7 +79,11 @@ def compute_midback_angle(kpts, kpt_conf, conf_thresh=BONE_CONF_THRESHOLD):
     三點幾乎共線（MidBack 關鍵點可能消失/飄移到 Chest-Hip 連線上），太小
     視為夾角過尖，兩端都可能代表關鍵點錯位或偵測失效。
     任一點信心不足或兩個向量長度太短（幾乎重疊）時回傳 None。"""
-    if kpt_conf[3] < conf_thresh or kpt_conf[4] < conf_thresh or kpt_conf[5] < conf_thresh:
+    if (
+        kpt_conf[3] < conf_thresh
+        or kpt_conf[4] < conf_thresh
+        or kpt_conf[5] < conf_thresh
+    ):
         return None
     chest = kpts[3, :2]
     midback = kpts[4, :2]
@@ -100,7 +105,9 @@ def compute_bone_stability_overlay(seq_window, conf_window):
     """
     seq = interpolate_missing(seq_window, conf_window, threshold=0.1)
 
-    chest_hip_valid = (conf_window[:, 3] >= BONE_CONF_THRESHOLD) & (conf_window[:, 5] >= BONE_CONF_THRESHOLD)
+    chest_hip_valid = (conf_window[:, 3] >= BONE_CONF_THRESHOLD) & (
+        conf_window[:, 5] >= BONE_CONF_THRESHOLD
+    )
 
     midback_valid = chest_hip_valid & (conf_window[:, 4] >= BONE_CONF_THRESHOLD)
     midback_offset_ratio = float("nan")
@@ -113,7 +120,9 @@ def compute_bone_stability_overlay(seq_window, conf_window):
             ratio_vals = raw_offset[frame_ok] / body_size_per_frame[frame_ok]
             midback_offset_ratio = float(np.mean(ratio_vals))
 
-    midback_angle = compute_midback_angle(seq[-1], conf_window[-1], conf_thresh=BONE_CONF_THRESHOLD)
+    midback_angle = compute_midback_angle(
+        seq[-1], conf_window[-1], conf_thresh=BONE_CONF_THRESHOLD
+    )
     if midback_angle is None:
         midback_angle = float("nan")
 
@@ -157,10 +166,12 @@ def compute_body_axis_geometry(kpts, chest_joint=3, midback_joint=4, hip_joint=5
     r3 = midback_hip / chest_hip_dist
     geometry_vector = [r2, r3]
 
-    diffs = np.array([
-        r2 - BODY_AXIS_REFERENCE_RATIOS["chest_midback"],
-        r3 - BODY_AXIS_REFERENCE_RATIOS["midback_hip"],
-    ])
+    diffs = np.array(
+        [
+            r2 - BODY_AXIS_REFERENCE_RATIOS["chest_midback"],
+            r3 - BODY_AXIS_REFERENCE_RATIOS["midback_hip"],
+        ]
+    )
     geometry_error = float(np.linalg.norm(diffs))
     body_axis_score = float(100.0 * np.exp(-geometry_error / BODY_AXIS_ERROR_SIGMA))
 
@@ -185,10 +196,12 @@ def compute_body_axis_score_jitter(kpts_window):
     """
     kpts_window = np.asarray(kpts_window, dtype=np.float64)
     t_len = kpts_window.shape[0]
-    scores = np.array([
-        compute_body_axis_geometry(kpts_window[t])["body_axis_score"]
-        for t in range(t_len)
-    ])
+    scores = np.array(
+        [
+            compute_body_axis_geometry(kpts_window[t])["body_axis_score"]
+            for t in range(t_len)
+        ]
+    )
     valid_scores = scores[np.isfinite(scores)]
     valid_sample_count = int(valid_scores.size)
     if valid_sample_count < BODY_AXIS_MIN_VALID_SAMPLES:
@@ -216,14 +229,23 @@ def _enabled_thresholds() -> dict:
     這三個變數的值會立刻生效，不需要重新載入模組。"""
     thresholds = {}
     if ENABLE_MIDBACK_OFFSET_CHECK:
-        thresholds["midback_offset_ratio"] = (CANDIDATE_MIDBACK_OFFSET_THRESHOLD, "above")
+        thresholds["midback_offset_ratio"] = (
+            CANDIDATE_MIDBACK_OFFSET_THRESHOLD,
+            "above",
+        )
     if ENABLE_MIDBACK_ANGLE_CHECK:
         thresholds["midback_angle"] = (
-            (CANDIDATE_MIDBACK_ANGLE_LOW_THRESHOLD, CANDIDATE_MIDBACK_ANGLE_HIGH_THRESHOLD),
+            (
+                CANDIDATE_MIDBACK_ANGLE_LOW_THRESHOLD,
+                CANDIDATE_MIDBACK_ANGLE_HIGH_THRESHOLD,
+            ),
             "outside_range",
         )
     if ENABLE_SCORE_JITTER_CHECK:
-        thresholds["body_axis_score_jitter"] = (BODY_AXIS_SCORE_JITTER_THRESHOLD, "above")
+        thresholds["body_axis_score_jitter"] = (
+            BODY_AXIS_SCORE_JITTER_THRESHOLD,
+            "above",
+        )
     return thresholds
 
 

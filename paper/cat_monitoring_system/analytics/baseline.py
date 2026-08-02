@@ -12,6 +12,7 @@ sample is the entire population of "this cat's days we know about", not a
 sample drawn from a larger population, so ddof=0 is intentional and is kept
 for parity with the numbers already shown on the existing dashboard.
 """
+
 from __future__ import annotations
 
 import math
@@ -27,12 +28,23 @@ MAX_BASELINE_DAYS_DEFAULT = 30
 # non-negative event counts. This classification is what deviation.py uses
 # to pick a statistical model — it is the central fix in this redesign
 # (see analytics/README.md "為什麼要分兩種模型").
-CONTINUOUS_METRICS = frozenset({
-    "walk_time", "stop_time", "lick_time", "scratch_time",
-})
-COUNT_METRICS = frozenset({
-    "walk_count", "stop_count", "lick_count", "scratch_count", "shake_count",
-})
+CONTINUOUS_METRICS = frozenset(
+    {
+        "walk_time",
+        "stop_time",
+        "lick_time",
+        "scratch_time",
+    }
+)
+COUNT_METRICS = frozenset(
+    {
+        "walk_count",
+        "stop_count",
+        "lick_count",
+        "scratch_count",
+        "shake_count",
+    }
+)
 
 
 @dataclass
@@ -57,13 +69,15 @@ class DailyRecord:
 
 @dataclass
 class MetricStats:
+    """單一指標在基線期間內的統計摘要（集中趨勢、離散程度、平滑值）。"""
+
     mean: float
     std: float
     median: float
     q1: float
     q3: float
     iqr: float
-    mad: float               # median absolute deviation (raw, unscaled)
+    mad: float  # median absolute deviation (raw, unscaled)
     ewma: float
     rolling_std: float
     sample_count: int
@@ -71,12 +85,14 @@ class MetricStats:
 
 @dataclass
 class Baseline:
+    """個體正常行為基線：各指標的統計摘要、計算時使用的天數與信心等級。"""
+
     computed_at: str
     days_count: int
     required_days: int
-    confidence: str          # "Low" / "Medium" / "High"
+    confidence: str  # "Low" / "Medium" / "High"
     excluded_dates: list = field(default_factory=list)
-    metrics: dict = field(default_factory=dict)   # name -> MetricStats
+    metrics: dict = field(default_factory=dict)  # name -> MetricStats
     sanity_warnings: list = field(default_factory=list)
     sanity_ok: bool = True
     # Per-day raw values for COUNT_METRICS, in the exact same day-window
@@ -85,7 +101,7 @@ class Baseline:
     # counts, not just mean/std/median — this guarantees it always fits on
     # the same window the baseline stats came from, instead of requiring
     # every caller to re-derive a matching window by hand.
-    count_histories: dict = field(default_factory=dict)   # name -> list[int]
+    count_histories: dict = field(default_factory=dict)  # name -> list[int]
 
 
 class InsufficientDataError(Exception):
@@ -151,10 +167,16 @@ def compute_metric_stats(values: list) -> MetricStats:
     rolling_std = math.sqrt(roll_var)
 
     return MetricStats(
-        mean=round(mean, 2), std=round(std, 2), median=round(median, 2),
-        q1=round(q1, 2), q3=round(q3, 2), iqr=round(iqr, 2),
-        mad=round(mad, 2), ewma=round(ewma, 2),
-        rolling_std=round(rolling_std, 2), sample_count=n,
+        mean=round(mean, 2),
+        std=round(std, 2),
+        median=round(median, 2),
+        q1=round(q1, 2),
+        q3=round(q3, 2),
+        iqr=round(iqr, 2),
+        mad=round(mad, 2),
+        ewma=round(ewma, 2),
+        rolling_std=round(rolling_std, 2),
+        sample_count=n,
     )
 
 
@@ -176,7 +198,8 @@ def compute_baseline(
     excluded = set(excluded_dates or [])
 
     valid = [
-        d for d in history
+        d
+        for d in history
         if d.monitoring_seconds >= min_daily_monitoring_sec
         and d.day.isoformat() not in excluded
     ]
@@ -221,6 +244,7 @@ def compute_baseline(
         )
 
     from datetime import datetime as _dt
+
     return Baseline(
         computed_at=_dt.now().isoformat(),
         days_count=len(days),

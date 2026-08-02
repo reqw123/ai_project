@@ -1,0 +1,241 @@
+[INFO] ====================================================
+[INFO] YOLO Pose Model Comparison  [20260716_223758]
+[INFO]   Old : C:\ai_project\cat_pose\v11s_129.pt
+[INFO]   New : C:\ai_project\cat_pose\v11s_130.pt
+[INFO]   Data[walk]: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\walk
+[INFO]   Data[lick]: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\lick
+[INFO]   Data[scratch]: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch
+[INFO]   Data[shake]: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake
+[INFO]   Data[stop]: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop
+[INFO]   Out : C:\ai_project\pose_compare_results\20260716_223758  Device: cuda
+[INFO] ====================================================
+[INFO] Loading old model...
+[INFO] Loading new model...
+[INFO] Benchmark videos: 23
+[INFO]   walk: 3
+[INFO]   lick: 5
+[INFO]   scratch: 5
+[INFO]   shake: 6
+[INFO]   stop: 4
+[INFO] 
+--- OLD MODEL: v11s_129.pt  (EMA α=1.0) ---
+[INFO] Processing: walk/7月7日 (8)(1).mp4
+[INFO]   Frames: 126 | Inference Time: 4.94 sec | Confidence=0.988 Jitter=10.44
+[INFO] --------------------------------
+[INFO] Processing: walk/7月7日 (8)(3).mp4
+[INFO]   Frames: 200 | Inference Time: 5.40 sec | Confidence=0.922 Jitter=12.96
+[INFO] --------------------------------
+[INFO] Processing: walk/7月7日 (8).mp4
+[INFO]   Frames: 94 | Inference Time: 3.13 sec | Confidence=0.886 Jitter=23.78
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日(1).mp4
+[INFO]   Frames: 135 | Inference Time: 3.49 sec | Confidence=0.995 Jitter=2.20
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日(2).mp4
+[INFO]   Frames: 156 | Inference Time: 4.38 sec | Confidence=0.998 Jitter=2.63
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日(3).mp4
+[INFO]   Frames: 121 | Inference Time: 2.99 sec | Confidence=0.998 Jitter=2.58
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日(4).mp4
+[INFO]   Frames: 147 | Inference Time: 3.61 sec | Confidence=0.990 Jitter=1.91
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日.mp4
+[INFO]   Frames: 139 | Inference Time: 5.18 sec | Confidence=0.980 Jitter=3.13
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2)(1).mp4
+[INFO]   Frames: 155 | Inference Time: 4.85 sec | Confidence=0.973 Jitter=6.02
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2)(2).mp4
+[INFO]   Frames: 109 | Inference Time: 3.04 sec | Confidence=0.986 Jitter=6.14
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2)(3).mp4
+[INFO]   Frames: 154 | Inference Time: 4.28 sec | Confidence=0.997 Jitter=5.51
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2)(4).mp4
+[INFO]   Frames: 142 | Inference Time: 3.86 sec | Confidence=0.983 Jitter=4.83
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2).mp4
+[INFO]   Frames: 177 | Inference Time: 4.59 sec | Confidence=0.997 Jitter=5.24
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(1).mp4
+[INFO]   Frames: 105 | Inference Time: 2.50 sec | Confidence=0.997 Jitter=4.39
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(2).mp4
+[INFO]   Frames: 99 | Inference Time: 2.35 sec | Confidence=0.997 Jitter=6.17
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(3).mp4
+[INFO]   Frames: 102 | Inference Time: 2.52 sec | Confidence=0.977 Jitter=5.86
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(4).mp4
+[INFO]   Frames: 110 | Inference Time: 2.61 sec | Confidence=0.996 Jitter=4.88
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(5).mp4
+[INFO]   Frames: 108 | Inference Time: 2.42 sec | Confidence=0.995 Jitter=4.02
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5).mp4
+[INFO]   Frames: 116 | Inference Time: 2.62 sec | Confidence=0.996 Jitter=4.69
+[INFO] --------------------------------
+[INFO] Processing: stop/7月7日 (8)(2).mp4
+[INFO]   Frames: 50 | Inference Time: 1.23 sec | Confidence=0.990 Jitter=3.45
+[INFO] --------------------------------
+[INFO] Processing: stop/7月7日 (8)(5).mp4
+[INFO]   Frames: 307 | Inference Time: 8.23 sec | Confidence=0.991 Jitter=3.26
+[INFO] --------------------------------
+[INFO] Processing: stop/7月7日 (8).mp4
+[INFO]   Frames: 123 | Inference Time: 3.26 sec | Confidence=0.991 Jitter=7.07
+[INFO] --------------------------------
+[INFO] Processing: stop/Desktop 2026.07.16 - 19.06.58.15.mp4
+[INFO]   Frames: 206 | Inference Time: 4.62 sec | Confidence=0.947 Jitter=1.23
+[INFO] --------------------------------
+[INFO] 
+--- NEW MODEL: v11s_130.pt  (EMA α=1.0) ---
+[INFO] Processing: walk/7月7日 (8)(1).mp4
+[INFO]   Frames: 126 | Inference Time: 3.23 sec | Confidence=0.992 Jitter=10.55
+[INFO] --------------------------------
+[INFO] Processing: walk/7月7日 (8)(3).mp4
+[INFO]   Frames: 200 | Inference Time: 5.07 sec | Confidence=0.951 Jitter=14.14
+[INFO] --------------------------------
+[INFO] Processing: walk/7月7日 (8).mp4
+[INFO]   Frames: 94 | Inference Time: 2.41 sec | Confidence=0.915 Jitter=24.47
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日(1).mp4
+[INFO]   Frames: 135 | Inference Time: 2.97 sec | Confidence=0.996 Jitter=3.39
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日(2).mp4
+[INFO]   Frames: 156 | Inference Time: 3.36 sec | Confidence=0.997 Jitter=2.52
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日(3).mp4
+[INFO]   Frames: 121 | Inference Time: 2.68 sec | Confidence=0.999 Jitter=2.45
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日(4).mp4
+[INFO]   Frames: 147 | Inference Time: 3.28 sec | Confidence=0.985 Jitter=1.92
+[INFO] --------------------------------
+[INFO] Processing: lick/7月3日.mp4
+[INFO]   Frames: 139 | Inference Time: 3.10 sec | Confidence=0.994 Jitter=3.24
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2)(1).mp4
+[INFO]   Frames: 155 | Inference Time: 3.62 sec | Confidence=0.977 Jitter=5.54
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2)(2).mp4
+[INFO]   Frames: 109 | Inference Time: 2.30 sec | Confidence=0.993 Jitter=6.68
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2)(3).mp4
+[INFO]   Frames: 154 | Inference Time: 3.44 sec | Confidence=0.997 Jitter=5.07
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2)(4).mp4
+[INFO]   Frames: 142 | Inference Time: 5.26 sec | Confidence=0.992 Jitter=5.00
+[INFO] --------------------------------
+[INFO] Processing: scratch/7月3日 (2).mp4
+[INFO]   Frames: 177 | Inference Time: 4.52 sec | Confidence=0.998 Jitter=5.43
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(1).mp4
+[INFO]   Frames: 105 | Inference Time: 2.35 sec | Confidence=0.997 Jitter=4.35
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(2).mp4
+[INFO]   Frames: 99 | Inference Time: 2.24 sec | Confidence=0.996 Jitter=5.84
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(3).mp4
+[INFO]   Frames: 102 | Inference Time: 2.42 sec | Confidence=0.970 Jitter=6.22
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(4).mp4
+[INFO]   Frames: 110 | Inference Time: 2.39 sec | Confidence=0.996 Jitter=4.73
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5)(5).mp4
+[INFO]   Frames: 108 | Inference Time: 2.40 sec | Confidence=0.996 Jitter=4.49
+[INFO] --------------------------------
+[INFO] Processing: shake/7月7日 (5).mp4
+[INFO]   Frames: 116 | Inference Time: 2.59 sec | Confidence=0.996 Jitter=4.54
+[INFO] --------------------------------
+[INFO] Processing: stop/7月7日 (8)(2).mp4
+[INFO]   Frames: 50 | Inference Time: 1.28 sec | Confidence=0.981 Jitter=3.26
+[INFO] --------------------------------
+[INFO] Processing: stop/7月7日 (8)(5).mp4
+[INFO]   Frames: 307 | Inference Time: 8.11 sec | Confidence=0.992 Jitter=5.88
+[INFO] --------------------------------
+[INFO] Processing: stop/7月7日 (8).mp4
+[INFO]   Frames: 123 | Inference Time: 3.22 sec | Confidence=0.990 Jitter=6.14
+[INFO] --------------------------------
+[INFO] Processing: stop/Desktop 2026.07.16 - 19.06.58.15.mp4
+[INFO]   Frames: 206 | Inference Time: 4.40 sec | Confidence=0.991 Jitter=1.19
+[INFO] --------------------------------
+[INFO] 
+Aggregating metrics...
+[INFO] 
+Writing CSV files...
+[INFO] Generating figures...
+[INFO] Writing reports...
+[INFO] 
+[INFO] =====================================================================================================
+[INFO] 逐影片比較結果
+[INFO] =====================================================================================================
+[INFO] 行為       影片                               舊信心   新信心      信心Δ   舊抖動   新抖動      抖動Δ
+[INFO] -----------------------------------------------------------------------------------------------------
+[INFO] walk       7月7日 (8)(1).mp4                   0.988    0.992    +0.004↑    10.44    10.55     +0.11↑
+[INFO] walk       7月7日 (8)(3).mp4                   0.922    0.951    +0.028↑    12.96    14.14     +1.18↑
+[INFO] walk       7月7日 (8).mp4                      0.886    0.915    +0.029↑    23.78    24.47     +0.69↑
+[INFO] lick       7月3日(1).mp4                       0.995    0.996    +0.001↑     2.20     3.39     +1.19↑
+[INFO] lick       7月3日(2).mp4                       0.998    0.997    -0.001↓     2.63     2.52     -0.11↓
+[INFO] lick       7月3日(3).mp4                       0.998    0.999    +0.001↑     2.58     2.45     -0.13↓
+[INFO] lick       7月3日(4).mp4                       0.990    0.985    -0.005↓     1.91     1.92     +0.01↑
+[INFO] lick       7月3日.mp4                          0.980    0.994    +0.014↑     3.13     3.24     +0.11↑
+[INFO] scratch    7月3日 (2)(1).mp4                   0.973    0.977    +0.005↑     6.02     5.54     -0.49↓
+[INFO] scratch    7月3日 (2)(2).mp4                   0.986    0.993    +0.007↑     6.14     6.68     +0.54↑
+[INFO] scratch    7月3日 (2)(3).mp4                   0.997    0.997    +0.000↑     5.51     5.07     -0.44↓
+[INFO] scratch    7月3日 (2)(4).mp4                   0.983    0.992    +0.008↑     4.83     5.00     +0.17↑
+[INFO] scratch    7月3日 (2).mp4                      0.997    0.998    +0.001↑     5.24     5.43     +0.19↑
+[INFO] shake      7月7日 (5)(1).mp4                   0.997    0.997    +0.000↑     4.39     4.35     -0.04↓
+[INFO] shake      7月7日 (5)(2).mp4                   0.997    0.996    -0.000↓     6.17     5.84     -0.33↓
+[INFO] shake      7月7日 (5)(3).mp4                   0.977    0.970    -0.007↓     5.86     6.22     +0.36↑
+[INFO] shake      7月7日 (5)(4).mp4                   0.996    0.996    -0.001↓     4.88     4.73     -0.15↓
+[INFO] shake      7月7日 (5)(5).mp4                   0.995    0.996    +0.001↑     4.02     4.49     +0.47↑
+[INFO] shake      7月7日 (5).mp4                      0.996    0.996    -0.001↓     4.69     4.54     -0.15↓
+[INFO] stop       7月7日 (8)(2).mp4                   0.990    0.981    -0.009↓     3.45     3.26     -0.18↓
+[INFO] stop       7月7日 (8)(5).mp4                   0.991    0.992    +0.001↑     3.26     5.88     +2.63↑
+[INFO] stop       7月7日 (8).mp4                      0.991    0.990    -0.001↓     7.07     6.14     -0.93↓
+[INFO] stop       Desktop 2026.07.16 - 19.06.58.15.mp4    0.947    0.991    +0.045↑     1.23     1.19     -0.03↓
+[INFO] 
+[INFO] =================================================================================================
+[INFO] 行為類別摘要
+[INFO] =================================================================================================
+[INFO] 行為         舊信心   新信心   信心改善   舊抖動   新抖動   抖動改善   舊缺失   新缺失   缺失改善
+[INFO] -------------------------------------------------------------------------------------------------
+[INFO] walk          0.934    0.955     +2.25%    14.46    15.23     -5.33%     0.0%     0.0%     +0.00%
+[INFO] lick          0.992    0.994     +0.19%     2.49     2.69     -8.29%     0.0%     0.0%     +0.00%
+[INFO] scratch       0.987    0.992     +0.42%     5.51     5.48     +0.58%     0.0%     0.0%     +0.00%
+[INFO] shake         0.993    0.992     -0.11%     4.97     4.99     -0.44%     0.0%     0.0%     +0.00%
+[INFO] stop          0.978    0.991     +1.26%     3.39     4.40    -29.90%     2.2%     1.6%    +26.67%
+[INFO] 
+[INFO] =================================================================================================
+[INFO] ★★★ 主指標：P95 Jitter（尾部抖動，數值越小越穩定） ★★★
+[INFO] =================================================================================================
+[INFO] 行為       舊P95抖動 新P95抖動       改善
+[INFO] -------------------------------------------------------------------------------------------------
+[INFO] walk          41.23    42.47     -3.00%
+[INFO] lick           8.77    10.12    -15.44%
+[INFO] scratch       20.44    21.01     -2.81%
+[INFO] shake         19.87    19.84     +0.18%
+[INFO] stop          11.11    15.57    -40.18%
+[INFO] -------------------------------------------------------------------------------------------------
+[INFO] 整體          20.72    22.58     -8.97%
+[INFO] 
+[INFO]   ★ 主指標結論：v11s_129.pt 尾部抖動較小（Δ1.86px）— 依你指定的主指標，優先選它
+[INFO] =================================================================================================
+[INFO] 
+[INFO] =================================================================================================
+[INFO] [參考，非主指標] 整體比較結果（複合分數）
+[INFO] =================================================================================================
+[INFO] 舊模型        v11s_129.pt   複合分數 95.39
+[INFO] 新模型        v11s_130.pt   複合分數 95.39
+[INFO] 
+[INFO] 平均信心值    0.981  →  0.987    改善 +0.67%
+[INFO] 平均抖動      5.41 px  →  5.79 px    改善 -7.02%
+[INFO] 缺失比率      0.5%  →  0.3%    改善 +0.13%
+[INFO] 尾尖缺失      8.8%  →  8.5%
+[INFO] 
+[INFO] 綜合改善分數  -2.19%
+[INFO] 進步最多行為  shake  （+0.2%）
+[INFO] 退步最多行為  stop  （-40.2%）
+[INFO] 
+[INFO] 結論          v11s_130.pt  相較  v11s_129.pt  →  WORSE（較差）  [參考用複合分數]
+[INFO] =================================================================================================

@@ -1,15 +1,14 @@
 """Lick zone time/hit accumulation with bout tracking."""
 
-
 _ZONES = ("BODY", "FL", "FR", "HL", "HR")
 
 # Maps raw zone labels to statistics keys
 _LABEL_TO_KEY = {
     "BODY_CENTER": "BODY",
-    "FL":          "FL",
-    "FR":          "FR",
-    "HL":          "HL",
-    "HR":          "HR",
+    "FL": "FL",
+    "FR": "FR",
+    "HL": "HL",
+    "HR": "HR",
 }
 
 
@@ -24,13 +23,13 @@ class LickStatistics:
     """
 
     def __init__(self):
-        self._time:  dict = {z: 0.0 for z in _ZONES}
-        self._hits:  dict = {z: 0   for z in _ZONES}
+        self._time: dict = {z: 0.0 for z in _ZONES}
+        self._hits: dict = {z: 0 for z in _ZONES}
         # bout tracking
-        self._bout_count: dict = {z: 0   for z in _ZONES}
-        self._bout_sec:   dict = {z: 0.0 for z in _ZONES}
-        self._active_bout_zone: str   = ""
-        self._active_bout_sec:  float = 0.0
+        self._bout_count: dict = {z: 0 for z in _ZONES}
+        self._bout_sec: dict = {z: 0.0 for z in _ZONES}
+        self._active_bout_zone: str = ""
+        self._active_bout_sec: float = 0.0
         self._prev_key: str = ""
 
     def update(self, zone_label: str, dt_sec: float) -> None:
@@ -55,16 +54,16 @@ class LickStatistics:
                 # Close previous bout
                 if self._active_bout_zone and self._active_bout_sec > 0:
                     self._bout_count[self._active_bout_zone] += 1
-                    self._bout_sec[self._active_bout_zone]   += self._active_bout_sec
+                    self._bout_sec[self._active_bout_zone] += self._active_bout_sec
                 self._active_bout_zone = key
-                self._active_bout_sec  = dt_sec
+                self._active_bout_sec = dt_sec
         else:
             # No contact this frame — close any open bout
             if self._active_bout_zone and self._active_bout_sec > 0:
                 self._bout_count[self._active_bout_zone] += 1
-                self._bout_sec[self._active_bout_zone]   += self._active_bout_sec
+                self._bout_sec[self._active_bout_zone] += self._active_bout_sec
             self._active_bout_zone = ""
-            self._active_bout_sec  = 0.0
+            self._active_bout_sec = 0.0
 
         self._prev_key = key
 
@@ -78,13 +77,3 @@ class LickStatistics:
     def zone_stats(self, key: str):
         """Return (hits, time_sec) for the given statistics key."""
         return self._hits.get(key, 0), self._time.get(key, 0.0)
-
-    def reset(self) -> None:
-        for z in _ZONES:
-            self._time[z]       = 0.0
-            self._hits[z]       = 0
-            self._bout_count[z] = 0
-            self._bout_sec[z]   = 0.0
-        self._active_bout_zone = ""
-        self._active_bout_sec  = 0.0
-        self._prev_key         = ""

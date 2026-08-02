@@ -5,25 +5,38 @@ classify() 統一接收 (T,V,2) raw 座標 + (T,V) 信心值，
 內部根據模型 in_channels 決定前處理路徑，
 呼叫方無需感知 multichannel / legacy 差異。
 """
+
 from models.stgcn_model import (
     CatBehaviorSTGCN,
-    flip_normalize,
-    orientation_normalize,
-    normalize_skeleton_coords,
     build_feature_tensor,
+    flip_normalize,
+    normalize_skeleton_coords,
+    orientation_normalize,
 )
 
 
 class BehaviorClassifier:
-    def __init__(self, model_path, device='cuda', sequence_length=16, normalize=True,
-                 feature_mode=None, in_channels=None, use_attention=None):
+    """封裝 ST-GCN 行為分類與其前處理；統一接收原始座標＋信心值，內部依模型
+    輸入通道數自動選擇 legacy 4ch 或多通道特徵前處理路徑。"""
+
+    def __init__(
+        self,
+        model_path,
+        device="cuda",
+        sequence_length=16,
+        normalize=True,
+        feature_mode=None,
+        in_channels=None,
+        use_attention=None,
+    ):
         # feature_mode=None 時從 config 讀取，確保 config 設定始終生效
         if feature_mode is None:
             try:
                 from config import STGCNConfig
+
                 feature_mode = STGCNConfig.FEATURE_MODE
             except Exception:
-                feature_mode = 'xy'
+                feature_mode = "xy"
         self.model = CatBehaviorSTGCN(
             model_path,
             device=device,
@@ -53,7 +66,7 @@ class BehaviorClassifier:
 
         # YOLO 輸出固定 17 點，但模型可能以較少關節（例如 14，排除尾巴）訓練。
         # 從模型 checkpoint 自動偵測的 num_joints 截斷多餘關節，避免 einsum 維度不符。
-        n_joints = getattr(self.model, 'num_joints', seq_xy.shape[1])
+        n_joints = getattr(self.model, "num_joints", seq_xy.shape[1])
         if seq_xy.shape[1] > n_joints:
             seq_xy = seq_xy[:, :n_joints, :]
             if conf_seq is not None:
@@ -64,11 +77,11 @@ class BehaviorClassifier:
             return self.model.predict(seq_xy, precomputed=False)
 
         # 多通道路徑：前處理在此完成，model.predict() 接收已建構好的特徵張量
-        m = self.model
-        seq = seq_xy.copy()
-        if m.normalize:
+        model = self.model
+        seq = seq_xy
+        if model.normalize:
             seq = flip_normalize(seq)
             seq = orientation_normalize(seq)
             seq = normalize_skeleton_coords(seq)
-        seq_features = build_feature_tensor(seq, conf_seq, m.feature_mode)
+        seq_features = build_feature_tensor(seq, conf_seq, model.feature_mode)
         return self.model.predict(seq_features, precomputed=True)

@@ -14,11 +14,17 @@ import cv2
 from ultralytics import YOLO
 from pathlib import Path
 
+from constants import (
+    EAR_DISTANCE_SKELETON_EDGES as _SKELETON_EDGES,
+    EAR_DISTANCE_KP_COLORS as _KP_COLORS,
+    EAR_DISTANCE_EDGE_COLORS as _EDGE_COLORS,
+)
+
 # ==================== 設定 ====================
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_121.pt"
-VIDEO_DIR = r"C:\Users\homec\Downloads\scratch_val"  # 讀取資料夾下所有影片
+MODEL_PATH = r"C:\ai_project\cat_pose\v11s_129.pt"
+VIDEO_DIR = r"C:\Users\homec\Downloads\walk_標記圖片"  # 讀取資料夾下所有影片
 OUTPUT_DIR = r"C:/cat_pose/cat50"
-IMG_NAME_FORMAT = "scratch_val-{}.png"
+IMG_NAME_FORMAT = "walk_real-{}.png"
 TARGET_MODEL_FPS = 30.0
 
 # 支援影片副檔名
@@ -199,33 +205,12 @@ print_mode()
 open_video(video_idx)
 resize_window_to_video()
 
-# ==================== 骨架顏色與連結（與 cat_mp4.py 一致） ====================
+# ==================== 骨架顏色與連結（統一從 constants.py import，
+# 該檔案直接複製自 paper/cat_monitoring_system/utils/constants.py 目前使用中
+# 的版本；原本這裡 _KP_COLORS 索引 3/4/5 是舊的黃綠色系版本，換成共用模組後
+# 會變成色相分離的黃/洋紅/綠，畫面上關鍵點顏色會有感知得到的變化） ====================
 KP_CONF_THRES = 0.5
 BLUE = (255, 0, 0)
-
-_SKELETON_EDGES = [
-    (0, 1), (0, 2), (1, 2),
-    (0, 3), (3, 4), (4, 5),
-    (3, 6), (6, 7), (3, 8), (8, 9),
-    (5, 10), (10, 11), (5, 12), (12, 13),
-    (5, 14), (14, 15), (15, 16),
-]
-
-_KP_COLORS = [
-    (255, 80, 80), (255, 160, 40), (255, 160, 40),
-    (255, 255, 60), (200, 255, 60), (100, 255, 100),
-    (60, 200, 255), (60, 120, 255), (60, 200, 255), (60, 120, 255),
-    (180, 80, 255), (120, 40, 255), (180, 80, 255), (120, 40, 255),
-    (80, 220, 180), (60, 180, 140), (40, 140, 100),
-]
-
-_EDGE_COLORS = [
-    (255, 120, 60), (255, 120, 60), (255, 120, 60),
-    (220, 220, 60), (200, 220, 60), (160, 220, 60),
-    (102, 85, 255), (102, 85, 255), (255, 68, 204), (255, 68, 204),
-    (255, 170, 34), (255, 170, 34), (0, 153, 255), (0, 153, 255),
-    (80, 200, 160), (60, 170, 130), (40, 140, 100),
-]
 
 
 def draw_styled_skeleton(frame, kpts, kpt_conf, ov, conf_thresh=KP_CONF_THRES):

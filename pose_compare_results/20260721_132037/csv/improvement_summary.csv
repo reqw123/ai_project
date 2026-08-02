@@ -1,0 +1,9 @@
+﻿Metric,Old,New,Change,Improvement
+[PRIMARY] P95 Jitter (px),20.96,20.48,-0.481,+2.30%
+Mean Confidence,0.983,0.980,-0.003,-0.34%
+Mean Jitter (px),5.45,5.43,-0.018,+0.33%
+Missing Ratio,0.4%,0.5%,+0.1%,-0.09%
+Nose Missing,5.0%,0.9%,-4.1%,+82.31%
+Paw Missing,0.2%,1.0%,+0.8%,-0.81%
+Tail Missing,4.0%,4.0%,+0.1%,-1.35%
+Tail Tip Missing,9.3%,9.8%,+0.6%,-6.03%

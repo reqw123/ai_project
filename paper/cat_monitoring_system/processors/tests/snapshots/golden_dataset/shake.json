@@ -1,0 +1,1433 @@
+{
+  "behavior": "shake",
+  "video": "C:\\Users\\homec\\OneDrive\\圖片\\貓咪圖像資料集\\主要測試\\shake\\7月7日 (5)(1).mp4",
+  "frame_count": 90,
+  "prediction": [
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": false,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": false,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 3.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 3.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.0,
+      "class_probs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9945249557495117,
+      "class_probs": [
+        0.0010695019736886024,
+        0.0008333485457114875,
+        0.001287355669774115,
+        0.002284793183207512,
+        0.9945249557495117
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9945249557495117,
+      "class_probs": [
+        0.0010695019736886024,
+        0.0008333485457114875,
+        0.001287355669774115,
+        0.002284793183207512,
+        0.9945249557495117
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9947211742401123,
+      "class_probs": [
+        0.0009476241539232433,
+        0.000842525449115783,
+        0.0012044428149238229,
+        0.002284348476678133,
+        0.9947211742401123
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9947211742401123,
+      "class_probs": [
+        0.0009476241539232433,
+        0.000842525449115783,
+        0.0012044428149238229,
+        0.002284348476678133,
+        0.9947211742401123
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9948474168777466,
+      "class_probs": [
+        0.0008303600479848683,
+        0.0008490573382005095,
+        0.0011365662794560194,
+        0.0023364939261227846,
+        0.9948474168777466
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9948474168777466,
+      "class_probs": [
+        0.0008303600479848683,
+        0.0008490573382005095,
+        0.0011365662794560194,
+        0.0023364939261227846,
+        0.9948474168777466
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9948404431343079,
+      "class_probs": [
+        0.000813927676063031,
+        0.0008516156813129783,
+        0.001146196504123509,
+        0.002347799716517329,
+        0.9948404431343079
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9948404431343079,
+      "class_probs": [
+        0.000813927676063031,
+        0.0008516156813129783,
+        0.001146196504123509,
+        0.002347799716517329,
+        0.9948404431343079
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9948128461837769,
+      "class_probs": [
+        0.0008204200421459973,
+        0.0008482416742481291,
+        0.0011712616542354226,
+        0.0023472756147384644,
+        0.9948128461837769
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9948128461837769,
+      "class_probs": [
+        0.0008204200421459973,
+        0.0008482416742481291,
+        0.0011712616542354226,
+        0.0023472756147384644,
+        0.9948128461837769
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949173927307129,
+      "class_probs": [
+        0.0007559694349765778,
+        0.000840545806568116,
+        0.0011277218582108617,
+        0.0023584291338920593,
+        0.9949173927307129
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949173927307129,
+      "class_probs": [
+        0.0007559694349765778,
+        0.000840545806568116,
+        0.0011277218582108617,
+        0.0023584291338920593,
+        0.9949173927307129
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.994939923286438,
+      "class_probs": [
+        0.0007645930745638907,
+        0.0008363089291378856,
+        0.0011339382035657763,
+        0.002325304551050067,
+        0.994939923286438
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.994939923286438,
+      "class_probs": [
+        0.0007645930745638907,
+        0.0008363089291378856,
+        0.0011339382035657763,
+        0.002325304551050067,
+        0.994939923286438
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949381351470947,
+      "class_probs": [
+        0.0007936253678053617,
+        0.000832850462757051,
+        0.0011677007423713803,
+        0.0022677090018987656,
+        0.9949381351470947
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949381351470947,
+      "class_probs": [
+        0.0007936253678053617,
+        0.000832850462757051,
+        0.0011677007423713803,
+        0.0022677090018987656,
+        0.9949381351470947
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949642419815063,
+      "class_probs": [
+        0.000814307713881135,
+        0.0008274707943201065,
+        0.0011902047554031014,
+        0.002203769516199827,
+        0.9949642419815063
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949642419815063,
+      "class_probs": [
+        0.000814307713881135,
+        0.0008274707943201065,
+        0.0011902047554031014,
+        0.002203769516199827,
+        0.9949642419815063
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949615001678467,
+      "class_probs": [
+        0.0008556608809158206,
+        0.0008234463166445494,
+        0.0012067110510542989,
+        0.00215262733399868,
+        0.9949615001678467
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949615001678467,
+      "class_probs": [
+        0.0008556608809158206,
+        0.0008234463166445494,
+        0.0012067110510542989,
+        0.00215262733399868,
+        0.9949615001678467
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949674010276794,
+      "class_probs": [
+        0.0008890075841918588,
+        0.000814296305179596,
+        0.0012078280560672283,
+        0.002121557714417577,
+        0.9949674010276794
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9949674010276794,
+      "class_probs": [
+        0.0008890075841918588,
+        0.000814296305179596,
+        0.0012078280560672283,
+        0.002121557714417577,
+        0.9949674010276794
+      ],
+      "is_still": true,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9948118925094604,
+      "class_probs": [
+        0.0009599400800652802,
+        0.0008233291446231306,
+        0.0012351344339549541,
+        0.0021697161719202995,
+        0.9948118925094604
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9948118925094604,
+      "class_probs": [
+        0.0009599400800652802,
+        0.0008233291446231306,
+        0.0012351344339549541,
+        0.0021697161719202995,
+        0.9948118925094604
+      ],
+      "is_still": true,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9945047497749329,
+      "class_probs": [
+        0.0010283292504027486,
+        0.0008610603981651366,
+        0.0012686550617218018,
+        0.002337127458304167,
+        0.9945047497749329
+      ],
+      "is_still": true,
+      "activity_value": 6.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9945047497749329,
+      "class_probs": [
+        0.0010283292504027486,
+        0.0008610603981651366,
+        0.0012686550617218018,
+        0.002337127458304167,
+        0.9945047497749329
+      ],
+      "is_still": true,
+      "activity_value": 11.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9871429800987244,
+      "class_probs": [
+        0.0026781309861689806,
+        0.00145969376899302,
+        0.0020651845261454582,
+        0.006653956603258848,
+        0.9871429800987244
+      ],
+      "is_still": true,
+      "activity_value": 18.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9871429800987244,
+      "class_probs": [
+        0.0026781309861689806,
+        0.00145969376899302,
+        0.0020651845261454582,
+        0.006653956603258848,
+        0.9871429800987244
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9631720185279846,
+      "class_probs": [
+        0.00949731282889843,
+        0.002651273040100932,
+        0.003627349389716983,
+        0.021052075549960136,
+        0.9631720185279846
+      ],
+      "is_still": true,
+      "activity_value": 8.0
+    },
+    {
+      "behavior_id": 4,
+      "confidence": 0.9631720185279846,
+      "class_probs": [
+        0.00949731282889843,
+        0.002651273040100932,
+        0.003627349389716983,
+        0.021052075549960136,
+        0.9631720185279846
+      ],
+      "is_still": true,
+      "activity_value": 31.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.6727773547172546,
+      "class_probs": [
+        0.01096457801759243,
+        0.004578966181725264,
+        0.007626700680702925,
+        0.3040523827075958,
+        0.6727773547172546
+      ],
+      "is_still": true,
+      "activity_value": 24.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.6727773547172546,
+      "class_probs": [
+        0.01096457801759243,
+        0.004578966181725264,
+        0.007626700680702925,
+        0.3040523827075958,
+        0.6727773547172546
+      ],
+      "is_still": true,
+      "activity_value": 19.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.6727773547172546,
+      "class_probs": [
+        0.01096457801759243,
+        0.004578966181725264,
+        0.007626700680702925,
+        0.3040523827075958,
+        0.6727773547172546
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.6727773547172546,
+      "class_probs": [
+        0.01096457801759243,
+        0.004578966181725264,
+        0.007626700680702925,
+        0.3040523827075958,
+        0.6727773547172546
+      ],
+      "is_still": true,
+      "activity_value": 24.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.6727773547172546,
+      "class_probs": [
+        0.01096457801759243,
+        0.004578966181725264,
+        0.007626700680702925,
+        0.3040523827075958,
+        0.6727773547172546
+      ],
+      "is_still": true,
+      "activity_value": 35.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.6727773547172546,
+      "class_probs": [
+        0.01096457801759243,
+        0.004578966181725264,
+        0.007626700680702925,
+        0.3040523827075958,
+        0.6727773547172546
+      ],
+      "is_still": true,
+      "activity_value": 16.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9991763234138489,
+      "class_probs": [
+        6.36325785308145e-05,
+        5.554002564167604e-05,
+        0.00018377313972450793,
+        0.9991763234138489,
+        0.0005207158392295241
+      ],
+      "is_still": true,
+      "activity_value": 29.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9991763234138489,
+      "class_probs": [
+        6.36325785308145e-05,
+        5.554002564167604e-05,
+        0.00018377313972450793,
+        0.9991763234138489,
+        0.0005207158392295241
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.999876856803894,
+      "class_probs": [
+        1.0788683539431076e-05,
+        1.0010193363996223e-05,
+        4.6639193897135556e-05,
+        0.999876856803894,
+        5.563825834542513e-05
+      ],
+      "is_still": true,
+      "activity_value": 18.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.999876856803894,
+      "class_probs": [
+        1.0788683539431076e-05,
+        1.0010193363996223e-05,
+        4.6639193897135556e-05,
+        0.999876856803894,
+        5.563825834542513e-05
+      ],
+      "is_still": true,
+      "activity_value": 31.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.999927282333374,
+      "class_probs": [
+        4.647386504075257e-06,
+        5.591189164988464e-06,
+        3.235627809772268e-05,
+        0.999927282333374,
+        3.0134988264762796e-05
+      ],
+      "is_still": true,
+      "activity_value": 16.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.999927282333374,
+      "class_probs": [
+        4.647386504075257e-06,
+        5.591189164988464e-06,
+        3.235627809772268e-05,
+        0.999927282333374,
+        3.0134988264762796e-05
+      ],
+      "is_still": true,
+      "activity_value": 25.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999382495880127,
+      "class_probs": [
+        4.5285109990800265e-06,
+        4.285799150238745e-06,
+        3.008885687449947e-05,
+        0.9999382495880127,
+        2.281857632624451e-05
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999382495880127,
+      "class_probs": [
+        4.5285109990800265e-06,
+        4.285799150238745e-06,
+        3.008885687449947e-05,
+        0.9999382495880127,
+        2.281857632624451e-05
+      ],
+      "is_still": true,
+      "activity_value": 26.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999134540557861,
+      "class_probs": [
+        5.341908035916276e-06,
+        6.027368272043532e-06,
+        4.146816354477778e-05,
+        0.9999134540557861,
+        3.360033588251099e-05
+      ],
+      "is_still": true,
+      "activity_value": 16.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999134540557861,
+      "class_probs": [
+        5.341908035916276e-06,
+        6.027368272043532e-06,
+        4.146816354477778e-05,
+        0.9999134540557861,
+        3.360033588251099e-05
+      ],
+      "is_still": true,
+      "activity_value": 21.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9998916387557983,
+      "class_probs": [
+        7.459115295205265e-06,
+        8.067127055255696e-06,
+        4.8822366807144135e-05,
+        0.9998916387557983,
+        4.396555232233368e-05
+      ],
+      "is_still": true,
+      "activity_value": 16.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9998916387557983,
+      "class_probs": [
+        7.459115295205265e-06,
+        8.067127055255696e-06,
+        4.8822366807144135e-05,
+        0.9998916387557983,
+        4.396555232233368e-05
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999396800994873,
+      "class_probs": [
+        3.857145202346146e-06,
+        4.032428023492685e-06,
+        3.1641669920645654e-05,
+        0.9999396800994873,
+        2.078948455164209e-05
+      ],
+      "is_still": true,
+      "activity_value": 21.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999396800994873,
+      "class_probs": [
+        3.857145202346146e-06,
+        4.032428023492685e-06,
+        3.1641669920645654e-05,
+        0.9999396800994873,
+        2.078948455164209e-05
+      ],
+      "is_still": true,
+      "activity_value": 13.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999390840530396,
+      "class_probs": [
+        2.7435391984909074e-06,
+        5.221169431024464e-06,
+        2.9012400773353875e-05,
+        0.9999390840530396,
+        2.395993215031922e-05
+      ],
+      "is_still": false,
+      "activity_value": 26.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999390840530396,
+      "class_probs": [
+        2.7435391984909074e-06,
+        5.221169431024464e-06,
+        2.9012400773353875e-05,
+        0.9999390840530396,
+        2.395993215031922e-05
+      ],
+      "is_still": false,
+      "activity_value": 9.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999473094940186,
+      "class_probs": [
+        2.7324565508024534e-06,
+        4.367452220321866e-06,
+        2.5381845262018032e-05,
+        0.9999473094940186,
+        2.0197436242597178e-05
+      ],
+      "is_still": false,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999473094940186,
+      "class_probs": [
+        2.7324565508024534e-06,
+        4.367452220321866e-06,
+        2.5381845262018032e-05,
+        0.9999473094940186,
+        2.0197436242597178e-05
+      ],
+      "is_still": false,
+      "activity_value": 29.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999607801437378,
+      "class_probs": [
+        2.2973588329477934e-06,
+        3.5351984024600824e-06,
+        1.9982548110419884e-05,
+        0.9999607801437378,
+        1.3393634617386851e-05
+      ],
+      "is_still": false,
+      "activity_value": 8.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999607801437378,
+      "class_probs": [
+        2.2973588329477934e-06,
+        3.5351984024600824e-06,
+        1.9982548110419884e-05,
+        0.9999607801437378,
+        1.3393634617386851e-05
+      ],
+      "is_still": false,
+      "activity_value": 7.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999523162841797,
+      "class_probs": [
+        3.024932084372267e-06,
+        4.514663942245534e-06,
+        2.1782481780974194e-05,
+        0.9999523162841797,
+        1.8365004507359117e-05
+      ],
+      "is_still": false,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9999523162841797,
+      "class_probs": [
+        3.024932084372267e-06,
+        4.514663942245534e-06,
+        2.1782481780974194e-05,
+        0.9999523162841797,
+        1.8365004507359117e-05
+      ],
+      "is_still": false,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.999893307685852,
+      "class_probs": [
+        6.988222139625577e-06,
+        1.1441632523201406e-05,
+        3.698088039527647e-05,
+        0.999893307685852,
+        5.125251482240856e-05
+      ],
+      "is_still": false,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.999893307685852,
+      "class_probs": [
+        6.988222139625577e-06,
+        1.1441632523201406e-05,
+        3.698088039527647e-05,
+        0.999893307685852,
+        5.125251482240856e-05
+      ],
+      "is_still": false,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9994487166404724,
+      "class_probs": [
+        4.3549520341912284e-05,
+        4.694504241342656e-05,
+        0.0001165308931376785,
+        0.9994487166404724,
+        0.000344204279826954
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9994487166404724,
+      "class_probs": [
+        4.3549520341912284e-05,
+        4.694504241342656e-05,
+        0.0001165308931376785,
+        0.9994487166404724,
+        0.000344204279826954
+      ],
+      "is_still": true,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9961079955101013,
+      "class_probs": [
+        0.00021976878633722663,
+        0.00024168295203708112,
+        0.0003792685747612268,
+        0.9961079955101013,
+        0.0030513633973896503
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9961079955101013,
+      "class_probs": [
+        0.00021976878633722663,
+        0.00024168295203708112,
+        0.0003792685747612268,
+        0.9961079955101013,
+        0.0030513633973896503
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9298272132873535,
+      "class_probs": [
+        0.003079949878156185,
+        0.002504223957657814,
+        0.002296661026775837,
+        0.9298272132873535,
+        0.062292058020830154
+      ],
+      "is_still": true,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": 3,
+      "confidence": 0.9298272132873535,
+      "class_probs": [
+        0.003079949878156185,
+        0.002504223957657814,
+        0.002296661026775837,
+        0.9298272132873535,
+        0.062292058020830154
+      ],
+      "is_still": true,
+      "activity_value": 2.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.5677385330200195,
+      "class_probs": [
+        0.011538630351424217,
+        0.007223566062748432,
+        0.0054362681694328785,
+        0.5677385330200195,
+        0.40806299448013306
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.5677385330200195,
+      "class_probs": [
+        0.011538630351424217,
+        0.007223566062748432,
+        0.0054362681694328785,
+        0.5677385330200195,
+        0.40806299448013306
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.5677385330200195,
+      "class_probs": [
+        0.011538630351424217,
+        0.007223566062748432,
+        0.0054362681694328785,
+        0.5677385330200195,
+        0.40806299448013306
+      ],
+      "is_still": true,
+      "activity_value": 0.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.5677385330200195,
+      "class_probs": [
+        0.011538630351424217,
+        0.007223566062748432,
+        0.0054362681694328785,
+        0.5677385330200195,
+        0.40806299448013306
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    },
+    {
+      "behavior_id": -1,
+      "confidence": 0.5677385330200195,
+      "class_probs": [
+        0.011538630351424217,
+        0.007223566062748432,
+        0.0054362681694328785,
+        0.5677385330200195,
+        0.40806299448013306
+      ],
+      "is_still": true,
+      "activity_value": 1.0
+    }
+  ],
+  "statistics": {
+    "today_stats": {
+      "walk": 0,
+      "walk_time": 0.0,
+      "scratch": 0,
+      "scratch_time": 0.0,
+      "lick": 0,
+      "lick_time": 0.0,
+      "shake": 1,
+      "shake_time": 1.1,
+      "stop": 1,
+      "stop_time": 1.1,
+      "active_time": 2.3,
+      "low_conf": 3,
+      "low_conf_time": 0.6,
+      "not_detected_time": 0.0,
+      "monitoring_seconds": 0.0,
+      "cat_visible_time": 2.9,
+      "total_uptime": 0.0,
+      "transition_matrix": {
+        "stop->shake": 1,
+        "shake->stop": 1
+      },
+      "hourly_distribution": {
+        "08": {
+          "walk": 0.0,
+          "lick": 0.0,
+          "scratch": 0.0,
+          "shake": 1.13332200050354,
+          "stop": 1.233320951461792,
+          "monitoring_sec": 2.999969959259033
+        }
+      },
+      "behavior_min_duration": {
+        "walk": null,
+        "lick": null,
+        "scratch": null,
+        "shake": 1.1,
+        "stop": 1.1
+      },
+      "behavior_max_duration": {
+        "walk": null,
+        "lick": null,
+        "scratch": null,
+        "shake": 1.1,
+        "stop": 1.1
+      },
+      "today_start_time": 1767225600.0,
+      "last_update_time": 1767225602.99997
+    },
+    "activity_score": 10,
+    "alerts": [
+      "活動度過低"
+    ]
+  },
+  "nodered_payload": {
+    "current": {
+      "behavior_id": -1,
+      "text": "LOW_CONF",
+      "behavior": "LOW_CONF",
+      "emoji": "❓",
+      "timestamp": "08:00:02"
+    },
+    "activity_score": 10,
+    "today_stats": {
+      "walk": 0,
+      "walk_time": 0.0,
+      "scratch": 0,
+      "scratch_time": 0.0,
+      "lick": 0,
+      "lick_time": 0.0,
+      "shake": 1,
+      "shake_time": 1.1,
+      "stop": 1,
+      "stop_time": 1.1,
+      "active_time": 2.3,
+      "low_conf": 3,
+      "low_conf_time": 0.6,
+      "not_detected_time": 0.0,
+      "monitoring_seconds": 0.0,
+      "cat_visible_time": 2.9,
+      "total_uptime": 0.0,
+      "transition_matrix": {
+        "stop->shake": 1,
+        "shake->stop": 1
+      },
+      "hourly_distribution": {
+        "08": {
+          "walk": 0.0,
+          "lick": 0.0,
+          "scratch": 0.0,
+          "shake": 1.13332200050354,
+          "stop": 1.233320951461792,
+          "monitoring_sec": 2.999969959259033
+        }
+      },
+      "behavior_min_duration": {
+        "walk": null,
+        "lick": null,
+        "scratch": null,
+        "shake": 1.1,
+        "stop": 1.1
+      },
+      "behavior_max_duration": {
+        "walk": null,
+        "lick": null,
+        "scratch": null,
+        "shake": 1.1,
+        "stop": 1.1
+      },
+      "today_start_time": 1767225600.0,
+      "last_update_time": 1767225602.99997
+    },
+    "behavior_log": [
+      {
+        "behavior": "stop",
+        "gcn_id": 4,
+        "time": "08:00:01",
+        "duration": 1.1
+      },
+      {
+        "behavior": "shake",
+        "gcn_id": 3,
+        "time": "08:00:02",
+        "duration": 1.1
+      }
+    ],
+    "alerts": [
+      {
+        "level": "medium",
+        "icon": "😴",
+        "title": "活動度過低",
+        "message": "今日走動時間僅 0.0 秒（低於門檻 20 秒）",
+        "suggestion": "貓咪活動不足，可能有身體不適",
+        "action": "嘗試互動或遊玩"
+      }
+    ],
+    "system": {
+      "ip": "192.168.0.171",
+      "model": "YOLO-Pose + ST-GCN",
+      "version": "v4.0-stgcn",
+      "gcn_confidence": 0.568
+    }
+  },
+  "csv_rows": [
+    {
+      "Frame": "70",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "0.9999",
+      "Is_Still": "NO",
+      "Motion_Score": "5.235103",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "71",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "0.9999",
+      "Is_Still": "NO",
+      "Motion_Score": "1.878173",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "72",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "0.9999",
+      "Is_Still": "NO",
+      "Motion_Score": "0.086704",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "73",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "0.9999",
+      "Is_Still": "NO",
+      "Motion_Score": "5.941737",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "74",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "1.0000",
+      "Is_Still": "NO",
+      "Motion_Score": "1.793485",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "75",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "1.0000",
+      "Is_Still": "NO",
+      "Motion_Score": "1.539104",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "76",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "1.0000",
+      "Is_Still": "NO",
+      "Motion_Score": "0.569677",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "77",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "1.0000",
+      "Is_Still": "NO",
+      "Motion_Score": "0.044781",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "78",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "0.9999",
+      "Is_Still": "NO",
+      "Motion_Score": "0.502498",
+      "Cat_ID": "cat_001"
+    },
+    {
+      "Frame": "79",
+      "Timestamp": "2026-01-01 08:00:02",
+      "Behavior": "shake",
+      "GCN_Confidence": "0.9999",
+      "Is_Still": "NO",
+      "Motion_Score": "0.420209",
+      "Cat_ID": "cat_001"
+    }
+  ],
+  "behavior_segment_rows": [
+    {
+      "date": "2026-01-01",
+      "time": "08:00:01",
+      "behavior_id": "4",
+      "behavior_name": "靜止",
+      "duration_sec": "1.1",
+      "activity": "24",
+      "cat_id": "cat_001"
+    },
+    {
+      "date": "2026-01-01",
+      "time": "08:00:02",
+      "behavior_id": "3",
+      "behavior_name": "甩頭",
+      "duration_sec": "1.1",
+      "activity": "1",
+      "cat_id": "cat_001"
+    }
+  ]
+}

@@ -9,6 +9,13 @@ import threading
 import queue
 import keyboard  # pip install keyboard
 
+from constants import (
+    COLOR_HEAD, COLOR_BODY, COLOR_TAIL, COLOR_KPT,
+    COLOR_LEFT_FRONT, COLOR_RIGHT_FRONT, COLOR_LEFT_HIND, COLOR_RIGHT_HIND,
+    HEAD_LINKS, BODY_LINKS, TAIL_LINKS,
+    LEFT_FRONT_LINKS, RIGHT_FRONT_LINKS, LEFT_HIND_LINKS, RIGHT_HIND_LINKS,
+)
+
 # ==================== 基本設定 ====================
 SPEED = 60          # 飛行速度 (0~100)
 IMGSZ = 640
@@ -49,20 +56,9 @@ GREEN = (0, 255, 0)
 RED   = (0, 0, 255)
 BLUE  = (255, 0, 0)
 
-COLOR_HEAD = (255, 255, 0)
-COLOR_BODY = (0, 255, 0)
-COLOR_TAIL = (255, 0, 255)
-COLOR_KPT  = (0, 0, 255)
-
-COLOR_LEFT_FRONT  = (255, 0, 255)
-COLOR_RIGHT_FRONT = (0, 255, 255)
-COLOR_LEFT_HIND   = (255, 165, 0)
-COLOR_RIGHT_HIND  = (0, 255, 0)
-
-# ==================== 骨架連結 ====================
-HEAD_LINKS  = [(0,1),(0,2),(1,2)]
-BODY_LINKS  = [(0,3),(3,4),(4,5)]
-TAIL_LINKS  = [(5,14),(14,15),(15,16)]
+# 骨架顏色/連結定義統一從 constants.py import（見檔案開頭），跟其他共用同一套
+# 分組配色的腳本（0_video_pose_viewer.py／pose_single_image_test.py／
+# eda_realtime_anomaly_viewer.py／自動標註工具/auto_labeling_capture.py）保持一致
 
 # ==================== 文字繪製（白字+黑邊） ====================
 def draw_text(frame, text, x, y, scale=0.7, thickness=2):
@@ -109,10 +105,10 @@ def draw_links(frame, kpts, conf, links, color):
 def draw_skeleton(frame, kpts, conf):
     draw_links(frame, kpts, conf, HEAD_LINKS, COLOR_HEAD)
     draw_links(frame, kpts, conf, BODY_LINKS, COLOR_BODY)
-    draw_links(frame, kpts, conf, [(3,6), (6,7)], COLOR_LEFT_FRONT)
-    draw_links(frame, kpts, conf, [(3,8), (8,9)], COLOR_RIGHT_FRONT)
-    draw_links(frame, kpts, conf, [(5,10), (10,11)], COLOR_LEFT_HIND)
-    draw_links(frame, kpts, conf, [(5,12), (12,13)], COLOR_RIGHT_HIND)
+    draw_links(frame, kpts, conf, LEFT_FRONT_LINKS, COLOR_LEFT_FRONT)
+    draw_links(frame, kpts, conf, RIGHT_FRONT_LINKS, COLOR_RIGHT_FRONT)
+    draw_links(frame, kpts, conf, LEFT_HIND_LINKS, COLOR_LEFT_HIND)
+    draw_links(frame, kpts, conf, RIGHT_HIND_LINKS, COLOR_RIGHT_HIND)
     draw_links(frame, kpts, conf, TAIL_LINKS, COLOR_TAIL)
 
     for i, (x, y) in enumerate(kpts):

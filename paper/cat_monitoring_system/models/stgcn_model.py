@@ -2,24 +2,40 @@
 ST-GCN 模型類別
 優化自原 cat_behavior_stgcn.py
 """
-import logging
-import torch
+
 import inspect
+import logging
+from pathlib import Path
+
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-from pathlib import Path
 
 # 骨架鄰接矩陣定義
 # ...existing code from get_adjacency_matrix and normalize_adjacency_matrix...
 
+
 def get_adjacency_matrix():
+    """建立 17 個關節點（含自身迴圈）的骨架鄰接矩陣。"""
     edges = [
-        (0, 1), (0, 2), (1, 2),
-        (0, 3), (3, 4), (4, 5),
-        (3, 6), (6, 7), (3, 8), (8, 9),
-        (5, 10), (10, 11), (5, 12), (12, 13),
-        (5, 14), (14, 15), (15, 16)
+        (0, 1),
+        (0, 2),
+        (1, 2),
+        (0, 3),
+        (3, 4),
+        (4, 5),
+        (3, 6),
+        (6, 7),
+        (3, 8),
+        (8, 9),
+        (5, 10),
+        (10, 11),
+        (5, 12),
+        (12, 13),
+        (5, 14),
+        (14, 15),
+        (15, 16),
     ]
     adj_matrix = np.zeros((17, 17), dtype=np.float32)
     for i, j in edges:
@@ -29,7 +45,9 @@ def get_adjacency_matrix():
         adj_matrix[i, i] = 1
     return adj_matrix
 
+
 def get_stgcn_partition_adjacency(num_joints=17):
+    """回傳 [自身, 向心, 離心] 三個分區鄰接矩陣，供 SpatialGraphConv 分區卷積使用。"""
     # Directional partition (PYSKL-style): center = mid_back (node 4).
     # BFS hop distances from center determine whether each neighbor is
     # centripetal (toward trunk) or centrifugal (toward extremities).
@@ -67,7 +85,9 @@ def get_stgcn_partition_adjacency(num_joints=17):
 
     return [A_self, A_centripetal, A_centrifugal]
 
+
 def normalize_adjacency_matrix(adj_matrix):
+    """對鄰接矩陣做對稱正規化（D^-0.5 A D^-0.5）。"""
     degree = np.sum(adj_matrix, axis=1)
     degree_inv_sqrt = np.power(degree, -0.5)
     degree_inv_sqrt[np.isinf(degree_inv_sqrt)] = 0
@@ -85,10 +105,14 @@ def _normalize_temporal_kernel_sizes(temporal_kernel_size):
         raise ValueError("temporal_kernel_size must contain at least one kernel size")
     return kernel_sizes
 
+
 # ==================== 骨架前處理函數（訓練與推論共用） ====================
 def interpolate_missing(sequence, conf, threshold=0.1):
-    # threshold=0.1 保留弱訊號供時間插值；動作分數過濾使用更嚴格的 AnomalyDetectionConfig.KP_CONF_THRES=0.5
-    """sequence: (T, V, 2), conf: (T, V) — 時間軸插尼補全低信心關節點"""
+    """sequence: (T, V, 2), conf: (T, V) — 時間軸插值補全低信心關節點。
+
+    threshold=0.1 保留弱訊號供時間插值；動作分數過濾使用更嚴格的
+    AnomalyDetectionConfig.KP_CONF_THRES=0.5。
+    """
     seq = sequence.copy()
     for v in range(seq.shape[1]):
         valid = conf[:, v] > threshold
@@ -100,6 +124,7 @@ def interpolate_missing(sequence, conf, threshold=0.1):
             seq[:, v, 1] = np.interp(idx, idx[valid], seq[valid, v, 1])
     return seq
 
+
 def orientation_normalize(sequence):
     """sequence: (T, V, 2) — 將 mid_back(4)→hip(5) 軸旋轉至 y 軸正向。
     使用 mid_back/hip 而非 nose/hip，因為 nose 常被遮蔽導致旋轉角噪音過大。
@@ -108,19 +133,22 @@ def orientation_normalize(sequence):
     """
     seq = sequence.copy()
     mid_back = seq[:, 4]
-    hip      = seq[:, 5]
-    axis  = hip - mid_back                           # mid_back→hip 方向
+    hip = seq[:, 5]
+    axis = hip - mid_back  # mid_back→hip 方向
     angles = np.arctan2(axis[:, 1], axis[:, 0])
-    target_angle = np.pi / 2                          # 目標：軸朝向 y 軸正向
+    target_angle = np.pi / 2  # 目標：軸朝向 y 軸正向
     rot_angles = target_angle - angles
-    center = mid_back                                 # 以 mid_back 為旋轉中心
+    center = mid_back  # 以 mid_back 為旋轉中心
     for t in range(seq.shape[0]):
-        R = np.array([
-            [np.cos(rot_angles[t]), -np.sin(rot_angles[t])],
-            [np.sin(rot_angles[t]),  np.cos(rot_angles[t])]
-        ])
+        R = np.array(
+            [
+                [np.cos(rot_angles[t]), -np.sin(rot_angles[t])],
+                [np.sin(rot_angles[t]), np.cos(rot_angles[t])],
+            ]
+        )
         seq[t] = (seq[t] - center[t]) @ R.T + center[t]
     return seq
+
 
 def flip_normalize(sequence):
     """sequence: (T, V, 2) — 在原始座標下確保 mid_back(4) 在 hip(5) 右側（序列級多數決），
@@ -128,7 +156,7 @@ def flip_normalize(sequence):
     使用 mid_back/hip 而非 nose/tail，因為鼻子常被遮蔽或消失，mid_back/hip 是穩定的軀幹中央關節。"""
     seq = sequence.copy()
     mid_back_x = seq[:, 4, 0]
-    hip_x      = seq[:, 5, 0]
+    hip_x = seq[:, 5, 0]
     # 只用兩個關節都有效（非零）的幀做多數決，避免遮蔽幀污染決策
     valid = (mid_back_x != 0) & (hip_x != 0)
     if valid.sum() > 0:
@@ -141,11 +169,14 @@ def flip_normalize(sequence):
             seq[t, :, 0] = 2 * mid_x - seq[t, :, 0]
     return seq
 
-def normalize_skeleton_coords(sequence, center_joint=4, chest_joint=3, lower_body_joint=5):
+
+def normalize_skeleton_coords(
+    sequence, center_joint=4, chest_joint=3, lower_body_joint=5
+):
     """sequence: (T, V, 2) — 中心化並以體型縮放
     center_joint=4 (Mid_Back), chest_joint=3 (Chest/前胸), lower_body_joint=5 (Hip)"""
     seq = sequence.copy()
-    seq[:, :, :2] -= seq[:, center_joint:center_joint+1, :2]
+    seq[:, :, :2] -= seq[:, center_joint : center_joint + 1, :2]
     body_sizes = np.linalg.norm(
         seq[:, chest_joint, :2] - seq[:, lower_body_joint, :2], axis=1
     )
@@ -153,6 +184,7 @@ def normalize_skeleton_coords(sequence, center_joint=4, chest_joint=3, lower_bod
     if avg_body_size > 1e-6:
         seq[:, :, :2] /= avg_body_size
     return seq
+
 
 def add_velocity_feature(sequence):
     """sequence: (T, V, 2) → (T, V, 4) 加入速度特徵"""
@@ -162,12 +194,15 @@ def add_velocity_feature(sequence):
 
 
 # ==================== 共享特徵構建函數（訓練與推論用） ====================
+# 骨架拓撲（COCO 17點貓骨架）：父節點索引，跟輸入無關，提升為模組常數避免每次呼叫重建
+_BONE_PARENTS_17 = np.array(
+    [0, 0, 0, 0, 3, 4, 3, 6, 3, 8, 5, 10, 5, 12, 5, 14, 15], dtype=np.int64
+)
+
+
 def compute_bone_feature(sequence):
-    """sequence: (T, V, 2) -> bone_xy: (T, V, 2)
-    骨架拓撲（COCO 17點貓骨架）：父節點索引
-    """
-    _parents_17 = np.array([0, 0, 0, 0, 3, 4, 3, 6, 3, 8, 5, 10, 5, 12, 5, 14, 15], dtype=np.int64)
-    parents = _parents_17[:sequence.shape[1]]
+    """sequence: (T, V, 2) -> bone_xy: (T, V, 2)"""
+    parents = _BONE_PARENTS_17[: sequence.shape[1]]
     bone = sequence - sequence[:, parents, :]
     bone[:, 0, :] = 0.0
     return bone
@@ -186,11 +221,11 @@ def compute_bone_motion_feature(sequence):
 # 五種特徵模式，名稱直接反映所含特徵標籤：
 #   xy=位置, conf=信心值, v=速度, bone=骨架向量, bmotion=骨架位移
 FEATURE_MODE_CHANNELS = {
-    "xy":                     2,   # x, y
-    "xy_conf":                3,   # x, y, conf
-    "xy_conf_v":              5,   # x, y, conf, vx, vy
-    "xy_conf_v_bone":         7,   # x, y, conf, vx, vy, bone_x, bone_y
-    "xy_conf_v_bone_bmotion": 9,   # x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my
+    "xy": 2,  # x, y
+    "xy_conf": 3,  # x, y, conf
+    "xy_conf_v": 5,  # x, y, conf, vx, vy
+    "xy_conf_v_bone": 7,  # x, y, conf, vx, vy, bone_x, bone_y
+    "xy_conf_v_bone_bmotion": 9,  # x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my
 }
 
 
@@ -199,7 +234,9 @@ def get_in_channels_for_mode(feature_mode):
     mode = feature_mode.strip().lower()
     if mode in FEATURE_MODE_CHANNELS:
         return FEATURE_MODE_CHANNELS[mode]
-    raise ValueError(f"Unknown feature mode: {feature_mode!r}. 支援模式: {list(FEATURE_MODE_CHANNELS)}")
+    raise ValueError(
+        f"Unknown feature mode: {feature_mode!r}. 支援模式: {list(FEATURE_MODE_CHANNELS)}"
+    )
 
 
 def build_feature_tensor(sequence_xy, conf_seq, feature_mode):
@@ -217,41 +254,49 @@ def build_feature_tensor(sequence_xy, conf_seq, feature_mode):
     """
     mode = feature_mode.strip().lower()
 
-    velocity = np.zeros_like(sequence_xy)
-    velocity[1:] = sequence_xy[1:] - sequence_xy[:-1]
-
-    conf_channel   = conf_seq.astype(sequence_xy.dtype, copy=False)[..., None]           # (T,V,1)
-    bone_xy        = compute_bone_feature(sequence_xy).astype(sequence_xy.dtype, copy=False)       # (T,V,2)
-    bone_motion_xy = compute_bone_motion_feature(sequence_xy).astype(sequence_xy.dtype, copy=False) # (T,V,2)
-
     if mode == "xy":
         # 2ch: x, y
         return sequence_xy.copy()
 
-    elif mode == "xy_conf":
+    if mode not in FEATURE_MODE_CHANNELS:
+        raise ValueError(
+            f"Unknown feature mode: {feature_mode!r}. 支援模式: {list(FEATURE_MODE_CHANNELS)}"
+        )
+
+    conf_channel = conf_seq.astype(sequence_xy.dtype, copy=False)[..., None]  # (T,V,1)
+
+    if mode == "xy_conf":
         # 3ch: x, y, conf
         return np.concatenate([sequence_xy, conf_channel], axis=-1)
 
-    elif mode == "xy_conf_v":
-        # 5ch: x, y, conf, vx, vy
-        return np.concatenate([sequence_xy, conf_channel, velocity], axis=-1)
+    velocity = np.zeros_like(sequence_xy)
+    velocity[1:] = sequence_xy[1:] - sequence_xy[:-1]
+    base = np.concatenate([sequence_xy, conf_channel, velocity], axis=-1)
 
-    elif mode == "xy_conf_v_bone":
+    if mode == "xy_conf_v":
+        # 5ch: x, y, conf, vx, vy
+        return base
+
+    bone_xy = compute_bone_feature(sequence_xy).astype(
+        sequence_xy.dtype, copy=False
+    )  # (T,V,2)
+
+    if mode == "xy_conf_v_bone":
         # 7ch: x, y, conf, vx, vy, bone_x, bone_y
-        base = np.concatenate([sequence_xy, conf_channel, velocity], axis=-1)
         return np.concatenate([base, bone_xy], axis=-1)
 
-    elif mode == "xy_conf_v_bone_bmotion":
-        # 9ch: x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my
-        base = np.concatenate([sequence_xy, conf_channel, velocity], axis=-1)
-        return np.concatenate([base, bone_xy, bone_motion_xy], axis=-1)
-
-    else:
-        raise ValueError(f"Unknown feature mode: {feature_mode!r}. 支援模式: {list(FEATURE_MODE_CHANNELS)}")
+    # mode == "xy_conf_v_bone_bmotion" — 9ch: x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my
+    # 骨向量的時間差分直接沿用已算好的 bone_xy，避免 compute_bone_motion_feature()
+    # 內部再次呼叫 compute_bone_feature() 重算一次骨向量
+    bone_motion_xy = np.zeros_like(bone_xy)
+    bone_motion_xy[1:] = bone_xy[1:] - bone_xy[:-1]
+    return np.concatenate([base, bone_xy, bone_motion_xy], axis=-1)
 
 
 # Module-level JointAttention: 1x1 conv -> sigmoid producing (N,1,T,V)
 class JointAttention(nn.Module):
+    """逐關節的可學習注意力閘門：1x1 conv + sigmoid，可疊加固定先驗權重。"""
+
     def __init__(self, in_channels, num_joints=17, prior_weights=None):
         """
         prior_weights: 長度 num_joints 的固定（非學習）先驗權重，逐關節乘進 sigmoid
@@ -268,54 +313,73 @@ class JointAttention(nn.Module):
             prior_weights = torch.ones(num_joints, dtype=torch.float32)
         else:
             prior_weights = torch.as_tensor(prior_weights, dtype=torch.float32)
-        self.register_buffer('prior_weights', prior_weights.view(1, 1, 1, -1))
+        self.register_buffer("prior_weights", prior_weights.view(1, 1, 1, -1))
+
     def forward(self, x):
+        """回傳套用先驗權重後的 attention gate，形狀 (N,1,T,V)。"""
         w = self.conv(x)
         attn = self.sigmoid(w)
         return attn * self.prior_weights
 
+
 class _ZeroResidual(nn.Module):
     """殘差分支回傳全零張量——用於 residual=False 時，可序列化且設備感知。"""
+
     def forward(self, x):
         return torch.zeros_like(x)
 
 
 # ST-GCN 網絡元件
 class SpatialGraphConv(nn.Module):
+    """單一 ST-GCN block 的空間圖卷積層：對每個分區鄰接矩陣做卷積後加權求和。"""
+
     def __init__(self, in_channels, out_channels, kernel_size, adj_matrices):
         super().__init__()
         self.K = len(adj_matrices)
-        self.register_buffer('A', torch.stack([torch.tensor(a, dtype=torch.float32) for a in adj_matrices]))
+        self.register_buffer(
+            "A",
+            torch.stack([torch.tensor(a, dtype=torch.float32) for a in adj_matrices]),
+        )
         # Learnable importance per graph partition; low-cost and often effective.
-        self.partition_importance = nn.Parameter(torch.ones(self.K, dtype=torch.float32))
+        self.partition_importance = nn.Parameter(
+            torch.ones(self.K, dtype=torch.float32)
+        )
         self.conv = nn.Conv2d(in_channels, out_channels * self.K, kernel_size=1)
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
+
     def forward(self, x):
+        """對輸入套用分區圖卷積並依可學習權重加總，輸出 (N, out_channels, T, V)。"""
         N, C, T, V = x.size()
         x = self.conv(x)
         x = x.view(N, self.K, -1, T, V)
         # 批次處理版本：更高效且與 train_gcn.py 一致
-        x = torch.einsum('nkctv,kvw->nkctw', x, self.A)  # (N, K, C_out, T, V)
+        x = torch.einsum("nkctv,kvw->nkctw", x, self.A)  # (N, K, C_out, T, V)
         x = x * self.partition_importance.view(1, self.K, 1, 1, 1)
         x = x.sum(dim=1)  # (N, C_out, T, V)
         x = self.bn(x)
         x = self.relu(x)
         return x
 
+
 class TemporalConv(nn.Module):
+    """單一 kernel size 的時間卷積層（conv + BN + ReLU）。"""
+
     def __init__(self, in_channels, out_channels, kernel_size, stride=1):
         super().__init__()
         padding = (kernel_size - 1) // 2
         self.conv = nn.Conv2d(
-            in_channels, out_channels,
+            in_channels,
+            out_channels,
             kernel_size=(kernel_size, 1),
             stride=(stride, 1),
-            padding=(padding, 0)
+            padding=(padding, 0),
         )
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
+
     def forward(self, x):
+        """套用 conv + BatchNorm + ReLU。"""
         x = self.conv(x)
         x = self.bn(x)
         x = self.relu(x)
@@ -323,16 +387,23 @@ class TemporalConv(nn.Module):
 
 
 class MultiScaleTemporalConv(nn.Module):
+    """多個不同 kernel size 的 TemporalConv 分支，以可學習權重（softmax）加權融合。"""
+
     def __init__(self, in_channels, out_channels, kernel_sizes=(3, 5, 9), stride=1):
         super().__init__()
         self.kernel_sizes = _normalize_temporal_kernel_sizes(kernel_sizes)
-        self.branches = nn.ModuleList([
-            TemporalConv(in_channels, out_channels, kernel_size, stride=stride)
-            for kernel_size in self.kernel_sizes
-        ])
-        self.branch_logits = nn.Parameter(torch.zeros(len(self.branches), dtype=torch.float32))
+        self.branches = nn.ModuleList(
+            [
+                TemporalConv(in_channels, out_channels, kernel_size, stride=stride)
+                for kernel_size in self.kernel_sizes
+            ]
+        )
+        self.branch_logits = nn.Parameter(
+            torch.zeros(len(self.branches), dtype=torch.float32)
+        )
 
     def forward(self, x):
+        """跑過每個 kernel size 分支，依 softmax 權重加權求和。"""
         branch_outputs = [branch(x) for branch in self.branches]
         branch_weights = torch.softmax(self.branch_logits, dim=0)
         x = torch.zeros_like(branch_outputs[0])
@@ -340,15 +411,32 @@ class MultiScaleTemporalConv(nn.Module):
             x = x + weight * branch_output
         return x
 
+
 class STGCNBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, adjacency_matrix,
-                 spatial_kernel_size=3, temporal_kernel_size=9, stride=1, residual=True,
-                 dropout=0.15):
+    """一個完整 ST-GCN block：空間圖卷積 + 多尺度時間卷積 + 殘差連接。"""
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        adjacency_matrix,
+        spatial_kernel_size=3,
+        temporal_kernel_size=9,
+        stride=1,
+        residual=True,
+        dropout=0.15,
+    ):
         super().__init__()
         self.residual = residual
-        self.sgc = SpatialGraphConv(in_channels, out_channels, spatial_kernel_size, adjacency_matrix)
-        self.tcn = MultiScaleTemporalConv(out_channels, out_channels, temporal_kernel_size, stride)
-        self.dropout = nn.Dropout2d(dropout) if dropout and dropout > 0 else nn.Identity()
+        self.sgc = SpatialGraphConv(
+            in_channels, out_channels, spatial_kernel_size, adjacency_matrix
+        )
+        self.tcn = MultiScaleTemporalConv(
+            out_channels, out_channels, temporal_kernel_size, stride
+        )
+        self.dropout = (
+            nn.Dropout2d(dropout) if dropout and dropout > 0 else nn.Identity()
+        )
         if not residual:
             self.residual_conv = _ZeroResidual()
         elif in_channels == out_channels and stride == 1:
@@ -356,63 +444,101 @@ class STGCNBlock(nn.Module):
         else:
             self.residual_conv = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=(stride, 1)),
-                nn.BatchNorm2d(out_channels)
+                nn.BatchNorm2d(out_channels),
             )
         self.relu = nn.ReLU(inplace=True)
+
     def forward(self, x):
-        res = self.residual_conv(x)
+        """依序套用空間圖卷積、時間卷積，再加上殘差分支與 ReLU/Dropout。"""
+        residual = self.residual_conv(x)
         x = self.sgc(x)
         x = self.tcn(x)
-        x = x + res
+        x = x + residual
         x = self.relu(x)
         x = self.dropout(x)
         return x
 
+
 class STGCN(nn.Module):
-    def __init__(self, num_classes=5, in_channels=4, num_joints=17,
-                 spatial_kernel_size=3, temporal_kernel_size=(3, 5, 9), num_layers=3,
-                 input_dropout=0.05, block_dropout=0.15, final_dropout=0.5,
-                 use_attention=True, joint_prior_weights=None):
+    """完整 ST-GCN 網路本體：輸入正規化 + 可選 JointAttention + 多層 STGCNBlock + 分類頭。"""
+
+    def __init__(
+        self,
+        num_classes=5,
+        in_channels=4,
+        num_joints=17,
+        spatial_kernel_size=3,
+        temporal_kernel_size=(3, 5, 9),
+        num_layers=3,
+        input_dropout=0.05,
+        block_dropout=0.15,
+        final_dropout=0.5,
+        use_attention=True,
+        joint_prior_weights=None,
+    ):
         super().__init__()
         adj_matrices = get_stgcn_partition_adjacency(num_joints)
         adj_matrices = [normalize_adjacency_matrix(a) for a in adj_matrices]
         self.bn_input = nn.BatchNorm2d(in_channels)
-        self.input_dropout = nn.Dropout2d(input_dropout) if input_dropout and input_dropout > 0 else nn.Identity()
+        self.input_dropout = (
+            nn.Dropout2d(input_dropout)
+            if input_dropout and input_dropout > 0
+            else nn.Identity()
+        )
         # 可學習的 per-sample per-frame joint attention 模組（模組層級定義）
         self.use_attention = bool(use_attention)
         self.joint_attention = (
             JointAttention(in_channels, num_joints, joint_prior_weights)
-            if self.use_attention else nn.Identity()
+            if self.use_attention
+            else nn.Identity()
         )
 
         # No per-class head or bias terms here — all classes treated equally.
         self.stgcn_layers = nn.ModuleList()
         self.stgcn_layers.append(
             STGCNBlock(
-                in_channels, 64, adj_matrices,
-                spatial_kernel_size, temporal_kernel_size, stride=1,
-                dropout=block_dropout
+                in_channels,
+                64,
+                adj_matrices,
+                spatial_kernel_size,
+                temporal_kernel_size,
+                stride=1,
+                dropout=block_dropout,
             )
         )
         self.stgcn_layers.append(
             STGCNBlock(
-                64, 128, adj_matrices,
-                spatial_kernel_size, temporal_kernel_size, stride=2,
-                dropout=block_dropout
+                64,
+                128,
+                adj_matrices,
+                spatial_kernel_size,
+                temporal_kernel_size,
+                stride=2,
+                dropout=block_dropout,
             )
         )
         for _ in range(num_layers - 2):
             self.stgcn_layers.append(
                 STGCNBlock(
-                    128, 128, adj_matrices,
-                    spatial_kernel_size, temporal_kernel_size, stride=1,
-                    dropout=block_dropout
+                    128,
+                    128,
+                    adj_matrices,
+                    spatial_kernel_size,
+                    temporal_kernel_size,
+                    stride=1,
+                    dropout=block_dropout,
                 )
             )
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(128, num_classes)
-        self.dropout = nn.Dropout(final_dropout) if final_dropout and final_dropout > 0 else nn.Identity()
+        self.dropout = (
+            nn.Dropout(final_dropout)
+            if final_dropout and final_dropout > 0
+            else nn.Identity()
+        )
+
     def forward(self, x):
+        """輸入 (N, C, T, V) 關鍵點特徵張量，回傳各行為類別的 logits。"""
         bn_x = self.bn_input(x)
         # 由 JointAttention 決定每個樣本、每個關節的縮放係數並套用
         if self.use_attention:
@@ -434,9 +560,24 @@ class STGCN(nn.Module):
         # No class-specific logit adjustments applied.
         return logits
 
+
 # 包裝器
 class CatBehaviorSTGCN:
-    def __init__(self, model_path, device='cuda', sequence_length=32, num_classes=5, normalize=True, feature_mode='xy', in_channels=None, use_attention=None):
+    """推論用包裝器：載入 checkpoint、依 checkpoint 內容自動偵測模型結構參數
+    （in_channels/num_joints/num_classes/use_attention/TCN 分支數），並提供
+    keypoints 正規化與行為預測介面。"""
+
+    def __init__(
+        self,
+        model_path,
+        device="cuda",
+        sequence_length=32,
+        num_classes=5,
+        normalize=True,
+        feature_mode="xy",
+        in_channels=None,
+        use_attention=None,
+    ):
         self.device = torch.device(device)
         self.sequence_length = sequence_length
         self.num_classes = num_classes
@@ -450,25 +591,37 @@ class CatBehaviorSTGCN:
         # Use safe loading when available (PyTorch experimental 'weights_only' flag).
         try:
             sig = inspect.signature(torch.load)
-            if 'weights_only' in sig.parameters:
-                checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
+            if "weights_only" in sig.parameters:
+                checkpoint = torch.load(
+                    model_path, map_location=self.device, weights_only=True
+                )
             else:
                 checkpoint = torch.load(model_path, map_location=self.device)
         except Exception as _e:
             logging.debug("weights_only load failed (%s), retrying without flag", _e)
             checkpoint = torch.load(model_path, map_location=self.device)
-        state_dict = checkpoint.get('model_state_dict', checkpoint) if isinstance(checkpoint, dict) else checkpoint
+        state_dict = (
+            checkpoint.get("model_state_dict", checkpoint)
+            if isinstance(checkpoint, dict)
+            else checkpoint
+        )
 
-        if self.in_channels is None and state_dict is not None and 'bn_input.weight' in state_dict:
-            self.in_channels = int(state_dict['bn_input.weight'].shape[0])
+        if (
+            self.in_channels is None
+            and state_dict is not None
+            and "bn_input.weight" in state_dict
+        ):
+            self.in_channels = int(state_dict["bn_input.weight"].shape[0])
         if self.in_channels is None:
             self.in_channels = get_in_channels_for_mode(self.feature_mode)
 
         # 從 checkpoint 自動偵測 num_classes，避免模型預設值與訓練 checkpoint 不符
-        if state_dict is not None and 'fc.weight' in state_dict:
-            ckpt_num_classes = int(state_dict['fc.weight'].shape[0])
+        if state_dict is not None and "fc.weight" in state_dict:
+            ckpt_num_classes = int(state_dict["fc.weight"].shape[0])
             if ckpt_num_classes != num_classes:
-                print(f"✓ 依 checkpoint 自動調整 num_classes: {num_classes} → {ckpt_num_classes}")
+                print(
+                    f"✓ 依 checkpoint 自動調整 num_classes: {num_classes} → {ckpt_num_classes}"
+                )
                 num_classes = ckpt_num_classes
         self.num_classes = num_classes
 
@@ -477,8 +630,10 @@ class CatBehaviorSTGCN:
             _ch_to_mode = {v: k for k, v in FEATURE_MODE_CHANNELS.items()}
             if self.in_channels in _ch_to_mode:
                 auto_mode = _ch_to_mode[self.in_channels]
-                print(f"⚠ feature_mode={self.feature_mode} 對應 {expected_channels} channels，"
-                      f"但 checkpoint in_channels={self.in_channels}，自動調整為 {auto_mode}")
+                print(
+                    f"⚠ feature_mode={self.feature_mode} 對應 {expected_channels} channels，"
+                    f"但 checkpoint in_channels={self.in_channels}，自動調整為 {auto_mode}"
+                )
                 self.feature_mode = auto_mode
             else:
                 raise ValueError(
@@ -488,14 +643,18 @@ class CatBehaviorSTGCN:
 
         if use_attention is None:
             if state_dict is not None:
-                has_attention_weights = any(k.startswith('joint_attention.') for k in state_dict.keys())
+                has_attention_weights = any(
+                    k.startswith("joint_attention.") for k in state_dict.keys()
+                )
                 use_attention = bool(has_attention_weights)
-                print(f"✓ 依 checkpoint 自動判定 attention: {'啟用' if use_attention else '停用'}")
+                print(
+                    f"✓ 依 checkpoint 自動判定 attention: {'啟用' if use_attention else '停用'}"
+                )
             else:
                 use_attention = True
 
         # 從 checkpoint 自動偵測 num_joints（adjacency buffer shape：K × V × V）
-        _adj_key = 'stgcn_layers.0.sgc.A'
+        _adj_key = "stgcn_layers.0.sgc.A"
         if state_dict is not None and _adj_key in state_dict:
             self.num_joints = int(state_dict[_adj_key].shape[-1])
             if self.num_joints != 17:
@@ -504,7 +663,7 @@ class CatBehaviorSTGCN:
             self.num_joints = 17
 
         # 從 checkpoint 偵測 TCN 分支數，避免新預設 (3,5,9) 與舊單分支 checkpoint 架構不符
-        _tcn_branch_key = 'stgcn_layers.0.tcn.branches.{}.conv.weight'
+        _tcn_branch_key = "stgcn_layers.0.tcn.branches.{}.conv.weight"
         if state_dict is not None:
             num_tcn_branches = sum(
                 1 for i in range(10) if _tcn_branch_key.format(i) in state_dict
@@ -514,7 +673,9 @@ class CatBehaviorSTGCN:
             _default_kernels = (3, 5, 9)
             if num_tcn_branches != len(_default_kernels):
                 _ckpt_kernels = tuple(9 for _ in range(num_tcn_branches))
-                print(f"✓ 依 checkpoint 自動調整 TCN 分支數: {num_tcn_branches}（kernel={_ckpt_kernels}）")
+                print(
+                    f"✓ 依 checkpoint 自動調整 TCN 分支數: {num_tcn_branches}（kernel={_ckpt_kernels}）"
+                )
                 temporal_kernel_size_ckpt = _ckpt_kernels
             else:
                 temporal_kernel_size_ckpt = _default_kernels
@@ -535,28 +696,37 @@ class CatBehaviorSTGCN:
         load_result = self.model.load_state_dict(state_dict, strict=False)
         print(f"✓ ST-GCN 模型已載入: {model_path}")
         print(f"  in_channels={self.in_channels}, feature_mode={self.feature_mode}")
-        non_attn_missing = [k for k in load_result.missing_keys if 'joint_attention' not in k]
+        non_attn_missing = [
+            k for k in load_result.missing_keys if "joint_attention" not in k
+        ]
         if non_attn_missing:
             print(f"  ⚠ checkpoint 缺少非 attention 層的 key: {non_attn_missing}")
         if load_result.unexpected_keys:
             print(f"  ⚠ checkpoint 含有未預期的 key: {load_result.unexpected_keys}")
         self.model.eval()
+
     def normalize_keypoints(self, keypoints_sequence):
+        """依序套用翻轉、旋轉、中心化縮放與速度特徵，回傳可直接餵入模型的特徵序列。"""
         # flip 必須在 orientation 之前：原始座標下使用 mid_back(4) 與 hip(5) 的 x 差距做多數決，翻轉決策穩定
         seq = flip_normalize(keypoints_sequence)
         seq = orientation_normalize(seq)
         seq = normalize_skeleton_coords(seq)
         seq = add_velocity_feature(seq)
         return seq
+
     def predict(self, keypoints_sequence, precomputed=False):
+        """取最後 sequence_length 幀做推論，回傳 (behavior_id, confidence, 各類別機率)。
+        序列長度不足時回傳 (None, 0.0, 全零機率列表)。"""
         if keypoints_sequence.shape[0] < self.sequence_length:
             return None, 0.0, [0.0] * self.num_classes
 
-        seq_window = keypoints_sequence[-self.sequence_length:].copy()
+        seq_window = keypoints_sequence[-self.sequence_length :].copy()
 
         if precomputed:
             if seq_window.ndim != 3:
-                raise ValueError(f"precomputed=True 時輸入需為 (T,V,C)，目前 shape={seq_window.shape}")
+                raise ValueError(
+                    f"precomputed=True 時輸入需為 (T,V,C)，目前 shape={seq_window.shape}"
+                )
             if seq_window.shape[-1] != self.in_channels:
                 raise ValueError(
                     f"預計 in_channels={self.in_channels}，但收到 C={seq_window.shape[-1]}，請檢查訓練/推論特徵通道是否一致"
@@ -583,6 +753,7 @@ class CatBehaviorSTGCN:
         behavior_id = int(np.argmax(probs))
         confidence = float(probs[behavior_id])
         return behavior_id, confidence, probs.tolist()
-    def __call__(self, keypoints_sequence):
-        return self.predict(keypoints_sequence)
 
+    def __call__(self, keypoints_sequence):
+        """等同呼叫 predict()。"""
+        return self.predict(keypoints_sequence)

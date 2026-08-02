@@ -92,14 +92,6 @@ class ModelEMA:
     def state_dict(self):
         return self.ema.state_dict()
 
-    def load_state_dict(self, state_dict):
-        self.ema.load_state_dict(state_dict)
-
-    def to(self, device):
-        self.ema.to(device)
-        self.device = device
-        return self
-
 # ==================== Configuration ====================
 # Load external config file (JSON or YAML). The config file is required;
 # the script will raise RuntimeError if it is missing or unreadable.
@@ -466,10 +458,8 @@ class CatSkeletonDataset(Dataset):
                 kpts_list = frame.get('keypoints', [])
                 if len(kpts_list) == _JSON_NUM_JOINTS:
                     coords = np.array([[kpt['x'], kpt['y']] for kpt in kpts_list])
-                    conf   = np.array([kpt.get('conf', 1.0) for kpt in kpts_list])
                 else:
                     coords = np.zeros((_JSON_NUM_JOINTS, 2), dtype=np.float32)
-                    conf   = np.zeros((_JSON_NUM_JOINTS,),   dtype=np.float32)
                 keypoint_frames.append(coords)
                 frame_labels_list.append(frame.get('label', 'unannotated'))
                 frame_detected.append(frame.get('bbox') is not None)
@@ -1807,90 +1797,6 @@ def diagnose_keypoint_motion(full_dataset, val_indices, val_labels, val_preds,
         with open(out_path, mode, encoding='utf-8') as f:
             f.write('\n'.join(lines))
         print(f"✓ 逐關節動作幅度診斷已附加存檔: {out_path}")
-
-
-def diagnose_keypoint_motion_groundtruth(full_dataset, indices, class_a: str, class_b: str,
-                                         output_dir: str = None):
-    """
-    diagnose_keypoint_motion() 的「純資料版」：完全不需要模型/預測結果，只依
-    ground truth 標籤篩選 window，比較兩個類別「全部」樣本（不是只挑模型判對
-    的樣本）的逐關節動作幅度。
-
-    動機：diagnose_keypoint_motion() 的 Table 1 只統計「模型判對」的樣本，而
-    模型是拿全部行為類別一起訓練出來的——如果訓練時的類別交互作用讓「判對的
-    scratch」剛好偏向某種特定樣態（不是 scratch 的真實全貌），那 Table 1 看到
-    的關節排名就可能是訓練造成的假象，不是資料本身的特性。這個函式跳過模型，
-    直接用標註標籤挑出「全部」屬於該類別的 window 來算，結果如果跟
-    diagnose_keypoint_motion() 的 Table 1 一致，就能證明先前的結論不是模型
-    5 類別聯合訓練造成的選樣偏差；如果不一致，代表選樣偏差確實存在，要以這份
-    「純資料版」結果為準。
-
-    indices: 要涵蓋的 sequence index 清單（例如 val_indices，或
-    range(len(full_dataset.sequences)) 涵蓋全部資料以取得最大樣本數——這裡沒有
-    train/val 洩漏疑慮，因為完全不涉及任何模型評估，用全部資料統計最穩定）。
-    """
-    label_names = [name for name, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
-    if class_a not in label_names or class_b not in label_names:
-        print(f"  ⚠ diagnose_keypoint_motion_groundtruth: {class_a}/{class_b} 不在 BEHAVIOR_PREFIXES 內，略過")
-        return
-    a_idx, b_idx = label_names.index(class_a), label_names.index(class_b)
-
-    def _joint_motion_for(idx):
-        item = full_dataset.sequences[idx]
-        seq  = item['sequence']
-        conf_seq = item['conf_sequence']
-        if full_dataset.num_joints < seq.shape[1]:
-            seq = seq[:, :full_dataset.num_joints, :]
-            conf_seq = conf_seq[:, :full_dataset.num_joints]
-        seq = flip_normalize(seq)
-        seq = orientation_normalize(seq)
-        seq = normalize_skeleton_coords(seq)
-        return _compute_per_joint_motion(seq, conf_seq)
-
-    n_joints = full_dataset.num_joints
-    joint_names = KEYPOINT_NAMES[:n_joints]
-
-    a_joints, b_joints = [], []
-    for idx in indices:
-        lbl = full_dataset.sequences[idx]['label']
-        if lbl == a_idx:
-            a_joints.append(_joint_motion_for(idx))
-        elif lbl == b_idx:
-            b_joints.append(_joint_motion_for(idx))
-
-    with np.errstate(invalid='ignore'):
-        mean_a = np.nanmean(np.stack(a_joints), axis=0) if a_joints else np.full(n_joints, np.nan)
-        mean_b = np.nanmean(np.stack(b_joints), axis=0) if b_joints else np.full(n_joints, np.nan)
-
-    lines = []
-    def _p(s=""):
-        lines.append(s)
-
-    SEP = '─' * 70
-    _p(f"\n{'='*70}")
-    _p(f"  逐關節動作幅度診斷（純資料版，不經模型）：{class_a} ↔ {class_b}")
-    _p(f"  {_joint_prior_weights_note()}")
-    _p(f"{'='*70}")
-    _p(f"\n【全部 {class_a}（n={len(a_joints)}） vs 全部 {class_b}（n={len(b_joints)}）：逐關節動作幅度】")
-    _p(f"  （依 ground truth 標籤挑樣本，不經模型分類，驗證 Table 1 排名是否為訓練選樣偏差）")
-    _p(f"  {_vlj('關節', 12)} {_vrj(class_a+'均值', 12)} {_vrj(class_b+'均值', 12)} {_vrj('差異', 10)}")
-    _p(f"  {SEP}")
-    order = np.argsort(-np.nan_to_num(mean_a - mean_b, nan=-np.inf))
-    for j in order:
-        va, vb = mean_a[j], mean_b[j]
-        diff_s = f"{va-vb:+.4f}" if not (np.isnan(va) or np.isnan(vb)) else "n/a"
-        va_s = f"{va:.4f}" if not np.isnan(va) else "n/a"
-        vb_s = f"{vb:.4f}" if not np.isnan(vb) else "n/a"
-        _p(f"  {_vlj(joint_names[j], 12)} {_vrj(va_s, 12)} {_vrj(vb_s, 12)} {_vrj(diff_s, 10)}")
-    _p(f"\n{'='*70}\n")
-
-    print('\n'.join(lines))
-    if output_dir:
-        out_path = os.path.join(output_dir, f'{class_a}_{class_b}_diagnosis.txt')
-        mode = 'a' if os.path.exists(out_path) else 'w'
-        with open(out_path, mode, encoding='utf-8') as f:
-            f.write('\n'.join(lines))
-        print(f"✓ 純資料版逐關節動作幅度診斷已附加存檔: {out_path}")
 
 
 def run_ablation_study(modes=None):

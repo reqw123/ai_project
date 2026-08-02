@@ -443,13 +443,12 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     names  = [m['name']  for m in MODELS]
-    alphas = [m['alpha'] for m in MODELS]
     colors = [_PALETTE[i % len(_PALETTE)] for i in range(len(MODELS))]
 
     sep = '=' * 64
     print(f"\n{sep}")
     print(f"  KP EMA Alpha Ablation — Inference Evaluation  #{run_num:03d}")
-    for m, col in zip(MODELS, colors):
+    for m in MODELS:
         print(f"  {m['name']:<20}  {Path(m['path']).name}")
     print(f"  Output: {out_dir}")
     print(f"{sep}")
