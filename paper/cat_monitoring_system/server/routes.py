@@ -16,6 +16,7 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 _project_root = str(Path(__file__).parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
+from config import BaselineDashboardConfig as _BaselineDashboardConfig
 from config import FlaskConfig as _FlaskConfig
 from config import ModelPaths as _ModelPaths
 from config import NodeRedConfig as _NodeRedConfig
@@ -386,14 +387,18 @@ def register_routes(app):
         deviation = compute_deviation(today=today, baseline=baseline)
         fusion = compute_fusion(deviation, class_c_score=class_c_score)
 
-        return jsonify(
-            {
-                "status": "ok",
-                "baseline": _dataclass_to_jsonable(baseline),
-                "deviation": _dataclass_to_jsonable(deviation),
-                "fusion": _dataclass_to_jsonable(fusion),
-            }
-        )
+        result = {
+            "status": "ok",
+            "baseline": _dataclass_to_jsonable(baseline),
+            "deviation": _dataclass_to_jsonable(deviation),
+            "fusion": _dataclass_to_jsonable(fusion),
+        }
+        if _BaselineDashboardConfig.ENABLED:
+            # 延遲匯入：旗標關閉時完全不載入 dashboard 套件，見 dashboard/__init__.py。
+            from dashboard.cache import set_latest as _set_baseline_dashboard_cache
+
+            _set_baseline_dashboard_cache(result)
+        return jsonify(result)
 
     def _cors(resp, status=200):
         """在回應上加 CORS header，讓 ui_template 的 fetch() 可跨 port 呼叫。"""
@@ -489,10 +494,16 @@ def register_routes(app):
     def index():
         """回傳簡易首頁（含各端點連結），並確保處理管線已啟動。"""
         _ensure_processor_started()
+        _dashboard_link = (
+            "<li><a href='/dashboard/baseline'>individualized baseline dashboard</a></li>"
+            if _BaselineDashboardConfig.ENABLED
+            else ""
+        )
         return Response(
             f"<html><body><p>{_SystemInfo.SYSTEM_NAME} {_SystemInfo.VERSION} &mdash; {LOCAL_IP}:{_PORT}</p>"
             f"<ul><li><a href='/stream'>stream</a></li>"
-            f"<li><a href='/api/behavior_history?limit=500'>behavior history</a></li></ul>"
+            f"<li><a href='/api/behavior_history?limit=500'>behavior history</a></li>"
+            f"{_dashboard_link}</ul>"
             f"</body></html>",
             mimetype="text/html",
         )

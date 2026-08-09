@@ -478,6 +478,25 @@ class FlaskConfig:
     JPEG_QUALITY = _env_int("CAT_MONITORING_JPEG_QUALITY", 30)
 
 
+# ==================== 個體化基線儀表板（Python 端唯讀展示頁）====================
+class BaselineDashboardConfig:
+    """新版個體化基線引擎（analytics/）的唯讀展示頁面設定。
+
+    ENABLED 關閉時，server/routes.py、server/flask_app.py 都不會匯入
+    dashboard/ 模組本身——不是路由回 404，是整個模組不被載入，不佔用任何
+    記憶體或處理資源。這個頁面只讀 analytics/ 算好的結果，不讀 Node-RED
+    的 global.json，也不做新舊引擎比對（那個已經有 analytics_deviation_bridge.json
+    的「🔬 基線引擎比對」可以看）。
+    """
+
+    ENABLED = _env_bool("CAT_MONITORING_BASELINE_DASHBOARD_ENABLED", True)
+
+    # 前端輪詢 /api/deviation/latest 的間隔（秒）。比照 NodeRedConfig.PUSH_INTERVAL
+    # （Python 端每筆推論結果送出的間隔，預設 2 秒）訂一個略慢的節奏，避免每次
+    # 輪詢都撲空、也不會累積沒必要的請求量。
+    POLL_INTERVAL_SEC = _env_float("CAT_MONITORING_BASELINE_DASHBOARD_POLL_INTERVAL", 3)
+
+
 # ==================== Node-RED 參數 ====================
 class NodeRedConfig:
     """Node-RED 通訊參數"""
