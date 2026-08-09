@@ -242,9 +242,9 @@ class FrameProcessor:
         )
         self._infer_frame_count = 0  # 累積有效幀計數器，以 window_stride 取模決定推論時機（貓咪消失時重置，確保重新出現後推論時機從 0 對齊）
         self.overlay = overlay
-        self.show_skeleton = True
-        self.show_label = True
-        self.show_bbox = True
+        self.show_skeleton = VisualizationConfig.SHOW_SKELETON
+        self.show_label = VisualizationConfig.SHOW_GCN_RESULT
+        self.show_bbox = VisualizationConfig.SHOW_BBOX
         self.prev_time = time.time()
         self.last_send_time = time.time()
         self.nodered = None

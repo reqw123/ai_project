@@ -1,6 +1,6 @@
 [
     {
-        "id": "c9b3353f6ab69b6b",
+        "id": "bfa5243aa9dbd045",
         "type": "tab",
         "label": "😺 貓咪健康監測系統",
         "disabled": false,
@@ -8,9 +8,9 @@
         "env": []
     },
     {
-        "id": "99d2434b121fa54c",
+        "id": "bbde1158c677172e",
         "type": "group",
-        "z": "c9b3353f6ab69b6b",
+        "z": "bfa5243aa9dbd045",
         "style": {
             "stroke": "#999999",
             "stroke-opacity": "1",
@@ -21,64 +21,64 @@
             "color": "#a4a4a4"
         },
         "nodes": [
-            "1f5216d0c12f5f84",
-            "7c0f5c930e1009d4",
-            "ac1a4a0e09e347a6",
-            "d871b7f00abf288c",
-            "353d55b49ae6b113",
-            "de030caa5b42be05",
-            "bf35409ac85c2c24",
-            "e6227ed4cd7760ba",
-            "2de4646a8e06d912",
-            "9386fff8b61ee5db",
-            "4bb4c08c683ae20b",
-            "cd5175a8899fc279",
-            "6d41362ebfe903fe",
-            "62acd705c1a16a70",
-            "5fd6565b21fa7bb3",
-            "55d9f8569c938732",
-            "2f5945e8301fa8d6",
-            "9588f1ab76f9fbf4",
-            "cf7ef482398192f3",
-            "95a678ba379e90b2",
-            "45a2cccbd4ab1828",
-            "70b34fc0187d2326",
-            "a0e4a15d9c16c1b6",
-            "bd84d44fb1841549",
-            "67cc5c5987b1cb6b",
-            "81fb4754a1e9a363",
-            "15b7af08b9698162",
-            "fab09f34a509651e"
+            "8f6f3b14776f3669",
+            "d6e190b919318a3c",
+            "30da3f410d1765f6",
+            "3983485996d5065e",
+            "daaf9ebe1faab10e",
+            "d8f7c7b342c1c921",
+            "99a7ef0dd1376acc",
+            "799e0dede85749f3",
+            "65b701debfe78a33",
+            "e44fc3a6ca18e58e",
+            "aeb537e3fd5d7337",
+            "f0016264d8649aa6",
+            "524a127640fe5d6c",
+            "0c931e8f3a73a30e",
+            "2815196b6b90eef7",
+            "3fdae97a54152c64",
+            "793915e032b38cba",
+            "d5c828d35f1f7f4c",
+            "7cc379c356e990ca",
+            "399e987cbe61bbb0",
+            "eab9ac534573a527",
+            "4f8d16570a761e27",
+            "64b97575e8f22a8b",
+            "bed09e3c3ffd1809",
+            "edb4a5e67457e0d5",
+            "b649dbe9fd77dc03",
+            "f6215532c20e0ba5",
+            "1e18d7e1ffa6ed4f"
         ],
-        "x": 294,
-        "y": 59,
-        "w": 1032,
-        "h": 742
+        "x": 340,
+        "y": 20,
+        "w": 1320,
+        "h": 760
     },
     {
-        "id": "7c0f5c930e1009d4",
+        "id": "8f6f3b14776f3669",
         "type": "http in",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "python_online",
         "url": "/python_online",
         "method": "post",
         "upload": false,
         "skipBodyParsing": false,
         "swaggerDoc": "",
-        "x": 390,
+        "x": 380,
         "y": 460,
         "wires": [
             [
-                "ac1a4a0e09e347a6"
+                "d6e190b919318a3c"
             ]
         ]
     },
     {
-        "id": "ac1a4a0e09e347a6",
+        "id": "d6e190b919318a3c",
         "type": "json",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "parse_json",
         "property": "payload",
         "action": "obj",
@@ -87,15 +87,15 @@
         "y": 460,
         "wires": [
             [
-                "e6227ed4cd7760ba"
+                "99a7ef0dd1376acc"
             ]
         ]
     },
     {
-        "id": "d871b7f00abf288c",
+        "id": "30da3f410d1765f6",
         "type": "inject",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "發送訊息到discord",
         "props": [
             {
@@ -109,19 +109,19 @@
         "topic": "",
         "payload": "這是一則來自 Node-RED 的測試通知！",
         "payloadType": "str",
-        "x": 450,
-        "y": 680,
+        "x": 380,
+        "y": 660,
         "wires": [
             [
-                "de030caa5b42be05"
+                "daaf9ebe1faab10e"
             ]
         ]
     },
     {
-        "id": "353d55b49ae6b113",
+        "id": "3983485996d5065e",
         "type": "http request",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "送到 Discord",
         "method": "POST",
         "ret": "txt",
@@ -134,17 +134,17 @@
         "authType": "",
         "senderr": false,
         "headers": [],
-        "x": 1030,
-        "y": 660,
+        "x": 1220,
+        "y": 720,
         "wires": [
             []
         ]
     },
     {
-        "id": "de030caa5b42be05",
+        "id": "daaf9ebe1faab10e",
         "type": "function",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "組成 Discord Webhook 格式",
         "func": "\n\n// Discord Python 上線通知\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// IP\n// =========================\nlet ip = msg.payload?.ip || \"未知IP\";\n\n// 保存 IP 到持久化全域 context，讓重連/重啟後仍可取用\ntry {\n    global.set(\n        \"python_ip\",\n        ip,\n        \"file\"\n    );\n} catch (e) {\n    global.set(\n        \"python_ip\",\n        ip\n    );\n}\n\n// =========================\n// Discord Payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                \"🟢 Python AI 已上線\",\n\n            description:\n                `偵測到 Python 推論系統啟動`,\n\n            color:\n                65280,\n\n            fields: [\n\n                {\n                    name: \"Python IP\",\n                    value: String(ip),\n                    inline: false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
         "outputs": 1,
@@ -153,31 +153,31 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 820,
-        "y": 680,
+        "x": 1010,
+        "y": 720,
         "wires": [
             [
-                "353d55b49ae6b113"
+                "3983485996d5065e"
             ]
         ]
     },
     {
-        "id": "bf35409ac85c2c24",
+        "id": "d8f7c7b342c1c921",
         "type": "http response",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "response_200",
         "statusCode": "200",
         "headers": {},
-        "x": 1060,
-        "y": 460,
+        "x": 1010,
+        "y": 540,
         "wires": []
     },
     {
-        "id": "e6227ed4cd7760ba",
+        "id": "99a7ef0dd1376acc",
         "type": "function",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "build_response",
         "func": "let ip = null;\ntry {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\", \"file\") || global.get(\"python_ip\") || null);\n} catch (e) {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\") || null);\n}\nif (ip) {\n    try {\n        global.set(\"python_ip\", ip, \"file\");\n    } catch (e) {\n        global.set(\"python_ip\", ip);\n    }\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = ip ? `http://${ip}:5000/stream` : \"\";\nnode.warn(\"python_online received IP: \" + (ip || 'null'));\nreturn msg;",
         "outputs": 1,
@@ -190,18 +190,18 @@
         "y": 460,
         "wires": [
             [
-                "de030caa5b42be05",
-                "bf35409ac85c2c24",
-                "1f5216d0c12f5f84",
-                "fab09f34a509651e"
+                "daaf9ebe1faab10e",
+                "d8f7c7b342c1c921",
+                "399e987cbe61bbb0",
+                "1e18d7e1ffa6ed4f"
             ]
         ]
     },
     {
-        "id": "2de4646a8e06d912",
+        "id": "799e0dede85749f3",
         "type": "inject",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "啟動時發送串流",
         "props": [
             {
@@ -215,19 +215,19 @@
         "topic": "",
         "payload": "{}",
         "payloadType": "json",
-        "x": 420,
+        "x": 380,
         "y": 560,
         "wires": [
             [
-                "9386fff8b61ee5db"
+                "65b701debfe78a33"
             ]
         ]
     },
     {
-        "id": "9386fff8b61ee5db",
+        "id": "65b701debfe78a33",
         "type": "function",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "從持久化context恢復串流",
         "func": "let ip = null;\ntry {\n    ip = global.get(\"python_ip\", \"file\") || global.get(\"python_ip\") || null;\n} catch (e) {\n    ip = global.get(\"python_ip\") || null;\n}\nif (!ip) {\n    return null;\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
         "outputs": 1,
@@ -236,108 +236,108 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 670,
+        "x": 590,
         "y": 560,
         "wires": [
             [
-                "1f5216d0c12f5f84",
-                "fab09f34a509651e"
+                "399e987cbe61bbb0",
+                "1e18d7e1ffa6ed4f"
             ]
         ]
     },
     {
-        "id": "4bb4c08c683ae20b",
+        "id": "e44fc3a6ca18e58e",
         "type": "http in",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "接收Python數據",
         "url": "/yolo_result",
         "method": "post",
         "upload": false,
         "skipBodyParsing": false,
         "swaggerDoc": "",
-        "x": 400,
-        "y": 180,
+        "x": 380,
+        "y": 140,
         "wires": [
             [
-                "6d41362ebfe903fe",
-                "cd5175a8899fc279"
+                "f0016264d8649aa6",
+                "aeb537e3fd5d7337"
             ]
         ]
     },
     {
-        "id": "cd5175a8899fc279",
+        "id": "aeb537e3fd5d7337",
         "type": "http response",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "回應200",
         "statusCode": "200",
         "headers": {},
-        "x": 580,
-        "y": 240,
+        "x": 590,
+        "y": 220,
         "wires": []
     },
     {
-        "id": "6d41362ebfe903fe",
+        "id": "f0016264d8649aa6",
         "type": "json",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "解析JSON",
         "property": "payload",
         "action": "obj",
         "pretty": false,
-        "x": 610,
-        "y": 180,
+        "x": 590,
+        "y": 140,
         "wires": [
             [
-                "62acd705c1a16a70"
+                "524a127640fe5d6c"
             ]
         ]
     },
     {
-        "id": "62acd705c1a16a70",
+        "id": "524a127640fe5d6c",
         "type": "function",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "數據分發器",
-        "func": "let data = msg.payload;\nif (!data) return null;\n\nif (!data.current)     data.current     = {};\nif (!data.today_stats) data.today_stats = {};\n\nlet stats = data.today_stats;\nstats.walk             = stats.walk             || 0;\nstats.walk_time        = stats.walk_time        || 0;\nstats.lick             = stats.lick             || 0;\nstats.lick_time        = stats.lick_time        || 0;\nstats.scratch          = stats.scratch          || 0;\nstats.scratch_time     = stats.scratch_time     || 0;\nstats.shake            = stats.shake            || 0;\nstats.shake_time       = stats.shake_time       || 0;\nstats.stop             = stats.stop             || 0;\nstats.stop_time        = stats.stop_time        || 0;\nstats.not_detected_time = stats.not_detected_time || 0;\nstats.active_time      = stats.active_time      || 0;\nstats.low_conf         = stats.low_conf         || 0;\nstats.low_conf_time     = stats.low_conf_time     || 0;\n\nif (Array.isArray(data.behavior_log)) {\n    data.behavior_log = data.behavior_log.map(function(item) {\n        return {\n            behavior: item.behavior || 'unknown',\n            time:     item.time     || '--:--',\n            duration: item.duration || 0,\n            emoji:    getEmoji(item.behavior)\n        };\n    });\n} else {\n    data.behavior_log = [];\n}\n\nif (!data.current.emoji)     data.current.emoji     = getEmoji(data.current.behavior);\nif (!data.current.timestamp) data.current.timestamp = new Date().toLocaleTimeString();\n\n\n\n// 行為開始時間追蹤（供時間軸進行中計時器使用）\nlet _curBeh = (data.current && data.current.behavior) || null;\nlet _prevBeh = flow.get('tl_cur_behavior');\nlet _startMs  = flow.get('tl_start_ms') || Date.now();\nif (_curBeh !== _prevBeh) {\n    _startMs = Date.now();\n    flow.set('tl_cur_behavior', _curBeh);\n    flow.set('tl_start_ms', _startMs);\n}\nif (data.current) data.current.start_epoch_ms = _startMs;\n\n// 今日各行為平均時長（供時間軸風險評估）\ndata.avg_duration = {};\nfor (let _b of ['walk','lick','scratch','shake','stop']) {\n    let _cnt = stats[_b] || 0;\n    let _t   = stats[_b + '_time'] || 0;\n    data.avg_duration[_b] = _cnt >= 2 ? Math.round(_t / _cnt * 10) / 10 : 0;\n}\n\nmsg.payload = data;\n\n// CSV：每 5 分鐘寫一次（與 v2 flow 一致）\nlet now     = Date.now();\nlet lastCsv = flow.get('last_csv_write') || 0;\nlet doCsv   = (now - lastCsv) >= 300000;\nif (doCsv) flow.set('last_csv_write', now);\n\nlet csvMsg = doCsv ? { payload: {\n    timestamp:         (function(){var d=new Date(),p=function(n){return String(n).padStart(2,\"0\")};return d.getFullYear()+\"-\"+p(d.getMonth()+1)+\"-\"+p(d.getDate())+\" \"+p(d.getHours())+\":\"+p(d.getMinutes())+\":\"+p(d.getSeconds());})(),\n    walk:              stats.walk,              walk_time:         stats.walk_time,\n    lick:              stats.lick,              lick_time:         stats.lick_time,\n    scratch:           stats.scratch,           scratch_time:      stats.scratch_time,\n    shake:             stats.shake,             shake_time:        stats.shake_time,\n    stop:              stats.stop,              stop_time:         stats.stop_time,\n    active_time:       stats.active_time,\n    low_conf:          stats.low_conf,\n    low_conf_time:     stats.low_conf_time,\n    not_detected_time: stats.not_detected_time,\n    activity_score:    data.activity_score || 0\n}} : null;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    msg,\n    { payload: data.activity_score || 0 },\n    csvMsg,\n    msg\n];\n\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case 'scratch': return '🐾';\n        case 'lick':    return '🧼';\n        case 'walk':    return '🚶';\n        case 'shake':   return '🔄';\n        case 'stop':    return '⏹';\n        case 'not':     return '📷';\n        default:        return '🐱';\n    }\n}",
+        "func": "let data = msg.payload;\nif (!data) return null;\n\nif (!data.current)     data.current     = {};\nif (!data.today_stats) data.today_stats = {};\n\nlet stats = data.today_stats;\nstats.walk             = stats.walk             || 0;\nstats.walk_time        = stats.walk_time        || 0;\nstats.lick             = stats.lick             || 0;\nstats.lick_time        = stats.lick_time        || 0;\nstats.scratch          = stats.scratch          || 0;\nstats.scratch_time     = stats.scratch_time     || 0;\nstats.shake            = stats.shake            || 0;\nstats.shake_time       = stats.shake_time       || 0;\nstats.stop             = stats.stop             || 0;\nstats.stop_time        = stats.stop_time        || 0;\nstats.not_detected_time = stats.not_detected_time || 0;\nstats.active_time      = stats.active_time      || 0;\nstats.low_conf         = stats.low_conf         || 0;\nstats.low_conf_time     = stats.low_conf_time     || 0;\n\nif (Array.isArray(data.behavior_log)) {\n    data.behavior_log = data.behavior_log.map(function(item) {\n        return {\n            behavior: item.behavior || 'unknown',\n            time:     item.time     || '--:--',\n            duration: item.duration || 0,\n            emoji:    getEmoji(item.behavior)\n        };\n    });\n} else {\n    data.behavior_log = [];\n}\n\nif (!data.current.emoji)     data.current.emoji     = getEmoji(data.current.behavior);\nif (!data.current.timestamp) data.current.timestamp = new Date().toLocaleTimeString();\n\n\n\n// 行為開始時間追蹤（供時間軸進行中計時器使用）\nlet _curBeh = (data.current && data.current.behavior) || null;\nlet _prevBeh = flow.get('tl_cur_behavior');\nlet _startMs  = flow.get('tl_start_ms') || Date.now();\nif (_curBeh !== _prevBeh) {\n    _startMs = Date.now();\n    flow.set('tl_cur_behavior', _curBeh);\n    flow.set('tl_start_ms', _startMs);\n}\nif (data.current) data.current.start_epoch_ms = _startMs;\n\n// 今日各行為平均時長（供時間軸風險評估）\ndata.avg_duration = {};\nfor (let _b of ['walk','lick','scratch','shake','stop']) {\n    let _cnt = stats[_b] || 0;\n    let _t   = stats[_b + '_time'] || 0;\n    data.avg_duration[_b] = _cnt >= 2 ? Math.round(_t / _cnt * 10) / 10 : 0;\n}\n\nmsg.payload = data;\n\n// CSV：每 5 分鐘寫一次（與 v2 flow 一致）\nlet now     = Date.now();\nlet lastCsv = flow.get('last_csv_write') || 0;\nlet doCsv   = (now - lastCsv) >= 300000;\nif (doCsv) flow.set('last_csv_write', now);\n\nlet csvMsg = doCsv ? { payload: {\n    timestamp:         (function(){var d=new Date(),p=function(n){return String(n).padStart(2,\"0\")};return d.getFullYear()+\"-\"+p(d.getMonth()+1)+\"-\"+p(d.getDate())+\" \"+p(d.getHours())+\":\"+p(d.getMinutes())+\":\"+p(d.getSeconds());})(),\n    walk:              stats.walk,              walk_time:         stats.walk_time,\n    lick:              stats.lick,              lick_time:         stats.lick_time,\n    scratch:           stats.scratch,           scratch_time:      stats.scratch_time,\n    shake:             stats.shake,             shake_time:        stats.shake_time,\n    stop:              stats.stop,              stop_time:         stats.stop_time,\n    active_time:       stats.active_time,\n    low_conf:          stats.low_conf,\n    low_conf_time:     stats.low_conf_time,\n    not_detected_time: stats.not_detected_time,\n    activity_score:    data.activity_score || 0\n}} : null;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    { payload: data.activity_score || 0 },\n    msg,\n    csvMsg,\n    msg\n];\n\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case 'scratch': return '🐾';\n        case 'lick':    return '🧼';\n        case 'walk':    return '🚶';\n        case 'shake':   return '🔄';\n        case 'stop':    return '⏹';\n        case 'not':     return '📷';\n        default:        return '🐱';\n    }\n}",
         "outputs": 7,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 810,
-        "y": 180,
+        "x": 800,
+        "y": 140,
         "wires": [
             [
-                "5fd6565b21fa7bb3"
+                "eab9ac534573a527"
             ],
             [
-                "55d9f8569c938732"
+                "4f8d16570a761e27"
             ],
             [
-                "2f5945e8301fa8d6"
+                "64b97575e8f22a8b"
             ],
             [
-                "95a678ba379e90b2"
+                "7cc379c356e990ca"
             ],
             [
-                "cf7ef482398192f3"
+                "0c931e8f3a73a30e"
             ],
             [
-                "a0e4a15d9c16c1b6"
+                "793915e032b38cba"
             ],
             [
-                "67cc5c5987b1cb6b"
+                "edb4a5e67457e0d5"
             ]
         ]
     },
     {
-        "id": "95a678ba379e90b2",
+        "id": "0c931e8f3a73a30e",
         "type": "function",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "健康引擎分析",
         "func": "let data    = msg.payload;\nlet stats   = (data && data.today_stats) ? data.today_stats : {};\n\n// ── 讀取用戶設定（與 v2 P4 共用 global context）─────────────\nlet cfg         = global.get('v2_user_settings','file') || {};\nlet LICK_THR    = cfg.lick_pct    != null ? +cfg.lick_pct    : 20;\nlet SCRATCH_THR = cfg.scratch_pct != null ? +cfg.scratch_pct : 15;\nlet SHAKE_THR   = cfg.shake_pct   != null ? +cfg.shake_pct   : 10;\nlet STOP_THR    = cfg.stop_pct    != null ? +cfg.stop_pct    : 55;\nlet LSC_THR     = cfg.lsc_count   != null ? +cfg.lsc_count   : 10;\n\n// ── 基礎時間變數 ──────────────────────────────────────────────\nlet walk_t    = Number(stats.walk_time    || 0);\nlet lick_t    = Number(stats.lick_time    || 0);\nlet scratch_t = Number(stats.scratch_time || 0);\nlet shake_t   = Number(stats.shake_time   || 0);\nlet stop_t    = Number(stats.stop_time    || 0);\nlet td_active = Number(stats.active_time  || 0);\n\n// ── 1. 行為佔比 distribution ──────────────────────────────────\nlet totalBeh = walk_t + lick_t + scratch_t + shake_t + stop_t;\nlet dist = totalBeh > 0 ? {\n    walk:    parseFloat((walk_t    / totalBeh * 100).toFixed(2)),\n    lick:    parseFloat((lick_t    / totalBeh * 100).toFixed(2)),\n    scratch: parseFloat((scratch_t / totalBeh * 100).toFixed(2)),\n    shake:   parseFloat((shake_t   / totalBeh * 100).toFixed(2)),\n    stop:    parseFloat((stop_t    / totalBeh * 100).toFixed(2))\n} : {walk:0, lick:0, scratch:0, shake:0, stop:0};\ndata.distribution = dist;\n\n// ── 2. 節律分析 rhythm（from hourly_distribution in payload）──\nlet hourly = stats.hourly_distribution || {};\nlet _pds = {\n    '00-06':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '06-12':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '12-18':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '18-24':{walk:0,lick:0,scratch:0,shake:0,stop:0,total:0}\n};\nfor (let h=0; h<24; h++) {\n    let k=String(h).padStart(2,'0'), hd=hourly[k]||{};\n    let pd=h<6?'00-06':h<12?'06-12':h<18?'12-18':'18-24';\n    for (let b of ['walk','lick','scratch','shake','stop']) { _pds[pd][b]+=(hd[b]||0); _pds[pd].total+=(hd[b]||0); }\n}\nlet rhythm = {};\nfor (let [pd,d] of Object.entries(_pds)) {\n    if (d.total===0) { rhythm[pd]={dominant:'none',pct:{},total:0}; continue; }\n    let bs=['walk','lick','scratch','shake','stop'];\n    let dom=bs.reduce((a,b)=>d[a]>=d[b]?a:b,'stop');\n    let pct={}; for (let b of bs) pct[b]=parseFloat((d[b]/d.total*100).toFixed(2));\n    rhythm[pd]={dominant:dom, pct, total:parseFloat(d.total.toFixed(1))};\n}\n\n// ── 3. 同步寫入 v2 global context（讓 v2 定時任務基線引擎繼續正常運作）──\nlet _tdDate = new Date().toLocaleDateString('zh-TW');\nglobal.set('v2_today', {\n    date: _tdDate,\n    walk:{count:stats.walk||0,time:walk_t}, lick:{count:stats.lick||0,time:lick_t},\n    scratch:{count:stats.scratch||0,time:scratch_t}, shake:{count:stats.shake||0,time:shake_t},\n    stop:{count:stats.stop||0,time:stop_t},\n    active_time:stats.active_time||0,\n    low_conf:{count:stats.low_conf||0,time:stats.low_conf_time||0},\n    not_detected_time:stats.not_detected_time||0, monitoring_seconds:stats.monitoring_seconds||0\n}, 'file');\nglobal.set('v2_hourly',            stats.hourly_distribution||{});\nglobal.set('v2_transition_matrix', stats.transition_matrix  ||{});\n\n// ── 4. dScore：行為占比偏離 (0-100) — 不需基線 ───────────────\nlet dScore = 0;\nif (dist.lick    > LICK_THR)    dScore += Math.min(30, (dist.lick    - LICK_THR)    * 1.5);\nif (dist.scratch > SCRATCH_THR) dScore += Math.min(35, (dist.scratch - SCRATCH_THR) * 2.0);\nif (dist.shake   > SHAKE_THR)   dScore += Math.min(35, (dist.shake   - SHAKE_THR)   * 2.5);\nif (dist.stop    > STOP_THR)    dScore += Math.min(20, (dist.stop    - STOP_THR)    * 1.0);\nif (dist.walk    < 10 && td_active > 300) dScore += 15;\ndScore = Math.min(100, Math.round(dScore));\n\n// ── 5. fScore：頻率偏離（讀取 v2_baseline；無基線時 = 0）────────\nlet fScore = 0, hasBaseline = false;\ntry {\n    let bl = global.get('v2_baseline', 'file') || global.get('v2_baseline');\n    if (bl && bl.metrics) {\n        hasBaseline = true;\n        let m = bl.metrics;\n        let pctDev = function(cur, key) {\n            let b = m[key]; if (!b || b.mean === 0) return 0;\n            return (cur - b.mean) / b.mean * 100;\n        };\n        let ld  = pctDev(lick_t,                         'lick_time');\n        let sd  = pctDev(scratch_t,                      'scratch_time');\n        let shd = pctDev(Number(stats.shake_count || 0), 'shake_count');\n        let std = pctDev(stop_t,                         'stop_time');\n        if (ld  > 150) fScore += 30; else if (ld  > 100) fScore += 20; else if (ld  >  50) fScore += 10;\n        if (sd  > 200) fScore += 35; else if (sd  > 150) fScore += 25; else if (sd  >  80) fScore += 15;\n        if (shd > 100) fScore += 35; else if (shd >  50) fScore += 20; else if (shd >  30) fScore += 10;\n        if (std >  80) fScore += 20; else if (std >  50) fScore += 10;\n        fScore = Math.min(100, Math.round(fScore));\n    }\n} catch(e) {}\n\n// ── 6. rScore：節律偏離 (0-100) ───────────────────────────────\nlet rScore = 0;\nlet night = rhythm['00-06'] || {};\nif (night.dominant==='scratch'||night.dominant==='lick') rScore += 30;\nif (night.dominant==='shake')                             rScore += 25;\nif (night.pct && night.pct.scratch > 20)                 rScore += 20;\nlet day06 = rhythm['06-12'] || {}, day12 = rhythm['12-18'] || {};\nif (day06.pct && day12.pct && (day06.pct.walk||0)<15 && (day12.pct.walk||0)<15 && dist.walk<20) rScore += 20;\nrScore = Math.min(100, rScore);\n\n// ── 7. tScore：轉移偏離 (0-100) ───────────────────────────────\nlet mx = stats.transition_matrix || {};\nlet tScore = 0;\nlet lsc  = (mx['lick->scratch']||0) + (mx['scratch->lick']||0);\nlet shch = mx['shake->shake'] || 0;\nlet stst = mx['stop->stop']   || 0;\nif (lsc>LSC_THR*2) tScore+=40; else if(lsc>LSC_THR) tScore+=20; else if(lsc>Math.max(2,Math.round(LSC_THR/2))) tScore+=10;\nif (shch>15) tScore+=30; else if(shch>8) tScore+=15;\nif (stst>50) tScore+=20; else if(stst>30) tScore+=10;\ntScore = Math.min(100, tScore);\n\n// ── 8. 綜合風險分（四維加權：占比30% 頻率35% 節律20% 轉移15%）──\nlet riskScore = Math.round(dScore*0.30 + fScore*0.35 + rScore*0.20 + tScore*0.15);\nriskScore = Math.max(0, Math.min(100, riskScore));\n\nlet level, color, emoji;\nif      (riskScore < 20) { level='Normal';    color='#4caf50'; emoji='✅'; }\nelse if (riskScore < 45) { level='Attention'; color='#ffa726'; emoji='⚠️'; }\nelse if (riskScore < 70) { level='Warning';   color='#ff7043'; emoji='🚨'; }\nelse                      { level='High Risk'; color='#f44336'; emoji='🆘'; }\n\n// ── 警示列表 ──────────────────────────────────────────────────\nlet alerts = [];\nif (dist.lick    > LICK_THR)    alerts.push({type:'lick',       msg:'舔舐佔比 ' + dist.lick.toFixed(1)    + '%，超過閾值 ' + LICK_THR    + '%'});\nif (dist.scratch > SCRATCH_THR) alerts.push({type:'scratch',    msg:'搔抓佔比 ' + dist.scratch.toFixed(1) + '%，超過閾值 ' + SCRATCH_THR + '%'});\nif (dist.shake   > SHAKE_THR)   alerts.push({type:'shake',      msg:'甩頭佔比 ' + dist.shake.toFixed(1)   + '%，超過閾值 ' + SHAKE_THR   + '%'});\nif (dist.stop    > STOP_THR)    alerts.push({type:'inactivity', msg:'靜止佔比 ' + dist.stop.toFixed(1)    + '%，活動力偏低'});\nif (lsc > LSC_THR) {\n    let ls=mx['lick->scratch']||0, sl=mx['scratch->lick']||0, half=Math.max(2,Math.round(LSC_THR/2));\n    let transMsg=(ls>half&&sl>half)?'lick↔scratch 循環 '+lsc+' 次，疑似皮膚不適':sl>ls?'scratch→lick '+sl+' 次（搔後舔舐），疑似皮膚不適':'lick→scratch '+ls+' 次（舔後搔抓），疑似皮膚不適';\n    alerts.push({type:'transition', msg:transMsg});\n}\nif (hasBaseline && fScore >= 20) alerts.push({type:'dev', msg:'行為頻率與個體基線偏離（fScore: ' + fScore + '）'});\n\ndata.risk = {\n    score: riskScore, level, color, emoji,\n    components: { distribution:dScore, frequency:fScore, rhythm:rScore, transition:tScore },\n    alerts,\n    computed_at: (function(){ let d=new Date(),p=function(n){return String(n).padStart(2,'0')}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); })()\n};\ndata.alerts = alerts;\nglobal.set('v2_risk', data.risk);\nflow.set('v2_today_risk', {level, score: riskScore});\nreturn msg;",
         "outputs": 1,
@@ -346,20 +346,20 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 600,
-        "y": 400,
+        "x": 1010,
+        "y": 320,
         "wires": [
             [
-                "9588f1ab76f9fbf4",
-                "45a2cccbd4ab1828"
+                "bed09e3c3ffd1809",
+                "2815196b6b90eef7"
             ]
         ]
     },
     {
-        "id": "45a2cccbd4ab1828",
+        "id": "2815196b6b90eef7",
         "type": "function",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "發送提醒",
         "func": "let risk   = msg.payload.risk   || {};\nlet alerts = msg.payload.alerts || [];\n\nif (!risk.level || risk.level === 'Normal') {\n    flow.set(\"last_discord_alert\", \"\");\n    return null;\n}\n\nlet dedup_key = risk.level + '|' + alerts.map(function(a){ return a.type||''; }).join(',');\nlet last_key  = flow.get(\"last_discord_alert\") || \"\";\nif (last_key === dedup_key) return null;\nflow.set(\"last_discord_alert\", dedup_key);\n\nlet colorMap = { Attention: 16753920, Warning: 16729344, 'High Risk': 16711680 };\nlet embed_color = colorMap[risk.level] || 16711680;\n\nlet fields = [\n    { name: '🎯 Risk Score', value: String(risk.score) + '/100', inline: true },\n    { name: '📊 風險等級',   value: (risk.emoji||'') + ' ' + risk.level, inline: true }\n];\nif (risk.components) {\n    fields.push({ name: '📊 占比偏離', value: String(risk.components.distribution||0), inline: true });\n    if ((risk.components.frequency||0) > 0) {\n        fields.push({ name: '📉 頻率偏離', value: String(risk.components.frequency||0), inline: true });\n    }\n}\nif (alerts.length > 0) {\n    fields.push({ name: '⚠️ 異常項目', value: alerts.map(function(a){ return a.msg; }).join('\\n'), inline: false });\n}\n\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = {\n    username: 'Cat Health Monitor',\n    embeds: [{\n        title:       (risk.emoji||'🚨') + ' 健康預警：' + risk.level,\n        description: '貓咪行為風險分析結果',\n        color:       embed_color,\n        fields:      fields,\n        footer:      { text: new Date().toLocaleString('zh-TW') }\n    }]\n};\nlet _cfg = {};\ntry { _cfg = global.get('v2_user_settings','file') || {}; } catch(e) { _cfg = global.get('v2_user_settings') || {}; }\nlet _url = (_cfg.discord_webhook || '').trim();\nif (!_url) { node.warn('健康預警 Discord：webhook URL 未設定，請在 P4 設定面板填入'); return null; }\nmsg.url = _url;\nreturn msg;",
         "outputs": 1,
@@ -368,19 +368,19 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 820,
-        "y": 400,
+        "x": 1220,
+        "y": 360,
         "wires": [
             [
-                "70b34fc0187d2326"
+                "3fdae97a54152c64"
             ]
         ]
     },
     {
-        "id": "70b34fc0187d2326",
+        "id": "3fdae97a54152c64",
         "type": "http request",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "送到 Discord",
         "method": "POST",
         "ret": "txt",
@@ -393,17 +393,17 @@
         "authType": "",
         "senderr": false,
         "headers": [],
-        "x": 1050,
-        "y": 400,
+        "x": 1430,
+        "y": 360,
         "wires": [
             []
         ]
     },
     {
-        "id": "a0e4a15d9c16c1b6",
+        "id": "793915e032b38cba",
         "type": "csv",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "建立CSV",
         "sep": ",",
         "hdrin": false,
@@ -415,19 +415,19 @@
         "strings": true,
         "include_empty_strings": false,
         "include_null_values": false,
-        "x": 980,
-        "y": 760,
+        "x": 1010,
+        "y": 400,
         "wires": [
             [
-                "bd84d44fb1841549"
+                "d5c828d35f1f7f4c"
             ]
         ]
     },
     {
-        "id": "bd84d44fb1841549",
+        "id": "d5c828d35f1f7f4c",
         "type": "file",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "儲存CSV",
         "filename": "C:\\\\a\\\\noda_data.csv",
         "filenameType": "str",
@@ -435,17 +435,17 @@
         "createDir": true,
         "overwriteFile": "false",
         "encoding": "utf8",
-        "x": 1140,
-        "y": 760,
+        "x": 1220,
+        "y": 420,
         "wires": [
             []
         ]
     },
     {
-        "id": "cf7ef482398192f3",
+        "id": "7cc379c356e990ca",
         "type": "ui_gauge",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "活動力儀表",
         "group": "group_gauge_cat",
         "order": 5,
@@ -466,15 +466,15 @@
         "seg2": "70",
         "diff": false,
         "className": "",
-        "x": 1050,
-        "y": 260,
+        "x": 1010,
+        "y": 240,
         "wires": []
     },
     {
-        "id": "1f5216d0c12f5f84",
+        "id": "399e987cbe61bbb0",
         "type": "ui_template",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "group": "group_stream_cat",
         "name": "影像串流",
         "order": 6,
@@ -486,17 +486,17 @@
         "resendOnRefresh": true,
         "templateScope": "local",
         "className": "",
-        "x": 1080,
-        "y": 560,
+        "x": 1010,
+        "y": 600,
         "wires": [
             []
         ]
     },
     {
-        "id": "5fd6565b21fa7bb3",
+        "id": "eab9ac534573a527",
         "type": "ui_template",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "group": "group_status_cat",
         "name": "即時狀態卡片",
         "order": 1,
@@ -508,17 +508,17 @@
         "resendOnRefresh": true,
         "templateScope": "local",
         "className": "",
-        "x": 1040,
-        "y": 100,
+        "x": 1010,
+        "y": 60,
         "wires": [
             []
         ]
     },
     {
-        "id": "55d9f8569c938732",
+        "id": "4f8d16570a761e27",
         "type": "ui_template",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "group": "group_timeline_cat",
         "name": "行為時間紀錄",
         "order": 2,
@@ -530,39 +530,39 @@
         "resendOnRefresh": false,
         "templateScope": "local",
         "className": "",
-        "x": 1040,
-        "y": 160,
+        "x": 1010,
+        "y": 120,
         "wires": [
             []
         ]
     },
     {
-        "id": "2f5945e8301fa8d6",
+        "id": "64b97575e8f22a8b",
         "type": "ui_template",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "group": "group_stats_cat",
         "name": "詳細統計",
         "order": 3,
         "width": "6",
         "height": "10",
-        "format": "<link href=\"https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500&display=swap\" rel=\"stylesheet\">\n\n<style>\n.cs-wrap {\n  padding: 1rem 0.5rem;\n  font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;\n  font-weight: 400;\n}\n\n.cs-eyebrow {\n  font-size: 10px;\n  font-weight: 500;\n  color: #bbb;\n  letter-spacing: 0.18em;\n  text-transform: uppercase;\n  margin: 0 0 4px;\n  font-family: 'Nunito', sans-serif;\n}\n\n.cs-date-row {\n  display: flex;\n  align-items: baseline;\n  justify-content: space-between;\n  gap: 10px;\n  margin: 0 0 1.25rem;\n}\n\n.cs-date {\n  font-size: 19px;\n  font-weight: 300;\n  color: #1a1a2e;\n  margin: 0;\n  letter-spacing: 0.03em;\n}\n\n.cs-date strong {\n  font-weight: 500;\n}\n\n.cs-time-range {\n  font-size: 13px;\n  font-weight: 400;\n  color: #999;\n  font-variant-numeric: tabular-nums;\n  font-family: 'Nunito', sans-serif;\n  letter-spacing: 0.01em;\n  white-space: nowrap;\n  margin: 0;\n}\n\n.cs-summary {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 10px;\n  margin-bottom: 1.25rem;\n}\n\n.cs-meta {\n  background: #f4f5f7;\n  border-radius: 10px;\n  padding: 13px 15px;\n  min-width: 0;\n}\n\n/* 總計數值：時/分/秒字串較長，字級收斂並允許換行避免爆版 */\n.cs-meta-val {\n  font-size: 18px;\n  font-weight: 700;\n  color: #1a1a2e;\n  font-variant-numeric: tabular-nums;\n  margin: 0 0 1px;\n  font-family: 'Nunito', sans-serif;\n  letter-spacing: -0.01em;\n  line-height: 1.25;\n  word-break: keep-all;\n}\n\n.cs-meta-val.cs-meta-count {\n  font-size: 24px;\n  letter-spacing: -0.02em;\n  line-height: 1.1;\n}\n\n.cs-meta-unit {\n  font-size: 13px;\n  font-weight: 400;\n  font-family: 'Noto Sans TC', sans-serif;\n  letter-spacing: 0;\n  opacity: 0.6;\n}\n\n.cs-meta-lbl {\n  font-size: 11px;\n  color: #888;\n  margin: 0;\n  font-weight: 300;\n  letter-spacing: 0.04em;\n}\n\n.cs-section-label {\n  font-size: 10px;\n  font-weight: 500;\n  color: #bbb;\n  letter-spacing: 0.15em;\n  text-transform: uppercase;\n  margin: 0 0 9px;\n  font-family: 'Nunito', sans-serif;\n}\n\n.cs-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 9px;\n  margin-bottom: 9px;\n}\n\n.cs-card {\n  border-radius: 12px;\n  padding: 14px 14px 12px;\n}\n\n.cs-card.walk    { background: #EAF3DE; }\n.cs-card.lick    { background: #FAEEDA; }\n.cs-card.scratch { background: #FCEBEB; }\n.cs-card.shake   { background: #E6F1FB; }\n.cs-card.stop    { background: #EEEDFE; }\n\n.cs-card-icon {\n  font-size: 18px;\n  margin-bottom: 7px;\n  display: block;\n}\n\n.cs-card-name {\n  font-size: 11px;\n  font-weight: 300;\n  margin: 0 0 4px;\n  letter-spacing: 0.08em;\n}\n\n.cs-card.walk    .cs-card-name { color: #3B6D11; }\n.cs-card.lick    .cs-card-name { color: #854F0B; }\n.cs-card.scratch .cs-card-name { color: #791F1F; }\n.cs-card.shake   .cs-card-name { color: #0C447C; }\n.cs-card.stop    .cs-card-name { color: #3C3489; }\n\n/* 時間為主：放大、加粗，取代原本次數的視覺位置 */\n.cs-card-time-main {\n  font-size: 19px;\n  font-weight: 700;\n  font-variant-numeric: tabular-nums;\n  margin: 0 0 5px;\n  letter-spacing: -0.01em;\n  font-family: 'Nunito', sans-serif;\n  line-height: 1.15;\n  word-break: keep-all;\n}\n\n.cs-card.walk    .cs-card-time-main { color: #27500A; }\n.cs-card.lick    .cs-card-time-main { color: #633806; }\n.cs-card.scratch .cs-card-time-main { color: #501313; }\n.cs-card.shake   .cs-card-time-main { color: #042C53; }\n.cs-card.stop    .cs-card-time-main { color: #26215C; }\n\n/* 次數為輔：縮小成小徽章 */\n.cs-card-count-badge {\n  display: inline-block;\n  font-size: 11px;\n  font-weight: 600;\n  padding: 2px 8px;\n  border-radius: 8px;\n  margin: 0 0 9px;\n  font-family: 'Nunito', sans-serif;\n  font-variant-numeric: tabular-nums;\n  letter-spacing: 0.02em;\n}\n\n.cs-card.walk    .cs-card-count-badge { background: #C0DD97; color: #27500A; }\n.cs-card.lick    .cs-card-count-badge { background: #FAC775; color: #633806; }\n.cs-card.scratch .cs-card-count-badge { background: #F7C1C1; color: #501313; }\n.cs-card.shake   .cs-card-count-badge { background: #B5D4F4; color: #042C53; }\n.cs-card.stop    .cs-card-count-badge { background: #CECBF6; color: #26215C; }\n\n.cs-bar {\n  height: 3px;\n  border-radius: 2px;\n  overflow: hidden;\n}\n\n.cs-card.walk    .cs-bar { background: #C0DD97; }\n.cs-card.lick    .cs-bar { background: #FAC775; }\n.cs-card.scratch .cs-bar { background: #F7C1C1; }\n.cs-card.shake   .cs-bar { background: #B5D4F4; }\n.cs-card.stop    .cs-bar { background: #CECBF6; }\n\n.cs-bar-fill {\n  height: 100%;\n  border-radius: 2px;\n  transition: width 0.6s ease;\n}\n\n.cs-card.walk    .cs-bar-fill { background: #639922; }\n.cs-card.lick    .cs-bar-fill { background: #BA7517; }\n.cs-card.scratch .cs-bar-fill { background: #A32D2D; }\n.cs-card.shake   .cs-bar-fill { background: #185FA5; }\n.cs-card.stop    .cs-bar-fill { background: #534AB7; }\n\n.cs-time-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 9px;\n  margin-bottom: 1rem;\n}\n\n.cs-time-card {\n  border-radius: 12px;\n  padding: 13px 14px;\n  display: flex;\n  align-items: center;\n  gap: 11px;\n}\n\n.cs-time-card.active { background: #EAF3DE; }\n.cs-time-card.lowconf { background: #ECEFF1; }\n\n.cs-time-icon {\n  width: 34px;\n  height: 34px;\n  border-radius: 50%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n  font-size: 16px;\n}\n\n.cs-time-card.active .cs-time-icon { background: #C0DD97; }\n.cs-time-card.lowconf .cs-time-icon { background: #CFD8DC; }\n\n.cs-time-lbl {\n  font-size: 11px;\n  margin: 0 0 2px;\n  font-weight: 300;\n  letter-spacing: 0.06em;\n}\n\n.cs-time-card.active .cs-time-lbl { color: #3B6D11; }\n.cs-time-card.lowconf .cs-time-lbl { color: #455A64; }\n\n.cs-time-val {\n  font-size: 17px;\n  font-weight: 600;\n  margin: 0;\n  font-variant-numeric: tabular-nums;\n  font-family: 'Nunito', sans-serif;\n  letter-spacing: -0.02em;\n}\n\n.cs-time-card.active .cs-time-val { color: #27500A; }\n.cs-time-card.lowconf .cs-time-val { color: #37474F; }\n</style>\n\n<div class=\"cs-wrap\" ng-if=\"msg.payload.today_stats\">\n\n  <p class=\"cs-eyebrow\">Daily Report</p>\n  <div class=\"cs-date-row\">\n    <p class=\"cs-date\"><strong>今日監測</strong></p>\n    <p class=\"cs-time-range\" ng-if=\"msg.payload.today_stats.today_start_time\">{{formatClock(msg.payload.today_stats.today_start_time)}}</p>\n  </div>\n\n  <div class=\"cs-summary\">\n    <div class=\"cs-meta\">\n      <p class=\"cs-meta-val\">{{formatTime(getSystemUptime())}}</p>\n      <p class=\"cs-meta-lbl\">總監測時長</p>\n    </div>\n    <div class=\"cs-meta\">\n      <p class=\"cs-meta-val\">{{formatTime(getTotalTime())}}</p>\n      <p class=\"cs-meta-lbl\">貓出現時長</p>\n    </div>\n  </div>\n\n  <p class=\"cs-section-label\">Behavior</p>\n  <div class=\"cs-grid\">\n\n    <div class=\"cs-card walk\">\n      <span class=\"cs-card-icon\">🚶</span>\n      <p class=\"cs-card-name\">行走</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.walk_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.walk || 0}} 次</span>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.walk_time) + '%'}\"></div></div>\n    </div>\n\n    <div class=\"cs-card lick\">\n      <span class=\"cs-card-icon\">🧼</span>\n      <p class=\"cs-card-name\">舔拭</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.lick_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.lick || 0}} 次</span>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.lick_time) + '%'}\"></div></div>\n    </div>\n\n    <div class=\"cs-card scratch\">\n      <span class=\"cs-card-icon\">🐾</span>\n      <p class=\"cs-card-name\">搔抓</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.scratch_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.scratch || 0}} 次</span>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.scratch_time) + '%'}\"></div></div>\n    </div>\n\n    <div class=\"cs-card shake\">\n      <span class=\"cs-card-icon\">🔄</span>\n      <p class=\"cs-card-name\">甩頭</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.shake_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.shake || 0}} 次</span>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.shake_time) + '%'}\"></div></div>\n    </div>\n\n    <div class=\"cs-card stop\">\n      <span class=\"cs-card-icon\">⏹</span>\n      <p class=\"cs-card-name\">靜止</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.stop_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.stop || 0}} 次</span>\n      <div class=\"cs-bar\"><div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.stop_time) + '%'}\"></div></div>\n    </div>\n\n  </div>\n\n  <p class=\"cs-section-label\" style=\"margin-top:1rem;\">Time</p>\n  <div class=\"cs-time-grid\">\n\n    <div class=\"cs-time-card active\">\n      <div class=\"cs-time-icon\">⚡</div>\n      <div>\n        <p class=\"cs-time-lbl\">活動時間</p>\n        <p class=\"cs-time-val\">{{formatTime(msg.payload.today_stats.active_time || 0)}}</p>\n      </div>\n    </div>\n\n    <div class=\"cs-time-card lowconf\">\n      <div class=\"cs-time-icon\">❓</div>\n      <div>\n        <p class=\"cs-time-lbl\">低信心時間（{{msg.payload.today_stats.low_conf || 0}} 次）</p>\n        <p class=\"cs-time-val\">{{formatTime(msg.payload.today_stats.low_conf_time || 0)}}</p>\n      </div>\n    </div>\n\n  </div>\n</div>\n\n<script>\n(function(scope) {\n  scope.formatTime = function(s) {\n    s = Math.round(s || 0);\n    if (!s) return '0 秒';\n    var h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;\n    if (h > 0) return h + ' 小時 ' + m + ' 分';\n    if (m > 0) return m + ' 分 ' + sec + ' 秒';\n    return sec + ' 秒';\n  };\n  // 計算全部由 Python 端（behavior_tracker.get_today_stats）完成，這裡只讀欄位直接顯示\n  scope.getTotalTime = function() {\n    if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n    return scope.msg.payload.today_stats.cat_visible_time || 0;\n  };\n  scope.getSystemUptime = function() {\n    if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n    return scope.msg.payload.today_stats.total_uptime || 0;\n  };\n  scope.getPercentage = function(t) {\n    var total = scope.getTotalTime();\n    if (!total) return 0;\n    return Math.round((t / total) * 100);\n  };\n  // today_start_time/last_update_time 是後端傳來的 Unix 秒數，這裡只負責\n  // 轉成本機時區的 HH:MM 顯示，不做任何時長計算（跟上面 formatTime 是\n  // 兩種不同用途：一個是「時間點」，一個是「時間長度」）。\n  scope.formatClock = function(ts) {\n    if (!ts) return '--:--';\n    var d = new Date(ts * 1000);\n    var hh = ('0' + d.getHours()).slice(-2);\n    var mm = ('0' + d.getMinutes()).slice(-2);\n    return hh + ':' + mm;\n  };\n})(scope);\n</script>",
+        "format": "<link\n  href=\"https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500&display=swap\"\n  rel=\"stylesheet\">\n\n<style>\n  .cs-wrap {\n    padding: 1rem 0.5rem;\n    font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;\n    font-weight: 400;\n  }\n\n  .cs-eyebrow {\n    font-size: 10px;\n    font-weight: 500;\n    color: #bbb;\n    letter-spacing: 0.18em;\n    text-transform: uppercase;\n    margin: 0 0 4px;\n    font-family: 'Nunito', sans-serif;\n  }\n\n  .cs-date-row {\n    display: flex;\n    align-items: baseline;\n    justify-content: space-between;\n    gap: 10px;\n    margin: 0 0 1.25rem;\n  }\n\n  .cs-date {\n    font-size: 19px;\n    font-weight: 300;\n    color: #1a1a2e;\n    margin: 0;\n    letter-spacing: 0.03em;\n  }\n\n  .cs-date strong {\n    font-weight: 500;\n  }\n\n  .cs-time-range {\n    display: flex;\n    align-items: baseline;\n    gap: 4px;\n    font-size: 13px;\n    font-weight: 400;\n    color: #999;\n    font-variant-numeric: tabular-nums;\n    font-family: 'Nunito', sans-serif;\n    letter-spacing: 0.01em;\n    white-space: nowrap;\n    margin: 0;\n  }\n\n  .cs-time-range-lbl {\n    font-family: 'Noto Sans TC', sans-serif;\n    font-size: 11px;\n    opacity: 0.8;\n  }\n\n  .cs-time-range-val {\n    font-weight: 700;\n    color: #666;\n  }\n\n  .cs-summary {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 10px;\n    margin-bottom: 1.25rem;\n  }\n\n  .cs-meta {\n    background: #f4f5f7;\n    border-radius: 10px;\n    padding: 13px 15px;\n    min-width: 0;\n  }\n\n  /* 總計數值：時/分/秒字串較長，字級收斂並允許換行避免爆版 */\n  .cs-meta-val {\n    font-size: 18px;\n    font-weight: 700;\n    color: #1a1a2e;\n    font-variant-numeric: tabular-nums;\n    margin: 0 0 1px;\n    font-family: 'Nunito', sans-serif;\n    letter-spacing: -0.01em;\n    line-height: 1.25;\n    word-break: keep-all;\n  }\n\n  .cs-meta-val.cs-meta-count {\n    font-size: 24px;\n    letter-spacing: -0.02em;\n    line-height: 1.1;\n  }\n\n  .cs-meta-unit {\n    font-size: 13px;\n    font-weight: 400;\n    font-family: 'Noto Sans TC', sans-serif;\n    letter-spacing: 0;\n    opacity: 0.6;\n  }\n\n  .cs-meta-lbl {\n    font-size: 11px;\n    color: #888;\n    margin: 0;\n    font-weight: 300;\n    letter-spacing: 0.04em;\n  }\n\n  .cs-section-label {\n    font-size: 10px;\n    font-weight: 500;\n    color: #bbb;\n    letter-spacing: 0.15em;\n    text-transform: uppercase;\n    margin: 0 0 9px;\n    font-family: 'Nunito', sans-serif;\n  }\n\n  .cs-grid {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 9px;\n    margin-bottom: 9px;\n  }\n\n  .cs-card {\n    border-radius: 12px;\n    padding: 14px 14px 12px;\n  }\n\n  .cs-card.walk {\n    background: #EAF3DE;\n  }\n\n  .cs-card.lick {\n    background: #FAEEDA;\n  }\n\n  .cs-card.scratch {\n    background: #FCEBEB;\n  }\n\n  .cs-card.shake {\n    background: #E6F1FB;\n  }\n\n  .cs-card.stop {\n    background: #EEEDFE;\n  }\n\n  .cs-card-icon {\n    font-size: 18px;\n    margin-bottom: 7px;\n    display: block;\n  }\n\n  .cs-card-name {\n    font-size: 11px;\n    font-weight: 300;\n    margin: 0 0 4px;\n    letter-spacing: 0.08em;\n  }\n\n  .cs-card.walk .cs-card-name {\n    color: #3B6D11;\n  }\n\n  .cs-card.lick .cs-card-name {\n    color: #854F0B;\n  }\n\n  .cs-card.scratch .cs-card-name {\n    color: #791F1F;\n  }\n\n  .cs-card.shake .cs-card-name {\n    color: #0C447C;\n  }\n\n  .cs-card.stop .cs-card-name {\n    color: #3C3489;\n  }\n\n  /* 時間為主：放大、加粗，取代原本次數的視覺位置 */\n  .cs-card-time-main {\n    font-size: 19px;\n    font-weight: 700;\n    font-variant-numeric: tabular-nums;\n    margin: 0 0 5px;\n    letter-spacing: -0.01em;\n    font-family: 'Nunito', sans-serif;\n    line-height: 1.15;\n    word-break: keep-all;\n  }\n\n  .cs-card.walk .cs-card-time-main {\n    color: #27500A;\n  }\n\n  .cs-card.lick .cs-card-time-main {\n    color: #633806;\n  }\n\n  .cs-card.scratch .cs-card-time-main {\n    color: #501313;\n  }\n\n  .cs-card.shake .cs-card-time-main {\n    color: #042C53;\n  }\n\n  .cs-card.stop .cs-card-time-main {\n    color: #26215C;\n  }\n\n  /* 次數為輔：縮小成小徽章 */\n  .cs-card-count-badge {\n    display: inline-block;\n    font-size: 11px;\n    font-weight: 600;\n    padding: 2px 8px;\n    border-radius: 8px;\n    margin: 0 0 9px;\n    font-family: 'Nunito', sans-serif;\n    font-variant-numeric: tabular-nums;\n    letter-spacing: 0.02em;\n  }\n\n  .cs-card.walk .cs-card-count-badge {\n    background: #C0DD97;\n    color: #27500A;\n  }\n\n  .cs-card.lick .cs-card-count-badge {\n    background: #FAC775;\n    color: #633806;\n  }\n\n  .cs-card.scratch .cs-card-count-badge {\n    background: #F7C1C1;\n    color: #501313;\n  }\n\n  .cs-card.shake .cs-card-count-badge {\n    background: #B5D4F4;\n    color: #042C53;\n  }\n\n  .cs-card.stop .cs-card-count-badge {\n    background: #CECBF6;\n    color: #26215C;\n  }\n\n  .cs-bar {\n    height: 3px;\n    border-radius: 2px;\n    overflow: hidden;\n  }\n\n  .cs-card.walk .cs-bar {\n    background: #C0DD97;\n  }\n\n  .cs-card.lick .cs-bar {\n    background: #FAC775;\n  }\n\n  .cs-card.scratch .cs-bar {\n    background: #F7C1C1;\n  }\n\n  .cs-card.shake .cs-bar {\n    background: #B5D4F4;\n  }\n\n  .cs-card.stop .cs-bar {\n    background: #CECBF6;\n  }\n\n  .cs-bar-fill {\n    height: 100%;\n    border-radius: 2px;\n    transition: width 0.6s ease;\n  }\n\n  .cs-card.walk .cs-bar-fill {\n    background: #639922;\n  }\n\n  .cs-card.lick .cs-bar-fill {\n    background: #BA7517;\n  }\n\n  .cs-card.scratch .cs-bar-fill {\n    background: #A32D2D;\n  }\n\n  .cs-card.shake .cs-bar-fill {\n    background: #185FA5;\n  }\n\n  .cs-card.stop .cs-bar-fill {\n    background: #534AB7;\n  }\n\n  .cs-time-grid {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 9px;\n    margin-bottom: 1rem;\n  }\n\n  .cs-time-card {\n    border-radius: 12px;\n    padding: 13px 14px;\n    display: flex;\n    align-items: center;\n    gap: 11px;\n  }\n\n  .cs-time-card.active {\n    background: #EAF3DE;\n  }\n\n  .cs-time-card.lowconf {\n    background: #ECEFF1;\n  }\n\n  .cs-time-icon {\n    width: 34px;\n    height: 34px;\n    border-radius: 50%;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    flex-shrink: 0;\n    font-size: 16px;\n  }\n\n  .cs-time-card.active .cs-time-icon {\n    background: #C0DD97;\n  }\n\n  .cs-time-card.lowconf .cs-time-icon {\n    background: #CFD8DC;\n  }\n\n  .cs-time-lbl {\n    font-size: 11px;\n    margin: 0 0 2px;\n    font-weight: 300;\n    letter-spacing: 0.06em;\n  }\n\n  .cs-time-card.active .cs-time-lbl {\n    color: #3B6D11;\n  }\n\n  .cs-time-card.lowconf .cs-time-lbl {\n    color: #455A64;\n  }\n\n  .cs-time-val {\n    font-size: 17px;\n    font-weight: 600;\n    margin: 0;\n    font-variant-numeric: tabular-nums;\n    font-family: 'Nunito', sans-serif;\n    letter-spacing: -0.02em;\n  }\n\n  .cs-time-card.active .cs-time-val {\n    color: #27500A;\n  }\n\n  .cs-time-card.lowconf .cs-time-val {\n    color: #37474F;\n  }\n</style>\n\n<div class=\"cs-wrap\" ng-if=\"msg.payload.today_stats\">\n\n  <p class=\"cs-eyebrow\">Daily Report</p>\n  <div class=\"cs-date-row\">\n    <p class=\"cs-date\"><strong>今日監測</strong></p>\n    <p class=\"cs-time-range\" ng-if=\"msg.payload.today_stats.today_start_time\">\n      <span class=\"cs-time-range-lbl\">開始於</span><span class=\"cs-time-range-val\">{{formatClock(msg.payload.today_stats.today_start_time)}}</span>\n    </p>\n  </div>\n\n  <div class=\"cs-summary\">\n    <div class=\"cs-meta\">\n      <p class=\"cs-meta-val\">{{formatTime(getSystemUptime())}}</p>\n      <p class=\"cs-meta-lbl\">總監測時長</p>\n    </div>\n    <div class=\"cs-meta\">\n      <p class=\"cs-meta-val\">{{formatTime(getTotalTime())}}</p>\n      <p class=\"cs-meta-lbl\">貓出現時長</p>\n    </div>\n  </div>\n\n  <p class=\"cs-section-label\">Behavior</p>\n  <div class=\"cs-grid\">\n\n    <div class=\"cs-card walk\">\n      <span class=\"cs-card-icon\">🚶</span>\n      <p class=\"cs-card-name\">行走</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.walk_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.walk || 0}} 次</span>\n      <div class=\"cs-bar\">\n        <div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.walk_time) + '%'}\"></div>\n      </div>\n    </div>\n\n    <div class=\"cs-card lick\">\n      <span class=\"cs-card-icon\">🧼</span>\n      <p class=\"cs-card-name\">舔拭</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.lick_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.lick || 0}} 次</span>\n      <div class=\"cs-bar\">\n        <div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.lick_time) + '%'}\"></div>\n      </div>\n    </div>\n\n    <div class=\"cs-card scratch\">\n      <span class=\"cs-card-icon\">🐾</span>\n      <p class=\"cs-card-name\">搔抓</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.scratch_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.scratch || 0}} 次</span>\n      <div class=\"cs-bar\">\n        <div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.scratch_time) + '%'}\"></div>\n      </div>\n    </div>\n\n    <div class=\"cs-card shake\">\n      <span class=\"cs-card-icon\">🔄</span>\n      <p class=\"cs-card-name\">甩頭</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.shake_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.shake || 0}} 次</span>\n      <div class=\"cs-bar\">\n        <div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.shake_time) + '%'}\"></div>\n      </div>\n    </div>\n\n    <div class=\"cs-card stop\">\n      <span class=\"cs-card-icon\">⏹</span>\n      <p class=\"cs-card-name\">靜止</p>\n      <p class=\"cs-card-time-main\">{{formatTime(msg.payload.today_stats.stop_time || 0)}}</p>\n      <span class=\"cs-card-count-badge\">{{msg.payload.today_stats.stop || 0}} 次</span>\n      <div class=\"cs-bar\">\n        <div class=\"cs-bar-fill\" ng-style=\"{width: getPercentage(msg.payload.today_stats.stop_time) + '%'}\"></div>\n      </div>\n    </div>\n\n  </div>\n\n  <p class=\"cs-section-label\" style=\"margin-top:1rem;\">Time</p>\n  <div class=\"cs-time-grid\">\n\n    <div class=\"cs-time-card active\">\n      <div class=\"cs-time-icon\">⚡</div>\n      <div>\n        <p class=\"cs-time-lbl\">活動時間</p>\n        <p class=\"cs-time-val\">{{formatTime(msg.payload.today_stats.active_time || 0)}}</p>\n      </div>\n    </div>\n\n    <div class=\"cs-time-card lowconf\">\n      <div class=\"cs-time-icon\">❓</div>\n      <div>\n        <p class=\"cs-time-lbl\">低信心時間（{{msg.payload.today_stats.low_conf || 0}} 次）</p>\n        <p class=\"cs-time-val\">{{formatTime(msg.payload.today_stats.low_conf_time || 0)}}</p>\n      </div>\n    </div>\n\n  </div>\n</div>\n\n<script>\n  (function(scope) {\n  scope.formatTime = function(s) {\n    s = Math.round(s || 0);\n    if (!s) return '0 秒';\n    var h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;\n    if (h > 0) return h + ' 小時 ' + m + ' 分';\n    if (m > 0) return m + ' 分 ' + sec + ' 秒';\n    return sec + ' 秒';\n  };\n  // 計算全部由 Python 端（behavior_tracker.get_today_stats）完成，這裡只讀欄位直接顯示\n  scope.getTotalTime = function() {\n    if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n    return scope.msg.payload.today_stats.cat_visible_time || 0;\n  };\n  scope.getSystemUptime = function() {\n    if (!scope.msg || !scope.msg.payload || !scope.msg.payload.today_stats) return 0;\n    return scope.msg.payload.today_stats.total_uptime || 0;\n  };\n  scope.getPercentage = function(t) {\n    var total = scope.getTotalTime();\n    if (!total) return 0;\n    return Math.round((t / total) * 100);\n  };\n  // today_start_time/last_update_time 是後端傳來的 Unix 秒數，這裡只負責\n  // 轉成本機時區的 HH:MM 顯示，不做任何時長計算（跟上面 formatTime 是\n  // 兩種不同用途：一個是「時間點」，一個是「時間長度」）。\n  scope.formatClock = function(ts) {\n    if (!ts) return '--:--';\n    var d = new Date(ts * 1000);\n    var hh = ('0' + d.getHours()).slice(-2);\n    var mm = ('0' + d.getMinutes()).slice(-2);\n    return hh + ':' + mm;\n  };\n})(scope);\n</script>",
         "storeOutMessages": false,
         "fwdInMessages": true,
         "resendOnRefresh": false,
         "templateScope": "local",
         "className": "",
-        "x": 1040,
-        "y": 200,
+        "x": 1010,
+        "y": 180,
         "wires": [
             []
         ]
     },
     {
-        "id": "9588f1ab76f9fbf4",
+        "id": "bed09e3c3ffd1809",
         "type": "ui_template",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "group": "group_alerts_cat",
         "name": "健康警示",
         "order": 4,
@@ -574,17 +574,17 @@
         "resendOnRefresh": false,
         "templateScope": "local",
         "className": "",
-        "x": 1040,
-        "y": 320,
+        "x": 1220,
+        "y": 300,
         "wires": [
             []
         ]
     },
     {
-        "id": "67cc5c5987b1cb6b",
+        "id": "edb4a5e67457e0d5",
         "type": "function",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "name": "事件時間軸引擎",
         "func": "// fs loaded via node libs: {\"var\":\"fs\",\"module\":\"fs\"}\nconst TRACKER_PATH = 'C:\\\\a\\\\tracker_state.json';\n\nlet data = msg.payload;\nif (!data || !data.current) return null;\n\nlet curBeh = data.current.behavior;\nif (!curBeh || curBeh === 'not') return null;\n\n// ── Read tracker_state.json (authoritative daily totals) ──────────\nlet tracker = {};\ntry {\n    tracker = JSON.parse(fs.readFileSync(TRACKER_PATH, 'utf8'));\n} catch(e) {\n    node.warn('tracker_state.json: ' + e.message);\n}\n\n// ── Date helpers ─────────────────────────────────────────────────\nfunction pad(n){ return String(n).padStart(2,'0'); }\nfunction fmtTime(d){\n    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+\n           ' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());\n}\nlet now      = new Date();\nlet nowMs    = now.getTime();\nlet nowStr   = fmtTime(now);\nlet todayStr = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());\nlet isToday  = (tracker.date === todayStr);\n\n// Derive start_time from Python's end_time (HH:MM:SS) and duration (sec)\nfunction deriveStart(endHMS, durSec) {\n    let pts = (endHMS||'00:00:00').split(':').map(Number);\n    let endSec   = (pts[0]||0)*3600 + (pts[1]||0)*60 + (pts[2]||0);\n    let startSec = Math.max(0, endSec - Math.round(durSec));\n    return todayStr+' '+pad(Math.floor(startSec/3600))+':'+\n           pad(Math.floor((startSec%3600)/60))+':'+pad(startSec%60);\n}\n\n// ── Accumulate Python's behavior_log (deduplicate by time+beh+dur) ─\nlet sessionEvents = flow.get('evt_session') || [];\nlet sessionKeys   = new Set(flow.get('evt_keys') || []);\nlet sessionDate   = flow.get('evt_date') || '';\n\nif (sessionDate && sessionDate !== todayStr) {\n    sessionEvents = [];\n    sessionKeys   = new Set();\n}\nflow.set('evt_date', todayStr);\n\nlet inLog   = data.behavior_log || [];\nlet changed = false;\nfor (let i = 0; i < inLog.length; i++) {\n    let rec = inLog[i];\n    if (!rec || !rec.behavior || rec.behavior === 'not' || !rec.time) continue;\n    let dur = Math.max(1, Math.round(rec.duration || 1));\n    let key = rec.time + '|' + rec.behavior + '|' + dur;\n    if (sessionKeys.has(key)) continue;\n    sessionKeys.add(key);\n    let nextId = sessionEvents.length > 0 ? sessionEvents[sessionEvents.length-1].event_id + 1 : 1;\n    sessionEvents.push({\n        event_id:   nextId,\n        behavior:   rec.behavior,\n        end_time:   todayStr + ' ' + rec.time,\n        start_time: deriveStart(rec.time, rec.duration || 0),\n        duration:   dur\n    });\n    changed = true;\n}\nif (changed) {\n    if (sessionEvents.length > 500) {\n        // trim oldest keys too\n        let trimmed = sessionEvents.slice(-500);\n        let keptKeys = new Set(trimmed.map(function(e){\n            return e.end_time.slice(11,19)+'|'+e.behavior+'|'+e.duration;\n        }));\n        sessionKeys = keptKeys;\n        sessionEvents = trimmed;\n    }\n    flow.set('evt_session', sessionEvents);\n    flow.set('evt_keys', Array.from(sessionKeys));\n}\n\n// ── Merge adjacent same-behavior events (Python sends ~2s segments) ─\n// Adjacent = gap ≤ 2s between end_time of one and start_time of the next\nfunction _tsec(dt) {\n    var t = dt.slice(11,19).split(':').map(Number);\n    return t[0]*3600 + t[1]*60 + t[2];\n}\nlet mergedEvents = (function(evts) {\n    if (evts.length < 2) return evts.slice();\n    var res = [{ event_id:evts[0].event_id, behavior:evts[0].behavior,\n                 start_time:evts[0].start_time, end_time:evts[0].end_time,\n                 duration:evts[0].duration }];\n    for (var i = 1; i < evts.length; i++) {\n        var prev = res[res.length-1], cur = evts[i];\n        if (prev.behavior === cur.behavior &&\n            _tsec(cur.start_time) - _tsec(prev.end_time) <= 2) {\n            prev.end_time = cur.end_time;\n            prev.duration = _tsec(cur.end_time) - _tsec(prev.start_time);\n        } else {\n            res.push({ event_id:cur.event_id, behavior:cur.behavior,\n                       start_time:cur.start_time, end_time:cur.end_time,\n                       duration:cur.duration });\n        }\n    }\n    return res;\n})(sessionEvents);\n\n// ── Current event live timer (Node-RED side) ──────────────────────\nlet currentEvt = flow.get('evt_cur') || null;\nif (!currentEvt || currentEvt.behavior !== curBeh) {\n    currentEvt = { behavior: curBeh, start_time: nowStr, start_ms: nowMs };\n}\nif (!currentEvt.start_ms) currentEvt.start_ms = nowMs;\ncurrentEvt.duration_running = Math.max(0, Math.round((nowMs - currentEvt.start_ms) / 1000));\nflow.set('evt_cur', currentEvt);\n\n// ── Per-behavior stats: tracker_state.json for count/total/avg ────\n// IQR / mode / max / min derived from accumulated session events\nlet bCount = (isToday && tracker.behavior_count) ? tracker.behavior_count : {};\nlet bTime  = (isToday && tracker.behavior_time)  ? tracker.behavior_time  : {};\n\n// 優先用 HTTP payload（每 2s 更新），避免等 30s 存檔才反映\nlet _statsMinMax = (data.today_stats) || {};\nlet minDur = _statsMinMax.behavior_min_duration\n             || ((isToday && tracker.behavior_min_duration) ? tracker.behavior_min_duration : {});\nlet maxDur = _statsMinMax.behavior_max_duration\n             || ((isToday && tracker.behavior_max_duration) ? tracker.behavior_max_duration : {});\n\nlet stats = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let count  = Math.round(bCount[b] || 0);\n    let totSec = bTime[b] || 0;\n    if (count === 0) {\n        stats[b] = { count:0, total_duration:0, avg_duration:0,\n                     max_duration:0, min_duration:0,\n                     mode_duration:null, mode_count:0,\n                     outlier_high:null, outlier_low:null };\n        return;\n    }\n    let durs = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .map(function(e){ return e.duration; });\n\n    let outlierHigh = null, outlierLow = null;\n    if (durs.length >= 5) {\n        let sorted = durs.slice().sort(function(a,b){ return a-b; });\n        let n  = sorted.length;\n        let q1 = sorted[Math.floor(n * 0.25)];\n        let q3 = sorted[Math.floor(n * 0.75)];\n        let iqr = q3 - q1;\n        if (iqr > 0) {\n            outlierHigh = Math.round(q3 + 1.5 * iqr);\n            outlierLow  = Math.max(1, Math.round(q1 - 1.5 * iqr));\n        }\n    }\n    let modeKey = null, modeCnt = 0;\n    if (durs.length >= 2) {\n        let buckets = {};\n        durs.forEach(function(d){\n            buckets[d] = (buckets[d]||0) + 1;\n        });\n        Object.keys(buckets).forEach(function(k){\n            if (buckets[k] > modeCnt) { modeCnt = buckets[k]; modeKey = Number(k); }\n        });\n    }\n    stats[b] = {\n        count:         count,\n        total_duration: Math.round(totSec),\n        avg_duration:   Math.round(totSec / count * 10) / 10,\n        max_duration:   maxDur[b] != null ? Math.max(1, Math.round(maxDur[b])) : (durs.length > 0 ? Math.max.apply(null, durs) : 0),\n        min_duration:   minDur[b] != null ? Math.max(1, Math.round(minDur[b])) : (durs.length > 0 ? Math.min.apply(null, durs) : 0),\n        mode_duration:  modeCnt >= 2 ? modeKey : null,\n        mode_count:     modeCnt >= 2 ? modeCnt : 0,\n        outlier_high:   outlierHigh,\n        outlier_low:    outlierLow\n    };\n});\n\n// ── Per-behavior event arrays with outlier flag ───────────────────\nlet byBehavior = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let s = stats[b];\n    byBehavior[b] = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .slice(-20).reverse()\n        .map(function(ev) {\n            let outlier = null;\n            if (s.outlier_high !== null && ev.duration > s.outlier_high) outlier = 'high';\n            else if (s.outlier_low !== null && ev.duration < s.outlier_low) outlier = 'low';\n            return { event_id:ev.event_id, behavior:ev.behavior,\n                     start_time:ev.start_time, end_time:ev.end_time,\n                     duration:ev.duration, outlier:outlier };\n        });\n});\n\nlet todayTotal = Object.values(bCount).reduce(function(a,v){ return a+Math.round(v||0); }, 0);\n\nmsg.payload = {\n    current_event: {\n        behavior:         currentEvt.behavior,\n        start_time:       currentEvt.start_time,\n        duration_running: currentEvt.duration_running,\n        status:           'running'\n    },\n    event_table:       mergedEvents.slice(-20).reverse(),\n    event_by_behavior: byBehavior,\n    event_stats:       stats,\n    total_events:      todayTotal\n};\nreturn msg;",
         "outputs": 1,
@@ -598,19 +598,19 @@
                 "module": "fs"
             }
         ],
-        "x": 1180,
-        "y": 360,
+        "x": 1010,
+        "y": 460,
         "wires": [
             [
-                "81fb4754a1e9a363"
+                "b649dbe9fd77dc03"
             ]
         ]
     },
     {
-        "id": "81fb4754a1e9a363",
+        "id": "b649dbe9fd77dc03",
         "type": "ui_template",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "group": "66d2f5137a604c19",
         "name": "行為事件分析",
         "order": 1,
@@ -623,16 +623,16 @@
         "templateScope": "local",
         "className": "",
         "x": 1220,
-        "y": 420,
+        "y": 480,
         "wires": [
             []
         ]
     },
     {
-        "id": "15b7af08b9698162",
+        "id": "f6215532c20e0ba5",
         "type": "ui_template",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "group": "",
         "name": "🎨 Dashboard Global Theme",
         "order": 0,
@@ -644,17 +644,17 @@
         "resendOnRefresh": true,
         "templateScope": "global",
         "className": "",
-        "x": 580,
-        "y": 100,
+        "x": 380,
+        "y": 60,
         "wires": [
             []
         ]
     },
     {
-        "id": "fab09f34a509651e",
+        "id": "1e18d7e1ffa6ed4f",
         "type": "ui_template",
-        "z": "c9b3353f6ab69b6b",
-        "g": "99d2434b121fa54c",
+        "z": "bfa5243aa9dbd045",
+        "g": "bbde1158c677172e",
         "group": "",
         "name": "懸浮影像（全域）",
         "order": 0,
@@ -666,8 +666,8 @@
         "resendOnRefresh": true,
         "templateScope": "global",
         "className": "",
-        "x": 1210,
-        "y": 520,
+        "x": 1010,
+        "y": 660,
         "wires": [
             []
         ]
@@ -759,7 +759,7 @@
         "hidden": false
     },
     {
-        "id": "30642f6c60b4c35c",
+        "id": "6f3da29561aa983c",
         "type": "global-config",
         "env": [],
         "modules": {

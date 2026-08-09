@@ -36,8 +36,8 @@
     "method": "post",
     "upload": false,
     "skipBodyParsing": false,
-    "x": 120,
-    "y": 100,
+    "x": 320,
+    "y": 192,
     "wires": [
       [
         "59f92c206ed0ff1e",
@@ -52,8 +52,8 @@
     "name": "200 OK",
     "statusCode": "200",
     "headers": {},
-    "x": 330,
-    "y": 160,
+    "x": 540,
+    "y": 302,
     "wires": []
   },
   {
@@ -64,8 +64,8 @@
     "property": "payload",
     "action": "obj",
     "pretty": false,
-    "x": 330,
-    "y": 100,
+    "x": 540,
+    "y": 192,
     "wires": [
       [
         "8feb3527c9bca065"
@@ -84,15 +84,16 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 560,
-    "y": 100,
+    "x": 760,
+    "y": 192,
     "wires": [
       [
         "0a8ebd132e8419f4"
       ],
       [],
       [
-        "fe98de440deab1ad"
+        "fe98de440deab1ad",
+        "b1a2c3d4e5f6072f"
       ],
       []
     ]
@@ -105,8 +106,8 @@
     "links": [
       "213c6631ce911cf0"
     ],
-    "x": 780,
-    "y": 60,
+    "x": 980,
+    "y": 192,
     "wires": []
   },
   {
@@ -117,8 +118,8 @@
     "links": [
       "ae39826a9d30dc3c"
     ],
-    "x": 780,
-    "y": 100,
+    "x": 320,
+    "y": 302,
     "wires": []
   },
   {
@@ -129,8 +130,8 @@
     "links": [
       "4b20bb60de9d0dc1"
     ],
-    "x": 780,
-    "y": 140,
+    "x": 980,
+    "y": 302,
     "wires": []
   },
   {
@@ -141,8 +142,8 @@
     "links": [
       "0a8ebd132e8419f4"
     ],
-    "x": 120,
-    "y": 320,
+    "x": 320,
+    "y": 412,
     "wires": [
       [
         "11eb0cbc1df49089"
@@ -158,14 +159,14 @@
     "order": 1,
     "width": "8",
     "height": "12",
-    "format": "<style>\n.p1-wrap{font-family:'Microsoft JhengHei',sans-serif;padding:12px;background:#0d1117;border-radius:14px;height:100%}\n.p1-status-card{background:linear-gradient(135deg,#1a2332,#0d1b2a);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:20px;margin-bottom:12px}\n.p1-emoji{font-size:48px;line-height:1;margin-bottom:8px}\n.p1-behavior{font-size:22px;font-weight:700;color:#fff;margin-bottom:4px}\n.p1-time{font-size:12px;color:rgba(255,255,255,.45)}\n.p1-score-row{display:flex;gap:10px;margin-top:14px}\n.p1-score-box{flex:1;background:rgba(255,255,255,.06);border-radius:10px;padding:12px;text-align:center}\n.p1-score-val{font-size:26px;font-weight:800;color:#fff}\n.p1-score-lbl{font-size:10px;color:rgba(255,255,255,.45);margin-top:4px}\n.p1-risk-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:99px;font-size:13px;font-weight:700;margin-top:10px}\n.risk-normal{background:rgba(76,175,80,.2);color:#81c784;border:1px solid rgba(76,175,80,.4)}\n.risk-attention{background:rgba(255,167,38,.2);color:#ffa726;border:1px solid rgba(255,167,38,.4)}\n.risk-warning{background:rgba(255,112,67,.2);color:#ff8a65;border:1px solid rgba(255,112,67,.4)}\n.risk-high{background:rgba(244,67,54,.2);color:#ef9a9a;border:1px solid rgba(244,67,54,.4)}\n.p1-bars{margin-top:14px}\n.p1-bar-row{display:grid;grid-template-columns:55px 1fr 45px;align-items:center;gap:8px;margin-bottom:8px}\n.p1-bar-lbl{font-size:11px;color:rgba(255,255,255,.5)}\n.p1-bar-track{height:7px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden}\n.p1-bar-fill{height:100%;border-radius:99px;transition:width .5s ease}\n.fill-walk{background:linear-gradient(90deg,#43a047,#66bb6a)}\n.fill-lick{background:linear-gradient(90deg,#f9a825,#ffd54f)}\n.fill-scratch{background:linear-gradient(90deg,#e53935,#ef9a9a)}\n.fill-shake{background:linear-gradient(90deg,#1e88e5,#90caf9)}\n.fill-stop{background:linear-gradient(90deg,#5c6bc0,#9fa8da)}\n.p1-bar-val{font-size:11px;color:rgba(255,255,255,.5);text-align:right}\n.p1-ov-btn{width:100%;border-radius:8px;padding:7px 0;font-size:11px;cursor:pointer;font-family:inherit;letter-spacing:.4px;transition:background .2s,color .2s,border-color .2s;border-width:1px;border-style:solid}.p1-ov-on{background:rgba(129,199,132,.18);border-color:rgba(129,199,132,.45);color:#81c784}.p1-ov-off{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.3)}\n</style>\n<div class=\"p1-wrap\" ng-init=\"init()\">\n  <div class=\"p1-status-card\">\n    <div class=\"p1-emoji\">{{cur.emoji || '🐱'}}</div>\n    <div class=\"p1-behavior\">{{behaviorName(cur.behavior)}}</div>\n    <div class=\"p1-time\">⏰ {{cur.timestamp}}</div>\n    <div class=\"p1-score-row\">\n      <div class=\"p1-score-box\">\n        <div class=\"p1-score-val\">{{msg.payload.activity_score || 0}}</div>\n        <div class=\"p1-score-lbl\">活動力</div>\n      </div>\n      <div class=\"p1-score-box\">\n        <div class=\"p1-score-val\">{{risk.score || '--'}}</div>\n        <div class=\"p1-score-lbl\">偏差分</div>\n      </div>\n    </div>\n    <div class=\"p1-risk-badge\" ng-class=\"riskCls\">\n      {{risk.emoji || '⏳'}} {{riskLevelZh(risk.level)}}\n    </div>\n  </div>\n  <div class=\"p1-bars\">\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">🚶 行走</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-walk\" ng-style=\"{width:pct('walk')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('walk')}}%</div>\n    </div>\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">😸 舔舐</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-lick\" ng-style=\"{width:pct('lick')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('lick')}}%</div>\n    </div>\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">🐾 搔抓</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-scratch\" ng-style=\"{width:pct('scratch')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('scratch')}}%</div>\n    </div>\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">🔄 甩頭</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-shake\" ng-style=\"{width:pct('shake')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('shake')}}%</div>\n    </div>\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">😴 靜止</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-stop\" ng-style=\"{width:pct('stop')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('stop')}}%</div>\n    </div>\n  \n  <div style=\"margin-top:14px;padding:0 2px\">\n    <button\n      onclick=\"if(window.gfvToggle){window.gfvToggle();}else{alert('請確認已載入貓咪主控流程');}\"\n      class=\"gfv-p1-stream-btn\"\n      style=\"width:100%;background:rgba(99,179,237,.15);border:1px solid rgba(99,179,237,.35);color:#63b3ed;border-radius:10px;padding:9px 0;font-size:12px;cursor:pointer;font-family:inherit;letter-spacing:.5px;transition:background .2s\"\n      onmouseover=\"this.style.background='rgba(99,179,237,.28)'\"\n      onmouseout=\"this.style.background='rgba(99,179,237,.15)'\"\n    >📷 開啟即時串流影像</button>\n  </div>\n  <!-- Overlay 控制列 -->\n  <div style=\"margin-top:8px;padding:0 2px\">\n    <div style=\"font-size:10px;color:rgba(255,255,255,.3);margin-bottom:5px;letter-spacing:.5px\">畫面 Overlay 控制</div>\n    <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:5px\">\n      <button ng-click=\"overlayToggle('master')\" class=\"p1-ov-btn\" ng-class=\"overlayState.master?'p1-ov-on':'p1-ov-off'\">全開/全關</button>\n      <button ng-click=\"overlayToggle('skeleton')\" class=\"p1-ov-btn\" ng-class=\"overlayState.skeleton?'p1-ov-on':'p1-ov-off'\">骨架</button>\n      <button ng-click=\"overlayToggle('label')\" class=\"p1-ov-btn\" ng-class=\"overlayState.label?'p1-ov-on':'p1-ov-off'\">行為標籤</button>\n      <button ng-click=\"overlayToggle('bbox')\" class=\"p1-ov-btn\" ng-class=\"overlayState.bbox?'p1-ov-on':'p1-ov-off'\">偵測框</button>\n    </div>\n  </div>\n</div>\n</div>\n<script>\n(function(scope){\n  scope.cur  = {};\n  scope.risk = {};\n  scope.pythonIp    = '127.0.0.1';\n  scope.overlayState = {master:true,skeleton:true,label:true,bbox:true};\n  scope.overlayToggle = function(key){\n    var url = 'http://'+scope.pythonIp+':5000/api/overlay';\n    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},\n      body:JSON.stringify({key:key,action:'toggle'})})\n    .then(function(r){return r.json();})\n    .then(function(d){if(d.state) scope.$evalAsync(function(){scope.overlayState=d.state;});})\n    .catch(function(){});\n  };\n  scope.riskLevelZh = function(lvl){\n    return (lvl==='Severe Behavioral Deviation'||lvl==='High Risk')?'重度行為偏差':\n           (lvl==='Moderate Behavioral Deviation'||lvl==='Warning')?'中度行為偏差':\n           (lvl==='Mild Behavioral Deviation'||lvl==='Attention')?'輕度行為偏差':\n           (lvl==='Normal')?'行為正常':lvl||'計算中';\n  };\n  scope.riskCls = 'risk-normal';\n  scope.init = function(){};\n  scope.behaviorName = function(b){\n    return {walk:'行走',lick:'舔舐',scratch:'搔抓',shake:'甩頭',stop:'靜止',not:'不在畫面'}[b] || b || '偵測中';\n  };\n  scope.pct = function(b){\n    let td = scope.msg && scope.msg.payload && scope.msg.payload.v2_today;\n    if(!td) return 0;\n    let total = (td.walk.time||0)+(td.lick.time||0)+(td.scratch.time||0)+(td.shake.time||0)+(td.stop.time||0);\n    if(total===0) return 0;\n    let t = td[b] ? td[b].time : 0;\n    return (t/total*100).toFixed(2);\n  };\n  scope.$watch('msg',function(m){\n    if(!m||!m.payload) return;\n    scope.cur  = m.payload.current || {};\n    scope.risk = m.payload.risk || {};\n    if(m.payload.system&&m.payload.system.ip) scope.pythonIp=m.payload.system.ip;\n    let lvl    = scope.risk.level || '';\n    scope.riskCls = (lvl==='Severe Behavioral Deviation'||lvl==='High Risk')?'risk-high':\n              (lvl==='Moderate Behavioral Deviation'||lvl==='Warning')?'risk-warning':\n              (lvl==='Mild Behavioral Deviation'||lvl==='Attention')?'risk-attention':'risk-normal';\n  });\n})(scope);\n</script>",
+    "format": "<style>\n.p1-wrap{font-family:'Microsoft JhengHei',sans-serif;padding:12px;background:#0d1117;border-radius:14px;height:100%}\n.p1-status-card{background:linear-gradient(135deg,#1a2332,#0d1b2a);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:20px;margin-bottom:12px}\n.p1-emoji{font-size:48px;line-height:1;margin-bottom:8px}\n.p1-behavior{font-size:22px;font-weight:700;color:#fff;margin-bottom:4px}\n.p1-time{font-size:12px;color:rgba(255,255,255,.45)}\n.p1-score-row{display:flex;gap:10px;margin-top:14px}\n.p1-score-box{flex:1;background:rgba(255,255,255,.06);border-radius:10px;padding:12px;text-align:center}\n.p1-score-val{font-size:26px;font-weight:800;color:#fff}\n.p1-score-lbl{font-size:10px;color:rgba(255,255,255,.45);margin-top:4px}\n.p1-risk-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:99px;font-size:13px;font-weight:700;margin-top:10px}\n.risk-normal{background:rgba(76,175,80,.2);color:#81c784;border:1px solid rgba(76,175,80,.4)}\n.risk-attention{background:rgba(255,167,38,.2);color:#ffa726;border:1px solid rgba(255,167,38,.4)}\n.risk-warning{background:rgba(255,112,67,.2);color:#ff8a65;border:1px solid rgba(255,112,67,.4)}\n.risk-high{background:rgba(244,67,54,.2);color:#ef9a9a;border:1px solid rgba(244,67,54,.4)}\n.p1-bars{margin-top:14px}\n.p1-bar-row{display:grid;grid-template-columns:55px 1fr 45px;align-items:center;gap:8px;margin-bottom:8px}\n.p1-bar-lbl{font-size:11px;color:rgba(255,255,255,.5)}\n.p1-bar-track{height:7px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden}\n.p1-bar-fill{height:100%;border-radius:99px;transition:width .5s ease}\n.fill-walk{background:linear-gradient(90deg,#43a047,#66bb6a)}\n.fill-lick{background:linear-gradient(90deg,#f9a825,#ffd54f)}\n.fill-scratch{background:linear-gradient(90deg,#e53935,#ef9a9a)}\n.fill-shake{background:linear-gradient(90deg,#1e88e5,#90caf9)}\n.fill-stop{background:linear-gradient(90deg,#5c6bc0,#9fa8da)}\n.p1-bar-val{font-size:11px;color:rgba(255,255,255,.5);text-align:right}\n.p1-ov-btn{width:100%;border-radius:8px;padding:7px 0;font-size:11px;cursor:pointer;font-family:inherit;letter-spacing:.4px;transition:background .2s,color .2s,border-color .2s;border-width:1px;border-style:solid}.p1-ov-on{background:rgba(129,199,132,.18);border-color:rgba(129,199,132,.45);color:#81c784}.p1-ov-off{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.3)}\n</style>\n<div class=\"p1-wrap\" ng-init=\"init()\">\n  <div class=\"p1-status-card\">\n    <div class=\"p1-emoji\">{{cur.emoji || '🐱'}}</div>\n    <div class=\"p1-behavior\">{{behaviorName(cur.behavior)}}</div>\n    <div class=\"p1-time\">⏰ {{cur.timestamp}}</div>\n    <div class=\"p1-score-row\">\n      <div class=\"p1-score-box\">\n        <div class=\"p1-score-val\">{{msg.payload.activity_score || 0}}</div>\n        <div class=\"p1-score-lbl\">活動力</div>\n      </div>\n      <div class=\"p1-score-box\">\n        <div class=\"p1-score-val\">{{risk.score || '--'}}</div>\n        <div class=\"p1-score-lbl\">偏差分</div>\n      </div>\n    </div>\n    <div class=\"p1-risk-badge\" ng-class=\"riskCls\">\n      {{risk.emoji || '⏳'}} {{riskLevelZh(risk.level)}}\n    </div>\n  </div>\n  <div class=\"p1-bars\">\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">🚶 行走</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-walk\" ng-style=\"{width:pct('walk')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('walk')}}%</div>\n    </div>\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">😸 舔舐</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-lick\" ng-style=\"{width:pct('lick')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('lick')}}%</div>\n    </div>\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">🐾 搔抓</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-scratch\" ng-style=\"{width:pct('scratch')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('scratch')}}%</div>\n    </div>\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">🔄 甩頭</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-shake\" ng-style=\"{width:pct('shake')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('shake')}}%</div>\n    </div>\n    <div class=\"p1-bar-row\">\n      <div class=\"p1-bar-lbl\">😴 靜止</div>\n      <div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-stop\" ng-style=\"{width:pct('stop')+'%'}\"></div></div>\n      <div class=\"p1-bar-val\">{{pct('stop')}}%</div>\n    </div>\n  \n  <div style=\"margin-top:14px;padding:0 2px\">\n    <button\n      onclick=\"if(window.gfvToggle){window.gfvToggle();}else{alert('請確認已載入貓咪主控流程');}\"\n      class=\"gfv-p1-stream-btn\"\n      style=\"width:100%;background:rgba(99,179,237,.15);border:1px solid rgba(99,179,237,.35);color:#63b3ed;border-radius:10px;padding:9px 0;font-size:12px;cursor:pointer;font-family:inherit;letter-spacing:.5px;transition:background .2s\"\n      onmouseover=\"this.style.background='rgba(99,179,237,.28)'\"\n      onmouseout=\"this.style.background='rgba(99,179,237,.15)'\"\n    >📷 開啟即時串流影像</button>\n  </div>\n  <!-- Overlay 控制列 -->\n  <div style=\"margin-top:8px;padding:0 2px\">\n    <div style=\"font-size:10px;color:rgba(255,255,255,.3);margin-bottom:5px;letter-spacing:.5px\">畫面 Overlay 控制</div>\n    <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:5px\">\n      <button ng-click=\"overlayToggle('master')\" class=\"p1-ov-btn\" ng-class=\"overlayState.master?'p1-ov-on':'p1-ov-off'\">{{overlayState.master ? '全關' : '全開'}}</button>\n      <button ng-click=\"overlayToggle('skeleton')\" class=\"p1-ov-btn\" ng-class=\"overlayState.skeleton?'p1-ov-on':'p1-ov-off'\">骨架</button>\n      <button ng-click=\"overlayToggle('label')\" class=\"p1-ov-btn\" ng-class=\"overlayState.label?'p1-ov-on':'p1-ov-off'\">行為標籤</button>\n      <button ng-click=\"overlayToggle('bbox')\" class=\"p1-ov-btn\" ng-class=\"overlayState.bbox?'p1-ov-on':'p1-ov-off'\">偵測框</button>\n    </div>\n  </div>\n</div>\n</div>\n<script>\n(function(scope){\n  scope.cur  = {};\n  scope.risk = {};\n  scope.pythonIp    = '127.0.0.1';\n  scope.overlayState = {master:true,skeleton:true,label:true,bbox:true};\n  scope.overlayToggle = function(key){\n    var url = 'http://'+scope.pythonIp+':5000/api/overlay';\n    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},\n      body:JSON.stringify({key:key,action:'toggle'})})\n    .then(function(r){return r.json();})\n    .then(function(d){if(d.state) scope.$evalAsync(function(){scope.overlayState=d.state;});})\n    .catch(function(){});\n  };\n  scope.riskLevelZh = function(lvl){\n    return (lvl==='Severe Behavioral Deviation'||lvl==='High Risk')?'重度行為偏差':\n           (lvl==='Moderate Behavioral Deviation'||lvl==='Warning')?'中度行為偏差':\n           (lvl==='Mild Behavioral Deviation'||lvl==='Attention')?'輕度行為偏差':\n           (lvl==='Normal')?'行為正常':lvl||'計算中';\n  };\n  scope.riskCls = 'risk-normal';\n  scope.init = function(){};\n  scope.behaviorName = function(b){\n    return {walk:'行走',lick:'舔舐',scratch:'搔抓',shake:'甩頭',stop:'靜止',not:'不在畫面'}[b] || b || '偵測中';\n  };\n  scope.pct = function(b){\n    let td = scope.msg && scope.msg.payload && scope.msg.payload.v2_today;\n    if(!td) return 0;\n    let total = (td.walk.time||0)+(td.lick.time||0)+(td.scratch.time||0)+(td.shake.time||0)+(td.stop.time||0);\n    if(total===0) return 0;\n    let t = td[b] ? td[b].time : 0;\n    return (t/total*100).toFixed(2);\n  };\n  scope.$watch('msg',function(m){\n    if(!m||!m.payload) return;\n    scope.cur  = m.payload.current || {};\n    scope.risk = m.payload.risk || {};\n    if(m.payload.system&&m.payload.system.ip) scope.pythonIp=m.payload.system.ip;\n    let lvl    = scope.risk.level || '';\n    scope.riskCls = (lvl==='Severe Behavioral Deviation'||lvl==='High Risk')?'risk-high':\n              (lvl==='Moderate Behavioral Deviation'||lvl==='Warning')?'risk-warning':\n              (lvl==='Mild Behavioral Deviation'||lvl==='Attention')?'risk-attention':'risk-normal';\n  });\n})(scope);\n</script>",
     "storeOutMessages": true,
     "fwdInMessages": true,
     "resendOnRefresh": true,
     "templateScope": "local",
     "className": "",
-    "x": 360,
-    "y": 320,
+    "x": 540,
+    "y": 412,
     "wires": [
       []
     ]
@@ -178,8 +179,8 @@
     "links": [
       "24900225dbe12cb2"
     ],
-    "x": 120,
-    "y": 440,
+    "x": 320,
+    "y": 522,
     "wires": [
       [
         "c90243a7c1a9407d"
@@ -201,8 +202,8 @@
     "resendOnRefresh": true,
     "templateScope": "local",
     "className": "",
-    "x": 360,
-    "y": 440,
+    "x": 540,
+    "y": 522,
     "wires": [
       []
     ]
@@ -215,8 +216,8 @@
     "links": [
       "fe98de440deab1ad"
     ],
-    "x": 100,
-    "y": 100,
+    "x": 40,
+    "y": 192,
     "wires": [
       [
         "0b1265ce733b827f"
@@ -235,8 +236,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 300,
-    "y": 100,
+    "x": 260,
+    "y": 192,
     "wires": [
       [
         "66c6d611d39e8d50"
@@ -256,7 +257,7 @@
     "finalize": "",
     "libs": [],
     "x": 480,
-    "y": 100,
+    "y": 192,
     "wires": [
       [
         "7b161e3492a5cd6a"
@@ -275,8 +276,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 660,
-    "y": 100,
+    "x": 700,
+    "y": 192,
     "wires": [
       [
         "4b0c232763de1461"
@@ -295,8 +296,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 860,
-    "y": 100,
+    "x": 920,
+    "y": 192,
     "wires": [
       [
         "24900225dbe12cb2",
@@ -316,8 +317,8 @@
       "1a5ee04b2ccffbd5",
       "ae39826a9d30dc3c"
     ],
-    "x": 1060,
-    "y": 60,
+    "x": 1140,
+    "y": 192,
     "wires": []
   },
   {
@@ -328,8 +329,8 @@
     "links": [
       "b1dc8b6ec394839a"
     ],
-    "x": 1060,
-    "y": 100,
+    "x": 1140,
+    "y": 302,
     "wires": []
   },
   {
@@ -344,8 +345,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 1060,
-    "y": 200,
+    "x": 1140,
+    "y": 412,
     "wires": [
       [
         "1c5374c31be341bd"
@@ -368,8 +369,8 @@
     "authType": "",
     "senderr": false,
     "headers": [],
-    "x": 1260,
-    "y": 200,
+    "x": 1360,
+    "y": 192,
     "wires": [
       []
     ]
@@ -382,8 +383,8 @@
     "links": [
       "24900225dbe12cb2"
     ],
-    "x": 100,
-    "y": 300,
+    "x": 40,
+    "y": 302,
     "wires": [
       [
         "de98157b1b927d40"
@@ -405,8 +406,8 @@
     "resendOnRefresh": true,
     "templateScope": "local",
     "className": "",
-    "x": 340,
-    "y": 300,
+    "x": 260,
+    "y": 302,
     "wires": [
       []
     ]
@@ -419,8 +420,8 @@
     "links": [
       "dc795368d2db2d33"
     ],
-    "x": 100,
-    "y": 440,
+    "x": 40,
+    "y": 412,
     "wires": [
       [
         "e3809f1cf09346ad"
@@ -442,8 +443,8 @@
     "resendOnRefresh": true,
     "templateScope": "local",
     "className": "",
-    "x": 340,
-    "y": 440,
+    "x": 260,
+    "y": 412,
     "wires": [
       [
         "ff00000000000010"
@@ -462,8 +463,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 400,
-    "y": 100,
+    "x": 430,
+    "y": 302,
     "wires": [
       [
         "a1000000000000f1",
@@ -486,8 +487,8 @@
     "strings": true,
     "include_empty_strings": false,
     "include_null_values": false,
-    "x": 640,
-    "y": 100,
+    "x": 870,
+    "y": 302,
     "wires": [
       [
         "4039cb1df63d1e60"
@@ -505,8 +506,8 @@
     "createDir": true,
     "overwriteFile": "false",
     "encoding": "utf8",
-    "x": 860,
-    "y": 100,
+    "x": 1090,
+    "y": 302,
     "wires": [
       []
     ]
@@ -519,8 +520,8 @@
     "links": [
       "2647a7294febc1fd"
     ],
-    "x": 100,
-    "y": 100,
+    "x": 210,
+    "y": 302,
     "wires": [
       [
         "66a22e0ec663d07d"
@@ -539,8 +540,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 360,
-    "y": 100,
+    "x": 540,
+    "y": 82,
     "wires": [
       [
         "a41466acee67f99a",
@@ -563,8 +564,8 @@
     "strings": true,
     "include_empty_strings": false,
     "include_null_values": false,
-    "x": 580,
-    "y": 80,
+    "x": 760,
+    "y": 82,
     "wires": [
       [
         "602c47782c0f1c85"
@@ -582,8 +583,8 @@
     "createDir": true,
     "overwriteFile": "false",
     "encoding": "utf8",
-    "x": 800,
-    "y": 80,
+    "x": 980,
+    "y": 82,
     "wires": [
       []
     ]
@@ -600,8 +601,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 580,
-    "y": 140,
+    "x": 760,
+    "y": 192,
     "wires": [
       [
         "2647a7294febc1fd"
@@ -625,8 +626,8 @@
     "topic": "",
     "payload": "{}",
     "payloadType": "json",
-    "x": 140,
-    "y": 100,
+    "x": 320,
+    "y": 82,
     "wires": [
       [
         "c5ce881398ee6376"
@@ -650,8 +651,8 @@
     "topic": "",
     "payload": "{}",
     "payloadType": "json",
-    "x": 140,
-    "y": 180,
+    "x": 320,
+    "y": 192,
     "wires": [
       [
         "d843ffcf4f4bf414"
@@ -670,8 +671,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 360,
-    "y": 180,
+    "x": 540,
+    "y": 192,
     "wires": [
       [
         "ba27abb3b73264fb"
@@ -693,8 +694,8 @@
     "strings": true,
     "include_empty_strings": false,
     "include_null_values": false,
-    "x": 570,
-    "y": 180,
+    "x": 760,
+    "y": 302,
     "wires": [
       [
         "32ead1535cd1a76a"
@@ -712,8 +713,8 @@
     "createDir": true,
     "overwriteFile": "false",
     "encoding": "utf8",
-    "x": 790,
-    "y": 180,
+    "x": 980,
+    "y": 302,
     "wires": [
       []
     ]
@@ -726,8 +727,8 @@
     "links": [
       "5035325d359a5e72"
     ],
-    "x": 800,
-    "y": 140,
+    "x": 980,
+    "y": 192,
     "wires": []
   },
   {
@@ -747,8 +748,8 @@
     "topic": "",
     "payload": "{}",
     "payloadType": "json",
-    "x": 160,
-    "y": 260,
+    "x": 320,
+    "y": 302,
     "wires": [
       [
         "2647a7294febc1fd"
@@ -772,8 +773,8 @@
     "topic": "",
     "payload": "{}",
     "payloadType": "json",
-    "x": 160,
-    "y": 300,
+    "x": 320,
+    "y": 412,
     "wires": [
       [
         "c5ce881398ee6376"
@@ -797,8 +798,8 @@
     "topic": "",
     "payload": "{}",
     "payloadType": "json",
-    "x": 160,
-    "y": 360,
+    "x": 320,
+    "y": 522,
     "wires": [
       [
         "25a5d07e18c136a9"
@@ -817,8 +818,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 390,
-    "y": 360,
+    "x": 540,
+    "y": 302,
     "wires": [
       []
     ]
@@ -840,8 +841,8 @@
     "topic": "",
     "payload": "{}",
     "payloadType": "json",
-    "x": 170,
-    "y": 460,
+    "x": 320,
+    "y": 632,
     "wires": [
       [
         "ff00000000000002"
@@ -860,8 +861,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 420,
-    "y": 460,
+    "x": 540,
+    "y": 412,
     "wires": [
       []
     ]
@@ -878,8 +879,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 560,
-    "y": 440,
+    "x": 480,
+    "y": 302,
     "wires": [
       [
         "ff00000000000011"
@@ -897,8 +898,8 @@
     "links": [
       "5035325d359a5e72"
     ],
-    "x": 760,
-    "y": 440,
+    "x": 700,
+    "y": 302,
     "wires": []
   },
   {
@@ -966,8 +967,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 500,
-    "y": 60,
+    "x": 650,
+    "y": 302,
     "wires": [
       [
         "6db53c0372826d6e"
@@ -986,8 +987,8 @@
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 500,
-    "y": 160,
+    "x": 650,
+    "y": 412,
     "wires": [
       [
         "a1000000000000f4"
@@ -1002,8 +1003,8 @@
     "links": [
       "a1000000000000f5"
     ],
-    "x": 700,
-    "y": 160,
+    "x": 870,
+    "y": 412,
     "wires": []
   },
   {
@@ -1014,8 +1015,8 @@
     "links": [
       "a1000000000000f4"
     ],
-    "x": 120,
-    "y": 500,
+    "x": 40,
+    "y": 522,
     "wires": [
       [
         "e3809f1cf09346ad"

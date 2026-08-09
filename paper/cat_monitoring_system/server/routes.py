@@ -457,10 +457,9 @@ def register_routes(app):
 
         if key == "master":
             frame_processor.overlay = value
-            if value:
-                frame_processor.show_skeleton = True
-                frame_processor.show_label = True
-                frame_processor.show_bbox = True
+            frame_processor.show_skeleton = value
+            frame_processor.show_label = value
+            frame_processor.show_bbox = value
         elif key == "skeleton":
             frame_processor.show_skeleton = value
         elif key == "label":

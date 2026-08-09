@@ -11,6 +11,25 @@ matching the original JS (``Math.sqrt(sum(sq)/n)``) — the daily-history
 sample is the entire population of "this cat's days we know about", not a
 sample drawn from a larger population, so ddof=0 is intentional and is kept
 for parity with the numbers already shown on the existing dashboard.
+
+Literature positioning: rolling individual-history baselines (rather than
+population norms) are an established digital-phenotyping/wearable-health
+pattern (Barnett et al., 2018, Neuropsychopharmacology; Mishra et al.,
+2020, Nature Biomedical Engineering). The closest direct precedent for
+this *exact* problem — individualized daily behavioral baselines for
+companion animals — is Silva, Ribeiro & Gama (2025, in Meo & Silvestri
+[Eds.], Machine Learning and Knowledge Discovery in Databases, Springer),
+which builds per-individual anomaly baselines from accelerometer data on
+10 pets (5 cats + 5 dogs) and finds per-day-then-time-of-day aggregation
+works best — the same granularity this module's ``period_coverage``
+tracking already uses, via a different sensing modality and algorithm
+family (unsupervised ML rather than parametric statistics). The MAD +
+Poisson/NB combination this module + deviation.py implement should be
+described in writeups as a methodological synthesis of two independent,
+well-established statistical traditions (robust statistics; count-based
+surveillance monitoring — see deviation.py docstring) applied to this
+problem, not as a direct replication of any single prior paper's method.
+Full citation list: ``paper/docs/個體化基線與異常偵測文獻來源.md``.
 """
 
 from __future__ import annotations
@@ -224,6 +243,10 @@ def compute_baseline(
 
     count_histories = {name: [getattr(d, name) for d in days] for name in COUNT_METRICS}
 
+    # 群體參考值（~60 min/day lick、~1 min/day scratch）來自 Eckstein & Hart (2000),
+    # "The organization and control of grooming in cats", Applied Animal Behaviour
+    # Science 68: 131-140 —— 11 隻無體外寄生蟲家貓的錄影時間預算研究，健康貓每日
+    # 舔舐佔非睡眠時間 8%（約 1 小時），抓撓僅佔約 0.2%（約 1 分鐘），兩者比例約 50:1。
     sanity_warnings = []
     lick_mean = metrics["lick_time"].mean
     scratch_mean = metrics["scratch_time"].mean

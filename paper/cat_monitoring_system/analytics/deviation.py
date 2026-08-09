@@ -27,6 +27,12 @@ metric actually is (see ``baseline.CONTINUOUS_METRICS`` /
   under normality. MAD has a 50% breakdown point (vs. 25% for IQR, 0% for
   std), so a couple of unusually long grooming days in the baseline window
   can't drag the "normal" spread up the way a mean/std baseline can.
+  Literature: Iglewicz & Hoaglin (1993) is the origin of the 1.4826 modified
+  z-score; Leys et al. (2013, J. Experimental Social Psychology) is the
+  standard citation for MAD's breakdown-point advantage over SD, including
+  the exact "one outlier day masks later real anomalies" failure mode this
+  module is built to avoid. See
+  ``paper/docs/個體化基線與異常偵測文獻來源.md`` §1 for the full writeup.
 
 * **Sparse event counts** (integers, mean well under ~5/day): a Poisson (or
   Negative Binomial, if the count history is overdispersed) tail
@@ -39,6 +45,18 @@ metric actually is (see ``baseline.CONTINUOUS_METRICS`` /
   P(X≥2 | λ≈0.71) ≈ 0.16 → correctly not remarkable (see
   ``analytics/tests/test_deviation.py::test_sparse_count_no_false_alarm``
   for the exact reproduction of this case).
+  Literature: this is standard practice in infectious-disease outbreak
+  surveillance, which faces the identical "sparse count, need a principled
+  probability threshold instead of a variance threshold" problem —
+  Farrington et al. (1996, JRSS-A) is the quasi-Poisson algorithm still run
+  by UK infectious disease surveillance today; Höhle & Paul (2008,
+  Computational Statistics & Data Analysis) is the direct source for the
+  Poisson→NB fallback under overdispersion (implemented in the R
+  ``surveillance`` package); Farrington (1995, Biometrics) self-controlled
+  case series is the individual-as-own-control + Poisson precedent at the
+  single-subject level. No direct precedent was found applying this
+  specifically to individual animal behavior counts — the transfer is by
+  structural analogy, not a cited prior application.
 
 Both paths report a ``sigma_equivalent`` so the downstream fusion engine
 (fusion.py) can keep using a single σ-shaped scale (2.5 / 3.0 / 4.0
@@ -62,6 +80,16 @@ COUNT_OVERDISPERSION_RATIO = 1.5  # variance/mean above this → use NB not Pois
 RATE_SMOOTHING_PRIOR = 0.25  # Bayesian-ish additive smoothing for λ, avoids
 # λ=0 producing an infinite/undefined tail prob
 # after an all-zero baseline window
+MIN_TAIL_P = 1e-15  # floor for a tail probability before converting to a sigma
+# equivalent. Must stay far enough from 0 that `1.0 - p` is still
+# distinguishable from 1.0 in float64 (machine epsilon near 1.0 is
+# ~2.22e-16) — an earlier floor of 1e-300 looked "safer" but silently
+# collapsed `1.0 - 1e-300 == 1.0`, making `_norm_ppf` hit its p>=1.0
+# guard and return literal `math.inf`. Flask's default JSON encoder
+# happily serializes that as the bareword `Infinity`, which is not
+# valid JSON and breaks any strict parser downstream (e.g. Node-RED's
+# http request node) — reproduced via a real /api/deviation call with
+# an extreme count-metric outlier (today far beyond the Poisson tail).
 
 
 @dataclass
@@ -94,7 +122,7 @@ def _norm_isf(p: float) -> float:
     (no scipy dependency) — accurate to ~1e-9, more than enough for a
     display-facing "sigma equivalent".
     """
-    p = min(max(p, 1e-300), 1 - 1e-16)
+    p = min(max(p, MIN_TAIL_P), 1 - 1e-16)
     # symmetry: isf(p) = -ppf(p) for p<0.5 branch handled via ppf(1-p)
     q = 1.0 - p
     return _norm_ppf(q)
@@ -291,7 +319,7 @@ def _deviate_count(
         p, sign = upper_p, 1.0
     else:
         p, sign = lower_p, -1.0
-    sigma_eq = sign * _norm_isf(max(min(p, 1.0), 1e-300))
+    sigma_eq = sign * _norm_isf(max(min(p, 1.0), MIN_TAIL_P))
 
     return MetricDeviation(
         metric=metric,

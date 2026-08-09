@@ -626,7 +626,7 @@ class CatIdentityConfig:
     CAT_ID = _env_str("CAT_MONITORING_CAT_ID", "cat_001")
 
     ENABLE_IDENTITY_VERIFICATION = _env_bool(
-        "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION", True
+        "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION", False
     )
     # 目標貓（唯一會被納入統計）的顏色特徵基準檔路徑，由
     # tools/3_cat_identity_verification_test.py 的 enroll 模式產生
@@ -678,6 +678,20 @@ class VisualizationConfig:
     # SHOW_NOSE_TRAPEZOID: True = 在串流畫面上繪製鼻子接觸梯形 overlay（lick_stage plugin 專用）
     # 設為 False 可在不移除 plugin 的情況下完全隱藏此視覺效果。
     SHOW_NOSE_TRAPEZOID = _env_bool("CAT_MONITORING_SHOW_NOSE_TRAPEZOID", True)
+
+    # 以下三個是 FrameProcessor.show_skeleton/show_label/show_bbox 的「啟動預設值」，
+    # 決定 Python 進程一啟動時畫面上預設要不要畫這些疊圖；啟動後仍可透過 GUI 模式
+    # 鍵盤 s/l/b 或 server 模式 /api/overlay 在執行期即時切換，不受這裡影響
+    # （這裡只決定重啟後、切回來時的初始狀態）。
+    SHOW_BBOX = _env_bool(
+        "CAT_MONITORING_SHOW_BBOX", True
+    )  # 是否繪製 YOLO 偵測框(bbox)與信心值文字
+    SHOW_SKELETON = _env_bool(
+        "CAT_MONITORING_SHOW_SKELETON", True
+    )  # 是否繪製骨架關鍵點與連線
+    SHOW_GCN_RESULT = _env_bool(
+        "CAT_MONITORING_SHOW_GCN_RESULT", True
+    )  # 是否顯示 ST-GCN 行為分類結果與機率條
 
 
 # ==================== 系統識別 ====================
@@ -816,6 +830,9 @@ def get_config_summary() -> str:
       - 串流縮放尺寸      : {VisualizationConfig.STREAM_DISPLAY_SIZE}
       - Ring Buffer 秒數  : {VisualizationConfig.CLIP_SECONDS} s
       - 鼻子梯形 overlay  : {VisualizationConfig.SHOW_NOSE_TRAPEZOID}
+      - 偵測框 bbox (啟動預設): {VisualizationConfig.SHOW_BBOX}  （執行期間可用鍵盤 b 切換(僅限 gui 模式)）
+      - 骨架關鍵點 (啟動預設): {VisualizationConfig.SHOW_SKELETON}  （執行期間可用鍵盤 s 切換(僅限 gui 模式)）
+      - GCN 分類結果+機率條 (啟動預設): {VisualizationConfig.SHOW_GCN_RESULT}  （執行期間可用鍵盤 l 切換(僅限 gui 模式)）
 
     🔗 Node-RED 連線
       - 主機        : {NodeRedConfig.HOST}:{NodeRedConfig.PORT}

@@ -38,21 +38,61 @@ LEVEL_MIN_SCORE = {
 }
 
 # metric name (as produced by deviation.py) -> (weight, threshold_mild, threshold_mod, threshold_severe)
+#
+# Duration features (lick_time, scratch_time) are weighted above their paired count
+# features (lick_count, scratch_count) not because duration is assumed to be more
+# clinically severe than frequency -- Colombo et al. (2022, Veterinary Dermatology
+# 33(5), "VAScat") found lick and scratch VAS scores correlate with *different*
+# clinical signs (hair loss vs.
+# head/neck pruritus respectively, r=0.26 between the two scales) with no evidence
+# either axis is inherently more severe, which is why lick/scratch stay separate
+# features here rather than being merged. The duration-over-count weighting instead
+# reflects measurement stability: bout *count* depends on an arbitrary segmentation
+# rule (Eckstein & Hart, 2000, used a 60s gap to end a bout and merged brief <5s
+# pauses into the same bout), making it more sensitive to detection noise than
+# cumulative *duration*, which is a continuous sum less perturbed by where bout
+# boundaries fall.
 CLASS_A_FEATURES = {
     "lick_time": {"weight": 0.30, "label": "Lick Duration"},
     "lick_count": {"weight": 0.15, "label": "Lick Frequency"},
     "scratch_time": {"weight": 0.30, "label": "Scratch Duration"},
     "scratch_count": {"weight": 0.10, "label": "Scratch Frequency"},
 }
+# Sigma cutoffs (2.5 / 3.0 / 4.0) are currently expert-set, not data-derived. Colombo
+# et al. (2022) calibrated an analogous cat pruritus severity cutoff via ROC analysis
+# against owner-scored VAS in 153 diseased + 108 healthy cats (cutoff=2 on a 0-10
+# scale gave 93% sensitivity / 92% specificity) -- once real diagnosed-anomaly
+# labels exist for this system, the same ROC-optimization approach should replace
+# these fixed thresholds.
 CLASS_A_THRESHOLDS = {"mild": 2.5, "moderate": 3.0, "severe": 4.0}
 CLASS_A_WEIGHT_SUM = sum(f["weight"] for f in CLASS_A_FEATURES.values())  # 0.85
 
+# shake_count's 0.40 (highest of the three Class B features) has NO literature
+# support: a targeted lit scan (2026-08) found no quantified/validated link between
+# head-shake frequency and ear-disease diagnosis in cats, and veterinary consensus
+# (Brame & Cain, 2021, JFMS) describes head-shaking as sensitive but not
+# diagnostically specific to ear disease -- multiple unrelated causes present with
+# the same behavior. Kept as-is (expert judgment) pending real data; documented
+# here as an explicit, unvalidated design choice rather than left silent.
 CLASS_B_FEATURES = {
     "shake_count": {"weight": 0.40, "label": "Head Shake"},
     "walk_time": {"weight": 0.30, "label": "Walk Duration"},
     "stop_time": {"weight": 0.30, "label": "Inactive Duration"},
 }
 
+# Class A > Class C > Class B (45/30/25) implicitly assumes self-care behavior
+# (Class A) is a more specific health signal than general activity (Class B). A
+# targeted lit scan (2026-08) found this assumption is NOT supported by the sickness
+# -behavior literature -- Lopes et al. (2021, J Experimental Biology) and the Merck
+# Veterinary Manual's pain-assessment guidance both treat reduced grooming and
+# reduced activity as co-occurring, equally non-specific components of the same
+# cytokine-driven "sickness behavior" syndrome, not as a hierarchy of specificity.
+# Class C's weight has indirect support (Wagner et al., 2021, Methods: circadian-
+# rhythm deviation detected disease in dairy cattle with 95% recall) but that study
+# did not compare against other evidence classes, so it cannot justify the specific
+# 30% figure either. All three weights remain expert-set; see
+# ``paper/docs/個體化基線與異常偵測文獻來源.md`` §3 for the full literature picture
+# and the honest limitation this implies for the thesis methodology section.
 FUSION_WEIGHTS = {"class_a": 0.45, "class_b": 0.25, "class_c": 0.30}
 
 

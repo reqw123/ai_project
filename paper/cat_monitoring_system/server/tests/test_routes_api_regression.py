@@ -432,6 +432,13 @@ class TestOverlayRoute:
         assert fake_processor.show_label is True
         assert fake_processor.show_bbox is True
 
+    def test_post_master_false_clears_all_sub_flags(self, client, fake_processor):
+        resp = client.post("/api/overlay", json={"key": "master", "value": False})
+        assert resp.status_code == 200
+        assert fake_processor.show_skeleton is False
+        assert fake_processor.show_label is False
+        assert fake_processor.show_bbox is False
+
     def test_post_unknown_key_returns_400(self, client):
         resp = client.post("/api/overlay", json={"key": "nonexistent", "value": True})
         assert resp.status_code == 400
