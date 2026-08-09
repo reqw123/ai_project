@@ -301,7 +301,9 @@
     "wires": [
       [
         "24900225dbe12cb2",
-        "dc795368d2db2d33"
+        "dc795368d2db2d33",
+        "e1f2a3b4c5d60901",
+        "e1f2a3b4c5d60904"
       ],
       [
         "57d44876136dba78"
@@ -331,6 +333,35 @@
     ],
     "x": 1140,
     "y": 302,
+    "wires": []
+  },
+  {
+    "id": "e1f2a3b4c5d60901",
+    "type": "link out",
+    "z": "d4c08ecd4c4a6899",
+    "name": "→ 貓咪主控健康警示（2026-08-09 分工明確：僅供顯示，不重算）",
+    "links": [
+      "e1f2a3b4c5d60902"
+    ],
+    "x": 1140,
+    "y": 362,
+    "wires": []
+  },
+  {
+    "id": "e1f2a3b4c5d60904",
+    "type": "debug",
+    "z": "d4c08ecd4c4a6899",
+    "name": "🧪 融合引擎輸出1除錯（暫時，確認無誤可刪）",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload.risk",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1140,
+    "y": 420,
     "wires": []
   },
   {

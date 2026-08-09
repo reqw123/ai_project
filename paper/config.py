@@ -502,6 +502,16 @@ class NodeRedConfig:
     # 超時時間（秒）
     TIMEOUT = _env_float("CAT_MONITORING_NODERED_TIMEOUT", 2)
 
+    # Node-RED context store（file-scoped，見 settings.js 的 contextStorage.file）
+    # 存放 v2_daily_history / v2_today / v2_baseline 等個體化基線相關資料。
+    # 只記錄路徑，尚未讀取／解析——之後 Python 端需要直接讀取這份資料時，
+    # 由此常數取得路徑，避免路徑散落各處造成不一致（對照 tracker_state.json
+    # 過去在 config.py 跟 Node-RED function node 裡各自寫死一份路徑的教訓）。
+    GLOBAL_CONTEXT_PATH = _env_str(
+        "CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH",
+        r"C:\Users\homec\.node-red\context\global\global.json",
+    )
+
 
 # ==================== 行為追蹤參數 ====================
 class BehaviorTrackingConfig:
