@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -6,7 +8,8 @@ import time
 import matplotlib.pyplot as plt
 
 # ==================== 基本設定 ====================
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_128.pt"
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MODEL_PATH = str(_PROJECT_ROOT / "yolo_models" / "v11s_128.pt")
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
 
 IMGSZ = 640

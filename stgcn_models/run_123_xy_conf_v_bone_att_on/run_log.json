@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "timestamp": "2026-07-15T10:11:17.777239+00:00",
+    "feature_mode": "xy_conf_v_bone",
+    "in_channels": 7,
+    "num_classes": 5,
+    "num_joints": 14,
+    "random_seed": 42,
+    "use_attention": true,
+    "use_ema_for_eval": false,
+    "kp_ema_alpha": 1.0,
+    "training_params": {
+      "batch_size": 16,
+      "num_epochs": 100,
+      "learning_rate": 5e-05,
+      "optimizer": "adamw",
+      "weight_decay": 0.0001,
+      "input_dropout": 0.02,
+      "block_dropout": 0.1,
+      "final_dropout": 0.2,
+      "label_smoothing": 0.01
+    },
+    "class_prefixes": {
+      "walk": 0,
+      "lick": 1,
+      "scratch": 2,
+      "shake": 3,
+      "stop": 4
+    },
+    "class_counts": {
+      "1": 1477,
+      "2": 279,
+      "3": 138,
+      "4": 1470,
+      "0": 743
+    }
+  },
+  "epochs": []
+}

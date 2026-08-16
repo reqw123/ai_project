@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -47,10 +49,11 @@ KEY_LEFT  = 2424832
 KEY_RIGHT = 2555904
 
 # ==================== 模型清單（3個） ====================
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_LIST = [
-    r"C:\ai_project\cat_pose\v11s_144.pt",
-    r"C:\ai_project\cat_pose\v11s_144.pt",
-    r"C:\ai_project\cat_pose\v11s_144.pt"
+    str(_PROJECT_ROOT / "yolo_models" / "v11s_144.pt"),
+    str(_PROJECT_ROOT / "yolo_models" / "v11s_144.pt"),
+    str(_PROJECT_ROOT / "yolo_models" / "v11s_144.pt"),
 ]
 
 # ==================== 影片清單（可放「影片檔」或「資料夾」） ====================

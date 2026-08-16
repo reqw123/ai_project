@@ -209,25 +209,55 @@ def _get_stgcn_feature_spec(feature_mode: str) -> dict:
 
 
 # ==================== 模型和資料路徑 ====================
+# 專案根目錄（paper/ 的上一層）：用來組出 yolo_models/、stgcn_models/ 的預設路徑，
+# 讓模型路徑不再寫死成特定電腦上的絕對路徑（例如 C:\ai_project\...、
+# C:\Users\homec\Downloads\...），改成「相對於這份原始碼所在的專案」，
+# 換一台電腦、換一個 clone 路徑都能直接跑，不需要每次都改 config 或設環境變數。
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_project_path(path_str: str) -> str:
+    """把相對路徑接到 _PROJECT_ROOT 上，絕對路徑原樣回傳。
+
+    讓 runtime_settings.json／環境變數可以直接寫 "yolo_models\\v11s_143.pt"
+    這種相對路徑，不受實際執行時的工作目錄（CWD）影響——不像 LOG_DIR/OUTPUT_DIR
+    那樣依賴 CWD 剛好等於專案根目錄，這裡固定以原始碼所在專案為錨點解析。
+    """
+    path = Path(path_str)
+    return str(path if path.is_absolute() else _PROJECT_ROOT / path)
+
+
 class ModelPaths:
     """模型和資料檔案路徑"""
 
-    # YOLO 模型
-    YOLO_MODEL = _env_str(
-        "CAT_MONITORING_YOLO_MODEL",
-        _runtime_default(
-            "model_paths.yolo_model", r"C:\ai_project\cat_pose\v11s_134.pt", value_type=str
-        ),
+    # YOLO 模型：權重檔統一放在專案根目錄的 yolo_models/（原本直接散落在 cat_pose/ 下，
+    # 沒有資料夾管理）。
+    YOLO_MODEL = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_YOLO_MODEL",
+            _runtime_default(
+                "model_paths.yolo_model",
+                str(Path("yolo_models") / "v11s_134.pt"),
+                value_type=str,
+            ),
+        )
     )
 
-    # ST-GCN 模型
-    STGCN_MODEL = _env_str(
-        "CAT_MONITORING_STGCN_MODEL",
-        _runtime_default(
-            "model_paths.stgcn_model",
-            r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth",
-            value_type=str,
-        ),
+    # ST-GCN 模型：訓練結果統一放在專案根目錄的 stgcn_models/（原本在另一顆磁碟機
+    # D:\stgcn_results，跨機器/跨磁碟機會直接找不到檔案）。
+    STGCN_MODEL = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_STGCN_MODEL",
+            _runtime_default(
+                "model_paths.stgcn_model",
+                str(
+                    Path("stgcn_models")
+                    / "run_122_xy_conf_v_bone_att_on"
+                    / "122_best_model.pth"
+                ),
+                value_type=str,
+            ),
+        )
     )
 
     # 測試視頻（可設為本機路徑、rtsp:// 串流網址、或攝影機 index）

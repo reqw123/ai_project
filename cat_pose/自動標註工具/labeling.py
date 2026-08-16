@@ -16,11 +16,13 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import cv2
 
- 
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 # =====================
 # 用戶可在此處直接設置模型路徑、圖片資料夾、輸出資料夾
 # =====================
-MODEL_PATH = r"C:/cat_pose/yo.pt"  # 修改為你的模型路徑
+MODEL_PATH = str(_PROJECT_ROOT / "yolo_models" / "yo.pt")  # 修改為你的模型路徑
 IMG_DIR = r"C:/cat_pose/cat_images"       # 修改為你的圖片資料夾
 OUTPUT_DIR = r"C:\cat_pose\自動標註工具\human_labeling"  # 修改為你的輸出資料夾
 
