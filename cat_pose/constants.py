@@ -53,7 +53,8 @@ EAR_DISTANCE_EDGE_COLORS = [
 # ===== 依身體部位分組的骨架連結／配色 =====
 # 跟上面「單一扁平列表＋逐邊配色」（EAR_DISTANCE_*）是同一套骨架拓撲的另一種
 # 表示法：每個身體部位分組各配一個固定顏色（HEAD_LINKS 用 COLOR_HEAD 畫、
-# BODY_LINKS 用 COLOR_BODY 畫...），給 tello_cat_pose.py／0_video_pose_viewer.py／
+# BODY_LINKS 用 COLOR_BODY 畫...），給 tello_drone_archive/tello_cat_pose.py（已停用的
+# 空拍機方案，移入 tello_drone_archive/ 保留）／0_video_pose_viewer.py／
 # pose_single_image_test.py／eda_realtime_anomaly_viewer.py／
 # 自動標註工具/auto_labeling_capture.py 這種「呼叫 draw_links(frame, kpts, conf,
 # LINKS, COLOR)」風格的繪製函式共用。

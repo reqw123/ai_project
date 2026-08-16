@@ -1,4 +1,26 @@
-"""LickStagePlugin（舔舐行為二階段分析）專屬設定，獨立於主專案 config.py。"""
+"""LickStagePlugin（舔舐行為二階段分析）專屬設定，除了 Node-RED 端點主機/port
+外，獨立於主專案 config.py。
+
+Node-RED 端點例外：這裡的 NODERED_URL 過去是完全獨立寫死的
+"http://127.0.0.1:1880/..."，跟主專案 config.py 的 NodeRedConfig.HOST/PORT
+（有 CAT_MONITORING_NODERED_HOST/PORT 可覆寫）互不相干——改了主設定，這個
+plugin 的推送目標不會跟著變，而且失敗時原本是完全靜默的（見
+plugins/lick_stage/publisher.py），不容易發現資料悄悄停止送達。2026-08-10
+起改成預設從 NodeRedConfig.HOST/PORT 組出來，仍可用獨立的環境變數單獨覆寫
+（例如這個 plugin 實際上要送到跟主流程不同的 Node-RED 實例時）。詳見
+docs/資料層架構現況與統一管理評估.md 第十一節。
+"""
+
+from config import NodeRedConfig as _NodeRedConfig
+
+# 2026-08-11：_env_str/_env_float 原本在這裡各自重複實作一份（跟
+# analytics/config.py、plugins/lick_stage/ext_body_zones/config.py 幾乎
+# 一模一樣），改成共用 utils/env_parsing.py——注意這仍然是匯入
+# cat_monitoring_system 套件內部的模組，不是匯入頂層 paper/config.py，
+# 沒有違背上面「Node-RED 端點例外」段落講的「不跟主設定耦合」原則（那條
+# 原則講的是不要依賴 paper/config.py 裡跟這個 plugin 無關的操作性設定，
+# 不是禁止共用同一個套件內、純函式、無狀態的字串/數字解析工具）。
+from utils.env_parsing import env_float as _env_float, env_str as _env_str
 
 
 class LickConfig:
@@ -146,5 +168,14 @@ class LickConfig:
     ELLIPSE_SAMPLES = 40  # 取樣點越多精度越高，但計算量略增
 
     # ── Node-RED 推送設定 ─────────────────────────────────────────────────
-    NODERED_URL = "http://127.0.0.1:1880/lick_zone_result"  # 結果推送端點
-    NODERED_TIMEOUT = 0.3  # HTTP 請求逾時秒數（避免卡住主迴圈）
+    # 主機/port 預設跟主專案共用（見檔案開頭說明）；CAT_MONITORING_LICK_NODERED_URL
+    # 可整條網址單獨覆寫，不受 NodeRedConfig.HOST/PORT 影響。
+    NODERED_URL = _env_str(
+        "CAT_MONITORING_LICK_NODERED_URL",
+        f"http://{_NodeRedConfig.HOST}:{_NodeRedConfig.PORT}/lick_zone_result",
+    )
+    # 逾時刻意比主流程的 NodeRedConfig.TIMEOUT（預設 2 秒）短很多：這是主
+    # YOLO/ST-GCN 推論迴圈裡的旁支輸出，寧可偶爾漏送一筆也不要卡住主迴圈
+    # 等 Node-RED 回應，跟主流程「值得等」的推送語意不同，故不共用同一個
+    # 設定值，但一樣開放獨立覆寫。
+    NODERED_TIMEOUT = _env_float("CAT_MONITORING_LICK_NODERED_TIMEOUT", 0.3)

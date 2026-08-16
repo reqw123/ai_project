@@ -1,10 +1,25 @@
 """All tunable parameters for the extended 7-zone body classifier.
 
 Independent of plugins/lick_stage/config.py — this module must be removable
-without touching the existing lick_stage plugin.
+without touching the existing lick_stage plugin. The one exception is the
+Node-RED HTTP endpoint host/port (see NODERED_URL below), which is shared
+with the main project's config.NodeRedConfig for the same reason
+plugins/lick_stage/config.py now shares it: a hardcoded 127.0.0.1:1880
+here would silently stop matching reality if NodeRedConfig.HOST/PORT is
+ever changed (e.g. Node-RED moved to another host) — see
+docs/資料層架構現況與統一管理評估.md 第十一節 (Traditional Chinese).
 """
 
 import os as _os
+
+from config import NodeRedConfig as _NodeRedConfig
+
+# 2026-08-11：_env_str/_env_float 原本在這裡各自重複實作一份，改成共用
+# utils/env_parsing.py，見該檔案開頭說明；同套件內的純函式 helper，不影響
+# 本檔案開頭講的「independent of plugins/lick_stage/config.py」這件事
+# （那句話講的是不依賴同一個 plugin 的另一份設定，不是禁止共用套件內的
+# 通用工具函式）。
+from utils.env_parsing import env_float as _env_float, env_str as _env_str
 
 _MODULE_DIR = _os.path.dirname(_os.path.abspath(__file__))
 
@@ -81,6 +96,12 @@ class ExtZoneConfig:
     # ── Node-RED HTTP output (raw geometry, for client-side visualization
     # only — Node-RED does the drawing; this module never renders anything) ──
     NODERED_ENABLED = True
-    NODERED_URL = "http://127.0.0.1:1880/ext_zone_result"
-    NODERED_TIMEOUT = 0.3
+    # Host/port default to the main project's NodeRedConfig (see module
+    # docstring); CAT_MONITORING_EXT_ZONE_NODERED_URL overrides the whole
+    # URL independently of NodeRedConfig.HOST/PORT if ever needed.
+    NODERED_URL = _env_str(
+        "CAT_MONITORING_EXT_ZONE_NODERED_URL",
+        f"http://{_NodeRedConfig.HOST}:{_NodeRedConfig.PORT}/ext_zone_result",
+    )
+    NODERED_TIMEOUT = _env_float("CAT_MONITORING_EXT_ZONE_NODERED_TIMEOUT", 0.3)
     GEO_PUBLISH_INTERVAL_SEC = 0.3  # throttle: raw pixel coords, not every frame

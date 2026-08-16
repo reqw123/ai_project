@@ -54,6 +54,7 @@ from models.stgcn_model import (
     normalize_skeleton_coords,
     build_feature_tensor,
 )
+from models.keypoint_kalman import kalman_smooth_sequence
 from utils.constants import BEHAVIOR_CLASSES
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 from scipy.stats import chi2, binomtest
@@ -68,7 +69,7 @@ CH_TO_FEATURE = {
 }
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
-DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_128.pt"
+DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_144.pt"
 DEFAULT_IMGSZ   = 640
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16
@@ -84,13 +85,49 @@ DEFAULT_DEVICE  = 'cuda'
 # 多個模型時建議優先看「Δ vs baseline」的相對變化，而非本表的絕對數字。
 PARTIAL_COVERAGE_CLASSES = {'scratch', 'shake'}
 
-# 預設比較清單：2~5 筆皆可，每筆為 {path, name, ema_alpha, seq_len}。
+# 預設比較清單：2~5 筆皆可，每筆為 {path, name, ema_alpha, seq_len}，
+# 可另外加 smoothing_kind/kalman_process_noise/kalman_measurement_noise
+# （省略則預設 'none'/90.0/70.0，等同這幾個欄位加入前的行為）。
 # name=None 時自動從檔名推導；--models 等 CLI 參數會整個覆蓋這份清單。
+# 比較「不同關鍵點平滑方式訓練出來的模型」時，每筆的 smoothing_kind 要跟
+# 該模型訓練時的 stgcn_config.yaml SMOOTHING_KIND 一致，才是公平比較
+# （見 evaluate_video() 開頭說明）。
+
 HARD_MODELS = [
-    {'path': r"C:\Users\homec\Downloads\stgcn_results\run_124_xy_conf_v_bone_att_on\124_best_model.pth",
-     'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
-    {'path': r"C:\Users\homec\Downloads\stgcn_results\run_125_xy_conf_v_bone_att_on\125_best_model.pth",
-     'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
+    {   # baseline — SMOOTHING_KIND="ema"（等同不平滑）訓練
+        'path':              r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth",
+        'name':              'Baseline_122_無平滑',
+        'ema_alpha':         1.0,
+        'seq_len':           16,
+        'smoothing_kind':    'none',
+    },
+    {   # Kalman Q=90 / R=70（實測校準起點——三組 Kalman 裡表現最好，見 comparison_025）
+        'path':              r"C:\Users\homec\Downloads\stgcn_results\run_126_xy_conf_v_bone_att_on\126_best_model.pth",
+        'name':              'Kalman_126_Q90R70',
+        'ema_alpha':         1.0,
+        'seq_len':           16,
+        'smoothing_kind':    'kalman',
+        'kalman_process_noise':     90.0,
+        'kalman_measurement_noise': 70.0,
+    },
+    {   # Kalman Q=45 / R=140（較強平滑）
+        'path':              r"C:\Users\homec\Downloads\stgcn_results\run_127_xy_conf_v_bone_att_on\127_best_model.pth",
+        'name':              'Kalman_127_Q45R140強',
+        'ema_alpha':         1.0,
+        'seq_len':           16,
+        'smoothing_kind':    'kalman',
+        'kalman_process_noise':     45.0,
+        'kalman_measurement_noise': 140.0,
+    },
+    {   # Kalman Q=180 / R=35（較弱平滑——三組 Kalman 裡表現最差）
+        'path':              r"C:\Users\homec\Downloads\stgcn_results\run_128_xy_conf_v_bone_att_on\128_best_model.pth",
+        'name':              'Kalman_128_Q180R35弱',
+        'ema_alpha':         1.0,
+        'seq_len':           16,
+        'smoothing_kind':    'kalman',
+        'kalman_process_noise':     180.0,
+        'kalman_measurement_noise': 35.0,
+    },
    # {'path': r"C:\Users\homec\Downloads\stgcn_results\run_116_seqlen_ablation_att_on\116_xy_conf_v_bone_T32_att_on.pth",
    #  'name': None, 'ema_alpha': 1.0, 'seq_len': 32},
   #   {'path': r"C:\Users\homec\Downloads\stgcn_results\run_095_reg_ablation_att_on\4.pth",
@@ -255,10 +292,20 @@ def _apply_ema(preds: list, alpha: float) -> list:
 
 
 def evaluate_video(video_path, kp_detector, classifier, feature_mode,
-                   sequence_length=16, classify_stride=2, ema_alpha=1.0):
+                   sequence_length=16, classify_stride=2, ema_alpha=1.0,
+                   smoothing_kind='none', kalman_process_noise=90.0,
+                   kalman_measurement_noise=70.0):
     """
     對單一影片執行逐幀推論。
     ema_alpha: EMA 平滑係數，1.0 = 不平滑，0.5 = 半衰期平滑。
+        ↑ 這是「預測機率序列」的事後平滑，跟下面的 smoothing_kind 是完全不同層次
+        （smoothing_kind 動的是餵進模型前的關鍵點座標，見 stgcn_config.yaml 的
+        SMOOTHING_KIND 說明）——兩者可以同時使用，互不影響。
+    smoothing_kind: 'none'（等同 interpolate_missing only）／'kalman'。
+        比較「用不同關鍵點平滑方式訓練出來的模型」時，每個模型要用**跟訓練時
+        相同**的 smoothing_kind 評估才公平（例如比較 122_best_model 這種吃無
+        平滑序列訓練的模型 vs. 一個吃 Kalman 平滑序列訓練的新模型，前者要用
+        'none'、後者要用 'kalman' 評估，不能兩個都用 'none'）。
     回傳 list of dicts: {frame, time, pred, conf, probs}
     """
     import cv2
@@ -297,6 +344,20 @@ def evaluate_video(video_path, kp_detector, classifier, feature_mode,
             conf_arr = conf_arr[:, :_model_joints]
 
         seq = interpolate_missing(kpts_arr, conf_arr, threshold=0.1)
+        # 關鍵點時間平滑（跟 smoothing_kind='none' 以外的模型比較時才會用到）：
+        # 在插值補全後、正規化前套用，套用點跟 0_train_gcn.py 的 CatSkeletonDataset
+        # 一致（見 SMOOTHING_KIND 說明），確保評估時的前處理跟該模型訓練時看到
+        # 的輸入分布一致，才是公平比較。
+        if smoothing_kind == 'kalman':
+            seq = kalman_smooth_sequence(
+                seq, conf_arr,
+                process_noise=kalman_process_noise,
+                measurement_noise=kalman_measurement_noise,
+            )
+        elif smoothing_kind != 'none':
+            raise ValueError(
+                f"未知的 smoothing_kind: {smoothing_kind!r}（只支援 'none'／'kalman'）"
+            )
         seq = flip_normalize(seq)
         seq = orientation_normalize(seq)
         seq = normalize_skeleton_coords(seq)
@@ -322,7 +383,9 @@ _VIDEO_EXTS = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.m4v', '.mpg', '.mpeg', 
 
 
 def evaluate_folder(folder_path, kp_detector, classifier, feature_mode,
-                    sequence_length=16, classify_stride=2, ema_alpha=1.0):
+                    sequence_length=16, classify_stride=2, ema_alpha=1.0,
+                    smoothing_kind='none', kalman_process_noise=90.0,
+                    kalman_measurement_noise=70.0):
     """
     對資料夾內所有影片執行推論。
     回傳 list of (filename, preds_list)，每部影片一個元素。
@@ -336,7 +399,9 @@ def evaluate_folder(folder_path, kp_detector, classifier, feature_mode,
     for vid in videos:
         print(f"    {vid.name} ...", end=' ', flush=True)
         preds = evaluate_video(vid, kp_detector, classifier, feature_mode,
-                               sequence_length, classify_stride, ema_alpha)
+                               sequence_length, classify_stride, ema_alpha,
+                               smoothing_kind, kalman_process_noise,
+                               kalman_measurement_noise)
         print(f"{len(preds)} windows")
         results.append((vid.name, preds))
     return results
@@ -1327,6 +1392,14 @@ def main():
                         help='對應 --models 的 EMA alpha（需與 --models 數量一致）；省略則全部使用 1.0')
     parser.add_argument('--seq_lens', nargs='+', type=int, default=None,
                         help='對應 --models 的序列長度（需與 --models 數量一致）；省略則全部使用 DEFAULT_SEQ_LEN')
+    parser.add_argument('--smoothing_kinds', nargs='+', default=None,
+                        help="對應 --models 的關鍵點平滑方式（'none'／'kalman'，需與 --models 數量一致）；"
+                             "省略則全部使用 'none'。比較不同 SMOOTHING_KIND 訓練出來的模型時，"
+                             "要跟該模型訓練時的設定一致才公平，見 evaluate_video() 說明")
+    parser.add_argument('--kalman_process_noises', nargs='+', type=float, default=None,
+                        help='對應 --models 的 Kalman process_noise（只有該模型 smoothing_kind=kalman 時才會用到）；省略則全部使用 90.0')
+    parser.add_argument('--kalman_measurement_noises', nargs='+', type=float, default=None,
+                        help='對應 --models 的 Kalman measurement_noise（只有該模型 smoothing_kind=kalman 時才會用到）；省略則全部使用 70.0')
     parser.add_argument('--video_walk_dir',      default=HARD_VIDEO_WALK_DIR)
     parser.add_argument('--video_lick_dir',      default=HARD_VIDEO_LICK_DIR)
     parser.add_argument('--video_scratch_dir',   default=HARD_VIDEO_SCRATCH_DIR)
@@ -1347,11 +1420,18 @@ def main():
         names_in   = args.names       if args.names       else [None] * n
         alphas_in  = args.ema_alphas  if args.ema_alphas  else [1.0] * n
         seqlens_in = args.seq_lens    if args.seq_lens    else [DEFAULT_SEQ_LEN] * n
-        if len(names_in) != n or len(alphas_in) != n or len(seqlens_in) != n:
-            parser.error('--names / --ema_alphas / --seq_lens 若指定，數量必須跟 --models 一致')
+        smoothk_in = args.smoothing_kinds          if args.smoothing_kinds          else ['none'] * n
+        procn_in   = args.kalman_process_noises    if args.kalman_process_noises    else [90.0] * n
+        measn_in   = args.kalman_measurement_noises if args.kalman_measurement_noises else [70.0] * n
+        if len(names_in) != n or len(alphas_in) != n or len(seqlens_in) != n \
+                or len(smoothk_in) != n or len(procn_in) != n or len(measn_in) != n:
+            parser.error('--names / --ema_alphas / --seq_lens / --smoothing_kinds / '
+                          '--kalman_process_noises / --kalman_measurement_noises 若指定，數量必須跟 --models 一致')
         models_cfg = [
-            {'path': p, 'name': nm, 'ema_alpha': a, 'seq_len': s}
-            for p, nm, a, s in zip(args.models, names_in, alphas_in, seqlens_in)
+            {'path': p, 'name': nm, 'ema_alpha': a, 'seq_len': s,
+             'smoothing_kind': sk, 'kalman_process_noise': pn, 'kalman_measurement_noise': mn}
+            for p, nm, a, s, sk, pn, mn in
+            zip(args.models, names_in, alphas_in, seqlens_in, smoothk_in, procn_in, measn_in)
         ]
     else:
         models_cfg = HARD_MODELS
@@ -1366,6 +1446,15 @@ def main():
               for n, c in zip(names, models_cfg)]
     if len(set(c['seq_len'] for c in models_cfg)) > 1:
         labels = [f"{l}[T{c['seq_len']}]" for l, c in zip(labels, models_cfg)]
+    # smoothing_kind 不是預設值 'none' 時附加標記，讓圖表/CSV 一眼看出
+    # 這幾支模型評估時用的關鍵點前處理不一樣（見 evaluate_video() 說明）
+    if any(c.get('smoothing_kind', 'none') != 'none' for c in models_cfg):
+        labels = [
+            f"{l}[kalman Q{c.get('kalman_process_noise', 90.0):g}/"
+            f"R{c.get('kalman_measurement_noise', 70.0):g}]"
+            if c.get('smoothing_kind', 'none') == 'kalman' else l
+            for l, c in zip(labels, models_cfg)
+        ]
 
     # 14/17 關節模型混合比較時附加標記（同一次比較裡有不同 NUM_JOINTS 的
     # checkpoint 才會標，見 infer_num_joints()），避免圖表/CSV 上看不出來
@@ -1446,7 +1535,10 @@ def main():
             print(f"  ▶ {chr(65 + mi)} ({labels[mi]})")
             folder_results = evaluate_folder(
                 dir_path, kp_det, clf, fm,
-                cfg['seq_len'], args.classify_stride, ema_alpha=cfg['ema_alpha']
+                cfg['seq_len'], args.classify_stride, ema_alpha=cfg['ema_alpha'],
+                smoothing_kind=cfg.get('smoothing_kind', 'none'),
+                kalman_process_noise=cfg.get('kalman_process_noise', 90.0),
+                kalman_measurement_noise=cfg.get('kalman_measurement_noise', 70.0),
             )
             preds_list[mi][cls_idx] = [p for _, p in folder_results]
             if mi == 0:

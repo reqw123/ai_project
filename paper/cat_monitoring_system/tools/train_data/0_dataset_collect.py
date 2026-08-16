@@ -1,6 +1,59 @@
 # ============================================================
 #  骨架資料集收集與手動標注工具
 # ============================================================
+#  七種執行模式（對應檔尾 __main__ 選單，數字為輸入代號）：
+#
+#  模式  函式                              作用
+#  ────  ────────────────────────────────  ──────────────────────────────
+#  1     process_all_videos()              批次推論 VIDEO_FOLDERS 五個資料夾
+#                                           影片 (YOLO-Pose)，增量、跳過已有
+#                                           JSON，依資料夾名稱自動標記整段
+#                                           （可直接訓練，不需再標註）
+#
+#  2     manual_action_labeling()          連續手動標記 OUTPUT_FOLDER 內多個
+#                                           skeleton JSON，適用影片含多種行
+#                                           為、需精確逐段標記事件區間的情況
+#
+#  3     reextract_preserve_labels()       重新推論骨架（換新模型後用），依
+#                                           timestamp 對應還原既有
+#                                           action_intervals 與 frame label，
+#                                           不受幀數變動影響
+#
+#  4     check_discarded_files()           純讀取報告：檢查有哪些影片／幀／
+#                                           訓練視窗被捨棄或過濾、未進入訓練
+#                                           資料，不修改任何檔案
+#
+#  5     reextract_preserve_labels_        同模式 3，但只針對指定的部分檔
+#        selected()                        案，不用重跑整個資料集
+#
+#  6     label_test_set()                  【測試集專用】進來後再選一次要
+#                                           做哪個步驟：1.只抽骨架（增量提
+#                                           取 TEST_VIDEO_FOLDERS 到獨立的
+#                                           TEST_OUTPUT_FOLDER）2.只標註
+#                                           （骨架需已存在，直接進入標註
+#                                           迴圈，沿用模式 2 介面）3.兩者都
+#                                           做。用途：scratch/shake 這類事
+#                                           件占比低的類別，測試集也需要逐
+#                                           幀標註才能算出跟訓練同一套「乾
+#                                           淨事件視窗」準確率，不能只用資
+#                                           料夾名稱當整支影片的標籤。不論
+#                                           選哪個步驟，結束後都自動印出
+#                                           review_test_labels() 報告
+#
+#  7     review_test_labels()              純讀取 TEST_OUTPUT_FOLDER 目前的
+#                                           標註結果，不開影片視窗，隨時可
+#                                           執行。終端印出依行為分組的表格
+#                                           （區間數/事件幀數/事件佔比/每個
+#                                           已標區間的起訖影片時間，精確到
+#                                           小數1位），同步輸出 CSV
+#                                           (_test_label_report.csv)——這是
+#                                           「怎麼知道被打上什麼標籤」的主
+#                                           要管道
+#
+#  模式 6/7 用的 TEST_VIDEO_FOLDERS/TEST_OUTPUT_FOLDER 跟模式 1-5 用的
+#  VIDEO_FOLDERS/OUTPUT_FOLDER 是完全獨立的路徑（見下方 Configuration），
+#  標測試集不會誤觸或混進訓練資料。
+# ============================================================
 #  frame label 三種狀態：
 #
 #  狀態  說明                                    frame label        需處理
@@ -60,6 +113,27 @@ KP_CONF_THRESHOLD = 0.5
 # 永久排除清單：列出不想再被模式 1 重新提取的影片檔名（不含副檔名）
 # 範例：EXCLUDED_STEMS = {"lick_bad_001", "walk_noise_003"}
 EXCLUDED_STEMS: set = set()
+
+# ==================== 獨立測試集標註（模式 6/7）====================
+# 2026-08-11：eval_gcn_compare.py 等腳本算「獨立測試集準確率」時，是用
+# 資料夾名稱當整支影片的 ground truth（沒有逐幀標籤）——但 scratch/shake
+# 這種事件式行為在影片裡只占一小段（訓練資料實測：scratch 平均 20.0%、
+# shake 平均 10.9%，其餘時間貓在走動/靜止），導致準確率被結構性稀釋，
+# 不是模型真的分不清。這裡幫「主要測試」資料夾也補上跟訓練資料同一套
+# 逐幀標註（action_intervals），才能算出跟訓練同一套「乾淨事件視窗」
+# 準確率。故意跟上面 VIDEO_FOLDERS/OUTPUT_FOLDER 完全分開路徑，避免標
+# 測試集時不小心覆寫或混進訓練用的 skeletons/ 資料夾。
+# walk/stop 整段都是目標行為（不需要標區間）、lick 事件占比 41.6% 已經
+# 100% 準確率，這三類可以不標；這裡預設仍列出全部 5 類資料夾，方便之後
+# 有需要時也能補標，不標的類別直接跳過即可（模式 6 不會強迫每類都要標）。
+TEST_VIDEO_FOLDERS = [
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\walk",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\lick",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake",
+    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop",
+]
+TEST_OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons_test_labeled/"
 
 # ==================== Main Processing Function ====================
 
@@ -197,6 +271,88 @@ def process_all_videos():
         print(f"  Detection rate: {result['detection_rate']:.1f}%")
         print()
     print(f"✓ All done! Skeleton data saved to: {OUTPUT_FOLDER}")
+
+
+def extract_test_set_skeletons():
+    """
+    批次提取「主要測試」資料夾（TEST_VIDEO_FOLDERS）的骨架，輸出到獨立的
+    TEST_OUTPUT_FOLDER——跟 process_all_videos() 邏輯相同（增量、跳過已有
+    JSON、依資料夾名稱給初始整段標籤），只是刻意不共用 VIDEO_FOLDERS/
+    OUTPUT_FOLDER 這兩個全域變數，避免誤觸訓練資料。
+    """
+    print("="*60)
+    print("Skeleton Extraction Pipeline — 獨立測試集（TEST_OUTPUT_FOLDER）")
+    print("="*60)
+    Path(TEST_OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
+    print(f"✓ Output directory ready: {TEST_OUTPUT_FOLDER}")
+
+    video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv']
+    existing_stems = {p.stem for p in Path(TEST_OUTPUT_FOLDER).glob("*.json")}
+
+    video_files = []
+    for folder in TEST_VIDEO_FOLDERS:
+        video_folder = Path(folder)
+        if not video_folder.exists():
+            print(f"[Warning] Video folder not found: {folder}")
+            continue
+        video_files.extend(sorted(
+            (f for f in video_folder.iterdir() if f.suffix.lower() in video_extensions),
+            key=_natural_sort_key,
+        ))
+
+    if not video_files:
+        print("✗ No video files found in any of TEST_VIDEO_FOLDERS.")
+        return
+
+    todo_list = [v for v in video_files if v.stem not in existing_stems]
+    print(f"\n影片總數：{len(video_files)}   已存在（跳過）：{len(video_files) - len(todo_list)}"
+          f"   待提取：{len(todo_list)}")
+    if not todo_list:
+        print("\n✓ 所有測試影片皆已提取，無需重新處理。")
+        return
+    for v in todo_list:
+        print(f"    {v.name}")
+
+    confirm = input('\n確認後輸入 "ok" 開始提取（其他任意鍵取消）：').strip().lower()
+    if confirm != "ok":
+        print("✗ 已取消。")
+        return
+
+    print()
+    pose_extractor = PoseExtractor(
+        model_path=MODEL_PATH,
+        imgsz=IMGSZ,
+        conf_threshold=CONF_THRESHOLD
+    )
+
+    for idx, video_path in enumerate(todo_list, 1):
+        print(f"[{idx}/{len(todo_list)}] Processing: {video_path.name}")
+        video_id    = video_path.stem
+        output_path = Path(TEST_OUTPUT_FOLDER) / f"{video_id}.json"
+        label = video_path.parent.name.lower()   # 初始整段標籤，之後模式 6 的標註步驟會覆蓋成事件區間
+        result = extract_skeleton_from_video(
+            video_path, pose_extractor, target_fps=TARGET_FPS, label=label
+        )
+        if result is None:
+            print(f"  ✗ Failed to process video")
+            continue
+        skeleton_data, actual_fps = result
+        video_metadata = {
+            "video_id": video_id,
+            "video_filename": video_path.name,
+            "video_path": str(video_path),
+            "target_fps": TARGET_FPS,
+            "actual_fps": actual_fps,
+            "fps_compensated": True,
+            "model_used": MODEL_PATH,
+            "imgsz": IMGSZ,
+            "conf_threshold": CONF_THRESHOLD,
+            "kp_conf_threshold": KP_CONF_THRESHOLD,
+        }
+        save_skeleton_data(skeleton_data, output_path, video_metadata)
+        print()
+    print(f"✓ 測試集骨架提取完成，共 {len(todo_list)} 支 → {TEST_OUTPUT_FOLDER}")
+
 
 # ==================== Setup ====================
 def setup_directories():
@@ -1331,6 +1487,172 @@ def manual_action_labeling():
     print("\n[Done] All annotation tasks completed.")
 
 
+def review_test_labels(folder: str = None):
+    """
+    純檢視獨立測試集（TEST_OUTPUT_FOLDER）目前的標註結果，不開啟任何影片
+    視窗，可以隨時執行、不會誤觸標註流程。
+
+    這是「怎麼知道被打上的資料標籤」的主要管道：終端印出一張表（依行為分
+    組，每支影片列出區間數、事件幀數/總幀數、事件佔比），同時把同一份內
+    容寫成 CSV（TEST_OUTPUT_FOLDER 底下 _test_label_report.csv），方便之
+    後不開終端也能核對，或是貼進論文/報告當附錄。
+    """
+    folder = folder or TEST_OUTPUT_FOLDER
+    p = Path(folder)
+    if not p.exists():
+        print(f"[Error] 資料夾不存在: {folder}（先跑模式 6 提取骨架）")
+        return
+
+    json_files = sorted(p.glob("*.json"), key=_natural_sort_key)
+    if not json_files:
+        print(f"[Error] {folder} 底下沒有任何 JSON（先跑模式 6 提取骨架）")
+        return
+
+    rows = []
+    for jf in json_files:
+        try:
+            with open(jf, 'r', encoding='utf-8') as f:
+                d = json.load(f)
+        except Exception as e:
+            print(f"  ⚠ 讀取失敗 {jf.name}: {e}")
+            continue
+        meta      = d.get('video_metadata', {})
+        total     = d.get('total_frames', len(d.get('frames', [])))
+        ivs       = d.get('action_intervals', [])
+        # frames 陣列已經被 resample_to_target_fps() 重取樣成嚴格等距
+        # 1/target_fps 秒一幀（見該函式說明），所以幀號換算成影片時間要用
+        # target_fps，不能用 actual_fps（來源影片原始幀率，跟重取樣後的
+        # frame index 對不上，換算出來的秒數會是錯的）。
+        fps       = meta.get('target_fps') or TARGET_FPS
+        ev_frames = sum(max(0, iv.get('end', 0) - iv.get('start', 0)) for iv in ivs)
+        frac      = (ev_frames / total * 100) if total else 0.0
+        behavior  = _parse_behavior(jf.stem) or 'unknown'
+        iv_desc   = '; '.join(
+            f"{iv.get('action','?')}: {iv.get('start', 0) / fps:.1f}s ~ {iv.get('end', 0) / fps:.1f}s"
+            f"  (frame {iv.get('start','?')}-{iv.get('end','?')})"
+            for iv in ivs
+        ) or '（未標註任何區間）'
+        rows.append({
+            'behavior': behavior, 'video': jf.name,
+            'video_filename': meta.get('video_filename', ''),
+            'total_frames': total, 'n_intervals': len(ivs),
+            'event_frames': ev_frames, 'event_fraction_pct': round(frac, 1),
+            'fps': fps, 'intervals': iv_desc,
+        })
+
+    groups = {b: [] for b in _BEHAVIOR_ORDER}
+    groups['unknown'] = []
+    for r in rows:
+        groups[r['behavior']].append(r)
+
+    sep = '─' * 100
+    print(f"\n{'='*100}")
+    print(f"  獨立測試集標註結果   {folder}")
+    print(f"{'='*100}")
+    for behavior in list(_BEHAVIOR_ORDER) + ['unknown']:
+        grp = groups[behavior]
+        if not grp:
+            continue
+        n_labeled = sum(1 for r in grp if r['n_intervals'] > 0)
+        print(f"\n[{behavior.upper()}]  {n_labeled}/{len(grp)} 已標註區間")
+        print(sep)
+        for r in grp:
+            status = '✓' if r['n_intervals'] > 0 else '·未標'
+            print(f"  {status}  {r['video']:<24} 總幀數={r['total_frames']:>4}"
+                  f"  事件幀數={r['event_frames']:>4}  事件佔比={r['event_fraction_pct']:>5.1f}%"
+                  f"  區間=[{r['intervals']}]")
+
+    # 同步輸出 CSV，留一份不依賴終端輸出的紀錄
+    import csv
+    csv_path = p / "_test_label_report.csv"
+    with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            'behavior', 'video', 'video_filename', 'total_frames',
+            'n_intervals', 'event_frames', 'event_fraction_pct', 'fps', 'intervals',
+        ])
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+    print(f"\n✓ 已同步輸出 CSV 報告：{csv_path}")
+
+
+def label_test_set():
+    """
+    模式 6 入口，進來後再選一次要做哪個步驟（抽骨架跟標註未必想綁在一
+    起做——例如骨架已經抽過、這次只想標註；或只想先把骨架抽完，晚點再
+    找時間標）：
+
+      1. 只抽骨架：呼叫 extract_test_set_skeletons()（增量，跳過已有 JSON）
+      2. 只標註：假設 TEST_OUTPUT_FOLDER 底下骨架已存在，直接進入標註
+         迴圈（沿用模式 2 的 _list_json_files_menu / _annotate_single_skeleton）
+      3. 兩者都做：先抽骨架，再進入標註迴圈（原本的預設行為）
+
+    不論選哪個步驟，結束後都會自動印出 review_test_labels() 的完整報
+    告，回答「被打上什麼標籤」這件事，不用另外再跑一次模式 7。
+    """
+    print("\n=== 獨立測試集標註模式 ===")
+    print("要執行哪個步驟？")
+    print("  1. 只抽骨架（增量提取，不進入標註）")
+    print("  2. 只標註（骨架需已存在，直接進入標註迴圈）")
+    print("  3. 兩者都做（先抽骨架，再進入標註）")
+    sub = input("請選擇 (1/2/3，直接 Enter = 3): ").strip() or '3'
+    if sub not in ('1', '2', '3'):
+        print("✗ 未選擇正確步驟，程式結束。")
+        return
+
+    if sub in ('1', '3'):
+        extract_test_set_skeletons()
+
+    if sub in ('2', '3'):
+        if sub == '2' and not any(Path(TEST_OUTPUT_FOLDER).glob("*.json")):
+            print(f"\n[Error] {TEST_OUTPUT_FOLDER} 底下沒有任何骨架 JSON，"
+                  "請先選 1 或 3 抽骨架。")
+            return
+
+        print(f"\nFolder: {TEST_OUTPUT_FOLDER}\n")
+        last_annotated = None
+        while True:
+            json_path = _list_json_files_menu(TEST_OUTPUT_FOLDER, last_annotated=last_annotated)
+            if not json_path:
+                print("\n[Done] 測試集標註工作階段結束。")
+                break
+
+            try:
+                all_jsons   = sorted(Path(TEST_OUTPUT_FOLDER).glob("*.json"), key=_natural_sort_key)
+                file_index  = next((i + 1 for i, jf in enumerate(all_jsons)
+                                    if str(jf) == json_path), None)
+                total_files = len(all_jsons)
+            except Exception:
+                file_index = total_files = None
+
+            _annotate_single_skeleton(json_path, file_index=file_index, total_files=total_files)
+
+            sep = '=' * 62
+            print(f"\n{sep}")
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    d = json.load(f)
+                ivs      = d.get('action_intervals', [])
+                n_frames = d.get('total_frames', 0)
+                labeled  = sum(1 for fr in d.get('frames', [])
+                               if fr.get('label', 'unannotated') != 'unannotated')
+                pct      = labeled / n_frames * 100 if n_frames > 0 else 0.0
+                from collections import Counter
+                act_counts = Counter(iv['action'] for iv in ivs)
+                act_str    = '  '.join(f"{act}x{cnt}" for act, cnt in sorted(act_counts.items()))
+                print(f"  ANNOTATED : {Path(json_path).name}")
+                print(f"  Intervals : {len(ivs)}   ({act_str if act_str else 'none'})")
+                print(f"  Labeled   : {labeled}/{n_frames} frames  ({pct:.1f}%)")
+            except Exception as e:
+                print(f"  ANNOTATED : {Path(json_path).name}")
+                print(f"  (Could not read summary: {e})")
+            print(f"{sep}\n")
+            last_annotated = json_path
+
+    # 不論剛剛做了哪個步驟，結束後都自動印出完整報告
+    review_test_labels(TEST_OUTPUT_FOLDER)
+
+
 def reextract_preserve_labels(target_stems: set = None):
     """
     以新 YOLO 模型重新推論骨架，並依「時間」（而非幀 index）還原既有 JSON 的
@@ -1932,7 +2254,13 @@ if __name__ == "__main__":
     print("   → 純讀取報告，不修改任何檔案；視窗層級會標出被丟棄的 window 從影片哪個 frame/秒數切出來")
     print("5. 重新推論骨架（新模型），但只針對指定的部分檔案，標籤覆蓋邏輯同模式 3")
     print("   → 只想修正少數幾支骨架抽取結果不佳的影片時使用，不用重跑整個資料集")
-    mode = input("請選擇模式 (1/2/3/4/5): ").strip()
+    print("6. 標註獨立測試集影片（主要測試資料夾，輸出到獨立的 TEST_OUTPUT_FOLDER）")
+    print("   → 進去後再選一次：1.只抽骨架 2.只標註 3.兩者都做；跟訓練資料完全分開路徑")
+    print("     （不會誤觸/混進 skeletons/），結束後自動印出報告")
+    print("7. 檢視獨立測試集目前的標註結果（純讀取，不開影片視窗，隨時可執行）")
+    print("   → 回答「被打上了什麼標籤」：終端列表（含每個區間起訖影片時間，小數1位）")
+    print("     + 同步輸出 CSV 到 TEST_OUTPUT_FOLDER")
+    mode = input("請選擇模式 (1/2/3/4/5/6/7): ").strip()
     if mode == '1':
         process_all_videos()
     elif mode == '2':
@@ -1943,5 +2271,9 @@ if __name__ == "__main__":
         check_discarded_files()
     elif mode == '5':
         reextract_preserve_labels_selected()
+    elif mode == '6':
+        label_test_set()
+    elif mode == '7':
+        review_test_labels()
     else:
         print("✗ 未選擇正確模式，程式結束。")

@@ -10,6 +10,7 @@ from analytics.baseline import (
     Baseline,
     compute_baseline,
 )
+from analytics.config import BaselineConfig, DeviationConfig
 from analytics.deviation import (
     MetricDeviation,
     DeviationResult,
@@ -24,9 +25,11 @@ __all__ = [
     "MetricStats",
     "Baseline",
     "compute_baseline",
+    "BaselineConfig",
     "MetricDeviation",
     "DeviationResult",
     "compute_deviation",
+    "DeviationConfig",
     "FusionResult",
     "compute_fusion",
 ]

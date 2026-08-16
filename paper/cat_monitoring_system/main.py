@@ -10,6 +10,7 @@
 
 import datetime
 import os
+import signal
 import sys
 import threading
 import time
@@ -26,13 +27,62 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 # 但其父目錄（paper/，config.py 所在處）不會，故手動補上。
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import FlaskConfig, NodeRedConfig, RunModeConfig
+from config import BaselineDashboardConfig, FlaskConfig, NodeRedConfig, RunModeConfig
 
 from server.flask_app import create_app
 from server.routes import _ensure_processor_started, _pause_processing
 from utils.helpers import get_ip
 
 _SCHEDULER_POLL_SECONDS = 20  # 排程檢查間隔；不需要到秒級精準，這個粒度已足夠
+
+
+_SHUTDOWN_GRACE_SECONDS = 3.0  # os._exit() 保底時限；見 _install_hard_shutdown_on_ctrl_c()
+
+_active_gui_processor = None  # run_gui_mode() 啟動後會設成目前的 FrameProcessor，供訊號處理常式清理用
+
+
+def _install_hard_shutdown_on_ctrl_c():
+    """讓 Ctrl+C（Windows 上也含 Ctrl+Break）保證能在有限時間內結束程式，同時盡量跑完清理。
+
+    背景：這個程式現在同時跑著好幾個常駐背景執行緒（_scheduler_loop、
+    dashboard/refresher.py 的 start_background_refresh()，以及 Flask
+    threaded=True 的 request handler 執行緒），主執行緒又常常卡在
+    Werkzeug 的 accept()/torch 推論這類 C 層級的呼叫裡——Python 的
+    SIGINT 預設處理（丟出 KeyboardInterrupt）只在主執行緒的 bytecode
+    執行間隙才會被檢查到，Windows 上這類阻塞呼叫經常要等到下一次「回到
+    Python 層級」才會真正反應 Ctrl+C，實務上就會變成「按了沒反應」。
+
+    2026-08-11 修正：接管 SIGINT/SIGBREAK 的訊號處理常式本身就是在主執行緒
+    的 bytecode 執行間隙被呼叫（等同一般的 signal handler 呼叫時機），所以
+    一旦真的進到 `_handle()`，已經回到 Python 層級，可以安全地呼叫
+    `FrameProcessor.cleanup()`（關閉 CSV/segment logger、Node-RED session、
+    通知外掛關閉）——不再無條件跳過。為了不違背這支函式原本「保證能結束」
+    的承諾，另外起一個 daemon watchdog 執行緒，最多等
+    `_SHUTDOWN_GRACE_SECONDS` 秒（清理正常完成也會提前結束），逾時或清理
+    本身出例外都會強制 `os._exit(0)`，不會卡住不結束。
+    """
+
+    def _handle(signum, frame):
+        print(f"\n🛑 收到中斷訊號，嘗試清理後結束程式（最多等 {_SHUTDOWN_GRACE_SECONDS:.0f} 秒）...")
+        watchdog = threading.Timer(_SHUTDOWN_GRACE_SECONDS, os._exit, args=(0,))
+        watchdog.daemon = True
+        watchdog.start()
+
+        try:
+            from server import routes as _routes
+
+            if _routes.frame_processor is not None:
+                _routes.frame_processor.cleanup()
+            if _active_gui_processor is not None:
+                _active_gui_processor.cleanup()
+        except Exception as e:
+            print(f"⚠ 清理處理管線時發生例外（忽略，直接結束程式）：{e}")
+
+        os._exit(0)
+
+    signal.signal(signal.SIGINT, _handle)
+    if hasattr(signal, "SIGBREAK"):  # Windows 專屬：Ctrl+Break
+        signal.signal(signal.SIGBREAK, _handle)
 
 
 def send_ip_to_nodered(ip, node_red_url):
@@ -106,6 +156,18 @@ def run_server_mode():
         ip = "127.0.0.1"
     print(f"\n📺 Web 服務器啟動於 http://{ip}:{FlaskConfig.PORT}")
     print(f"📊 串流網址: http://{ip}:{FlaskConfig.PORT}/stream")
+    if BaselineDashboardConfig.ENABLED:
+        # dashboard/ 是 Python 分析引擎（analytics/）的唯讀展示頁，跟 Node-RED
+        # 舊引擎的 Dashboard 是分開的頁面，見 dashboard/views.py 開頭說明。
+        print(f"🧮 個體化基線儀表板（新引擎）: http://{ip}:{FlaskConfig.PORT}/dashboard/baseline")
+        # 背景排程直接在 process 內算，定期刷新上面那個頁面的資料，完全不
+        # 依賴 Node-RED 有沒有開／有沒有呼叫 POST /api/deviation——見
+        # dashboard/refresher.py 開頭說明。放在 create_app() 之外（而非
+        # server/flask_app.py 裡）是刻意的，理由同樣寫在該檔案的
+        # start_background_refresh() docstring。
+        from dashboard.refresher import start_background_refresh
+
+        start_background_refresh()
 
     if RunModeConfig.AUTO_START_PROCESSING:
         # 不等第一個 HTTP 請求（例如使用者打開 Dashboard 點播放）才啟動處理管線，
@@ -171,9 +233,11 @@ def run_gui_mode():
         _try_register_lick_stage,
     )
 
+    global _active_gui_processor
     processor = _build_frame_processor(enable_nodered=False)
     _try_register_lick_stage(processor)
     _try_register_ext_body_zone(processor)
+    _active_gui_processor = processor  # 讓 _install_hard_shutdown_on_ctrl_c() 的訊號處理常式也能清理到這個 processor
 
     # OpenCV 在 Windows 上的視窗標題（cv2.namedWindow）不支援中文，非 ASCII
     # 字元會顯示成亂碼視窗標題，因此這裡固定用英文。
@@ -244,6 +308,7 @@ def run_gui_mode():
 
 
 if __name__ == "__main__":
+    _install_hard_shutdown_on_ctrl_c()
     if RunModeConfig.MODE == "gui":
         run_gui_mode()
     else:

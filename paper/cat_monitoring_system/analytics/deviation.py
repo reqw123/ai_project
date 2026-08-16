@@ -73,23 +73,16 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from analytics.baseline import CONTINUOUS_METRICS, COUNT_METRICS, Baseline
+from analytics.config import DeviationConfig
 
-MAD_SCALE = 1.4826  # consistency constant so MAD ≈ std under normal
-MIN_VARIABILITY_MAD = 1e-9  # below this, treat MAD as "degenerate"
-COUNT_OVERDISPERSION_RATIO = 1.5  # variance/mean above this → use NB not Poisson
-RATE_SMOOTHING_PRIOR = 0.25  # Bayesian-ish additive smoothing for λ, avoids
-# λ=0 producing an infinite/undefined tail prob
-# after an all-zero baseline window
-MIN_TAIL_P = 1e-15  # floor for a tail probability before converting to a sigma
-# equivalent. Must stay far enough from 0 that `1.0 - p` is still
-# distinguishable from 1.0 in float64 (machine epsilon near 1.0 is
-# ~2.22e-16) — an earlier floor of 1e-300 looked "safer" but silently
-# collapsed `1.0 - 1e-300 == 1.0`, making `_norm_ppf` hit its p>=1.0
-# guard and return literal `math.inf`. Flask's default JSON encoder
-# happily serializes that as the bareword `Infinity`, which is not
-# valid JSON and breaks any strict parser downstream (e.g. Node-RED's
-# http request node) — reproduced via a real /api/deviation call with
-# an extreme count-metric outlier (today far beyond the Poisson tail).
+# 模組層級別名，向下相容任何直接 `from analytics.deviation import MAD_SCALE`
+# 的舊寫法；數值本身、可調性、文獻依據的完整說明都集中在
+# analytics/config.py 的 DeviationConfig，這裡不重複。
+MAD_SCALE = DeviationConfig.MAD_SCALE
+MIN_VARIABILITY_MAD = DeviationConfig.MIN_VARIABILITY_MAD
+COUNT_OVERDISPERSION_RATIO = DeviationConfig.COUNT_OVERDISPERSION_RATIO
+RATE_SMOOTHING_PRIOR = DeviationConfig.RATE_SMOOTHING_PRIOR
+MIN_TAIL_P = DeviationConfig.MIN_TAIL_P
 
 
 @dataclass

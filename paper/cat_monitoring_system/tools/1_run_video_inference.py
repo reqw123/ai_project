@@ -76,7 +76,7 @@ RATING_LETTERS = ("A", "B", "C", "D", "E")
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
 FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\22"  # 'single' 模式使用的扁平資料夾
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Videos\NVIDIA\Desktop\0721_13"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []

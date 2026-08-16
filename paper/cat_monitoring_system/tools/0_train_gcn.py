@@ -43,6 +43,7 @@ from models.stgcn_model import (
     get_in_channels_for_mode,
     build_feature_tensor as shared_build_feature_tensor,
 )
+from models.keypoint_kalman import kalman_smooth_sequence
 
 # ==================== Path Config（絕對路徑統一於此管理） ====================
 # 設定檔絕對路徑集中在此常數；可用 STGCN_CONFIG_PATH 環境變數覆寫
@@ -164,6 +165,19 @@ RESULTS_FOLDER = CONFIG['RESULTS_FOLDER']
 STRICT_WINDOW_FILTER = CONFIG['STRICT_WINDOW_FILTER']
 MAX_NO_DETECT_FRAMES = int(CONFIG.get('MAX_NO_DETECT_FRAMES', 2))
 KP_EMA_ALPHA = CONFIG['KP_EMA_ALPHA']
+# 平滑方式切換：none/ema/kalman，跟 models/keypoint_kalman.py、
+# tools/eval_accuracy_smoothing_compare.py 的 SMOOTHING_CONFIGS 用同一套
+# kind 命名。預設 "ema"（搭配 KP_EMA_ALPHA=1.0）跟這個設定加入前的行為
+# 完全一致，見 stgcn_config.yaml 對應註解。
+SMOOTHING_KIND = CONFIG.get('SMOOTHING_KIND', 'ema')
+# 2026-08-11 修正：fallback 值原本是 1.0/5.0（沒有實測依據的舊猜測），跟
+# stgcn_config.yaml 目前實際的值、models/keypoint_kalman.py 的函式簽名
+# 預設值、tools/eval_gcn_compare.py 自己的 fallback 差了近兩個數量級——
+# 如果 config 缺這兩個 key（例如指到舊版/其他 yaml），訓練會靜默套用
+# 差兩個量級的參數，跟評估端假設的 90.0/70.0 對不上，訓出分布不匹配的
+# 模型。統一改成跟其他地方一致的實測校準值。
+KALMAN_PROCESS_NOISE = float(CONFIG.get('KALMAN_PROCESS_NOISE', 90.0))
+KALMAN_MEASUREMENT_NOISE = float(CONFIG.get('KALMAN_MEASUREMENT_NOISE', 70.0))
 NUM_CLASSES = CONFIG['NUM_CLASSES']
 BEHAVIOR_PREFIXES = CONFIG['BEHAVIOR_PREFIXES']
 NUM_JOINTS = CONFIG['NUM_JOINTS']
@@ -409,7 +423,8 @@ class CatSkeletonDataset(Dataset):
     
     def __init__(self, skeleton_folder, sequence_length=32,
                  num_joints=17, augment=False, feature_mode="xy_conf_v_bone",
-                 window_stride=0, kp_ema_alpha=None):
+                 window_stride=0, kp_ema_alpha=None, smoothing_kind=None,
+                 kalman_process_noise=None, kalman_measurement_noise=None):
         self.skeleton_folder = Path(skeleton_folder)
         self.sequence_length = sequence_length
         self.num_joints = num_joints
@@ -417,6 +432,15 @@ class CatSkeletonDataset(Dataset):
         self.feature_mode = feature_mode
         self.window_stride = window_stride
         self.kp_ema_alpha = kp_ema_alpha if kp_ema_alpha is not None else KP_EMA_ALPHA
+        # smoothing_kind 決定下面 _load_sequences() 要用哪一種平滑；"ema"
+        # （預設）沿用 self.kp_ema_alpha，跟這個參數加入前完全一致的行為。
+        self.smoothing_kind = smoothing_kind if smoothing_kind is not None else SMOOTHING_KIND
+        self.kalman_process_noise = (
+            kalman_process_noise if kalman_process_noise is not None else KALMAN_PROCESS_NOISE
+        )
+        self.kalman_measurement_noise = (
+            kalman_measurement_noise if kalman_measurement_noise is not None else KALMAN_MEASUREMENT_NOISE
+        )
         # idx_to_label: map numeric label -> behaviour name (derived from CONFIG)
         self.idx_to_label = {v: k for k, v in BEHAVIOR_PREFIXES.items()}
         
@@ -473,15 +497,31 @@ class CatSkeletonDataset(Dataset):
             ])
             keypoint_frames = interpolate_missing(keypoint_frames, confs)
 
-            # EMA 平滑：在插值補全後、滑動切窗前對整段影片套用，與推論行為一致
-            # 必須在切窗前套，否則跨窗的平滑狀態不連貫
-            _ema = self.kp_ema_alpha
-            if _ema is not None and 0.0 < _ema < 1.0:
-                for t in range(1, len(keypoint_frames)):
-                    keypoint_frames[t] = (
-                        _ema * keypoint_frames[t]
-                        + (1.0 - _ema) * keypoint_frames[t - 1]
-                    )
+            # 關鍵點時間平滑：在插值補全後、滑動切窗前對整段影片套用，與推論
+            # 行為一致（frame_processor.py 的 window-level 平滑同樣是在
+            # interpolate_missing 之後、build_feature_tensor 之前套用）。
+            # 必須在切窗前套，否則跨窗的平滑狀態不連貫。依 self.smoothing_kind
+            # dispatch（見 stgcn_config.yaml 的 SMOOTHING_KIND 說明）；預設
+            # "ema" 的行為跟這個 dispatch 加入前完全一致，不影響既有結果。
+            if self.smoothing_kind == "kalman":
+                keypoint_frames = kalman_smooth_sequence(
+                    keypoint_frames, confs,
+                    process_noise=self.kalman_process_noise,
+                    measurement_noise=self.kalman_measurement_noise,
+                )
+            elif self.smoothing_kind == "ema":
+                _ema = self.kp_ema_alpha
+                if _ema is not None and 0.0 < _ema < 1.0:
+                    for t in range(1, len(keypoint_frames)):
+                        keypoint_frames[t] = (
+                            _ema * keypoint_frames[t]
+                            + (1.0 - _ema) * keypoint_frames[t - 1]
+                        )
+            elif self.smoothing_kind != "none":
+                raise ValueError(
+                    f"未知的 smoothing_kind: {self.smoothing_kind!r}"
+                    "（只支援 'none'／'ema'／'kalman'，見 stgcn_config.yaml 的 SMOOTHING_KIND）"
+                )
 
             if len(keypoint_frames) < self.sequence_length:
                 skipped_too_short.append((video_id, len(keypoint_frames)))
@@ -827,16 +867,35 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
                 shared_models_dir=None, kp_ema_alpha=None, seq_len=None,
                 batch_size=None, learning_rate=None,
                 input_dropout=None, block_dropout=None, final_dropout=None,
-                label_smoothing=None):
+                label_smoothing=None, smoothing_kind=None,
+                kalman_process_noise=None, kalman_measurement_noise=None):
     """Main training function.
 
     batch_size / learning_rate / input_dropout / block_dropout / final_dropout /
     label_smoothing 皆可覆寫 CONFIG 預設值（None 則沿用 yaml 設定），供
     run_regularization_ablation() 做網格消融比較用，不影響單次訓練的既有行為。
+
+    smoothing_kind / kalman_process_noise / kalman_measurement_noise：同一套
+    覆寫模式，供未來的 Kalman 平滑消融實驗用（目前 run_kp_ema_ablation()
+    還沒有對應的呼叫端會傳這幾個參數進來，見 stgcn_config.yaml 的
+    SMOOTHING_KIND 註解——這裡先讓 train_model()／CatSkeletonDataset 具備
+    處理能力，呼叫端的消融執行器留待之後有需要再補）。
+
+    已知取捨：eff_alpha/alpha_tag 這段檔名標記邏輯目前只反映 EMA alpha，
+    手動傳入 smoothing_kind="kalman" 訓練時，檔名/console 訊息不會顯示
+    Kalman 參數，只有 params_snapshot.json 的 effective_params 裡看得到
+    完整記錄——之後要正式做 Kalman 消融實驗時，這段標記邏輯需要一併擴充。
     """
     in_channels = get_in_channels_for_mode(feature_mode)
     eff_alpha = kp_ema_alpha if kp_ema_alpha is not None else KP_EMA_ALPHA
     alpha_tag = f"_ema{eff_alpha:.2f}" if (eff_alpha is not None and eff_alpha < 1.0) else ""
+    eff_smoothing_kind = smoothing_kind if smoothing_kind is not None else SMOOTHING_KIND
+    eff_kalman_process_noise = (
+        kalman_process_noise if kalman_process_noise is not None else KALMAN_PROCESS_NOISE
+    )
+    eff_kalman_measurement_noise = (
+        kalman_measurement_noise if kalman_measurement_noise is not None else KALMAN_MEASUREMENT_NOISE
+    )
 
     # Sequence-length–dependent parameters (auto-adjusted when seq_len differs from config)
     eff_seq_len       = int(seq_len) if seq_len is not None else SEQUENCE_LENGTH
@@ -895,6 +954,9 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
             'num_joints': NUM_JOINTS,
             'use_attention': use_attention,
             'kp_ema_alpha': eff_alpha,
+            'smoothing_kind': eff_smoothing_kind,
+            'kalman_process_noise': eff_kalman_process_noise,
+            'kalman_measurement_noise': eff_kalman_measurement_noise,
             'sequence_length': eff_seq_len,
             'window_stride': eff_window_stride,
             'batch_size': eff_batch_size,
@@ -948,6 +1010,9 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         feature_mode=feature_mode,
         window_stride=eff_window_stride,
         kp_ema_alpha=eff_alpha,
+        smoothing_kind=eff_smoothing_kind,
+        kalman_process_noise=eff_kalman_process_noise,
+        kalman_measurement_noise=eff_kalman_measurement_noise,
     )
 
     if len(full_dataset) == 0:

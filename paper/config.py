@@ -6,6 +6,7 @@
 import builtins as _builtins
 import datetime as _datetime
 import os
+import re
 from pathlib import Path
 
 
@@ -100,20 +101,56 @@ def _is_valid_port(port: int) -> bool:
     return isinstance(port, int) and 1 <= port <= 65535
 
 
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
+
 def _parse_hhmm(value: str) -> tuple[int, int] | None:
-    """解析 'HH:MM'（24 小時制）字串，回傳 (hour, minute)；空字串/格式錯誤回傳 None。"""
+    """解析 'HH:MM'（24 小時制，兩位數，例如 '06:00'）字串，回傳 (hour, minute)；
+    空字串/格式錯誤（含少一位數的 '6:00'、無效範圍如 '24:00'）回傳 None。
+
+    2026-08-15：改用正則、要求兩位數小時，跟 settings_manager.py 的
+    _HHMM_RE 用同一個 pattern——原本這裡只檢查數值範圍（0<=hour<=23），
+    「6:00」這種少一位數的字串也算合法，但設定視窗那邊的驗證規則要求
+    兩位數，兩邊標準不一致，會出現「config.py 自己執行不會擋、存進設定
+    視窗卻被擋」的落差。統一成一樣嚴格，任何一邊都用同一套判斷標準。
+    """
     if not value:
         return None
-    parts = value.strip().split(":")
-    if len(parts) != 2:
+    match = _HHMM_RE.match(value.strip())
+    if not match:
         return None
+    return (int(match.group(1)), int(match.group(2)))
+
+
+def _runtime_default(json_key: str, fallback, value_type=None):
+    """JSON 執行期覆寫層的「預設值」來源：settings_manager.get_runtime_value() 讀
+    runtime_settings.json，欄位缺漏/檔案不存在時直接回傳 fallback（原本寫死的
+    字面值）。這個函式回傳的值只是拿去當 `_env_*()` 的 `default` 參數——最終
+    優先順序仍是「環境變數（_env_* 本身的邏輯）> runtime_settings.json（這裡）
+    > 寫死的 fallback」，`_env_*` 系列函式本身完全不變。
+
+    刻意用 try/except 包住整個查詢：settings_manager.py 缺失、import 失敗、
+    JSON 格式錯誤等任何情況都不該讓 config.py 整個 import 失敗——config.py
+    被 39 個檔案 import，安全啟動比「JSON 一定要生效」更優先。
+    """
     try:
-        hour, minute = int(parts[0]), int(parts[1])
-    except (TypeError, ValueError):
-        return None
-    if 0 <= hour <= 23 and 0 <= minute <= 59:
-        return (hour, minute)
-    return None
+        from settings_manager import get_runtime_value
+
+        return get_runtime_value(json_key, fallback, value_type=value_type)
+    except Exception as e:
+        print(f"⚠ 讀取 runtime_settings.json 失敗（{json_key}），使用內建預設值: {e}")
+        return fallback
+
+
+def _runtime_default_size(json_key: str, fallback):
+    """STREAM_DISPLAY_SIZE 專用版本：JSON 存 null 或 {"width":.., "height":..}。"""
+    try:
+        from settings_manager import get_runtime_size
+
+        return get_runtime_size(json_key, fallback)
+    except Exception as e:
+        print(f"⚠ 讀取 runtime_settings.json 失敗（{json_key}），使用內建預設值: {e}")
+        return fallback
 
 
 def _normalize_feature_mode(feature_mode: str) -> str:
@@ -177,26 +214,41 @@ class ModelPaths:
 
     # YOLO 模型
     YOLO_MODEL = _env_str(
-        "CAT_MONITORING_YOLO_MODEL", r"C:\ai_project\cat_pose\v11s_133.pt"
+        "CAT_MONITORING_YOLO_MODEL",
+        _runtime_default(
+            "model_paths.yolo_model", r"C:\ai_project\cat_pose\v11s_134.pt", value_type=str
+        ),
     )
 
     # ST-GCN 模型
     STGCN_MODEL = _env_str(
         "CAT_MONITORING_STGCN_MODEL",
-        r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth",
+        _runtime_default(
+            "model_paths.stgcn_model",
+            r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth",
+            value_type=str,
+        ),
     )
 
     # 測試視頻（可設為本機路徑、rtsp:// 串流網址、或攝影機 index）
-    # 例：rtsp://12345678:456456123@192.168.0.192:554/stream1 
+    # 例：rtsp://12345678:456456123@192.168.0.192:554/stream1
     # "C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\7月18日.mp4"
     VIDEO_INPUT = _env_video_input(
         "CAT_MONITORING_VIDEO_INPUT",
-        r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\7月18日.mp4",
+        _runtime_default(
+            "model_paths.video_input",
+            r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\7月18日.mp4",
+        ),
     )
 
     # 日誌和輸出目錄
-    LOG_DIR = _env_str("CAT_MONITORING_LOG_DIR", "./logs")
-    OUTPUT_DIR = _env_str("CAT_MONITORING_OUTPUT_DIR", "./output")
+    LOG_DIR = _env_str(
+        "CAT_MONITORING_LOG_DIR", _runtime_default("model_paths.log_dir", "./logs", value_type=str)
+    )
+    OUTPUT_DIR = _env_str(
+        "CAT_MONITORING_OUTPUT_DIR",
+        _runtime_default("model_paths.output_dir", "./output", value_type=str),
+    )
 
     @classmethod
     def ensure_dirs(cls) -> None:
@@ -246,8 +298,14 @@ class YOLOConfig:
     """
 
     # 推論參數
-    IMAGE_SIZE = _env_int("CAT_MONITORING_YOLO_IMAGE_SIZE", 640)
-    CONFIDENCE_THRESHOLD = _env_float("CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD", 0.50)
+    IMAGE_SIZE = _env_int(
+        "CAT_MONITORING_YOLO_IMAGE_SIZE",
+        _runtime_default("yolo.image_size", 640, value_type=int),
+    )
+    CONFIDENCE_THRESHOLD = _env_float(
+        "CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD",
+        _runtime_default("yolo.confidence_threshold", 0.50, value_type=float),
+    )
 
 
 # ==================== ST-GCN 參數 ====================
@@ -272,20 +330,32 @@ class STGCNConfig:
 
     # 推論用滑動步長（每幾幀執行一次 ST-GCN，對應 CLASSIFY_STRIDE）
     # 訓練用的步長由 stgcn_config.yaml 的 WINDOW_STRIDE 管理，與此無關
-    WINDOW_STRIDE = _env_int("CAT_MONITORING_STGCN_WINDOW_STRIDE", 2)
+    WINDOW_STRIDE = _env_int(
+        "CAT_MONITORING_STGCN_WINDOW_STRIDE",
+        _runtime_default("stgcn_runtime.window_stride", 2, value_type=int),
+    )
 
     # 裝置選擇不在此設定：實際執行時由 routes.py 的 _resolve_runtime_device() 自動偵測 CUDA 可用性。
 
     # FPS 同步：對來源影片做降採樣，使模型輸入時基符合訓練設定。
     # TARGET_MODEL_FPS: 推論與串流使用的目標 FPS，須與訓練時一致。
     #   調低（例如 15）可降低 YOLO + ST-GCN 推論頻率，減少 CPU/GPU 負擔，但反應會變慢。
-    TARGET_MODEL_FPS = _env_float("CAT_MONITORING_TARGET_MODEL_FPS", 30.0)
+    TARGET_MODEL_FPS = _env_float(
+        "CAT_MONITORING_TARGET_MODEL_FPS",
+        _runtime_default("stgcn_runtime.target_model_fps", 30.0, value_type=float),
+    )
     # ENABLE_FPS_DOWNSAMPLE: True 代表來源 FPS 高於 TARGET_MODEL_FPS 時自動跳幀；False 代表每幀都處理。
-    ENABLE_FPS_DOWNSAMPLE = _env_bool("CAT_MONITORING_ENABLE_FPS_DOWNSAMPLE", True)
+    ENABLE_FPS_DOWNSAMPLE = _env_bool(
+        "CAT_MONITORING_ENABLE_FPS_DOWNSAMPLE",
+        _runtime_default("stgcn_runtime.enable_fps_downsample", True, value_type=bool),
+    )
 
     # 關鍵點 EMA 平滑（須與 train_gcn.py 的 KP_EMA_ALPHA 保持一致）
     # alpha 越大 → 越貼近原始偵測值；alpha 越小 → 越平滑但延遲增加
-    KP_EMA_ALPHA = _env_float("CAT_MONITORING_KP_EMA_ALPHA", 1.0)
+    KP_EMA_ALPHA = _env_float(
+        "CAT_MONITORING_KP_EMA_ALPHA",
+        _runtime_default("stgcn_runtime.kp_ema_alpha", 1.0, value_type=float),
+    )
     # 行為類別名稱與顏色見 BehaviorTrackingConfig.BEHAVIOR_CATEGORIES / utils.constants.BEHAVIOR_COLORS
 
 
@@ -357,12 +427,25 @@ class AnomalyDetectionConfig:
     閾值參考值：靜止呼吸 < 2；舔毛/抓撓 5-15；走路 > 10
     """
 
-    MAX_MOTION = 20.0  # motion_score 正規化分母（body_fraction×100）；走路約 10-20
-    KP_CONF_THRES = 0.5  # 只使用高於此信心的關鍵點計算 motion_score
-    ROLLING_WINDOW_SIZE = 30  # 滾動均值視窗大小（幀數，30fps ≈ 1 秒）
-    STILL_MOTION_THRESHOLD = (
-        3.0  # 滾動均值低於此值（body_fraction×100）判為靜止；呼吸抖動約 < 2
-    )
+    # 2026-08-15：這四個欄位原本是純寫死常數，沒有 env 覆寫。納入 GUI 設定系統時
+    # 補上對應環境變數（CAT_MONITORING_MAX_MOTION 等），屬於新增而非移除既有機制，
+    # 讓它們也能走「環境變數 > runtime_settings.json > 內建預設值」這條鏈。
+    MAX_MOTION = _env_float(
+        "CAT_MONITORING_MAX_MOTION",
+        _runtime_default("anomaly_detection.max_motion", 20.0, value_type=float),
+    )  # motion_score 正規化分母（body_fraction×100）；走路約 10-20
+    KP_CONF_THRES = _env_float(
+        "CAT_MONITORING_KP_CONF_THRES",
+        _runtime_default("anomaly_detection.kp_conf_thres", 0.5, value_type=float),
+    )  # 只使用高於此信心的關鍵點計算 motion_score
+    ROLLING_WINDOW_SIZE = _env_int(
+        "CAT_MONITORING_ROLLING_WINDOW_SIZE",
+        _runtime_default("anomaly_detection.rolling_window_size", 30, value_type=int),
+    )  # 滾動均值視窗大小（幀數，30fps ≈ 1 秒）
+    STILL_MOTION_THRESHOLD = _env_float(
+        "CAT_MONITORING_STILL_MOTION_THRESHOLD",
+        _runtime_default("anomaly_detection.still_motion_threshold", 3.0, value_type=float),
+    )  # 滾動均值低於此值（body_fraction×100）判為靜止；呼吸抖動約 < 2
 
 
 # ==================== Skeleton Quality Assessment（骨架品質雙重判定）====================
@@ -391,7 +474,10 @@ class SQAConfig:
     正式套用前建議先在 GUI 模式肉眼比對過覆蓋規則是否合理， 確認沒問題後再開啟。
     """
 
-    ENABLE_SQA_DUAL_JUDGMENT = _env_bool("CAT_MONITORING_ENABLE_SQA_DUAL_JUDGMENT", True)
+    ENABLE_SQA_DUAL_JUDGMENT = _env_bool(
+        "CAT_MONITORING_ENABLE_SQA_DUAL_JUDGMENT",
+        _runtime_default("anomaly_detection.enable_sqa_dual_judgment", True, value_type=bool),
+    )
 
 
 # ==================== 執行模式參數 ====================
@@ -402,14 +488,19 @@ class RunModeConfig:
     "gui"           ：不啟動 Flask/Node-RED，直接用同一套 FrameProcessor 開本地視窗顯示
     """
 
-    MODE = _env_str("CAT_MONITORING_RUN_MODE", "server")
+    MODE = _env_str(
+        "CAT_MONITORING_RUN_MODE", _runtime_default("run_mode.mode", "gui", value_type=str)
+    )
 
     # server 模式下，處理管線（開影片、載入 YOLO/ST-GCN、tracker 統計、CSV、Node-RED 推送）
     # 原本要等第一個打到 /stream 等路由的 HTTP 請求才會啟動（見 routes.py 的
     # _ensure_processor_started()），也就是實務上要有人打開 Dashboard 點播放才會真正開始跑。
     # 預錄影片、排程無人值守執行時沒人會去點播放，關掉這個延遲啟動，改成 Python 進程一啟動
     # 就立刻開始處理，不等任何請求。設為 False 可還原成原本「有人連線才啟動」的行為。
-    AUTO_START_PROCESSING = _env_bool("CAT_MONITORING_AUTO_START_PROCESSING", True)
+    AUTO_START_PROCESSING = _env_bool(
+        "CAT_MONITORING_AUTO_START_PROCESSING",
+        _runtime_default("run_mode.auto_start_processing", True, value_type=bool),
+    )
 
     # 排程啟動時間（24 小時制 "HH:MM"，例如 "06:00"）。設定後，處理管線在 Python 進程
     # 啟動的當下不會立刻執行，而是持續等待直到真實世界時間到達此時刻才開始跑；
@@ -417,7 +508,10 @@ class RunModeConfig:
     # 立即開始，不會傻等到隔天。留空（預設）代表不啟用排程，沿用 AUTO_START_PROCESSING
     # 的行為（一啟動就跑或永遠不自動跑）。用於預錄影片、無人值守的排程執行情境
     # （例如固定每天啟動一次，只想在 06:00 才開始處理當天份的影片）。
-    SCHEDULED_START_TIME = _env_str("CAT_MONITORING_SCHEDULED_START_TIME", "")  # "06:00"
+    SCHEDULED_START_TIME = _env_str(
+        "CAT_MONITORING_SCHEDULED_START_TIME",
+        _runtime_default("run_mode.scheduled_start_time", "06:00", value_type=str),
+    )  # "06:00"
     SCHEDULED_START_HHMM = _parse_hhmm(SCHEDULED_START_TIME)
 
     # 排程結束時間（24 小時制 "HH:MM"，例如 "12:00"）。留空（預設）＝不設結束時間，
@@ -427,7 +521,10 @@ class RunModeConfig:
     # [開始, 結束) 之間才處理，區間外自動暫停，且每一天都會依同一組 HH:MM 重新套用
     # （不需要重啟 Python，也不會重新載入模型——暫停只是不讀取/不推論，不釋放資源）。
     # 若只設結束、沒設開始，開始時間視為當天 00:00。
-    SCHEDULED_END_TIME = _env_str("CAT_MONITORING_SCHEDULED_END_TIME", "")  # "12:00"
+    SCHEDULED_END_TIME = _env_str(
+        "CAT_MONITORING_SCHEDULED_END_TIME",
+        _runtime_default("run_mode.scheduled_end_time", "12:00", value_type=str),
+    )  # "12:00"
     SCHEDULED_END_HHMM = _parse_hhmm(SCHEDULED_END_TIME)
 
     @classmethod
@@ -469,13 +566,25 @@ class RunModeConfig:
 class FlaskConfig:
     """Flask Web 服務參數"""
 
-    HOST = _env_str("CAT_MONITORING_FLASK_HOST", "0.0.0.0")
-    PORT = _env_int("CAT_MONITORING_FLASK_PORT", 5000)
-    DEBUG = _env_bool("CAT_MONITORING_FLASK_DEBUG", False)
-    THREADED = _env_bool("CAT_MONITORING_FLASK_THREADED", True)
+    HOST = _env_str(
+        "CAT_MONITORING_FLASK_HOST", _runtime_default("flask.host", "0.0.0.0", value_type=str)
+    )
+    PORT = _env_int(
+        "CAT_MONITORING_FLASK_PORT", _runtime_default("flask.port", 5000, value_type=int)
+    )
+    DEBUG = _env_bool(
+        "CAT_MONITORING_FLASK_DEBUG", _runtime_default("flask.debug", False, value_type=bool)
+    )
+    THREADED = _env_bool(
+        "CAT_MONITORING_FLASK_THREADED",
+        _runtime_default("flask.threaded", True, value_type=bool),
+    )
 
     # JPEG 壓縮品質 (1-100)
-    JPEG_QUALITY = _env_int("CAT_MONITORING_JPEG_QUALITY", 30)
+    JPEG_QUALITY = _env_int(
+        "CAT_MONITORING_JPEG_QUALITY",
+        _runtime_default("flask.jpeg_quality", 30, value_type=int),
+    )
 
 
 # ==================== 個體化基線儀表板（Python 端唯讀展示頁）====================
@@ -489,46 +598,108 @@ class BaselineDashboardConfig:
     的「🔬 基線引擎比對」可以看）。
     """
 
-    ENABLED = _env_bool("CAT_MONITORING_BASELINE_DASHBOARD_ENABLED", True)
+    ENABLED = _env_bool(
+        "CAT_MONITORING_BASELINE_DASHBOARD_ENABLED",
+        _runtime_default("flask.baseline_dashboard_enabled", True, value_type=bool),
+    )
 
     # 前端輪詢 /api/deviation/latest 的間隔（秒）。比照 NodeRedConfig.PUSH_INTERVAL
     # （Python 端每筆推論結果送出的間隔，預設 2 秒）訂一個略慢的節奏，避免每次
     # 輪詢都撲空、也不會累積沒必要的請求量。
-    POLL_INTERVAL_SEC = _env_float("CAT_MONITORING_BASELINE_DASHBOARD_POLL_INTERVAL", 3)
+    POLL_INTERVAL_SEC = _env_float(
+        "CAT_MONITORING_BASELINE_DASHBOARD_POLL_INTERVAL",
+        _runtime_default("flask.baseline_dashboard_poll_interval_sec", 3, value_type=float),
+    )
+
+    # dashboard/refresher.py 背景執行緒重新計算一次基線/偏差/融合結果的間隔（秒）。
+    # 這是這個頁面「跟 Node-RED 毫無相干」的關鍵——POST /api/deviation 只在 Node-RED
+    # 主動呼叫時才會算一次（那是給新舊引擎比對用的，見 analytics_deviation_bridge.json），
+    # 這裡是同一個 process 內直接呼叫 analytics/ 算的獨立排程，不透過 HTTP、不依賴
+    # Node-RED 有沒有開。見 docs/資料層架構現況與統一管理評估.md 第十節。
+    #
+    # 預設值刻意「跟隨」NodeRedConfig.PUSH_INTERVAL（Python 推送推論結果給
+    # Node-RED 的間隔，預設 2 秒）——讀同一個環境變數
+    # CAT_MONITORING_NODERED_PUSH_INTERVAL 當 fallback 預設值，不是寫死複製
+    # 一份數字：改那個環境變數，這裡的預設節奏會一起變，兩邊「感覺一樣即時」。
+    # NodeRedConfig 定義在這個 class 後面（第 510 行），沒辦法在這裡直接寫
+    # `NodeRedConfig.PUSH_INTERVAL`（class body 執行時那個名字還不存在），
+    # 所以用共用環境變數名稱做間接參照，而不是搬動 class 定義順序。
+    # 想讓儀表板用跟推論推送不同的節奏，設 CAT_MONITORING_BASELINE_DASHBOARD_RECOMPUTE_INTERVAL
+    # 即可獨立覆寫，不受 PUSH_INTERVAL 影響。
+    #
+    # 注意：compute_baseline/compute_deviation/compute_fusion 都是純 Python
+    # 統計運算（不是 ML 推論），對預設 <=30 天的資料量而言，每 2 秒算一次的
+    # CPU 成本可忽略；daily_store.load_history() 也只是一次輕量 SQLite 讀取。
+    RECOMPUTE_INTERVAL_SEC = _env_float(
+        "CAT_MONITORING_BASELINE_DASHBOARD_RECOMPUTE_INTERVAL",
+        _runtime_default(
+            "flask.baseline_dashboard_recompute_interval_sec",
+            _env_float(
+                "CAT_MONITORING_NODERED_PUSH_INTERVAL",
+                _runtime_default("nodered.push_interval", 2, value_type=float),
+            ),
+            value_type=float,
+        ),
+    )
 
 
 # ==================== Node-RED 參數 ====================
 class NodeRedConfig:
     """Node-RED 通訊參數"""
 
-    HOST = _env_str("CAT_MONITORING_NODERED_HOST", "127.0.0.1")
-    PORT = _env_int("CAT_MONITORING_NODERED_PORT", 1880)
+    HOST = _env_str(
+        "CAT_MONITORING_NODERED_HOST",
+        _runtime_default("nodered.host", "127.0.0.1", value_type=str),
+    )
+    PORT = _env_int(
+        "CAT_MONITORING_NODERED_PORT", _runtime_default("nodered.port", 1880, value_type=int)
+    )
 
     # 推送間隔（秒）
-    PUSH_INTERVAL = _env_float("CAT_MONITORING_NODERED_PUSH_INTERVAL", 2)
+    PUSH_INTERVAL = _env_float(
+        "CAT_MONITORING_NODERED_PUSH_INTERVAL",
+        _runtime_default("nodered.push_interval", 2, value_type=float),
+    )
 
+    # 端點預設由上面的 HOST/PORT（已含 env/JSON 覆寫結果）推導；仍可個別用環境變數
+    # 或 runtime_settings.json 的 advanced.* 覆寫成完全不同的網址。
     ENDPOINT_NOTIFY = _env_str(
-        "CAT_MONITORING_NODERED_ENDPOINT_NOTIFY", f"http://{HOST}:{PORT}/python_online"
+        "CAT_MONITORING_NODERED_ENDPOINT_NOTIFY",
+        _runtime_default(
+            "advanced.nodered_endpoint_notify", f"http://{HOST}:{PORT}/python_online", value_type=str
+        ),
     )
     ENDPOINT_RESULT = _env_str(
-        "CAT_MONITORING_NODERED_ENDPOINT_RESULT", f"http://{HOST}:{PORT}/yolo_result"
+        "CAT_MONITORING_NODERED_ENDPOINT_RESULT",
+        _runtime_default(
+            "advanced.nodered_endpoint_result", f"http://{HOST}:{PORT}/yolo_result", value_type=str
+        ),
     )
     ENDPOINT_RESULT_V2 = _env_str(
         "CAT_MONITORING_NODERED_ENDPOINT_RESULT_V2",
-        f"http://{HOST}:{PORT}/yolo_result_v2",
+        _runtime_default(
+            "advanced.nodered_endpoint_result_v2",
+            f"http://{HOST}:{PORT}/yolo_result_v2",
+            value_type=str,
+        ),
     )
 
     # 超時時間（秒）
-    TIMEOUT = _env_float("CAT_MONITORING_NODERED_TIMEOUT", 2)
+    TIMEOUT = _env_float(
+        "CAT_MONITORING_NODERED_TIMEOUT",
+        _runtime_default("nodered.timeout", 2, value_type=float),
+    )
 
-    # Node-RED context store（file-scoped，見 settings.js 的 contextStorage.file）
+    # 個體化基線共用儲存（原本是 Node-RED 內建 file-scoped context store；
+    # 2026-08-10 起改為 settings.js functionGlobalContext.gfile 手動用 fs
+    # 讀寫的固定路徑，Python 端與 Node-RED function node 都指向這裡）。
     # 存放 v2_daily_history / v2_today / v2_baseline 等個體化基線相關資料。
     # 只記錄路徑，尚未讀取／解析——之後 Python 端需要直接讀取這份資料時，
     # 由此常數取得路徑，避免路徑散落各處造成不一致（對照 tracker_state.json
     # 過去在 config.py 跟 Node-RED function node 裡各自寫死一份路徑的教訓）。
     GLOBAL_CONTEXT_PATH = _env_str(
         "CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH",
-        r"C:\Users\homec\.node-red\context\global\global.json",
+        _runtime_default("nodered.global_context_path", r"C:\a\global.json", value_type=str),
     )
 
 
@@ -538,27 +709,38 @@ class BehaviorTrackingConfig:
 
     # 歷史記錄大小
     MAX_HISTORY_SIZE = _env_int(
-        "CAT_MONITORING_MAX_HISTORY_SIZE", 100
+        "CAT_MONITORING_MAX_HISTORY_SIZE",
+        _runtime_default("behavior_tracking.max_history_size", 100, value_type=int),
     )  # 行為歷史清單最多保留筆數
 
     # 活動力窗口
     ACTIVITY_WINDOW_SIZE = _env_int(
-        "CAT_MONITORING_ACTIVITY_WINDOW_SIZE", 54
+        "CAT_MONITORING_ACTIVITY_WINDOW_SIZE",
+        _runtime_default("behavior_tracking.activity_window_size", 54, value_type=int),
     )  # 30fps × 1.8s = 54；須 ≥ TARGET_MODEL_FPS × ACTIVITY_SCORE_WINDOW_SECONDS
 
     # 行為轉換與活動分數參數
     MIN_RECORD_DURATION_SECONDS = _env_float(
-        "CAT_MONITORING_MIN_RECORD_DURATION_SECONDS", 2.0
+        "CAT_MONITORING_MIN_RECORD_DURATION_SECONDS",
+        _runtime_default("behavior_tracking.min_record_duration_seconds", 2.0, value_type=float),
     )  # 單一行為最短記錄秒數
     ACTIVITY_SCORE_WINDOW_SECONDS = _env_float(
-        "CAT_MONITORING_ACTIVITY_SCORE_WINDOW_SECONDS", 1.2
+        "CAT_MONITORING_ACTIVITY_SCORE_WINDOW_SECONDS",
+        _runtime_default(
+            "behavior_tracking.activity_score_window_seconds", 1.2, value_type=float
+        ),
     )  # 活動分數取樣時間窗（秒）；越短反應越快
     LOW_CONFIDENCE_ACTIVITY_WEIGHT = _env_float(
-        "CAT_MONITORING_LOW_CONFIDENCE_ACTIVITY_WEIGHT", 0.5
+        "CAT_MONITORING_LOW_CONFIDENCE_ACTIVITY_WEIGHT",
+        _runtime_default(
+            "behavior_tracking.low_confidence_activity_weight", 0.5, value_type=float
+        ),
     )  # 低信心幀的活動權重
     STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD = _env_float(
         "CAT_MONITORING_STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD",
-        0.80,
+        _runtime_default(
+            "behavior_tracking.stgcn_behavior_label_confidence_threshold", 0.80, value_type=float
+        ),
     )  # ST-GCN 行為標籤輸出門檻；低於此值視為 normal
 
     # 顯示層 hysteresis：同一個新類別要連續達到這麼多次分類視窗（非幀數，見 STGCNConfig.WINDOW_STRIDE
@@ -569,19 +751,28 @@ class BehaviorTrackingConfig:
     # shake 動作本身只持續 0.5~1 秒，換算成分類視窗數不多，門檻設太高會導致整個 shake 事件
     # 結束前都累積不到門檻次數、畫面永遠來不及切換顯示，因此預設給比其他行為低的門檻。
     DISPLAY_HYSTERESIS_WINDOWS_WALK = _env_int(
-        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_WALK", 3
+        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_WALK",
+        _runtime_default("behavior_tracking.display_hysteresis_windows.walk", 3, value_type=int),
     )
     DISPLAY_HYSTERESIS_WINDOWS_LICK = _env_int(
-        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_LICK", 3
+        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_LICK",
+        _runtime_default("behavior_tracking.display_hysteresis_windows.lick", 3, value_type=int),
     )
     DISPLAY_HYSTERESIS_WINDOWS_SCRATCH = _env_int(
-        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_SCRATCH", 3
+        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_SCRATCH",
+        _runtime_default(
+            "behavior_tracking.display_hysteresis_windows.scratch", 3, value_type=int
+        ),
     )
     DISPLAY_HYSTERESIS_WINDOWS_SHAKE = _env_int(
-        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_SHAKE", 3
+        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_SHAKE",
+        _runtime_default(
+            "behavior_tracking.display_hysteresis_windows.shake", 3, value_type=int
+        ),
     )
     DISPLAY_HYSTERESIS_WINDOWS_STOP = _env_int(
-        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_STOP", 3
+        "CAT_MONITORING_DISPLAY_HYSTERESIS_WINDOWS_STOP",
+        _runtime_default("behavior_tracking.display_hysteresis_windows.stop", 3, value_type=int),
     )
     DISPLAY_HYSTERESIS_WINDOWS = {
         0: DISPLAY_HYSTERESIS_WINDOWS_WALK,
@@ -595,27 +786,38 @@ class BehaviorTrackingConfig:
     # 容忍期間內沿用最後一次偵測到的關鍵點，避免單幀漏偵測就整個中斷分類/顯示。
     # <=0 等同關閉此機制，維持原本單幀漏偵測就立即重置的行為。
     CAT_MISSING_TOLERANCE_FRAMES = _env_int(
-        "CAT_MONITORING_CAT_MISSING_TOLERANCE_FRAMES", 5
+        "CAT_MONITORING_CAT_MISSING_TOLERANCE_FRAMES",
+        _runtime_default("behavior_tracking.cat_missing_tolerance_frames", 5, value_type=int),
     )
 
     # 警報門檻
     SCRATCH_ALERT_TIME_SECONDS = _env_float(
-        "CAT_MONITORING_SCRATCH_ALERT_TIME_SECONDS", 10.0
+        "CAT_MONITORING_SCRATCH_ALERT_TIME_SECONDS",
+        _runtime_default("behavior_tracking.scratch_alert_time_seconds", 10.0, value_type=float),
     )  # 單日搔抓累積秒數警戒值
     SCRATCH_ALERT_COUNT_THRESHOLD = _env_int(
-        "CAT_MONITORING_SCRATCH_ALERT_COUNT_THRESHOLD", 5
+        "CAT_MONITORING_SCRATCH_ALERT_COUNT_THRESHOLD",
+        _runtime_default(
+            "behavior_tracking.scratch_alert_count_threshold", 5, value_type=int
+        ),
     )  # 單日搔抓次數警戒值
     LICK_ALERT_TIME_SECONDS = _env_float(
-        "CAT_MONITORING_LICK_ALERT_TIME_SECONDS", 10.0
+        "CAT_MONITORING_LICK_ALERT_TIME_SECONDS",
+        _runtime_default("behavior_tracking.lick_alert_time_seconds", 10.0, value_type=float),
     )  # 單日舔舐累積秒數警戒值
     SHAKE_ALERT_COUNT_THRESHOLD = _env_int(
-        "CAT_MONITORING_SHAKE_ALERT_COUNT_THRESHOLD", 10
+        "CAT_MONITORING_SHAKE_ALERT_COUNT_THRESHOLD",
+        _runtime_default("behavior_tracking.shake_alert_count_threshold", 10, value_type=int),
     )  # 單日甩頭次數警戒值
     STOP_ALERT_TIME_SECONDS = _env_float(
-        "CAT_MONITORING_STOP_ALERT_TIME_SECONDS", 300.0
+        "CAT_MONITORING_STOP_ALERT_TIME_SECONDS",
+        _runtime_default("behavior_tracking.stop_alert_time_seconds", 300.0, value_type=float),
     )  # 單日靜止累積秒數警戒值
     LOW_ACTIVITY_TIME_THRESHOLD_SECONDS = _env_float(
-        "CAT_MONITORING_LOW_ACTIVITY_TIME_THRESHOLD_SECONDS", 20.0
+        "CAT_MONITORING_LOW_ACTIVITY_TIME_THRESHOLD_SECONDS",
+        _runtime_default(
+            "behavior_tracking.low_activity_time_threshold_seconds", 20.0, value_type=float
+        ),
     )  # 活動度過低的 walk 時長門檻
 
     # 行為統計：四種行為完全獨立
@@ -640,11 +842,11 @@ class CatIdentityConfig:
     內部的細節（H-S bin 數、色彩門檻等）留在該模組自己管理；基準檔遺失/
     載入失敗，或啟用時 detectors/identity_verifier.py 整個被刪除，
     FrameProcessor 都會自動停用這一層、回退成「偵測到的貓一律視為目標貓」
-    的原本行為，不影響其餘功能運行。目前預設開啟（True），且
+    的原本行為，不影響其餘功能運行。目前預設關閉（False）——即使
     TARGET_CAT_PROFILE_PATH/OTHER_CAT_PROFILE_PATH 指向的基準檔案已存在，
-    代表這層過濾在預設部署下實際生效中——非目標貓的畫面會被當成「貓不在
-    畫面」處理，不產生行為紀錄。需要沿用舊版「偵測到的貓一律視為目標貓」
-    行為時，設定環境變數 CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION=false。
+    預設部署下這層過濾也不會生效，所有偵測到的貓一律視為目標貓。需要啟用
+    身分過濾時，設定環境變數 CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION=true
+    （或透過 settings_window.py 存進 runtime_settings.json）。
 
     啟用後：FrameProcessor 只有在判定「這是目標貓（TARGET_CAT_PROFILE_PATH）」
     時才會把偵測結果送進行為分類/追蹤/CSV/Node-RED；判定為其他貓或無法判定
@@ -652,22 +854,33 @@ class CatIdentityConfig:
     路徑），不會產生任何行為紀錄，也不會計入 Node-RED 的 today_stats。
     """
 
-    CAT_ID = _env_str("CAT_MONITORING_CAT_ID", "cat_001")
+    CAT_ID = _env_str(
+        "CAT_MONITORING_CAT_ID", _runtime_default("cat_identity.cat_id", "cat_001", value_type=str)
+    )
 
     ENABLE_IDENTITY_VERIFICATION = _env_bool(
-        "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION", False
+        "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION",
+        _runtime_default("cat_identity.enable_identity_verification", False, value_type=bool),
     )
     # 目標貓（唯一會被納入統計）的顏色特徵基準檔路徑，由
     # tools/3_cat_identity_verification_test.py 的 enroll 模式產生
     TARGET_CAT_PROFILE_PATH = _env_str(
         "CAT_MONITORING_TARGET_CAT_PROFILE_PATH",
-        r"C:\ai_project\paper\cat_monitoring_system\tools\cat_profile_cat_a.json",
+        _runtime_default(
+            "cat_identity.target_cat_profile_path",
+            r"C:\ai_project\paper\cat_monitoring_system\tools\cat_profile_cat_a.json",
+            value_type=str,
+        ),
     )
     # 其他已知貓（例如同住的另一隻貓）的基準檔路徑；留空或檔案不存在時，
     # IdentityVerifier 會自動退化成「只跟目標貓比對距離門檻」的單貓模式
     OTHER_CAT_PROFILE_PATH = _env_str(
         "CAT_MONITORING_OTHER_CAT_PROFILE_PATH",
-        r"C:\ai_project\paper\cat_monitoring_system\tools\cat_profile_cat_b.json",
+        _runtime_default(
+            "cat_identity.other_cat_profile_path",
+            r"C:\ai_project\paper\cat_monitoring_system\tools\cat_profile_cat_b.json",
+            value_type=str,
+        ),
     )
 
 
@@ -677,17 +890,36 @@ class LoggingConfig:
 
     # Tracker 狀態持久化路徑（重啟後恢復當日累積資料）
     TRACKER_STATE_PATH = _env_str(
-        "CAT_MONITORING_TRACKER_STATE_PATH", r"C:\a\tracker_state.json"
+        "CAT_MONITORING_TRACKER_STATE_PATH",
+        _runtime_default("logging.tracker_state_path", r"C:\a\tracker_state.json", value_type=str),
+    )
+
+    # Python 端獨立的多天歷史（analytics/daily_store.py，SQLite）。刻意跟
+    # NodeRedConfig.GLOBAL_CONTEXT_PATH（C:\a\global.json，Node-RED 自己的
+    # v2_daily_history）分開存放、互不相干——見
+    # docs/資料層架構現況與統一管理評估.md 第九節「Python 端獨立多天歷史」。
+    DAILY_HISTORY_DB_PATH = _env_str(
+        "CAT_MONITORING_DAILY_HISTORY_DB_PATH",
+        _runtime_default(
+            "logging.daily_history_db_path", r"C:\a\daily_history.db", value_type=str
+        ),
     )
 
     # CSV 絕對路徑（可由環境變數覆寫）
     CSV_PATH = _env_str(
-        "CAT_MONITORING_CSV_PATH", r"C:\ai_project\paper\cat_monitoring_log.csv"
+        "CAT_MONITORING_CSV_PATH",
+        _runtime_default(
+            "logging.csv_path", r"C:\ai_project\paper\cat_monitoring_log.csv", value_type=str
+        ),
     )
     # 行為區段 CSV（BehaviorSegmentLogger）路徑 — 獨立檔案，避免與 CSV_PATH 混寫
     SEGMENTS_CSV_PATH = _env_str(
         "CAT_MONITORING_SEGMENTS_CSV_PATH",
-        r"C:\ai_project\paper\behavior_segments_log.csv",
+        _runtime_default(
+            "logging.segments_csv_path",
+            r"C:\ai_project\paper\behavior_segments_log.csv",
+            value_type=str,
+        ),
     )
 
 
@@ -699,27 +931,39 @@ class VisualizationConfig:
     """串流輸出參數"""
 
     # STREAM_DISPLAY_SIZE: None 代表維持原始解析度；(寬, 高) 例如 (480, 480) 代表先縮小再編碼，降低頻寬但犧牲畫質。
-    STREAM_DISPLAY_SIZE = _env_size("CAT_MONITORING_STREAM_DISPLAY_SIZE", None)
+    STREAM_DISPLAY_SIZE = _env_size(
+        "CAT_MONITORING_STREAM_DISPLAY_SIZE",
+        _runtime_default_size("visualization.stream_display_size", None),
+    )
 
     # CLIP_SECONDS: /video_clip 保留的 ring buffer 秒數；記憶體佔用會隨這個值線性增加，但不會因長時間運行持續暴增。
-    CLIP_SECONDS = _env_int("CAT_MONITORING_CLIP_SECONDS", 5)
+    CLIP_SECONDS = _env_int(
+        "CAT_MONITORING_CLIP_SECONDS",
+        _runtime_default("visualization.clip_seconds", 5, value_type=int),
+    )
 
     # SHOW_NOSE_TRAPEZOID: True = 在串流畫面上繪製鼻子接觸梯形 overlay（lick_stage plugin 專用）
     # 設為 False 可在不移除 plugin 的情況下完全隱藏此視覺效果。
-    SHOW_NOSE_TRAPEZOID = _env_bool("CAT_MONITORING_SHOW_NOSE_TRAPEZOID", True)
+    SHOW_NOSE_TRAPEZOID = _env_bool(
+        "CAT_MONITORING_SHOW_NOSE_TRAPEZOID",
+        _runtime_default("visualization.show_nose_trapezoid", True, value_type=bool),
+    )
 
     # 以下三個是 FrameProcessor.show_skeleton/show_label/show_bbox 的「啟動預設值」，
     # 決定 Python 進程一啟動時畫面上預設要不要畫這些疊圖；啟動後仍可透過 GUI 模式
     # 鍵盤 s/l/b 或 server 模式 /api/overlay 在執行期即時切換，不受這裡影響
     # （這裡只決定重啟後、切回來時的初始狀態）。
     SHOW_BBOX = _env_bool(
-        "CAT_MONITORING_SHOW_BBOX", True
+        "CAT_MONITORING_SHOW_BBOX",
+        _runtime_default("visualization.show_bbox", True, value_type=bool),
     )  # 是否繪製 YOLO 偵測框(bbox)與信心值文字
     SHOW_SKELETON = _env_bool(
-        "CAT_MONITORING_SHOW_SKELETON", True
+        "CAT_MONITORING_SHOW_SKELETON",
+        _runtime_default("visualization.show_skeleton", True, value_type=bool),
     )  # 是否繪製骨架關鍵點與連線
     SHOW_GCN_RESULT = _env_bool(
-        "CAT_MONITORING_SHOW_GCN_RESULT", True
+        "CAT_MONITORING_SHOW_GCN_RESULT",
+        _runtime_default("visualization.show_gcn_result", True, value_type=bool),
     )  # 是否顯示 ST-GCN 行為分類結果與機率條
 
 
@@ -731,9 +975,22 @@ class SystemInfo:
     VERSION = "v4.0-stgcn"
     MODEL_TYPE = "YOLO-Pose + ST-GCN"
 
-    # 幀尺寸（None = 使用原始尺寸）
-    OUTPUT_WIDTH = 640
-    OUTPUT_HEIGHT = 640
+    # 幀尺寸——不只是文件用的識別資訊，server/routes.py 的 _build_frame_processor()
+    # 會把這兩個值當成 width/height 傳進 FrameProcessor，透過
+    # cv2.VideoCapture.set(CAP_PROP_FRAME_WIDTH/HEIGHT) 要求攝影機來源改用這個
+    # 解析度擷取（對影片檔/串流來源這個 .set() 是無效操作，只有真的接攝影機時
+    # 才會實際生效）。
+    #
+    # 2026-08-15 修正：這裡原本是 640×640（正方形 1:1），跟 YOLOConfig.IMAGE_SIZE
+    # 剛好同一個數字，懷疑是把「YOLO 推論輸入尺寸」誤用成「攝影機擷取解析度」——
+    # 兩者是完全不同的概念。1:1 幾乎沒有消費級攝影機原生支援，驅動收到這種不支援
+    # 的請求時行為完全看驅動實作，可能悄悄退回它自己的開機預設解析度（畫面被拉伸
+    # 鋪滿顯示區域、像素感明顯），也可能退回原生最大解析度（畫面明顯過大，因為
+    # VisualizationConfig.STREAM_DISPLAY_SIZE 預設不會再把它縮小）——這是實際
+    # 使用網路攝影機時回報過的問題。改成 1280×720（16:9），絕大多數 USB/網路攝影機
+    # 原生支援的標準比例，才比較可能被驅動真的採納。
+    OUTPUT_WIDTH = 1280
+    OUTPUT_HEIGHT = 720
 
 
 # ==================== 便利函數 ====================
@@ -782,7 +1039,7 @@ def get_config_summary() -> str:
       - 名稱    : {SystemInfo.SYSTEM_NAME}
       - 版本    : {SystemInfo.VERSION}
       - 模型    : {SystemInfo.MODEL_TYPE}
-      - 輸出尺寸: {SystemInfo.OUTPUT_WIDTH} × {SystemInfo.OUTPUT_HEIGHT}
+      - 輸出尺寸: {SystemInfo.OUTPUT_WIDTH} × {SystemInfo.OUTPUT_HEIGHT}  （會透過 cv2.VideoCapture.set() 要求攝影機來源改用此解析度擷取；對影片檔/串流無效）
 
     📷 YOLO 參數
       - 圖像尺寸          : {YOLOConfig.IMAGE_SIZE}
@@ -846,14 +1103,22 @@ def get_config_summary() -> str:
       - 靜止警報秒數          : {BehaviorTrackingConfig.STOP_ALERT_TIME_SECONDS} s
       - 低活動 walk 門檻      : {BehaviorTrackingConfig.LOW_ACTIVITY_TIME_THRESHOLD_SECONDS} s
 
-    🐱 貓咪身分  (單一貓咪固定 ID，本系統不做多貓 re-ID)
-      - CAT_ID            : {CatIdentityConfig.CAT_ID}
+    🐱 貓咪身分與身分驗證
+      - CAT_ID                    : {CatIdentityConfig.CAT_ID}
+      - 身分驗證總開關（多貓過濾）: {CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION}  （False=偵測到的貓一律視為目標貓，不做身分過濾）
+      - 目標貓特徵基準檔          : {CatIdentityConfig.TARGET_CAT_PROFILE_PATH}
+      - 其他已知貓特徵基準檔      : {CatIdentityConfig.OTHER_CAT_PROFILE_PATH}  （留空或檔案不存在時自動退化為單貓模式）
 
     🌐 Flask 服務
       - 主機        : {FlaskConfig.HOST}:{FlaskConfig.PORT}
       - JPEG 品質   : {FlaskConfig.JPEG_QUALITY}
       - Debug 模式  : {FlaskConfig.DEBUG}
       - Threaded    : {FlaskConfig.THREADED}
+
+    🧮 個體化基線儀表板（Python 端唯讀展示頁）
+      - 啟用          : {BaselineDashboardConfig.ENABLED}  （False=不匯入 dashboard/ 模組，不佔用任何資源）
+      - 前端輪詢間隔  : {BaselineDashboardConfig.POLL_INTERVAL_SEC} s
+      - 背景重算間隔  : {BaselineDashboardConfig.RECOMPUTE_INTERVAL_SEC} s
 
     🎞️ 串流視覺化
       - 串流縮放尺寸      : {VisualizationConfig.STREAM_DISPLAY_SIZE}
@@ -870,11 +1135,13 @@ def get_config_summary() -> str:
       - Notify 端點   : {NodeRedConfig.ENDPOINT_NOTIFY}
       - Result v1 端點: {NodeRedConfig.ENDPOINT_RESULT}
       - Result v2 端點: {NodeRedConfig.ENDPOINT_RESULT_V2}
+      - 個體化基線共用儲存: {NodeRedConfig.GLOBAL_CONTEXT_PATH}
 
     📄 日誌設定
       - 主要 CSV          : {LoggingConfig.CSV_PATH}
       - 行為區段 CSV      : {LoggingConfig.SEGMENTS_CSV_PATH}
       - Tracker 狀態檔    : {LoggingConfig.TRACKER_STATE_PATH}  （重啟後恢復當日累積資料）
+      - 多天歷史 SQLite   : {LoggingConfig.DAILY_HISTORY_DB_PATH}
 
     📁 路徑配置
       - YOLO 模型   : {ModelPaths.YOLO_MODEL}
@@ -1003,3 +1270,25 @@ if __name__ == "__main__":
         print("\n✅ 所有配置驗證通過！")
     else:
         print("\n⚠ 部分配置驗證失敗，請檢查。")
+
+    # 2026-08-15：直接修改這個檔案裡任何 _runtime_default() 的字面值（例如把
+    # "server" 改成 "gui"）之後，default_runtime_settings.json（設定視窗
+    # 「還原 GUI 預設值」用的範本）不會自動跟著變——那份 JSON 是獨立檔案，兩邊
+    # 各自維護容易漂移。這裡讓 `python config.py` 順手把範本同步好，不用再手動
+    # 對照兩邊改。只動範本檔，不動 runtime_settings.json（使用者實際套用中的
+    # 設定，不該被這個動作悄悄覆蓋）。
+    try:
+        from settings_manager import regenerate_default_runtime_settings
+
+        changed, changes = regenerate_default_runtime_settings()
+        if changed:
+            print(
+                f"\n🔄 default_runtime_settings.json 已同步（{len(changes)} 個欄位"
+                "跟目前硬編碼預設值不同，已更新為新值）："
+            )
+            for key, label, old, new in changes:
+                print(f"  - {label}（{key}）：{old!r} → {new!r}")
+        else:
+            print("\n✓ default_runtime_settings.json 已跟目前硬編碼預設值一致，未變更。")
+    except Exception as e:
+        print(f"\n⚠ 同步 default_runtime_settings.json 失敗（不影響主系統）：{e}")

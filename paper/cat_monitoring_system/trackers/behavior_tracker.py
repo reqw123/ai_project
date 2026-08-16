@@ -79,8 +79,18 @@ class ImprovedBehaviorTracker:
                 }
             path = LoggingConfig.TRACKER_STATE_PATH
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
+            # 原子寫入：先寫到同目錄下的暫存檔，成功寫完+flush 後再用
+            # os.replace() 原子取代正式檔案。避免寫到一半被中斷（例如
+            # Ctrl+C 觸發 main.py 的 os._exit()）時，正式檔案被截斷成
+            # 損毀的 JSON，導致 load_state() 讀取失敗、整天累積的統計遺失
+            # （os.replace 在同一個檔案系統內是單一原子系統呼叫，不會有
+            # 「寫一半」的中間狀態）。
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(state, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
         except Exception as e:
             logging.warning("TrackerState save failed: %s", e)
 
@@ -131,27 +141,123 @@ class ImprovedBehaviorTracker:
         except Exception as e:
             logging.warning("TrackerState load failed: %s", e)
 
-    def check_daily_reset(self):
-        """若日期已跨天，重置所有當日累積統計。"""
+    def _persist_daily_record(self, day, snapshot):
+        """把 `_reset_if_new_day_locked()` 傳入的「歸零前」當日累積統計快照，
+        彙整成一筆 DailyRecord 寫入 Python 端獨立的多天歷史（analytics/daily_store.py）。
+
+        這份持久化跟 Node-RED 自己的 v2_daily_history 完全獨立——不讀、不寫
+        Node-RED 的 global.json，兩邊各自累積、互不相干，任一邊資料被寫壞
+        都不會波及另一邊（見 docs/資料層架構現況與統一管理評估.md 第九節）。
+
+        2026-08-11 修正：改吃呼叫端傳入的 `snapshot`，不再直接讀
+        `self.behavior_time`/`self.behavior_count`/`self.monitoring_seconds`。
+        這支方法現在特意在 `self._lock` 之外呼叫（見 `check_daily_reset()`），
+        呼叫當下這些欄位可能已經被歸零、甚至已經被其他執行緒的 `update()`
+        呼叫進一步累積新一天的資料，讀 `self.*` 會拿到錯誤的資料，一定要
+        用重置當下鎖內拍下的快照。失敗時只記警告、不拋出，避免持久化問題
+        影響即時監測本身（跟 save_state() 的容錯原則一致）。
+        """
+        try:
+            from analytics import daily_store
+            from analytics.baseline import DailyRecord
+
+            behavior_time = snapshot["behavior_time"]
+            behavior_count = snapshot["behavior_count"]
+            total_active = (
+                behavior_time["walk"]
+                + behavior_time["scratch"]
+                + behavior_time["lick"]
+                + behavior_time["shake"]
+                + behavior_time["stop"]
+            )
+            record = DailyRecord(
+                day=day,
+                monitoring_seconds=snapshot["monitoring_seconds"],
+                walk_time=behavior_time["walk"],
+                walk_count=behavior_count["walk"],
+                stop_time=behavior_time["stop"],
+                stop_count=behavior_count["stop"],
+                lick_time=behavior_time["lick"],
+                lick_count=behavior_count["lick"],
+                scratch_time=behavior_time["scratch"],
+                scratch_count=behavior_count["scratch"],
+                shake_count=behavior_count["shake"],
+                active_time=total_active,
+                # rest_time 目前不影響 analytics 的評分模型（不在
+                # baseline.CONTINUOUS_METRICS/COUNT_METRICS 內），沿用
+                # stop_time 只是保留語意對照，不代表額外計算。
+                rest_time=behavior_time["stop"],
+            )
+            daily_store.save_day(record)
+        except Exception as e:
+            logging.warning("Daily history persist failed (day=%s): %s", day, e)
+
+    def _reset_if_new_day_locked(self):
+        """呼叫端必須已持有 self._lock。若日期已跨天，重置所有當日累積統計
+        （純記憶體操作，不做任何 I/O），並回傳 `(prev_date, snapshot)` 供
+        呼叫端在鎖外呼叫 `_persist_daily_record()`；沒跨天則回傳
+        `(None, None)`。
+
+        2026-08-11 從 check_daily_reset() 拆出來：原本 SQLite 寫入
+        （_persist_daily_record）是在這裡、也就是在 self._lock 內執行的，
+        因為 `update()`（即時推論熱路徑）跟 `get_today_stats()`（HTTP 請求）
+        都會在持鎖狀態下呼叫 check_daily_reset()，一旦跨日那一刻剛好撞上
+        SQLite 連線競爭（例如 analytics/manage_baseline_history.py 同時在
+        寫同一個 db），`daily_store._connect()` 的 `timeout=10.0` 可以讓
+        整條即時影像管線被卡住長達 10 秒。拆開後，這裡只做快速的記憶體
+        重置，真正可能慢的 I/O 交給呼叫端在鎖外處理。
+        """
         today = datetime.now().date()
-        if today != self.last_reset:
-            # 先更新 last_reset 防止兩個執行緒同時通過 != 判斷造成雙重 reset
-            self.last_reset = today
-            self.behavior_time = {k: 0.0 for k in self.behavior_time}
-            self.behavior_count = {k: 0 for k in self.behavior_count}
-            self.low_conf_time = 0.0
-            self.low_conf_count = 0
-            self._in_low_conf = False
-            self.not_detected_time = 0.0
-            self.transition_matrix = {}
-            self.hourly_distribution = {}
-            self.monitoring_seconds = 0.0
-            self._last_valid_behavior = None
-            self.behavior_min_duration = {k: None for k in self.behavior_min_duration}
-            self.behavior_max_duration = {k: None for k in self.behavior_max_duration}
-            self.today_start_time = (
-                time.time()
-            )  # 跨日重置：新的一天，重新起算監測開始時間
+        if today == self.last_reset:
+            return None, None
+        prev_date = self.last_reset
+        # 先更新 last_reset 防止兩個執行緒同時通過 != 判斷造成雙重 reset
+        self.last_reset = today
+        snapshot = {
+            "behavior_time": dict(self.behavior_time),
+            "behavior_count": dict(self.behavior_count),
+            "monitoring_seconds": self.monitoring_seconds,
+        }
+        self.behavior_time = {k: 0.0 for k in self.behavior_time}
+        self.behavior_count = {k: 0 for k in self.behavior_count}
+        self.low_conf_time = 0.0
+        self.low_conf_count = 0
+        self._in_low_conf = False
+        self.not_detected_time = 0.0
+        self.transition_matrix = {}
+        self.hourly_distribution = {}
+        self.monitoring_seconds = 0.0
+        self._last_valid_behavior = None
+        self.behavior_min_duration = {k: None for k in self.behavior_min_duration}
+        self.behavior_max_duration = {k: None for k in self.behavior_max_duration}
+        self.today_start_time = time.time()  # 跨日重置：新的一天，重新起算監測開始時間
+        return prev_date, snapshot
+
+    def check_daily_reset(self):
+        """公開介面：若日期已跨天，重置所有當日累積統計並把前一天的資料
+        持久化到 Python 端獨立的多天歷史。
+
+        2026-08-11 修正：呼叫端（`update()`/`get_today_stats()`）不能已經
+        持有 `self._lock` 才呼叫這支方法——記憶體重置在鎖內做（快），
+        `_persist_daily_record()` 的 SQLite 寫入刻意留到鎖外做（可能慢），
+        避免即時管線被卡住，見 `_reset_if_new_day_locked()` 說明。
+
+        2026-08-11 稍晚再修正（code review 發現的效能迴歸）：`update()`
+        是每一幀都會呼叫的即時熱路徑，這支方法被獨立出來後，等於每幀都
+        多付一次鎖的 acquire/release（跟原本「已經在 `update()` 的鎖裡」
+        相比變成兩次）。這裡加一個無鎖的快速路徑：先不加鎖比較一次日期，
+        沒跨天（絕大多數幀）直接返回，完全不碰鎖；只有日期真的不一樣時
+        才進鎖裡用 `_reset_if_new_day_locked()` 二次確認並執行重置——這是
+        標準的 double-checked locking，這裡的無鎖讀取只是「要不要進鎖」的
+        提示，正確性仍然由鎖內的二次確認保證，不會因為讀到瞬間髒值而重複
+        重置或漏掉重置（CPython 的 GIL 保證 `date` 物件屬性讀取不會撕裂）。
+        """
+        if datetime.now().date() == self.last_reset:
+            return
+        with self._lock:
+            prev_date, snapshot = self._reset_if_new_day_locked()
+        if prev_date is not None:
+            self._persist_daily_record(prev_date, snapshot)
 
     def map_gcn_to_tracker(self, behavior_id):
         """把 ST-GCN 的行為 ID 轉成統計用的行為名稱字串；未知 ID 預設為 'walk'。"""
@@ -208,9 +314,14 @@ class ImprovedBehaviorTracker:
 
     def update(self, behavior_id, activity_value):
         """以本幀的行為 ID 與活動力數值更新累積統計、轉移矩陣與活動視窗。"""
+        # check_daily_reset() 刻意放在下面的主鎖之外呼叫：它內部的
+        # _persist_daily_record()（可能慢的 SQLite 寫入）本來就設計成鎖外
+        # 執行，如果在這裡先進了 `with self._lock:` 才呼叫，self._lock 是
+        # RLock、重入不會擋住同一執行緒，但也不會釋放鎖給其他執行緒，等於
+        # 白白拆了還是卡住即時管線——見 check_daily_reset() 說明。
+        self.check_daily_reset()
         _event_completed = False
         with self._lock:
-            self.check_daily_reset()
             now = time.time()
             dt = now - self.last_update_time
             self.last_update_time = now
@@ -312,8 +423,10 @@ class ImprovedBehaviorTracker:
 
     def get_today_stats(self):
         """組出供 Dashboard 顯示的當日完整統計字典（各行為時長/次數、活動時長等）。"""
+        # 同 update()：check_daily_reset() 要在主鎖之外呼叫，避免它內部可能
+        # 慢的 SQLite 寫入卡住這支方法（HTTP 請求路徑）的呼叫端。
+        self.check_daily_reset()
         with self._lock:
-            self.check_daily_reset()
             total_active = (
                 self.behavior_time["walk"]
                 + self.behavior_time["scratch"]

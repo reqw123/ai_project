@@ -39,9 +39,15 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
-EWMA_ALPHA = 0.15
-MIN_BASELINE_DAYS_DEFAULT = 7
-MAX_BASELINE_DAYS_DEFAULT = 30
+from analytics.config import BaselineConfig
+
+# 保留模組層級別名，向下相容任何直接 `from analytics.baseline import
+# EWMA_ALPHA` 的舊寫法；數值本身、可調性、文獻依據的說明都集中在
+# analytics/config.py，這裡不重複。
+EWMA_ALPHA = BaselineConfig.EWMA_ALPHA
+MIN_BASELINE_DAYS_DEFAULT = BaselineConfig.MIN_BASELINE_DAYS_DEFAULT
+MAX_BASELINE_DAYS_DEFAULT = BaselineConfig.MAX_BASELINE_DAYS_DEFAULT
+HISTORY_LOAD_LIMIT_DAYS = BaselineConfig.HISTORY_LOAD_LIMIT_DAYS
 
 # Behaviors that are genuinely continuous durations (seconds/day) vs. sparse
 # non-negative event counts. This classification is what deviation.py uses
@@ -204,7 +210,7 @@ def compute_baseline(
     min_days: int = MIN_BASELINE_DAYS_DEFAULT,
     max_days: int = MAX_BASELINE_DAYS_DEFAULT,
     excluded_dates: Optional[list] = None,
-    min_daily_monitoring_sec: float = 3600.0,
+    min_daily_monitoring_sec: float = BaselineConfig.MIN_DAILY_MONITORING_SEC_DEFAULT,
 ) -> Baseline:
     """Compute an individualized baseline from a list of ``DailyRecord``.
 
@@ -243,24 +249,23 @@ def compute_baseline(
 
     count_histories = {name: [getattr(d, name) for d in days] for name in COUNT_METRICS}
 
-    # 群體參考值（~60 min/day lick、~1 min/day scratch）來自 Eckstein & Hart (2000),
-    # "The organization and control of grooming in cats", Applied Animal Behaviour
-    # Science 68: 131-140 —— 11 隻無體外寄生蟲家貓的錄影時間預算研究，健康貓每日
-    # 舔舐佔非睡眠時間 8%（約 1 小時），抓撓僅佔約 0.2%（約 1 分鐘），兩者比例約 50:1。
+    # 群體參考值（~60 min/day lick、~1 min/day scratch）來自 Eckstein & Hart (2000)；
+    # 完整文獻資訊與上下限本身的取捨說明見 analytics/config.py 的
+    # BaselineConfig.LICK_SANITY_*/SCRATCH_SANITY_* 註解，這裡不重複。
     sanity_warnings = []
     lick_mean = metrics["lick_time"].mean
     scratch_mean = metrics["scratch_time"].mean
-    if lick_mean > 6 * 3600:
+    if lick_mean > BaselineConfig.LICK_SANITY_UPPER_SEC:
         sanity_warnings.append(
             f"Lick Duration 個體基線（{lick_mean/60:.0f} min/day）遠超群體參考值（~60 min/day）。"
             "請確認錄影時間、辨識模型精度及資料品質。"
         )
-    if 0 < lick_mean < 0.5 * 3600:
+    if 0 < lick_mean < BaselineConfig.LICK_SANITY_LOWER_SEC:
         sanity_warnings.append(
             f"Lick Duration 個體基線（{lick_mean/60:.1f} min/day）遠低於群體參考值（~60 min/day）。"
             "監控時間可能不足或模型漏偵。"
         )
-    if scratch_mean > 10 * 60:
+    if scratch_mean > BaselineConfig.SCRATCH_SANITY_UPPER_SEC:
         sanity_warnings.append(
             f"Scratch Duration 個體基線（{scratch_mean/60:.0f} min/day）遠超群體參考值（~1 min/day）。"
             "請確認辨識精度。"

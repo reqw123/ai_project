@@ -189,6 +189,20 @@ class FrameProcessor:
         if width and height:
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            # cv2.VideoCapture.set() 對攝影機來源是「請求」不是「保證」——驅動收到
+            # 不支援的解析度時，可能悄悄退回它自己的預設值而不報錯，.set() 呼叫本身
+            # 一樣回傳成功。讀回實際協商到的值印出來，才能在畫面看起來不對勁時
+            # （像素感明顯／畫面過大）直接從 log 判斷是不是解析度沒被驅動採納，
+            # 不用憑空猜測。對影片檔/串流這個 .set() 是無效操作，讀回的值會等於
+            # 檔案原始解析度，不代表有問題。
+            actual_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if (actual_w, actual_h) != (width, height):
+                print(
+                    f"⚠ 影像來源實際協商到的解析度（{actual_w}x{actual_h}）"
+                    f"跟請求的（{width}x{height}）不同——多半是攝影機驅動不支援"
+                    f"該解析度、自動退回它自己的預設值，屬正常現象，非程式錯誤。"
+                )
         # 即時網路串流才啟用「只保留最新幀」的背景讀取，避免推論跟不上時
         # 延遲隨執行時間持續累積；本機檔案維持原本同步讀取行為不變。放在
         # width/height 設定之後才啟動背景執行緒，避免和 cap.set() 競態。

@@ -23,6 +23,9 @@ class VideoRenameGUI:
         self.cap = None
         self.playing = False
         self.current_photo = None
+        self.total_frames = 0
+        self.fps = 0.0
+        self.updating_timeline = False
 
         self.counter = {}
 
@@ -70,6 +73,24 @@ class VideoRenameGUI:
 
         self.video_label = tk.Label(center, bg="black")
         self.video_label.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # 可點擊／拖曳的影片時間軸（數值以影格位置表示）
+        timeline = tk.Frame(center)
+        timeline.pack(fill="x", padx=16, pady=(0, 2))
+
+        self.time_label = tk.Label(timeline, text="00:00 / 00:00", width=15, anchor="w")
+        self.time_label.pack(side="left", padx=(0, 8))
+
+        self.timeline_scale = tk.Scale(
+            timeline,
+            from_=0,
+            to=1,
+            orient="horizontal",
+            showvalue=False,
+            resolution=1,
+            command=self.seek_from_timeline,
+        )
+        self.timeline_scale.pack(side="left", fill="x", expand=True)
 
         self.info_label = tk.Label(center, text="目前影片：無", font=("Arial", 12))
         self.info_label.pack(pady=5)
@@ -152,6 +173,16 @@ class VideoRenameGUI:
 
         path = os.path.join(self.folder, self.files[self.index])
         self.cap = cv2.VideoCapture(path)
+        self.total_frames = max(0, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 0.0
+        if self.fps <= 0:
+            self.fps = 30.0
+
+        self.updating_timeline = True
+        self.timeline_scale.config(to=max(1, self.total_frames - 1))
+        self.timeline_scale.set(0)
+        self.updating_timeline = False
+        self.update_time_label(0)
 
         self.info_label.config(
             text=f"目前影片：[{self.index + 1}/{len(self.files)}] {self.files[self.index]}"
@@ -189,9 +220,53 @@ class VideoRenameGUI:
         self.current_photo = ImageTk.PhotoImage(img)
 
         self.video_label.config(image=self.current_photo)
+        self.update_timeline_position()
 
         if self.playing:
             self.root.after(30, self.show_frame)
+
+    def seek_from_timeline(self, value):
+        """點擊或拖曳時間軸後，跳至對應影格。"""
+        if self.updating_timeline or not self.cap:
+            return
+
+        target_frame = int(float(value))
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+        # 播放中的 after 迴圈會繼續運作；此處只更新預覽，避免拖曳時建立多個播放迴圈。
+        was_playing = self.playing
+        self.playing = False
+        self.show_frame()
+        self.playing = was_playing
+
+    def update_timeline_position(self):
+        if not self.cap:
+            return
+
+        # read() 後的位置是「下一張影格」，因此減 1 顯示目前畫面的位置。
+        current_frame = max(0, int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1)
+        if self.total_frames:
+            current_frame = min(current_frame, self.total_frames - 1)
+
+        self.updating_timeline = True
+        self.timeline_scale.set(current_frame)
+        self.updating_timeline = False
+        self.update_time_label(current_frame)
+
+    def update_time_label(self, current_frame):
+        current_seconds = current_frame / self.fps if self.fps else 0
+        total_seconds = self.total_frames / self.fps if self.fps else 0
+        self.time_label.config(
+            text=f"{self.format_time(current_seconds)} / {self.format_time(total_seconds)}"
+        )
+
+    @staticmethod
+    def format_time(seconds):
+        seconds = int(seconds)
+        minutes, seconds = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
 
     def toggle_play(self):
         if not self.cap:

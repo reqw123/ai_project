@@ -3,8 +3,7 @@
 存成一份快照 JSON，給互動式 UI 預覽頁面當「複製真實資料再竄改」的起點。
 
 ⚠️ 全程唯讀：只用 open(...).read() 讀取，從頭到尾不會寫回
-C:\\Users\\homec\\.node-red\\context\\global\\global.json 這個檔案，
-不會動到 Node-RED 正在使用的任何 context 資料。
+C:\\a\\global.json 這個檔案，不會動到 Node-RED 正在使用的任何 context 資料。
 
 用法：
     python fetch_real_history.py
@@ -16,9 +15,9 @@ C:\\Users\\homec\\.node-red\\context\\global\\global.json 這個檔案，
 import json
 from pathlib import Path
 
-# Node-RED file-based 全域 context 的實際位置（跟 paper/_tools/1_read_context.py
+# 個體化基線共用儲存的實際位置（跟 paper/_tools/1_read_context.py
 # 用的是同一個路徑，已確認這台機器上這個檔案真實存在）
-REAL_CONTEXT_PATH = Path(r"C:\Users\homec\.node-red\context\global\global.json")
+REAL_CONTEXT_PATH = Path(r"C:\a\global.json")
 OUTPUT_PATH = Path(__file__).parent / "real_history_snapshot.json"
 
 

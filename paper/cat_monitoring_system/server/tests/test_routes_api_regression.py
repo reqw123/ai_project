@@ -34,7 +34,25 @@ pytest.importorskip(
 from flask import Flask
 
 import server.routes as routes_module
+from config import LoggingConfig as _LoggingConfig
 from config import ModelPaths as _ModelPaths
+
+
+class FakeTracker:
+    """只實作 /api/deviation 在沒帶 `today` 時會用到的
+    `get_today_stats()`，模擬 ImprovedBehaviorTracker 的即時資料來源。"""
+
+    def __init__(self):
+        self.stats = {
+            "walk": 5, "walk_time": 100.0,
+            "stop": 3, "stop_time": 50.0,
+            "lick": 2, "lick_time": 30.0,
+            "scratch": 1, "scratch_time": 10.0,
+            "shake": 0,
+        }
+
+    def get_today_stats(self):
+        return self.stats
 
 
 class FakeFrameProcessor:
@@ -46,6 +64,7 @@ class FakeFrameProcessor:
         self.show_label = True
         self.show_bbox = True
         self.history_records = []
+        self.tracker = FakeTracker()
 
     def get_behavior_history_records(self, limit):
         return self.history_records[-limit:]
@@ -83,17 +102,29 @@ def fake_streamer():
 
 
 @pytest.fixture
-def client(monkeypatch, fake_processor, fake_streamer):
+def client(monkeypatch, fake_processor, fake_streamer, tmp_path):
     """建立 Flask 測試用戶端；`_ensure_processor_started()` 換成 no-op，
-    避免任何路徑意外觸發真正的 GPU pipeline 建置。"""
+    避免任何路徑意外觸發真正的 GPU pipeline 建置。
+
+    `LoggingConfig.DAILY_HISTORY_DB_PATH` 一併換成 tmp_path 底下的檔案，
+    避免 `/api/deviation` 在沒帶 `daily_history` 時預設讀 Python 自己的
+    daily_store（見 routes.py）誤觸真正的 `C:\\a\\daily_history.db`。
+    """
     monkeypatch.setattr(routes_module, "_ensure_processor_started", lambda: None)
     monkeypatch.setattr(routes_module, "frame_processor", fake_processor)
     monkeypatch.setattr(routes_module, "frame_streamer", fake_streamer)
+    db_path = str(tmp_path / "test_daily_history.db")
+    monkeypatch.setattr(_LoggingConfig, "DAILY_HISTORY_DB_PATH", db_path)
 
     app = Flask(__name__)
     routes_module.register_routes(app)
     app.testing = True
-    return app.test_client()
+    yield app.test_client()
+    # daily_store 依路徑快取連線（見 2026-08-11 效能修正），測試結束後顯式
+    # 關閉，避免 Windows 上檔案控制代碼佔用導致 tmp_path 清不掉。
+    from analytics import daily_store as _daily_store
+
+    _daily_store.close_connection(db_path)
 
 
 # ============================================================================
@@ -323,18 +354,130 @@ class TestDeviationRoute:
         assert "current_days" in body
         assert "required_days" in body
 
-    def test_missing_daily_history_returns_400(self, client):
+    def test_missing_daily_history_defaults_to_independent_daily_store_empty(
+        self, client
+    ):
+        """省略 daily_history 時預設讀 Python 自己的 daily_store；store 是空的
+        （測試用 tmp_path，跟正式資料無關）時應該回傳 insufficient_data，
+        不是 400——這是「省略欄位」跟「格式錯誤」該有的不同結果。"""
         resp = client.post("/api/deviation", json={"today": {}})
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "insufficient_data"
+
+    def test_missing_daily_history_defaults_to_independent_daily_store_populated(
+        self, client
+    ):
+        """daily_store 裡已經有 Python 自己獨立持久化的歷史時，省略
+        daily_history 應該直接吃這份資料算出結果，完全不需要呼叫端
+        （Node-RED）forward 任何歷史過來。"""
+        from analytics import daily_store
+        from analytics.baseline import DailyRecord
+
+        for i in range(7):
+            daily_store.save_day(
+                DailyRecord(
+                    day=date(2026, 1, 1) + timedelta(days=i),
+                    monitoring_seconds=7200,
+                    walk_time=100.0,
+                    walk_count=5,
+                    lick_time=50.0,
+                    lick_count=2,
+                )
+            )
+        resp = client.post("/api/deviation", json={"today": {"walk_time": 100.0}})
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "ok"
+
+    def test_missing_excluded_dates_defaults_to_daily_store_exclusion_list(
+        self, client
+    ):
+        """省略 excluded_dates 時，預設吃 daily_store 自己的排除清單（透過
+        analytics/manage_baseline_history.py 或直接呼叫 set_excluded() 設定），
+        不需要 Node-RED forward 它自己的 v2_excluded_dates。"""
+        from analytics import daily_store
+        from analytics.baseline import DailyRecord
+
+        for i in range(8):
+            daily_store.save_day(
+                DailyRecord(
+                    day=date(2026, 1, 1) + timedelta(days=i),
+                    monitoring_seconds=7200,
+                    walk_time=100.0,
+                    walk_count=5,
+                )
+            )
+        daily_store.set_excluded(date(2026, 1, 1), excluded=True)
+
+        resp = client.post("/api/deviation", json={"today": {"walk_time": 100.0}})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "ok"
+        assert body["baseline"]["days_count"] == 7  # 8 天扣掉被排除的 1 天
+
+    def test_explicit_excluded_dates_overrides_daily_store_list(self, client):
+        """呼叫端（例如 Node-RED）明確帶了 excluded_dates（即使是空陣列），
+        就以請求內容為準，不去讀 daily_store 自己的排除清單。"""
+        from analytics import daily_store
+        from analytics.baseline import DailyRecord
+
+        for i in range(8):
+            daily_store.save_day(
+                DailyRecord(
+                    day=date(2026, 1, 1) + timedelta(days=i),
+                    monitoring_seconds=7200,
+                    walk_time=100.0,
+                    walk_count=5,
+                )
+            )
+        daily_store.set_excluded(date(2026, 1, 1), excluded=True)
+
+        resp = client.post(
+            "/api/deviation",
+            json={"today": {"walk_time": 100.0}, "excluded_dates": []},
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "ok"
+        assert body["baseline"]["days_count"] == 8  # 明確帶空陣列，不採用本地排除清單
+
+    def test_missing_today_defaults_to_live_tracker_stats(self, client, fake_processor):
+        """省略 today 時預設吃 frame_processor.tracker.get_today_stats()
+        （即時資料），不需要呼叫端把 today 塞進請求裡。"""
+        resp = client.post(
+            "/api/deviation", json={"daily_history": _mk_history(7)}
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "ok"
+
+    def test_missing_today_without_frame_processor_returns_400(
+        self, client, monkeypatch
+    ):
+        """省略 today、且攝影機管線根本還沒啟動（frame_processor is None）時，
+        沒有任何資料來源可用，應該明確回 400 而不是靜默當成全 0。"""
+        monkeypatch.setattr(routes_module, "frame_processor", None)
+        resp = client.post(
+            "/api/deviation", json={"daily_history": _mk_history(7)}
+        )
         assert resp.status_code == 400
         assert "error" in resp.get_json()
 
-    def test_missing_today_returns_400(self, client):
-        resp = client.post("/api/deviation", json={"daily_history": _mk_history(7)})
-        assert resp.status_code == 400
+    def test_empty_body_now_defaults_instead_of_erroring(self, client):
+        """完全不帶 body：daily_history/today 都省略，兩邊都走預設資料源
+        （空 daily_store → insufficient_data），不再是格式錯誤。"""
+        resp = client.post("/api/deviation", data="", content_type="application/json")
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "insufficient_data"
 
     def test_non_list_daily_history_returns_400(self, client):
         resp = client.post(
             "/api/deviation", json={"daily_history": "not-a-list", "today": {}}
+        )
+        assert resp.status_code == 400
+
+    def test_non_list_excluded_dates_returns_400(self, client):
+        resp = client.post(
+            "/api/deviation",
+            json={"daily_history": _mk_history(7), "today": {}, "excluded_dates": "nope"},
         )
         assert resp.status_code == 400
 
@@ -368,10 +511,6 @@ class TestDeviationRoute:
                 "class_c_score": "not_a_number",
             },
         )
-        assert resp.status_code == 400
-
-    def test_empty_body_returns_400(self, client):
-        resp = client.post("/api/deviation", data="", content_type="application/json")
         assert resp.status_code == 400
 
     def test_custom_min_baseline_days_is_honored(self, client):

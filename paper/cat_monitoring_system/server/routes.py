@@ -34,7 +34,14 @@ _IMAGE_SIZE = _YOLOConfig.IMAGE_SIZE
 _CONF_THRES = _YOLOConfig.CONFIDENCE_THRESHOLD
 _SEQUENCE_LENGTH = _STGCNConfig.SEQUENCE_LENGTH
 _PORT = _FlaskConfig.PORT
-from analytics.baseline import DailyRecord, InsufficientDataError, compute_baseline
+from analytics import daily_store
+from analytics.baseline import (
+    HISTORY_LOAD_LIMIT_DAYS,
+    MIN_BASELINE_DAYS_DEFAULT,
+    DailyRecord,
+    InsufficientDataError,
+    compute_baseline,
+)
 from analytics.deviation import compute_deviation
 from analytics.fusion import compute_fusion
 from processors.frame_processor import FrameProcessor
@@ -99,6 +106,78 @@ def _dataclass_to_jsonable(obj):
     import dataclasses
 
     return dataclasses.asdict(obj)
+
+
+def _today_from_live_tracker():
+    """把 frame_processor.tracker.get_today_stats() 轉成 compute_deviation()
+    要的欄位形狀（walk_time/walk_count/... 扁平鍵名），供 /api/deviation 在
+    請求沒帶 ``today`` 時當預設值。frame_processor 尚未啟動時回傳 None——
+    刻意不呼叫 _ensure_processor_started()，維持這個端點原本「跟攝影機/
+    YOLO pipeline 無關」的特性，不因為呼叫這個比對端點就把攝影機管線啟動。
+    """
+    tracker = getattr(frame_processor, "tracker", None)
+    if tracker is None:
+        return None
+    stats = tracker.get_today_stats()
+    return {
+        "walk_time": stats.get("walk_time", 0),
+        "walk_count": stats.get("walk", 0),
+        "stop_time": stats.get("stop_time", 0),
+        "stop_count": stats.get("stop", 0),
+        "lick_time": stats.get("lick_time", 0),
+        "lick_count": stats.get("lick", 0),
+        "scratch_time": stats.get("scratch_time", 0),
+        "scratch_count": stats.get("scratch", 0),
+        "shake_count": stats.get("shake", 0),
+    }
+
+
+def _resolve_optional_field(
+    raw,
+    *,
+    expected_type,
+    type_name,
+    field_name,
+    default_factory=None,
+    missing_default_error=None,
+    transform=None,
+):
+    """``/api/deviation`` 請求裡「可省略、省略時走獨立預設值」的欄位共用驗證。
+
+    2026-08-11 從三段結構相同的 if/elif/else 抽出來（daily_history/today/
+    excluded_dates），避免之後每加一個同類型欄位就手動複製貼上一份、容易
+    改一份漏掉其他份（見 daily_history 目前分支已經比另外兩個多一層巢狀
+    transform 邏輯，正是這種各自演化的早期徵兆）。
+
+    行為：
+      - ``raw is None``：呼叫 ``default_factory()``（若有提供）取得預設值；
+        若預設值本身也是 ``None`` 且提供了 ``missing_default_error``，代表
+        「連預設資料源都沒有」，回傳對應的 400（例如 today 沒有即時 tracker
+        可用時）。
+      - ``raw`` 是 ``expected_type``：若提供 ``transform`` 就套用（允許拋出
+        ``ValueError``/``TypeError``/``AttributeError``，會被轉成 400 附上
+        例外訊息），否則原樣使用。
+      - 其他型別：回傳「``{field_name}`` 必須是 ``{type_name}``（或省略）」400。
+
+    回傳 ``(value, None)`` 或 ``(None, (flask_response, status_code))``——
+    呼叫端用 ``value, err = ...; if err: return err`` 的模式串接。
+    """
+    if raw is None:
+        value = default_factory() if default_factory is not None else None
+        if value is None and missing_default_error is not None:
+            return None, (jsonify({"error": missing_default_error}), 400)
+        return value, None
+    if isinstance(raw, expected_type):
+        if transform is not None:
+            try:
+                return transform(raw), None
+            except (ValueError, TypeError, AttributeError) as e:
+                return None, (jsonify({"error": str(e)}), 400)
+        return raw, None
+    return None, (
+        jsonify({"error": f"{field_name} 必須是 {type_name}（或省略）"}),
+        400,
+    )
 
 
 def _build_frame_processor(enable_nodered=True):
@@ -332,12 +411,25 @@ def register_routes(app):
         引擎」兩個 function node 的統計邏輯（見 analytics/README.md）。
         與攝影機/YOLO pipeline 無關，不會觸發 _ensure_processor_started()。
 
-        請求 body：
+        2026-08-10 起：``daily_history``／``today``／``excluded_dates`` 都改成
+        可省略。省略時分別預設讀取 Python 端**自己獨立收集、獨立持久化**的
+        多天歷史（``analytics/daily_store.py``，資料來源是 ``behavior_tracker``
+        每天跨日時自己彙整的一筆記錄）、即時 tracker 資料、與 Python 自己的
+        排除清單（``daily_store.load_excluded_dates()``，透過
+        ``analytics/manage_baseline_history.py`` GUI 工具編輯），不再需要呼叫端
+        （目前是 Node-RED）把它自己的 ``v2_daily_history``/``v2_today``/
+        ``v2_excluded_dates`` forward 過來——兩邊資料源從此互不相干，任一邊
+        被寫壞都不會波及另一邊（見 docs/資料層架構現況與統一管理評估.md
+        第九節）。仍然接受顯式帶入這三個欄位當一次性覆寫（例如測試、手動
+        比對用），帶了就以請求內容為準，不去讀 Python 自己的資料源。
+
+        請求 body（全部欄位皆可省略，預設走 Python 自己的資料源）：
             {
               "daily_history": [{"date": "2026-06-01", "monitoring_seconds": 7200,
-                                  "walk_time": ..., "lick_count": ..., ...}, ...],
-              "today": {"walk_time": ..., "lick_count": ..., ...},
-              "excluded_dates": ["2026-06-05", ...],   // 可省略
+                                  "walk_time": ..., "lick_count": ..., ...}, ...],  // 可省略
+              "today": {"walk_time": ..., "lick_count": ..., ...},                 // 可省略
+              "excluded_dates": ["2026-06-05", ...],   // 可省略；省略時預設用
+                                                          // daily_store 自己的排除清單
               "min_baseline_days": 7,                   // 可省略，預設 7
               "class_c_score": 0                        // 可省略；節律/轉移分數暫由
                                                           // Node-RED 自行計算後傳入
@@ -346,22 +438,66 @@ def register_routes(app):
         回應：
             成功 → {"status":"ok", "baseline":{...}, "deviation":{...}, "fusion":{...}}
             基線資料不足 → {"status":"insufficient_data", "current_days":N, "required_days":M}
-            請求格式錯誤 → 400 {"error": "..."}
+            請求格式錯誤／沒有可用的 today 資料來源 → 400 {"error": "..."}
         """
         body = request.get_json(silent=True) or {}
-        raw_history = body.get("daily_history")
-        today = body.get("today")
-        if not isinstance(raw_history, list) or not isinstance(today, dict):
-            return jsonify({"error": "需要 daily_history(list) 與 today(dict)"}), 400
 
-        try:
-            daily_records = [_daily_record_from_dict(d) for d in raw_history]
-        except (ValueError, TypeError, AttributeError) as e:
-            return jsonify({"error": str(e)}), 400
+        daily_records, err = _resolve_optional_field(
+            body.get("daily_history"),
+            expected_type=list,
+            type_name="list",
+            field_name="daily_history",
+            # limit_days：daily_history 這張表只會累積、從不刪除，
+            # compute_baseline() 最終只用得到最近 MAX_BASELINE_DAYS_DEFAULT
+            # 天，這個端點又是 Node-RED 每 ~2 秒觸發一次的高頻路徑，不限制
+            # 讀取筆數的話系統跑越久這裡的 SQL 掃描/物件建構成本就越高，
+            # 見 analytics/config.py 的 HISTORY_LOAD_LIMIT_DAYS 說明。
+            default_factory=lambda: daily_store.load_history(
+                limit_days=HISTORY_LOAD_LIMIT_DAYS
+            ),
+            transform=lambda items: [_daily_record_from_dict(d) for d in items],
+        )
+        if err:
+            return err
 
-        excluded_dates = body.get("excluded_dates") or []
+        today, err = _resolve_optional_field(
+            body.get("today"),
+            expected_type=dict,
+            type_name="dict",
+            field_name="today",
+            default_factory=_today_from_live_tracker,
+            missing_default_error=(
+                "沒有帶 today，且攝影機管線尚未啟動、"
+                "無法取得即時資料；請帶入 today 或先啟動監測。"
+            ),
+        )
+        if err:
+            return err
+
+        # excluded_dates 省略時預設用 Python 自己管理的排除清單（見
+        # analytics/manage_baseline_history.py、analytics/daily_store.py 的
+        # set_excluded()/load_excluded_dates()），跟 daily_history/today
+        # 的預設邏輯一致；Node-RED 若明確帶了（即使是空陣列）就以請求
+        # 內容為準，代表呼叫端刻意要用它自己的 v2_excluded_dates。
+        excluded_dates, err = _resolve_optional_field(
+            body.get("excluded_dates"),
+            expected_type=list,
+            type_name="list",
+            field_name="excluded_dates",
+            default_factory=daily_store.load_excluded_dates,
+        )
+        if err:
+            return err
         try:
-            min_baseline_days = int(body.get("min_baseline_days", 7))
+            # 2026-08-11 修正：預設值原本寫死 7，跟 BaselineConfig 引入後
+            # dashboard/refresher.py、analytics/manage_baseline_history.py
+            # 改用的 compute_baseline() 自身預設值（可被
+            # CAT_MONITORING_ANALYTICS_MIN_BASELINE_DAYS 覆蓋）不一致，
+            # 導致省略 min_baseline_days 的請求跟另外兩個引擎對同一份資料
+            # 的「夠不夠天數」判斷會兜不起來。改成同一個來源。
+            min_baseline_days = int(
+                body.get("min_baseline_days", MIN_BASELINE_DAYS_DEFAULT)
+            )
         except (TypeError, ValueError):
             return jsonify({"error": "min_baseline_days 必須是整數"}), 400
         try:

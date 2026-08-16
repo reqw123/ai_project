@@ -52,7 +52,7 @@ from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 # ═══════════════════════════════════════════════════════
 MODEL_A = dict(
     label="Model A",
-    yolo_path=r"C:\ai_project\cat_pose\v11s_142.pt",
+    yolo_path=r"C:\ai_project\cat_pose\v11s_144.pt",
     stgcn_path=r"C:\Users\homec\Downloads\stgcn_results\run_124_xy_conf_v_bone_att_on\124_best_model.pth",
     feature_mode=None,   # None = 用下面 STGCN_FEATURE_MODE 的預設值
     ema_alpha=1.0,
@@ -60,7 +60,7 @@ MODEL_A = dict(
 )
 MODEL_B = dict(
     label="Model B",
-    yolo_path=r"C:\ai_project\cat_pose\v11s_144.pt",
+    yolo_path=r"C:\ai_project\cat_pose\v11s_145.pt",
     stgcn_path=r"C:\Users\homec\Downloads\stgcn_results\run_124_xy_conf_v_bone_att_on\124_best_model.pth",
     feature_mode=None,
     ema_alpha=1.0,
@@ -90,7 +90,7 @@ DEFAULT_FOLDER_KEY = 'z'
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾
 # 'all'    : 合併所有五個行為資料夾（可用 z/x/c/v/b 切換）
 FOLDER_TEST_MODE = 'single'   # 'single' / 'all' / 'z' / 'x' / 'c' / 'v' / 'b'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\22"
+SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\幻覺貓"
 VIDEO_PATHS = []   # 手動指定影片清單則優先使用（忽略 FOLDER_TEST_MODE）
 
 TARGET_MODEL_FPS = 30.0

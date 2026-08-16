@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import threading
+import time
 from datetime import datetime
 
 try:
@@ -23,6 +24,8 @@ except ImportError:
 from .config import ExtZoneConfig as _C
 
 _log = logging.getLogger(__name__)
+
+_HTTP_WARN_INTERVAL_SEC = 30.0  # ZoneHttpPublisher 同一個實例失敗時最多多久警告一次
 
 
 class ZoneCsvWriter:
@@ -119,6 +122,8 @@ class ZoneHttpPublisher:
         self._pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="ext_zone_nr"
         )
+        self._last_warn_time = 0.0  # 上次記警告的時間，用來節流避免洗版
+        self._warn_lock = threading.Lock()  # 保護上面的 check-then-set，避免 pool 內多執行緒同時通過節流判斷
 
     def publish(self, payload: dict) -> None:
         """提交一筆 JSON payload 到背景執行緒發送，立即返回。"""
@@ -133,5 +138,29 @@ class ZoneHttpPublisher:
     def _post(self, payload: dict) -> None:
         try:
             _requests.post(self._url, json=payload, timeout=self._timeout)
-        except Exception:
-            pass
+        except Exception as e:
+            # 過去這裡是完全靜默的 except: pass，跟同檔案其他 sink（至少都
+            # 有 _log.debug）不一致，也是本模組唯一完全無聲的失敗路徑。這條
+            # 路徑呼叫頻率高，逐筆都記警告會洗版，節流成同一個 publisher
+            # 實例最多每 _HTTP_WARN_INTERVAL_SEC 秒警告一次。
+            #
+            # check-then-set 用 _warn_lock 保護（跟 plugins/lick_stage/
+            # publisher.py 同樣的修正）：_post() 是在
+            # ThreadPoolExecutor(max_workers=2) 裡跑的，兩個 worker 幾乎同時
+            # 送出的請求都失敗時，若沒有鎖，兩者都可能在對方更新
+            # _last_warn_time 之前判斷「超過節流間隔」，導致同一次故障重複
+            # 印出兩則警告，節流形同虛設。
+            should_warn = False
+            with self._warn_lock:
+                now = time.time()
+                if now - self._last_warn_time >= _HTTP_WARN_INTERVAL_SEC:
+                    self._last_warn_time = now
+                    should_warn = True
+            if should_warn:
+                _log.warning(
+                    "推送到 Node-RED 失敗（%s）：%s"
+                    "（此類錯誤 %d 秒內只警告一次，避免洗版）",
+                    self._url,
+                    e,
+                    int(_HTTP_WARN_INTERVAL_SEC),
+                )

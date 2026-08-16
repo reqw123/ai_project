@@ -178,6 +178,85 @@ def test_load_state_ignored_when_saved_on_a_different_day(tmp_path, monkeypatch,
     assert next_day_tracker.transition_matrix == {}
 
 
+# ── 7：跨日時彙整進 Python 端獨立的多天歷史（daily_store，不經過 Node-RED） ──
+
+
+def test_daily_reset_persists_previous_day_to_independent_daily_store(
+    tmp_path, monkeypatch, fake_clock
+):
+    """跨日觸發 check_daily_reset() 時，應該把「歸零前」的當日累積統計彙整成
+    一筆 DailyRecord 寫進 analytics/daily_store.py——這份歷史完全獨立於
+    Node-RED 的 v2_daily_history，兩邊互不相干（見
+    docs/資料層架構現況與統一管理評估.md 第九節）。"""
+    from analytics import daily_store
+
+    state_path = tmp_path / "test_tracker_state.json"
+    db_path = tmp_path / "test_daily_history.db"
+    monkeypatch.setattr(LoggingConfig, "TRACKER_STATE_PATH", str(state_path))
+    monkeypatch.setattr(LoggingConfig, "DAILY_HISTORY_DB_PATH", str(db_path))
+    monkeypatch.setattr(behavior_tracker_module.time, "time", fake_clock.time)
+    monkeypatch.setattr(behavior_tracker_module, "datetime", fake_clock)
+
+    tracker = ImprovedBehaviorTracker()
+    run_script(tracker, fake_clock)
+    day_one = fake_clock.now().date()
+
+    # 還沒跨日之前，daily_store 不應該有任何紀錄。
+    assert daily_store.load_history(db_path=str(db_path)) == []
+
+    # 推到隔天，任何一個會呼叫 check_daily_reset() 的方法都會觸發持久化 + 歸零
+    # （這裡用 get_today_stats()，跟 Dashboard 拿即時資料的路徑一致）。
+    fake_clock.advance(24 * 3600)
+    tracker.get_today_stats()
+
+    history = daily_store.load_history(db_path=str(db_path))
+    assert len(history) == 1
+    record = history[0]
+    assert record.day == day_one
+    assert record.walk_time == pytest.approx(5.0)
+    assert record.walk_count == 1
+    assert record.lick_time == pytest.approx(15.0)
+    assert record.lick_count == 1
+    assert record.scratch_time == pytest.approx(12.0)
+    assert record.scratch_count == 1
+    assert record.stop_time == pytest.approx(1.0)
+    assert record.stop_count == 1
+    assert record.shake_count == 0
+    assert record.active_time == pytest.approx(5.0 + 15.0 + 12.0 + 1.0)
+
+    # 新的一天：tracker 自己的即時統計已歸零，不影響剛寫入的歷史紀錄。
+    assert tracker.behavior_time["walk"] == 0.0
+
+    # daily_store 依路徑快取連線（見 2026-08-11 效能修正），測試結束後顯式
+    # 關閉，避免 Windows 上檔案控制代碼佔用導致 tmp_path 清不掉。
+    daily_store.close_connection(str(db_path))
+
+
+def test_daily_reset_persist_failure_does_not_break_reset(
+    tmp_path, monkeypatch, fake_clock
+):
+    """daily_store 寫入失敗時（例如磁碟/權限問題）只應該記警告，不能讓
+    check_daily_reset() 整個掛掉、卡住即時監測的歸零流程。"""
+    from analytics import daily_store
+
+    state_path = tmp_path / "test_tracker_state.json"
+    monkeypatch.setattr(LoggingConfig, "TRACKER_STATE_PATH", str(state_path))
+    monkeypatch.setattr(behavior_tracker_module.time, "time", fake_clock.time)
+    monkeypatch.setattr(behavior_tracker_module, "datetime", fake_clock)
+
+    def _boom(record, db_path=None):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(daily_store, "save_day", _boom)
+
+    tracker = ImprovedBehaviorTracker()
+    run_script(tracker, fake_clock)
+    fake_clock.advance(24 * 3600)
+
+    tracker.get_today_stats()  # 不應該拋出例外
+    assert tracker.behavior_time["walk"] == 0.0  # 歸零仍正常完成
+
+
 # ── 額外：把完整腳本情境的最終狀態凍結成快照（多一層回歸保護） ──────────────
 
 

@@ -15,6 +15,7 @@ MAX_NO_DETECT_FRAMES: 2
 # Keypoint EMA smoothing (null to disable)
 # 關鍵點時間平滑的指數衰減係數（設為 null 或 1.0 表示停用）
 # 若在 (0,1) 範圍內，執行 new = alpha*current + (1-alpha)*prev 的平滑
+# 只有 SMOOTHING_KIND: "ema" 時才會用到這個值。
 KP_EMA_ALPHA: 1.0
 
 # KP EMA Alpha Ablation
@@ -27,6 +28,51 @@ ABLATION_KP_EMA_ALPHAS:
   - 0.7
   - 0.5
   - 0.3
+
+# ── 關鍵點平滑方式切換：none / ema / kalman ─────────────────────────────────
+# 對應 cat_monitoring_system/models/keypoint_kalman.py（Kalman filter 實作）
+# 與 tools/eval_accuracy_smoothing_compare.py 的 SMOOTHING_CONFIGS，三邊用
+# 同一套 kind 命名，方便日後把「哪一種平滑方式最好」的答案從推論時驗證
+# （eval_accuracy_smoothing_compare.py，不需要重新訓練）延伸到重新訓練驗證
+# （這裡）。預設值 "ema" 搭配 KP_EMA_ALPHA=1.0 等同完全不平滑，跟這個設定
+# 加入前的行為完全一致。
+#
+# 2026-08-11 改為 "kalman" 做路線 B 實驗：訓了 126(Q90/R70)/127(Q45/R140)/
+# 128(Q180/R35) 三個 Kalman 模型，各自用匹配前處理跟 baseline(122) 比較
+# （comparison_024/025，見 memory: project_kalman_smoothing_eval）——三組
+# 裡 Q90/R70（126）表現最好，但即使是它，McNemar 檢定跟 122 比較仍不顯著
+# （p=1.0），Kalman 平滑沒有找到顯著贏過不平滑的證據。實驗結束，改回
+# "ema"（KP_EMA_ALPHA=1.0，等同不平滑）恢復現行部署行為。下面的
+# KALMAN_PROCESS_NOISE/KALMAN_MEASUREMENT_NOISE 保留 126 用的 90.0/70.0
+# 當作紀錄（三組裡最好的一組），不會被讀到（只有 SMOOTHING_KIND="kalman"
+# 時才生效），之後如果要重啟這條實驗可以直接沿用。
+SMOOTHING_KIND: "ema"
+
+# Kalman filter 平滑參數（只有 SMOOTHING_KIND: "kalman" 時才會用到）。
+# 意義見 models/keypoint_kalman.py 的 KeypointKalmanFilter 說明：
+# process_noise 越大→越信任量測、平滑越弱；measurement_noise 越大→越信任
+# 等速度運動模型、平滑越強。這兩個值（單位：像素²，因為套用點在 YOLO
+# 原始像素座標、正規化之前）是 2026-08-11 用真實 YOLO 偵測結果實測校準
+# 出來的起點（stop 類別算量測雜訊、shake 類別算等速度模型解釋不了的殘差），
+# 不是最終答案——shake 需要的平滑強度跟 stop 差很多，用同一組全域參數是
+# 妥協，真的要選定數值應該用
+# tools/eval_accuracy_smoothing_compare.py 的 SMOOTHING_CONFIGS 掃過幾組
+# 實際比較準確度，詳見 models/keypoint_kalman.py 開頭註解。
+# 三組候選（126 Q90/R70／127 Q45/R140／128 Q180/R35）裡 Q90/R70 表現最好
+# （comparison_025），保留這組當預設值——目前 SMOOTHING_KIND="ema" 不會讀
+# 到這兩個值，只是留著紀錄／方便之後要重啟 Kalman 實驗時直接沿用。
+KALMAN_PROCESS_NOISE: 90.0
+KALMAN_MEASUREMENT_NOISE: 70.0
+
+# 【尚未實作對應的消融實驗執行器】RUN_KP_EMA_ABLATION／run_kp_ema_ablation()
+# 目前仍然只支援掃 ABLATION_KP_EMA_ALPHAS 這個 EMA alpha 清單，不會讀
+# SMOOTHING_KIND/KALMAN_*——要用 Kalman 平滑重新訓練並跟不同 EMA alpha
+# 一起消融比較，需要先擴充 run_kp_ema_ablation()（或新增一個
+# run_smoothing_ablation()）才能用。這是刻意分階段留到之後才做：
+# tools/eval_accuracy_smoothing_compare.py 的推論時驗證還沒跑出「Kalman
+# 有沒有幫助」的實際數據前，先不investing在會實際跑很多次完整訓練、耗費
+# GPU 時數的消融執行器上。見
+# docs/YOLO-Pose應用文獻與專案優化建議.md「深入」章節路線 B。
 
 # Sequence Length Ablation
 # 是否對不同的 SEQUENCE_LENGTH 做消融實驗（true 時使用下方列表）

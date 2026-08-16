@@ -12,8 +12,15 @@ Python 模組，並修正其中一個具體的統計問題（詳見下方「為�
 baseline.py   個體化基線計算（mean/median/std/IQR/MAD/EWMA），對應「個體化基線計算器」
 deviation.py  今日值 vs 基線的偏差評分，對應「偏差分析引擎」——這是本次重構真正改變行為的地方
 fusion.py     Class A/B/C 證據融合與等級判定，對應「行為偏差融合引擎」
+config.py     baseline.py/deviation.py 的可調參數集中管理（EWMA α、基線天數門檻、
+              MAD/Poisson 相關統計常數），每個參數都標註是否有文獻依據，見該檔案開頭說明
+daily_store.py Python 端獨立的多天歷史持久化（SQLite），見該檔案開頭說明
 tests/        pytest，含「重現舊版假警報」的迴歸測試
 ```
+
+`fusion.py` 的 Class A/B/C 權重/門檻刻意**不在** `config.py` 裡——每個數字都直接在
+`fusion.py` 原地掛著完整文獻引用（或明確標註「無文獻支持」），搬到別的檔案會把數值
+跟它的依據拆開，見該檔案內註解。
 
 執行測試：
 
@@ -116,9 +123,15 @@ function node JavaScript 變成一份可以在論文口試被審查、可以單�
 ## 還沒做的事（刻意不在這次一起做，避免範圍蔓延）
 
 - **`behavior_segments_log.csv` 的日期格式混用**（ISO vs 本地格式）：這是資料前處理層的 bug，跟這裡的統計
-  引擎設計是兩件事，需要先修好 CSV 才能把真實歷史資料餵進 `compute_baseline`。建議另開任務處理。
-- **完整的歷史資料 ingestion pipeline**：目前 `compute_baseline` 吃的是 `DailyRecord` 物件列表，還沒有
-  「讀 CSV → 轉成 `DailyRecord`」的轉接層——這也是上面 CSV bug 修好之後自然的下一步。
+  引擎設計是兩件事。**不影響**下面已完成的 ingestion pipeline——`daily_store.py` 收集資料的路徑是
+  `behavior_tracker.py` 自己跨日時彙整（見下一項），不經過這份 CSV，所以不受這個 bug 影響。
+- **~~完整的歷史資料 ingestion pipeline~~（2026-08-10 已完成）**：新增 `analytics/daily_store.py`
+  （SQLite），`trackers/behavior_tracker.py` 的 `check_daily_reset()` 在跨日重置前會把當日累積統計
+  彙整成一筆 `DailyRecord` 寫進去，`load_history()` 直接回傳 `DailyRecord` 列表餵給 `compute_baseline`。
+  這份歷史完全獨立於 Node-RED 的 `v2_daily_history`（不讀不寫 Node-RED 的 `global.json`），
+  `server/routes.py` 的 `POST /api/deviation` 在請求沒帶 `daily_history`/`today` 時預設就是吃這份資料
+  ＋即時 tracker 資料，不再需要 Node-RED forward 自己的歷史過來。詳見
+  `paper/docs/資料層架構現況與統一管理評估.md` 第九節。
 - **驗證（信度/靈敏度/false-alarm rate）**：這次交付的是「引擎本身」，不是「引擎有效的證據」。要回答
   「這套系統可不可靠」，需要另外設計驗證實驗（例如：同一隻貓已知正常期，切成兩半算基線互相比對；
   注入已知擾動測靈敏度），這是研究方法論層級的工作，不是重構可以順便做完的。
