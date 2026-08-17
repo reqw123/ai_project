@@ -161,7 +161,7 @@ VIDEO_FOLDER_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
 # 只有 INPUT_MODE = "folder" 時才會用到：資料夾底下（不含子資料夾）
 # 副檔名符合上面清單的影片檔，依檔名排序後最多取前 10 支。
 
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_128.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 

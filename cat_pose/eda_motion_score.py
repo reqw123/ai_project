@@ -17,7 +17,7 @@ CSV_PATH = "eda_keypoint_jitter.csv"
 # 錯誤的畫面。目前跟 eda_motion_anomaly.py 目前的預設值保持同步；如果你改了
 # eda_motion_anomaly.py 的影片/模型重新產生 CSV，這裡也要跟著改。
 SOURCE_VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
-SOURCE_MODEL_PATH = r"C:\ai_project\cat_pose\v11s_128.pt"
+SOURCE_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"
 
 # ==================== 檢查檔案是否存在 ====================
 if not os.path.exists(CSV_PATH):

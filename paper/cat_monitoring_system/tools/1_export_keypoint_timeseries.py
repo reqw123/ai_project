@@ -31,7 +31,7 @@ VIDEO_PATHS = [
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\7月2日 (4).mp4",
    
 ]
-YOLO_MODEL_PATH = r"C:\ai_project\cat_pose\v11s_121.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 YOLO_CONF_THRESHOLD = 0.5

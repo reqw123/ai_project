@@ -235,8 +235,10 @@ def run_gui_mode():
 
     global _active_gui_processor
     processor = _build_frame_processor(enable_nodered=False)
-    _try_register_lick_stage(processor)
-    _try_register_ext_body_zone(processor)
+    # 兩個外掛各自有獨立的 Node-RED 推送邏輯，不受上面 enable_nodered=False 影響，
+    # 這裡要另外關掉，GUI 模式才會真的完全不推送 HTTP（見 routes.py 兩個函式的說明）。
+    _try_register_lick_stage(processor, enable_nodered=False)
+    _try_register_ext_body_zone(processor, enable_nodered=False)
     _active_gui_processor = processor  # 讓 _install_hard_shutdown_on_ctrl_c() 的訊號處理常式也能清理到這個 processor
 
     # OpenCV 在 Windows 上的視窗標題（cv2.namedWindow）不支援中文，非 ASCII
@@ -309,6 +311,8 @@ def run_gui_mode():
 
 if __name__ == "__main__":
     _install_hard_shutdown_on_ctrl_c()
+    _mode_label = "GUI（本地視窗，不推送 HTTP）" if RunModeConfig.MODE == "gui" else "Server（Flask + Node-RED）"
+    print(f"🔧 執行模式：{_mode_label}　[RunModeConfig.MODE={RunModeConfig.MODE!r}，可在設定視窗的「執行模式與排程」分頁切換]")
     if RunModeConfig.MODE == "gui":
         run_gui_mode()
     else:

@@ -48,7 +48,7 @@ from ultralytics import YOLO
 # ═══════════════════════════════════════════════════════
 #  使用者設定區
 # ═══════════════════════════════════════════════════════
-YOLO_MODEL_PATH = r"C:\ai_project\cat_pose\v11s_133.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_133.pt"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 YOLO_CONF_THRESHOLD = 0.5   # bbox 偵測信心門檻

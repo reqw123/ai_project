@@ -287,7 +287,7 @@ def main():
     """Main program entry"""
     
     # ==================== Configuration ====================
-    MODEL_PATH = r"C:/cat_pose/2222.pt"
+    MODEL_PATH = r"C:/ai_project/yolo_models/2222.pt"  # ⚠ 此檔名目前 yolo_models/ 底下已無，僅修正資料夾；執行前請改成實際存在的模型檔名
     VIDEO_PATH = r"C:/cat_pose/test1.mp4"
     OUTPUT_DIR = r"C:\cat_pose\自動標註工具\auto_capture"
     CLASS_ID = 0

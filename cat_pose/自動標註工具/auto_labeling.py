@@ -683,7 +683,7 @@ class AutoLabelingGUI:
         model_frame = ttk.Frame(input_frame)
         model_frame.pack(fill='x', pady=5)
         ttk.Label(model_frame, text="模型文件:", width=12).pack(side='left')
-        self.model_var = tk.StringVar(value="C:/cat_pose/640_best2.pt")
+        self.model_var = tk.StringVar(value="C:/ai_project/yolo_models/640_best2.pt")  # ⚠ 此檔名目前 yolo_models/ 底下已無，僅修正資料夾；可用「瀏覽」按鈕改選現有模型
         ttk.Entry(model_frame, textvariable=self.model_var, width=50).pack(side='left', padx=5)
         ttk.Button(model_frame, text="浏览", command=self.choose_model).pack(side='left')
         

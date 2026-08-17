@@ -201,24 +201,35 @@ def _build_frame_processor(enable_nodered=True):
     )
 
 
-def _try_register_lick_stage(processor) -> None:
-    """Optionally attach the Lick Stage plugin. Silently skipped if plugin is absent."""
+def _try_register_lick_stage(processor, enable_nodered: bool = True) -> None:
+    """Optionally attach the Lick Stage plugin. Silently skipped if plugin is absent.
+
+    enable_nodered=False 供本地 GUI 模式使用：這個外掛有自己獨立的 Node-RED 推送
+    （plugins/lick_stage/publisher.py），不受 _build_frame_processor(enable_nodered=False)
+    影響，過去 GUI 模式下仍會嘗試推送並在連不到 Node-RED 時洗出警告，這裡補上同一個開關。
+    """
     try:
         from plugins.lick_stage import LickStagePlugin as _LickStagePlugin
 
-        processor.register_plugin(_LickStagePlugin())
+        kwargs = {} if enable_nodered else {"nodered_url": None}
+        processor.register_plugin(_LickStagePlugin(**kwargs))
     except ImportError:
         pass
 
 
-def _try_register_ext_body_zone(processor) -> None:
-    """Optionally attach the extended 7-zone body plugin. Silently skipped if plugin is absent."""
+def _try_register_ext_body_zone(processor, enable_nodered: bool = True) -> None:
+    """Optionally attach the extended 7-zone body plugin. Silently skipped if plugin is absent.
+
+    enable_nodered=False 供本地 GUI 模式使用，理由同 _try_register_lick_stage：
+    這個外掛也有自己獨立的 Node-RED 推送（ext_body_zones/output.py 的 ZoneHttpPublisher）。
+    """
     try:
         from plugins.lick_stage.ext_body_zones import (
             ExtBodyZonePlugin as _ExtBodyZonePlugin,
         )
 
-        processor.register_plugin(_ExtBodyZonePlugin())
+        kwargs = {} if enable_nodered else {"nodered_enabled": False}
+        processor.register_plugin(_ExtBodyZonePlugin(**kwargs))
     except ImportError:
         pass
 

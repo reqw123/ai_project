@@ -69,7 +69,7 @@ CH_TO_FEATURE = {
 }
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
-DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\v11s_144.pt"
+DEFAULT_YOLO    = r"C:\ai_project\yolo_models\v11s_144.pt"
 DEFAULT_IMGSZ   = 640
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16

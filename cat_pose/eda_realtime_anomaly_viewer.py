@@ -17,7 +17,7 @@ from constants import (
 )
 
 # ==================== Configuration ====================
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_128.pt"
+MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
 IMGSZ = 640
 CONF_THRES = 0.50

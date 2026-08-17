@@ -49,7 +49,7 @@ INFERENCE_DEVICE = "cuda"
 
 # ── 模式 1：即時影片/攝影機量測 ──────────────────────────────────────────
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\暫存\two_cat\1 (229).mp4"  # 0 = 預設攝影機（webcam）；改成影片檔路徑字串即可測試指定影片
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_134.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_134.pt"
 LOOP_PLAYBACK = True  # 影片播完是否自動從頭重播（webcam 模式下無影響）
 
 DISPLAY_RESOLUTION = "1080p"  # "720p" 或 "1080p"，控制 GUI 視窗顯示解析度
@@ -68,7 +68,7 @@ USER_RECT_COLOR = (60, 220, 60)        # 綠色：使用者自畫矩形（已定
 USER_RECT_DRAG_COLOR = (60, 220, 220)  # 黃綠色：拖曳中、尚未放開左鍵
 
 # ── 模式 2：資料夾批次分類（沿用 cat_pose/cat_pose_size_tier_report.py 原始設定）──
-MODE2_YOLO_MODEL_PATH = r"C:\ai_project\cat_pose\v11s_114.pt"  # 換成你要用的模型
+MODE2_YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_114.pt"  # 換成你要用的模型
 MODE2_FOLDER = r"C:\Users\homec\OneDrive\圖片\Screenshots\screen_cat"           # 換成你的資料夾
 MODE2_OUTPUT_DIR = r"C:\Users\homec\OneDrive\圖片\Screenshots\screen_cat\class"  # 預設輸出資料夾，請自行修改
 MODE2_MIN_RATIO_PCT = 50.0  # 門檻（%）：低於此值視為 small，高於則分層 5 級 (50% ~ 100%)
@@ -532,10 +532,11 @@ def resolve_run_mode():
     if RUN_MODE in (1, 2):
         return RUN_MODE
 
-    if not sys.stdin.isatty():
-        print("\n偵測到非互動式輸入環境，預設使用模式 1（即時影片/攝影機量測）")
-        return 1
-
+    # 原本這裡有 `if not sys.stdin.isatty(): return 1` 的提前判斷。拿掉理由跟
+    # 1_run_video_inference.py 的 resolve_run_mode() 一樣：stdin 被導向 pipe（例如
+    # settings_window.py 的「獨立腳本工具」面板）時 isatty() 也是 False，但那個 pipe
+    # 其實可以讀，使用者能透過該面板的輸入框送文字進來，不該直接跳過詢問。真的完全
+    # 沒有 stdin 可讀時，下面 input() 的 except 還是會接住、給預設值，不會卡住。
     print("\n請選擇執行模式:")
     print("  1) 模式1：即時影片/攝影機量測（bbox 占比 + 滑鼠自畫矩形）")
     print("  2) 模式2：資料夾批次分類（依 bbox 占比分類圖片到 tier 資料夾）")

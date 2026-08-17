@@ -62,7 +62,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_127.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_127.pt"
 
 # 輸出 CSV 路徑（可直接在此處修改）
 OUTPUT_CSV_PATH = r"C:\Users\homec\left_right_ear_distance.csv"

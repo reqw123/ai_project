@@ -2,7 +2,7 @@
   "model_paths": {
     "yolo_model": "yolo_models\\v11s_143.pt",
     "stgcn_model": "stgcn_models\\run_122_xy_conf_v_bone_att_on\\122_best_model.pth",
-    "video_input": "C:\\Users\\homec\\OneDrive\\圖片\\貓咪圖像資料集\\泛化測試\\7月18日.mp4",
+    "video_input": "C:/Users/homec/OneDrive/圖片/貓咪/自行拍攝/影片/3月12日(1).mp4",
     "log_dir": "./logs",
     "output_dir": "./output"
   },

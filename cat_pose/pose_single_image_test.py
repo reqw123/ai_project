@@ -23,7 +23,7 @@ GREEN = (0, 255, 0)
 RED   = (0, 0, 255)
 BLUE  = (255, 0, 0)
 
-model = YOLO(r"C:\ai_project\cat_pose\v11s_121.pt")
+model = YOLO(r"C:\ai_project\yolo_models\v11s_121.pt")
 
 # ==================== 推論與繪製函式 ====================
 def run_inference(img_path: str):

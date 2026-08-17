@@ -131,7 +131,7 @@ _MODE_SUBDIR = {
 # 由 EXCLUDED_KEYPOINTS 衍生，供各分析函式共用
 _ACTIVE_KP_IDS: list = [i for i in range(17) if i not in EXCLUDED_KEYPOINTS]
 
-YOLO_MODEL_PATH  = r"C:\AI_Project\cat_pose\v11s_121.pt"
+YOLO_MODEL_PATH  = r"C:\ai_project\yolo_models\v11s_121.pt"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640
 TARGET_MODEL_FPS = 30.0

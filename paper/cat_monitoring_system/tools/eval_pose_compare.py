@@ -65,8 +65,8 @@ def _vrj(s: str, w: int) -> str:
 # ═══════════════════════════════════════════════════════
 #  設定區  ── 修改這裡，不需要命令列參數
 # ═══════════════════════════════════════════════════════
-OLD_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_144.pt"
-NEW_MODEL_PATH   = r"C:\ai_project\cat_pose\v11s_145.pt"
+OLD_MODEL_PATH   = r"C:\ai_project\yolo_models\v11s_145.pt"
+NEW_MODEL_PATH   = r"C:\ai_project\yolo_models\v11s_146.pt"
 OUTPUT_DIR       = r"C:\ai_project\pose_compare_results"
 INFERENCE_DEVICE = "cuda"   # "cuda" 或 "cpu"
 EMA_ALPHA_OLD    = 1.0      # Old model EMA 平滑係數（1.0 = 不平滑；0.5 = 半衰期平滑）
@@ -86,10 +86,10 @@ BENCHMARK_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\�
 # 自動跳過（該類別影片數與統計都是 0），不影響其餘行為正常執行。
 BENCHMARK_DIRS = [
     ("walk", BENCHMARK_WALK_DIR),
-   #("lick", BENCHMARK_LICK_DIR),
-   # ("scratch", BENCHMARK_SCRATCH_DIR),
-   # ("shake", BENCHMARK_SHAKE_DIR),
-   # ("stop", BENCHMARK_STOP_DIR),
+   ("lick", BENCHMARK_LICK_DIR),
+    ("scratch", BENCHMARK_SCRATCH_DIR),
+    ("shake", BENCHMARK_SHAKE_DIR),
+    ("stop", BENCHMARK_STOP_DIR),
 ]
 # ═══════════════════════════════════════════════════════
 

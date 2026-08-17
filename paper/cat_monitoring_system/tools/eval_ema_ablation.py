@@ -60,7 +60,7 @@ HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\
 HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
 HARD_OUTPUT_DIR        = r"C:\paper\cat_monitoring_system\eval_results"
 
-DEFAULT_YOLO    = r"C:\AI_Project\cat_pose\aug_8.pt"
+DEFAULT_YOLO    = r"C:\ai_project\yolo_models\aug_8.pt"
 DEFAULT_IMGSZ   = 640
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16

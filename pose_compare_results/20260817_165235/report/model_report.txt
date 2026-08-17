@@ -1,0 +1,105 @@
+=================================================
+YOLO POSE MODEL COMPARISON REPORT
+=================================================
+
+Old Model:
+v11s_145.pt
+
+New Model:
+v11s_146.pt
+
+Benchmark Videos:
+4
+
+=================================================
+PRIMARY METRIC: P95 JITTER (tail/occasional-spike stability)
+=================================================
+
+P95 Jitter:
+41.00 px -> 33.90 px
+
+Improvement:
++17.33 %
+
+Primary Result:
+NEW MODEL IS MORE STABLE
+
+=================================================
+[REFERENCE] OVERALL COMPOSITE SCORE (not the primary metric)
+=================================================
+
+Overall Score:
++34.03 %
+
+Result:
+NEW MODEL IS BETTER
+
+=================================================
+CONFIDENCE
+=================================================
+
+Mean Confidence:
+0.980 → 0.960
+
+Improvement:
+-2.05 %
+
+=================================================
+JITTER
+=================================================
+
+Mean Jitter:
+13.55 px → 11.72 px
+
+Improvement:
++13.56 %
+
+=================================================
+MISSING KEYPOINT
+=================================================
+
+Missing Ratio:
+2.1 % → 0.0 %
+
+Improvement:
++100.00 %
+
+=================================================
+BIGGEST IMPROVEMENT
+=================================================
+
+Behavior:
+Walk
+
+Improvement:
++17.33 %
+
+=================================================
+BIGGEST REGRESSION
+=================================================
+
+Behavior:
+Walk
+
+Degradation:
++17.33 % [not an actual regression]
+
+=================================================
+TAIL ANALYSIS
+=================================================
+
+Tail Tip Missing:
+0.0 % → 16.2 %
+
+Improvement:
+-16.24 %
+
+=================================================
+RECOMMENDATION
+=================================================
+
+Primary metric (P95 jitter): NEW MODEL IS MORE STABLE
+
+[Reference] Composite score: ✓ Replace old model.
+
+=================================================

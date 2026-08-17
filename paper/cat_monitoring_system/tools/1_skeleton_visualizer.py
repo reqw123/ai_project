@@ -289,7 +289,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_121.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
 
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640

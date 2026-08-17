@@ -21,7 +21,7 @@ from constants import (
 )
 
 # ==================== 設定 ====================
-MODEL_PATH = r"C:\ai_project\cat_pose\v11s_129.pt"
+MODEL_PATH = r"C:\ai_project\yolo_models\v11s_129.pt"
 VIDEO_DIR = r"C:\Users\homec\Downloads\walk_標記圖片"  # 讀取資料夾下所有影片
 OUTPUT_DIR = r"C:/cat_pose/cat50"
 IMG_NAME_FORMAT = "walk_real-{}.png"

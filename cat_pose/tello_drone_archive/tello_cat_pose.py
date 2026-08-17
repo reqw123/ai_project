@@ -42,9 +42,9 @@ KEY_RIGHT = 2555904
 
 # ==================== 模型清單 ====================
 MODEL_LIST = [
-    r"C:\cat_pose\yolo11n.pt",
-    r"C:\cat_pose\v11s_10.pt",
-    r"C:\cat_pose\v11s_15.pt"
+    r"C:\ai_project\yolo_models\yolo11n.pt",
+    r"C:\ai_project\yolo_models\v11s_10.pt",   # ⚠ 目前 yolo_models/ 底下已無此檔案，可能是被清掉的舊 checkpoint
+    r"C:\ai_project\yolo_models\v11s_15.pt"    # ⚠ 同上，目前 yolo_models/ 底下找不到
 ]
 
 # ==================== 截圖存放資料夾（FIX #8：指定明確路徑）====================

@@ -60,7 +60,7 @@ from models.stgcn_model import interpolate_missing
 # ═══════════════════════════════ 使用者設定區 ═══════════════════════════════
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
 
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_133.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_133.pt"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 YOLO_CONF_THRESHOLD = 0.5

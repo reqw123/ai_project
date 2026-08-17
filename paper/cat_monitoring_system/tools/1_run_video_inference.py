@@ -80,7 +80,7 @@ SINGLE_FOLDER_PATH = r"C:\Users\homec\Videos\NVIDIA\Desktop\0721_13"  # 'single'
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\AI_Project\cat_pose\v11s_144.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_144.pt"
 STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_124_xy_conf_v_bone_att_on\124_best_model.pth"
 INFERENCE_DEVICE = 'cuda'   
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
@@ -874,10 +874,13 @@ def resolve_run_mode():
     if RUN_MODE in (1, 2):
         return RUN_MODE
 
-    if not sys.stdin.isatty():
-        print("\n偵測到非互動式輸入環境，預設使用模式 2（只測試模型效果，開視窗）")
-        return 2
-
+    # 原本這裡有 `if not sys.stdin.isatty(): return 2` 的提前判斷，用來擋「stdin 不是
+    # 真終端機」的情況（例如被其他程式以 subprocess 呼叫、CI 自動化）。但這個判斷把
+    # 「不是 tty」跟「沒辦法讀到輸入」劃上等號——stdin 被導向 pipe（例如
+    # settings_window.py 的「獨立腳本工具」面板）時 isatty() 一樣是 False，但那個 pipe
+    # 其實是可以讀的，使用者能透過該面板的輸入框把文字送進來。拿掉這段提前判斷，
+    # 一律嘗試 input()；真的完全沒有 stdin 可讀時（例如雙擊執行、沒有任何主控台）
+    # 下面的 except EOFError 還是會接住、給預設值，不會卡住。
     print("\n請選擇執行模式:")
     print("  1) 只生成統計結果（不開視窗）")
     print("  2) 只測試模型效果（開視窗）")
