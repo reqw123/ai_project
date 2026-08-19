@@ -75,13 +75,13 @@ RATING_LETTERS = ("A", "B", "C", "D", "E")
 # 測試資料夾模式
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
-FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
+FOLDER_TEST_MODE = 'all'  # 'single' or 'all'
 SINGLE_FOLDER_PATH = r"C:\Users\homec\Videos\NVIDIA\Desktop\0721_13"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_144.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_124_xy_conf_v_bone_att_on\124_best_model.pth"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_145.pt"
+STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_124_xy_conf_v_bone_att_on\124_best_model.pth"
 INFERENCE_DEVICE = 'cuda'   
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 STGCN_NORMALIZE = True
@@ -127,7 +127,7 @@ LOOP_PLAYBACK = True  # 是否循環播放
 ENABLE_AUDIO_PLAYBACK = False   # 是否播放外部音訊檔
 AUDIO_PATH = r"C:\Users\homec\Downloads\7月2日.mp3"  # 從影片抽出的音訊檔路徑（mp3/wav），留空則不播放
 
-REPORT_OUTPUT_PATH = r"C:\paper\output\inference_analysis_report_ema.csv"  # 最終 CSV 報告
+REPORT_OUTPUT_PATH = r"C:\ai_project\paper\output\inference_analysis_report_ema.csv"  # 最終 CSV 報告
 RUN_MODE = 0  # 0: 啟動時選擇, 1: 只生成統計, 2: 只做視窗測試
 
 # ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====

@@ -73,7 +73,7 @@ SINGLE_FOLDER_PATH = r"C:\Users\homec\Videos\NVIDIA\Desktop\Desktop 2026.07.21 -
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_121_xy_conf_v_bone_att_on\121_best_model.pth"
+STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_121_xy_conf_v_bone_att_on\121_best_model.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 YOLO_CONF_THRESHOLD = 0.5

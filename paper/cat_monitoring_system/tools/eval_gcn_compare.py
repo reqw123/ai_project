@@ -95,14 +95,14 @@ PARTIAL_COVERAGE_CLASSES = {'scratch', 'shake'}
 
 HARD_MODELS = [
     {   # baseline — SMOOTHING_KIND="ema"（等同不平滑）訓練
-        'path':              r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth",
+        'path':              r"C:\ai_project\stgcn_models\run_122_xy_conf_v_bone_att_on\122_best_model.pth",
         'name':              'Baseline_122_無平滑',
         'ema_alpha':         1.0,
         'seq_len':           16,
         'smoothing_kind':    'none',
     },
     {   # Kalman Q=90 / R=70（實測校準起點——三組 Kalman 裡表現最好，見 comparison_025）
-        'path':              r"C:\Users\homec\Downloads\stgcn_results\run_126_xy_conf_v_bone_att_on\126_best_model.pth",
+        'path':              r"C:\ai_project\stgcn_models\run_126_xy_conf_v_bone_att_on\126_best_model.pth",
         'name':              'Kalman_126_Q90R70',
         'ema_alpha':         1.0,
         'seq_len':           16,
@@ -111,7 +111,7 @@ HARD_MODELS = [
         'kalman_measurement_noise': 70.0,
     },
     {   # Kalman Q=45 / R=140（較強平滑）
-        'path':              r"C:\Users\homec\Downloads\stgcn_results\run_127_xy_conf_v_bone_att_on\127_best_model.pth",
+        'path':              r"C:\ai_project\stgcn_models\run_127_xy_conf_v_bone_att_on\127_best_model.pth",
         'name':              'Kalman_127_Q45R140強',
         'ema_alpha':         1.0,
         'seq_len':           16,
@@ -120,7 +120,7 @@ HARD_MODELS = [
         'kalman_measurement_noise': 140.0,
     },
     {   # Kalman Q=180 / R=35（較弱平滑——三組 Kalman 裡表現最差）
-        'path':              r"C:\Users\homec\Downloads\stgcn_results\run_128_xy_conf_v_bone_att_on\128_best_model.pth",
+        'path':              r"C:\ai_project\stgcn_models\run_128_xy_conf_v_bone_att_on\128_best_model.pth",
         'name':              'Kalman_128_Q180R35弱',
         'ema_alpha':         1.0,
         'seq_len':           16,
@@ -128,11 +128,11 @@ HARD_MODELS = [
         'kalman_process_noise':     180.0,
         'kalman_measurement_noise': 35.0,
     },
-   # {'path': r"C:\Users\homec\Downloads\stgcn_results\run_116_seqlen_ablation_att_on\116_xy_conf_v_bone_T32_att_on.pth",
+   # {'path': r"C:\ai_project\stgcn_models\run_116_seqlen_ablation_att_on\116_xy_conf_v_bone_T32_att_on.pth",
    #  'name': None, 'ema_alpha': 1.0, 'seq_len': 32},
-  #   {'path': r"C:\Users\homec\Downloads\stgcn_results\run_095_reg_ablation_att_on\4.pth",
+  #   {'path': r"C:\ai_project\stgcn_models\run_095_reg_ablation_att_on\4.pth",
    #  'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
- #    {'path': r"C:\Users\homec\Downloads\stgcn_results\run_095_reg_ablation_att_on\5.pth",
+ #    {'path': r"C:\ai_project\stgcn_models\run_095_reg_ablation_att_on\5.pth",
 #     'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
 ]
 
@@ -141,7 +141,7 @@ HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\
 HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
 HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake"
 HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
-HARD_OUTPUT_DIR        = r"C:\ai_project\paper\gcn_compare_results"
+HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_results\gcn_compare"
 
 # ── 視覺樣式：最多支援 5 個模型，一模型一色 ─────────────────────────────────
 _PALETTE = ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0', '#F44336']  # 藍/橘/綠/紫/紅

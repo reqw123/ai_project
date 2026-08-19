@@ -20,6 +20,7 @@ config.py 對應屬性外包一層 ``_runtime_default()``——不需要碰這�
 
 import os
 import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -87,6 +88,10 @@ COLOR_CONSOLE_FG = "#d4d4d4"
 COLOR_CONSOLE_MUTED_FG = "#7f8c8d"
 COLOR_CONSOLE_GRIP_BG = "#3a3f44"  # 可拖拉調整高度的把手，比面板底色略亮，暗示「這裡能拖」
 COLOR_TOOL_LISTBOX_BG = "#eaf4fc"  # 獨立腳本工具下拉選單展開後的淡藍色底，掃視一長串腳本名稱更輕鬆
+COLOR_TOOL_DESC_BG = "#eaf4fc"  # 常駐說明卡片底色，跟下拉選單同一色系，視覺上關聯在一起
+COLOR_TOOL_DESC_BORDER = "#aed6f1"
+COLOR_TOOL_DESC_ACCENT = "#1b4f72"  # 卡片左側色條 + 呼應下拉選單選取列的深藍
+COLOR_TOOL_DESC_FG = "#1b2631"  # 深色文字，淡藍底上要維持可讀性
 
 CONSOLE_DEFAULT_HEIGHT = 260  # 預設展開高度
 CONSOLE_MIN_HEIGHT = 50  # 拖拉能縮到的最小高度，比收合狀態(34px)略高，仍看得到一點點輸出內容
@@ -410,11 +415,90 @@ class SettingsWindow(tk.Tk):
                 return
             typed = combo.get().strip().lower()
             if typed:
-                combo["values"] = [n for n in all_display_names if typed in n.lower()]
+                # 搜尋範圍不只比對檔名，也比對 self._tool_script_desc_map 的功能說明
+                # 文字——記不住確切檔名、只記得「大概是做什麼的」時一樣找得到（例如
+                # 打「比較」能找到 eval_pose_compare.py，即使檔名本身沒有這兩個字）。
+                combo["values"] = [
+                    n for n in all_display_names
+                    if typed in n.lower() or typed in self._tool_script_desc_map.get(n, "").lower()
+                ]
             else:
                 combo["values"] = all_display_names
 
         combo.bind("<KeyRelease>", _refresh_tool_combo_filter)
+
+        # 常駐說明卡片：選定（或篩選/打字剛好完全對到）某支腳本時，這裡會顯示
+        # docs/獨立運行腳本索引.md 記錄的功能說明——常忘記腳本名稱或功能時不用切去
+        # 開文件對照，選了就看得到。trace_add 綁在 StringVar 上，不管是滑鼠選清單、
+        # 「瀏覽...」選檔案、還是打字打到完全符合，都會觸發更新。
+        #
+        # 特地做成一張淡藍底、左側色條、大圖示的卡片——跟深色的流程列/獨立腳本工具
+        # 外框拉開視覺層次，讓人一眼就注意到「這裡有東西」，不是埋在一堆按鈕文字裡
+        # 容易被忽略的一行小字；圖示會依狀態換（📖 找到說明／💡 尚未選擇／⚠️ 找不到
+        # 說明），不是每次都同一個圖示，掃視時更容易分辨目前是哪種狀態。
+        desc_card = tk.Frame(
+            tool_outer, bg=COLOR_TOOL_DESC_BG,
+            highlightbackground=COLOR_TOOL_DESC_BORDER, highlightthickness=1,
+        )
+        desc_card.pack(fill="x", padx=10, pady=(2, 6))
+        tk.Frame(desc_card, bg=COLOR_TOOL_DESC_ACCENT, width=5).pack(side="left", fill="y")
+
+        self._tool_desc_icon_var = tk.StringVar(value="💡")
+        tk.Label(
+            desc_card, textvariable=self._tool_desc_icon_var, bg=COLOR_TOOL_DESC_BG,
+            font=("Segoe UI Emoji", 20),
+        ).pack(side="left", padx=(12, 10), pady=10)
+
+        self._tool_desc_var = tk.StringVar(value="")
+        tk.Label(
+            desc_card, textvariable=self._tool_desc_var, bg=COLOR_TOOL_DESC_BG, fg=COLOR_TOOL_DESC_FG,
+            font=self._font_label, anchor="w", justify="left", wraplength=1780,
+        ).pack(side="left", fill="x", expand=True, padx=(0, 12), pady=10)
+
+        def _on_tool_script_var_change(*_a):
+            # 這個 trace 綁在 self._tool_script_var 上，Combobox 打字時每敲一個字都會
+            # 觸發（textvariable 本來就跟 Entry 內容即時同步，不是只有選定/送出時才變）
+            # ——之前的版本只判斷「完全對到清單裡某個顯示名稱」，打字打到一半、還沒
+            # 選定完成時一律顯示「⚠️ 找不到說明」，看起來像是搜尋沒作用；拿掉了打字時
+            # 自動彈出清單那個機制（見上面 _refresh_tool_combo_filter 的說明，那樣做
+            # 會搶走鍵盤焦點導致打不了字）之後，這個誤導感更明顯——不打開清單，畫面
+            # 上完全沒有任何回饋。這裡改成：打完整符合就顯示說明；沒完整符合但還有
+            # 部分符合（檔名或功能說明含有目前打的字）就顯示「符合幾支＋預覽名稱」，
+            # 讓使用者不用手動展開清單也能立刻看到搜尋有沒有效果；真的一支都不符合
+            # 才顯示找不到。
+            raw = self._tool_script_var.get()
+            desc = self._tool_script_desc_map.get(raw)
+            if desc:
+                self._tool_desc_icon_var.set("📖")
+                self._tool_desc_var.set(desc)
+                return
+            stripped = raw.strip()
+            if not stripped:
+                self._tool_desc_icon_var.set("💡")
+                self._tool_desc_var.set("從下拉選單選一支腳本後，這裡會顯示它的功能說明"
+                                         "（來源：docs/獨立運行腳本索引.md）")
+                return
+            typed = stripped.lower()
+            matches = [
+                n for n in all_display_names
+                if typed in n.lower() or typed in self._tool_script_desc_map.get(n, "").lower()
+            ]
+            if matches:
+                self._tool_desc_icon_var.set("🔍")
+                preview = "、".join(m.split("#")[0].strip() for m in matches[:3])
+                more = f" 等共 {len(matches)} 支" if len(matches) > 3 else ""
+                self._tool_desc_var.set(
+                    f"符合「{stripped}」：{preview}{more} —— 按 ↓ 或點下拉箭頭展開清單挑選"
+                )
+            else:
+                self._tool_desc_icon_var.set("⚠️")
+                self._tool_desc_var.set(
+                    f"找不到符合「{stripped}」的腳本或功能說明"
+                    "（如果這是「瀏覽...」選的清單外路徑，這是正常的，不影響執行）"
+                )
+
+        self._tool_script_var.trace_add("write", _on_tool_script_var_change)
+        _on_tool_script_var_change()
 
         def _focus_tool_combo_search(_event=None):
             combo["values"] = all_display_names
@@ -477,6 +561,10 @@ class SettingsWindow(tk.Tk):
         `影片拼接.py`），中文字元在等寬字型下通常還是佔兩個半形字的寬度，直接用
         len() 對這種檔名補的空白數會不夠、流水號對不齊。流水號同時也是 Ctrl+F
         打字篩選時，使用者一眼確認「這是清單第幾支」的依據。"""
+        self._tool_script_desc_map = {}  # 顯示名稱（含流水號）→ 功能說明，給常駐說明列／Ctrl+F 用
+        # 一定要在下面 tools_dir 不存在時的早退之前設好：_on_tool_script_var_change()
+        # 在 _build_process_bar() 尾端會無條件呼叫一次，若 tools_dir 剛好讀不到（例如
+        # 資料夾正在被同步/搬移）就會早退不往下跑，這個屬性沒設到就直接 AttributeError。
         tools_dir = _SCRIPT_DIR / "cat_monitoring_system" / "tools"
         if not tools_dir.exists():
             return {}
@@ -484,11 +572,56 @@ class SettingsWindow(tk.Tk):
         names = [str(p.relative_to(tools_dir)).replace("\\", "/") for p in paths]
         widths = [_display_width(n) for n in names]
         pad_width = max(widths, default=0) + 4
+        plain_descriptions = self._load_tool_script_descriptions()  # {相對路徑: 功能說明}
         mapping = {}
         for idx, (name, width, p) in enumerate(zip(names, widths, paths), start=1):
             display = f"{name}{' ' * (pad_width - width)}#{idx:02d}"
             mapping[display] = str(p)
+            self._tool_script_desc_map[display] = plain_descriptions.get(name, "")
         return mapping
+
+    def _load_tool_script_descriptions(self):
+        """解析 docs/獨立運行腳本索引.md 裡「5. paper/cat_monitoring_system/tools/」
+        與「6. .../train_data/」兩節的表格，取出每支腳本的「功能」欄位文字，回傳
+        {相對於 tools/ 的路徑: 功能說明}——這份文件本來就是這個專案既有、持續維護
+        的腳本索引，不重新生成一份新的說明，直接沿用。表格格式是
+        `| \\`檔名\\` | 功能說明 | 使用方法 |`，用簡單的逐行 regex 讀，不依賴任何
+        Markdown 套件。找不到檔案或格式對不上時安靜回傳空字典，不影響下拉選單本身
+        正常運作——這份說明是加值資訊，不是必要功能，讀取失敗不該讓整個 GUI 掛掉。"""
+        md_path = _SCRIPT_DIR / "docs" / "獨立運行腳本索引.md"
+        descriptions = {}
+        try:
+            text = md_path.read_text(encoding="utf-8")
+        except OSError:
+            return descriptions
+
+        row_re = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*([^|]+?)\s*\|")
+
+        def _parse_section(section_text, prefix=""):
+            for line in section_text.splitlines():
+                m = row_re.match(line.strip())
+                if m:
+                    descriptions[f"{prefix}{m.group(1)}"] = m.group(2)
+
+        # 第 5 節表格內的路徑就是相對於 tools/ 的檔名（例如 "eval_pose_compare.py"），
+        # 直接對得上 _discover_tool_scripts() 算出來的 name；第 6 節（train_data/
+        # 子資料夾）表格內路徑沒帶 "train_data/" 前綴，這裡要另外補上才對得起來。
+        #
+        # 章節邊界的標題比對一定要用 re.M 的 ^ 錨定在「行首」，不能只單純用
+        # re.search 找字串出現的位置——這份文件如果哪裡用一般文字或行內程式碼提到
+        # 這兩個標題字串（例如說明格式規則時舉例引用），沒有錨定行首的話會誤認那裡
+        # 就是章節開頭，抓到完全不對的範圍，導致整份說明解析失敗（此教訓來自實際
+        # 踩過一次：文件裡新增的格式規範說明段落引用了標題全文，行首錨定修好前，
+        # 27 支腳本的說明一次全部消失）。
+        sec5 = re.search(r"^## 5\. paper/cat_monitoring_system/tools/.*?(?=^## \d|\Z)", text, re.S | re.M)
+        if sec5:
+            _parse_section(sec5.group(0))
+        sec6 = re.search(
+            r"^## 6\. paper/cat_monitoring_system/tools/train_data/.*?(?=^## \d|\Z)", text, re.S | re.M
+        )
+        if sec6:
+            _parse_section(sec6.group(0), prefix="train_data/")
+        return descriptions
 
     def _on_window_close(self):
         """視窗關閉的唯一入口（右上角 X 與下方「關閉」按鈕都走這裡）：main.py 或
@@ -574,6 +707,7 @@ class SettingsWindow(tk.Tk):
         self._on_clear_console()
         self._console_append(f"— main.py 已啟動（PID {self._main_process.pid}） —\n", tag="muted")
         self._start_log_reader(self._main_process)
+        self._bring_child_window_to_front(self._main_process)
         messagebox.showinfo(
             "啟動 main.py",
             f"main.py 已啟動（PID {self._main_process.pid}）。\n\n"
@@ -696,6 +830,7 @@ class SettingsWindow(tk.Tk):
         self._on_clear_console()
         self._console_append(f"— {script_file.name} 已啟動（PID {self._main_process.pid}） —\n", tag="muted")
         self._start_log_reader(self._main_process)
+        self._bring_child_window_to_front(self._main_process)
 
     def _on_stop_tool(self):
         if self._active_kind != "tool" or self._main_process is None or self._main_process.poll() is not None:
@@ -1124,6 +1259,82 @@ class SettingsWindow(tk.Tk):
 
         self._log_reader_thread = threading.Thread(target=_reader, daemon=True)
         self._log_reader_thread.start()
+
+    def _bring_child_window_to_front(self, process):
+        """背景執行緒輪詢，等子行程（main.py／獨立腳本）自己開出的 GUI 視窗出現後
+        自動拉到最上層、取得焦點，不用手動 Alt+Tab 切過去。
+
+        這些腳本大多要先載入 YOLO/ST-GCN 模型才會真的開窗，時間不固定（幾秒到
+        十幾秒），所以用輪詢而不是啟動後立刻找一次。找視窗只認「屬於這個 PID
+        的可見頂層視窗」，不比對標題文字——各腳本視窗標題五花八門（tkinter 預設
+        標題、cv2.imshow 的檔名...），比對 PID 才不用每支腳本都額外維護一份標題
+        清單，且對之後新增的腳本自動適用。
+
+        需要 pywin32（win32gui/win32process/win32con）；環境沒裝的話直接跳過，
+        不影響腳本本身執行、也不彈錯誤訊息——這只是「省得手動切視窗」的錦上添花
+        功能，缺了頂多要自己切一下，不該讓整個啟動流程失敗。
+        """
+        try:
+            import win32api
+            import win32con
+            import win32gui
+            import win32process
+        except ImportError:
+            return
+
+        def _worker():
+            deadline = time.time() + 20.0  # 模型載入可能要幾秒到十幾秒，給足時間再放棄
+            target_hwnd = None
+            while time.time() < deadline:
+                if process.poll() is not None:
+                    return  # 行程提早結束（例如啟動失敗），沒視窗好找
+                found = []
+
+                def _enum_handler(hwnd, _extra):
+                    if not win32gui.IsWindowVisible(hwnd):
+                        return
+                    if win32gui.GetParent(hwnd) != 0:
+                        return  # 只找頂層視窗，排除子控制項
+                    if not win32gui.GetWindowText(hwnd):
+                        return  # 排除沒標題的隱藏輔助視窗
+                    _, found_pid = win32process.GetWindowThreadProcessId(hwnd)
+                    if found_pid == process.pid:
+                        found.append(hwnd)
+
+                try:
+                    win32gui.EnumWindows(_enum_handler, None)
+                except Exception:
+                    pass
+                if found:
+                    target_hwnd = found[0]
+                    break
+                time.sleep(0.3)
+
+            if target_hwnd is None:
+                return
+
+            try:
+                if win32gui.IsIconic(target_hwnd):
+                    win32gui.ShowWindow(target_hwnd, win32con.SW_RESTORE)
+                # Windows 預設會擋「非目前使用中程式」呼叫 SetForegroundWindow（避免
+                # 程式亂搶焦點）。這裡用常見的繞法：先把自己這條執行緒的輸入佇列跟
+                # 目前前景視窗的執行緒 attach 在一起，讓系統把接下來的
+                # SetForegroundWindow 視為「使用者自己切換」而放行，做完再 detach。
+                fg_hwnd = win32gui.GetForegroundWindow()
+                current_thread_id = win32api.GetCurrentThreadId()
+                fg_thread_id = win32process.GetWindowThreadProcessId(fg_hwnd)[0] if fg_hwnd else 0
+                attached = False
+                if fg_thread_id and fg_thread_id != current_thread_id:
+                    attached = win32process.AttachThreadInput(current_thread_id, fg_thread_id, True)
+                try:
+                    win32gui.SetForegroundWindow(target_hwnd)
+                finally:
+                    if attached:
+                        win32process.AttachThreadInput(current_thread_id, fg_thread_id, False)
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _drain_log_queue(self):
         drained = 0

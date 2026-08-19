@@ -43,7 +43,7 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 # ── Hardcoded model definitions ───────────────────────────────────────────────
 # ↓ 重新訓練後只需改此一行 run 號碼，下方路徑全部自動更新
 _RUN_TAG = "075"
-_BASE    = rf"C:\Users\homec\Downloads\stgcn_results\run_{_RUN_TAG}_ema_ablation_att_on"
+_BASE    = rf"C:\ai_project\stgcn_models\run_{_RUN_TAG}_ema_ablation_att_on"
 MODELS = [
     {'path': rf"{_BASE}\{_RUN_TAG}_xy_conf_v_bone_att_on.pth",          'alpha': 1.0, 'name': 'α=1.00 (no EMA)'},
     {'path': rf"{_BASE}\{_RUN_TAG}_xy_conf_v_bone_ema0.90_att_on.pth",  'alpha': 0.9, 'name': 'α=0.90'},
@@ -58,7 +58,7 @@ HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\
 HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
 HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake"
 HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
-HARD_OUTPUT_DIR        = r"C:\paper\cat_monitoring_system\eval_results"
+HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_results"
 
 DEFAULT_YOLO    = r"C:\ai_project\yolo_models\aug_8.pt"
 DEFAULT_IMGSZ   = 640

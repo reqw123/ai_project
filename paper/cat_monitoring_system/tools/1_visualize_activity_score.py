@@ -5,7 +5,7 @@ Activity Score 機制視覺化
 用合成位移資料展示 activity_value 與 activity_score 對不同運動模式的反應。
 
 執行：python visualize_activity_score.py
-輸出：同目錄下 activity_score_visualization.png
+輸出：C:\ai_project\paper\output\activity_score_visualization\activity_score_visualization.png
 """
 
 import numpy as np
@@ -286,7 +286,8 @@ ax_dist.set_title("全場景 activity_value vs score 分佈", fontsize=8, color=
 ax_dist.tick_params(labelsize=6.5, colors=C["muted"])
 ax_dist.legend(fontsize=6.5, facecolor=C["bg"], edgecolor=C["border"], labelcolor=C["muted"], framealpha=0.85)
 
-out_path = Path(__file__).parent / "activity_score_visualization.png"
+out_path = Path(r"C:\ai_project\paper\output\activity_score_visualization\activity_score_visualization.png")
+out_path.parent.mkdir(parents=True, exist_ok=True)
 plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
 print(f"已儲存: {out_path}")
 plt.show()

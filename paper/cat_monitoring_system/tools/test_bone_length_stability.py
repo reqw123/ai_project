@@ -171,7 +171,7 @@ YOLO_IMGSZ = 640
 # 腳本只要能看到「GCN 這一刻覺得是什麼」就夠了。feature_mode/in_channels
 # 留給 BehaviorClassifier 依 config.py 的 STGCNConfig.FEATURE_MODE 及
 # checkpoint 的 bn_input 通道數自動判斷/校正，不在這裡寫死。=====
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_122_xy_conf_v_bone_att_on\122_best_model.pth"
+STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_122_xy_conf_v_bone_att_on\122_best_model.pth"
 STGCN_NORMALIZE = True
 BEHAVIOR_MIN_CONFIDENCE = BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
 

@@ -1,8 +1,0 @@
-[INFO] ====================================================
-[INFO] YOLO Pose Model Comparison  [20260724_001310]
-[INFO]   Old : C:\ai_project\cat_pose\v11s_136.pt
-[INFO]   New : C:\ai_project\cat_pose\v11s_138.pt
-[INFO]   Data[stop]: C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop
-[INFO]   Out : C:\ai_project\pose_compare_results\20260724_001310  Device: cuda
-[INFO] ====================================================
-[INFO] Loading old model...

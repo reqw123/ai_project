@@ -19,17 +19,17 @@ fetch_cat_behavior_videos.py
 === 使用方式 ===
    python fetch_cat_behavior_videos.py
    # 預設會搜尋 BEHAVIOR_KEYWORDS 中列出的所有關鍵字
-   # 結果輸出到 cat_behavior_videos.csv
+   # 結果輸出到 C:\ai_project\paper\output\fetch_cat_behavior_videos\cat_behavior_videos.csv
    # 若 DOWNLOAD_VIDEOS = True（預設開啟），會自動把影片下載到
-   #   downloaded_videos/<執行時間戳記>/ 資料夾（每次執行獨立子資料夾）
+   #   ...\fetch_cat_behavior_videos\downloaded_videos\<執行時間戳記>\ 資料夾（每次執行獨立子資料夾）
    # 可調整程式開頭的 MAX_DOWNLOADS 控制最多下載幾支，避免一次佔滿硬碟/流量
 
 === 執行紀錄與去重複 ===
 - 每次執行都會用當下時間建立獨立子資料夾，例如：
-    downloaded_videos/20260701_153045/
+    downloaded_videos\20260701_153045\
   所以不同次執行的結果不會互相覆蓋或混在一起。
 - 每次執行的摘要（時間、找到筆數、下載成功數、重複數、失敗數）會
-  append 到 downloaded_videos/run_log.csv，方便回顧歷次執行紀錄。
+  append 到 downloaded_videos\run_log.csv，方便回顧歷次執行紀錄。
 - 去重複分兩層：
   1) 同一次搜尋若同一支影片被不同關鍵字搜到兩次（同 source + 同 id），
      只保留一筆，避免重複下載。
@@ -37,7 +37,7 @@ fetch_cat_behavior_videos.py
      完全相同，會自動刪除剛下載的重複檔案。
      去重複範圍由 GLOBAL_DEDUP 控制：
        GLOBAL_DEDUP = False（預設）：只比對「這次執行的資料夾內」。
-       GLOBAL_DEDUP = True：比對 downloaded_videos/ 底下「所有歷次執行」
+       GLOBAL_DEDUP = True：比對 downloaded_videos\ 底下「所有歷次執行」
          下載過的影片，執行前會先掃描歷史檔案建立雜湊索引，檔案數量多
          時會比較耗時。
 
@@ -82,10 +82,10 @@ BEHAVIOR_KEYWORDS = [
 ]
 
 RESULTS_PER_KEYWORD = 50   # 每個關鍵字各平台最多抓幾筆
-OUTPUT_CSV = "cat_behavior_videos.csv"
+OUTPUT_CSV = r"C:\ai_project\paper\output\fetch_cat_behavior_videos\cat_behavior_videos.csv"
 
 DOWNLOAD_VIDEOS = True      # 是否自動下載影片檔案
-DOWNLOAD_BASE_DIR = "downloaded_videos"   # 影片存放的根資料夾
+DOWNLOAD_BASE_DIR = r"C:\ai_project\paper\output\fetch_cat_behavior_videos\downloaded_videos"   # 影片存放的根資料夾（原為相對路徑，改成絕對路徑避免依執行時的工作目錄而跑到不同地方，也避免大量影片混進原始碼資料夾）
 MAX_DOWNLOADS = 500         # 保護用：最多下載幾支影片（避免一次抓太多佔滿硬碟/流量）
 
 # False（預設）：只在「這次執行的子資料夾內」去重複。
@@ -340,6 +340,7 @@ def main():
         "source", "keyword", "id", "page_url", "download_url",
         "width", "height", "duration_sec", "tags", "views", "downloads", "license",
     ]
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
     with open(OUTPUT_CSV, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()

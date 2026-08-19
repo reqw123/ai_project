@@ -36,7 +36,7 @@ from config import ModelPaths
 # ── 設定 ──────────────────────────────────────────────────────────────────────
 YOLO_MODEL_PATH  = ModelPaths.YOLO_MODEL
 VIDEO_FOLDER     = r"C:\Users\homec\Downloads\5562"  # 影片資料夾
-CSV_OUTPUT_DIR   = r"C:\ai_project\paper\still_analysis"
+CSV_OUTPUT_DIR   = r"C:\ai_project\paper\output\anomaly_detection"
 DEVICE           = "cuda"
 YOLO_IMGSZ       = 640
 YOLO_CONF        = 0.5

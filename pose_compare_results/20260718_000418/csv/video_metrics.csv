@@ -1,3 +1,0 @@
-﻿model,behavior,video_name,frames,frames_with_cat,frames_without_cat,mean_confidence,std_confidence,mean_jitter_px,std_jitter_px,p95_jitter_px,max_jitter_px,missing_ratio,nose_missing_ratio,paw_missing_ratio,tail_missing_ratio
-old,walk,0_Cat_Calico_1920x1080.mp4,400,400,0,0.9875,0.0148,13.197,16.887,36.997,332.383,0.0000,0.0000,0.0000,0.0000
-new,walk,0_Cat_Calico_1920x1080.mp4,400,400,0,0.9909,0.0107,12.644,14.938,35.036,356.629,0.0000,0.0100,0.0000,0.0000

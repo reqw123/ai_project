@@ -65,7 +65,7 @@ VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_127.pt"
 
 # 輸出 CSV 路徑（可直接在此處修改）
-OUTPUT_CSV_PATH = r"C:\Users\homec\left_right_ear_distance.csv"
+OUTPUT_CSV_PATH = r"C:\ai_project\paper\output\ear_distance\left_right_ear_distance.csv"
 # Node-RED 即時推送（設為 None 或空字串可停用）
 NODERED_URL = "http://127.0.0.1:1880/lick_zone_result"
 INFERENCE_DEVICE = "cuda"

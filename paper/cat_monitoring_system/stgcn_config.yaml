@@ -4,7 +4,7 @@
 # 用於訓練的每支影片骨架 JSON 檔案資料夾路徑
 SKELETON_DATA_FOLDER: "C:/ai_project/paper/skeletons"
 # 訓練輸出（圖表、混淆矩陣、CSV 等）儲存目錄
-RESULTS_FOLDER: "C:/Users/homec/Downloads/stgcn_results"
+RESULTS_FOLDER: "C:/ai_project/stgcn_models"
 
 # Window filtering
 # 若為 true，會丟棄包含未標註幀的視窗；若為 false，至少一個已標註幀即保留

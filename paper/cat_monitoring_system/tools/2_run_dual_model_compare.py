@@ -52,16 +52,16 @@ from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 # ═══════════════════════════════════════════════════════
 MODEL_A = dict(
     label="Model A",
-    yolo_path=r"C:\ai_project\yolo_models\v11s_144.pt",
-    stgcn_path=r"C:\Users\homec\Downloads\stgcn_results\run_124_xy_conf_v_bone_att_on\124_best_model.pth",
+    yolo_path=r"C:\ai_project\yolo_models\v11s_146.pt",
+    stgcn_path=r"C:\ai_project\stgcn_models\run_124_xy_conf_v_bone_att_on\124_best_model.pth",
     feature_mode=None,   # None = 用下面 STGCN_FEATURE_MODE 的預設值
     ema_alpha=1.0,
     banner_color=(60, 60, 180),   # BGR，紅色系
 )
 MODEL_B = dict(
     label="Model B",
-    yolo_path=r"C:\ai_project\yolo_models\v11s_145.pt",
-    stgcn_path=r"C:\Users\homec\Downloads\stgcn_results\run_124_xy_conf_v_bone_att_on\124_best_model.pth",
+    yolo_path=r"C:\ai_project\yolo_models\v11s_147.pt",
+    stgcn_path=r"C:\ai_project\stgcn_models\run_124_xy_conf_v_bone_att_on\124_best_model.pth",
     feature_mode=None,
     ema_alpha=1.0,
     banner_color=(60, 180, 60),   # BGR，綠色系

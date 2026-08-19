@@ -39,7 +39,7 @@ DEST_BASE = r"C:\Users\homec\Downloads\istock\class"  # TODO: 五個行為資料
 DEST_FOLDERS = {name: rf"{DEST_BASE}\{name}" for name in BEHAVIOR_CLASSES}  # walk/lick/scratch/shake/stop
 
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_119.pt"
-STGCN_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_105_xy_conf_v_bone_att_on\105_best_model.pth"
+STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_105_xy_conf_v_bone_att_on\105_best_model.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640
 YOLO_CONF_THRESHOLD = 0.5

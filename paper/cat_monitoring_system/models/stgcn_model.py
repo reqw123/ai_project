@@ -89,7 +89,8 @@ def get_stgcn_partition_adjacency(num_joints=17):
 def normalize_adjacency_matrix(adj_matrix):
     """對鄰接矩陣做對稱正規化（D^-0.5 A D^-0.5）。"""
     degree = np.sum(adj_matrix, axis=1)
-    degree_inv_sqrt = np.power(degree, -0.5)
+    with np.errstate(divide="ignore"):
+        degree_inv_sqrt = np.power(degree, -0.5)
     degree_inv_sqrt[np.isinf(degree_inv_sqrt)] = 0
     D_inv_sqrt = np.diag(degree_inv_sqrt)
     normalized = D_inv_sqrt @ adj_matrix @ D_inv_sqrt

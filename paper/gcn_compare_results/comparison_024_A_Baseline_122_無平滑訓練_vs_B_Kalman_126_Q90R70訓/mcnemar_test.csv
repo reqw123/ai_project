@@ -1,7 +1,0 @@
-pair,scope,b,c,n_discordant,statistic,p_value,method,significant(p<0.05)
-Baseline_122_無平滑訓練[V14]_vs_Kalman_126_Q90R70訓練[kalman Q90/R70][V17],overall,4,3,7,3.0000,1.0000,exact_binomial,
-Baseline_122_無平滑訓練[V14]_vs_Kalman_126_Q90R70訓練[kalman Q90/R70][V17],walk,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
-Baseline_122_無平滑訓練[V14]_vs_Kalman_126_Q90R70訓練[kalman Q90/R70][V17],lick,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
-Baseline_122_無平滑訓練[V14]_vs_Kalman_126_Q90R70訓練[kalman Q90/R70][V17],scratch,2,0,2,0.0000,0.5000,exact_binomial,
-Baseline_122_無平滑訓練[V14]_vs_Kalman_126_Q90R70訓練[kalman Q90/R70][V17],shake,2,3,5,2.0000,1.0000,exact_binomial,
-Baseline_122_無平滑訓練[V14]_vs_Kalman_126_Q90R70訓練[kalman Q90/R70][V17],stop,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,

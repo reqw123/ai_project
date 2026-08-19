@@ -48,7 +48,7 @@ PLOT_REL_AXIS_UPPER_PCT = 99
 # EMA 設定：與 test_video_inference_ema.py 保持一致
 EMA_ALPHA = 1.0
 
-OUTPUT_DIR = Path(r"C:\paper\output\keypoint_timeseries")
+OUTPUT_DIR = Path(r"C:\ai_project\paper\output\keypoint_timeseries")
 SUMMARY_MD_PATH = OUTPUT_DIR / "keypoint_timeseries_summary.md"
 MOTION_METRICS_CSV_PATH = OUTPUT_DIR / "keypoint_motion_metrics.csv"
 RAW_PLOT_OUTPUT_DIR = OUTPUT_DIR / "raw_plots"

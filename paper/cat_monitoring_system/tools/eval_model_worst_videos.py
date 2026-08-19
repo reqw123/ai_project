@@ -70,7 +70,7 @@ EVENT_MIN_WINDOWS = 3     # 保留作備用下限；實際以比例門檻為主
 EVENT_MIN_RATIO   = 0.30  # 事件偵測（比例門檻）：正確 window 數 / 總 window 數 ≥ 此值即視為偵測成功
 DEFAULT_DEVICE  = 'cuda'
 
-HARD_MODEL_PATH = r"C:\Users\homec\Downloads\stgcn_results\run_081_models_att_on\081_xy_conf_v_bone_att_on.pth"
+HARD_MODEL_PATH = r"C:\ai_project\stgcn_models\run_081_models_att_on\081_xy_conf_v_bone_att_on.pth"
 HARD_NAME       = None   # None → auto-derived from filename
 HARD_EMA_ALPHA  = 1.0    # 1.0 = 不平滑；< 1.0 = EMA 平滑（例如 0.5），須與訓練時 KP_EMA_ALPHA 一致
 HARD_SEQ_LEN    = 16     # 模型訓練時使用的序列長度（影響 ring buffer 大小）
@@ -79,7 +79,7 @@ HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\
 HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
 HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake"
 HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
-HARD_OUTPUT_DIR        = r"C:\paper\cat_monitoring_system\eval_results"
+HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_results"
 
 POOR_ACC_THRESHOLD       = 0.50  # 低於此準確率的影片在圖表/摘要中標記為表現不佳
 POOR_KPT_CONF_THRESHOLD  = 0.50  # 平均關鍵點信心低於此值，懷疑是 YOLO 偵測品質問題而非分類器問題
