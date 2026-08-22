@@ -166,18 +166,45 @@ def trap_dir_from_perp(trap_perp):
     return d
 
 
-def _curvature_size_boost(mid_back_dist_pct: float) -> float:
-    """依 mid_back_dist_pct（脊椎彎曲程度）線性內插出梯形縮放倍率。
+def _compute_midback_angle_deg(chest, midback, hip) -> float:
+    """算 Chest-MidBack-Hip 夾角（度，MidBack 為頂點）。
+
+    跟 processors/skeleton_quality_assessment.py 的 compute_midback_angle()
+    是同一套幾何公式，這裡另外重新實作一份（不 import processors/ 模組），
+    以維持本 plugin 低耦合、可獨立抽離的既有設計原則（見本檔案開頭
+    docstring）。呼叫端已經確認過三個關鍵點的信心值，這裡不重複檢查，
+    只在兩個向量長度太短（幾乎重疊）時回傳 NaN。
+    """
+    chest = np.asarray(chest, dtype=np.float64)
+    midback = np.asarray(midback, dtype=np.float64)
+    hip = np.asarray(hip, dtype=np.float64)
+    v1 = chest - midback
+    v2 = hip - midback
+    n1 = float(np.linalg.norm(v1))
+    n2 = float(np.linalg.norm(v2))
+    if n1 < 1e-6 or n2 < 1e-6:
+        return float("nan")
+    cos_angle = float(np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0))
+    return float(np.degrees(np.arccos(cos_angle)))
+
+
+def _curvature_size_boost(midback_angle_deg: float) -> float:
+    """依 Chest-MidBack-Hip 夾角（脊椎彎曲程度指標）線性內插出梯形縮放倍率。
+
+    夾角越接近 CURVATURE_ANGLE_MAX_DEG（越直）→ 倍率越接近 CURVATURE_BOOST_MIN；
+    夾角越接近 CURVATURE_ANGLE_MIN_DEG（越彎/蜷曲）→ 倍率越接近 CURVATURE_BOOST_MAX
+    ——跟距離百分比版本方向相反（角度是遞減指標，越彎角度越小），故分子用
+    CURVATURE_ANGLE_MAX_DEG 減去角度而非角度本身。
 
     純函式：輸入 NaN 或無效值時回傳 1.0（不縮放），維持與未量測 mid_back
     時完全一致的既有行為。內插區間見 config.py 的 CURVATURE_* 常數說明。
     """
-    if mid_back_dist_pct is None or not math.isfinite(mid_back_dist_pct):
+    if midback_angle_deg is None or not math.isfinite(midback_angle_deg):
         return 1.0
-    span = _C.CURVATURE_PCT_MAX - _C.CURVATURE_PCT_MIN
+    span = _C.CURVATURE_ANGLE_MAX_DEG - _C.CURVATURE_ANGLE_MIN_DEG
     if span <= 1e-9:
         return 1.0
-    t = (mid_back_dist_pct - _C.CURVATURE_PCT_MIN) / span
+    t = (_C.CURVATURE_ANGLE_MAX_DEG - midback_angle_deg) / span
     t = max(0.0, min(1.0, t))
     return _C.CURVATURE_BOOST_MIN + t * (
         _C.CURVATURE_BOOST_MAX - _C.CURVATURE_BOOST_MIN
@@ -381,30 +408,26 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
     region_rx = max(1e-6, 0.5 * _C.BODY_ELLIPSE_W_RATIO * body_len)
     region_ry = max(1e-6, 0.5 * _C.BODY_ELLIPSE_H_RATIO * body_len)
 
-    # mid_back 偏離 chest-hip 中點的正規化距離百分比（脊椎彎曲程度指標）。
-    # mid_back 信心不足時視為無法判斷彎曲程度，boost 退回 1.0（不縮放）。
+    # Chest-MidBack-Hip 夾角（脊椎彎曲程度指標，度）。mid_back 信心不足時
+    # 視為無法判斷彎曲程度，boost 退回 1.0（不縮放）。公式對齊 processors/
+    # skeleton_quality_assessment.py 的 compute_midback_angle()（見
+    # _compute_midback_angle_deg() 說明）。
     mid_back_ok = float(kpt_conf[_C.KP_MID_BACK]) > _C.EAR_CONF_THRESHOLD
     if mid_back_ok:
         mid_back = np.asarray(kpts[_C.KP_MID_BACK], dtype=np.float64)
-        mid_back_dist_pct = (
-            100.0
-            * math.hypot(
-                float(mid_back[0] - body_center[0]), float(mid_back[1] - body_center[1])
-            )
-            / body_len
-        )
+        midback_angle_deg = _compute_midback_angle_deg(chest, mid_back, hip)
     else:
-        mid_back_dist_pct = float("nan")
-    curvature_boost = _curvature_size_boost(mid_back_dist_pct)
+        mid_back = None
+        midback_angle_deg = float("nan")
+    curvature_boost = _curvature_size_boost(midback_angle_deg)
 
     # Nose contact trapezoid
     eff_len = max(_C.CONTACT_BODY_LEN_MIN_PX, min(_C.CONTACT_BODY_LEN_MAX_PX, body_len))
-    px_per_cm = max(eff_len / max(_C.CAT_BODY_LENGTH_CM, 1e-6), 1e-6)
     trap_height = max(
         1e-6,
-        _C.NOSE_TRAP_THICKNESS_CM
+        _C.NOSE_TRAP_THICKNESS_RATIO
         * _C.NOSE_TRAP_THICKNESS_SCALE
-        * px_per_cm
+        * eff_len
         * curvature_boost,
     )
     trap_top_half = max(
@@ -454,7 +477,8 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
         "body_normal": body_normal,
         "body_axis_unit": body_axis_unit,
         "body_len": body_len,
-        "mid_back_dist_pct": mid_back_dist_pct,
+        "mid_back": mid_back,  # (2,) pixel coords，或 None（信心不足）；供 overlay 標角度數字用
+        "midback_angle_deg": midback_angle_deg,
         "curvature_boost": curvature_boost,
         "region_rx": region_rx,
         "region_ry": region_ry,

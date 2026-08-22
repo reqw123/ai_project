@@ -57,6 +57,7 @@ def draw_all_overlays(
 
     if geom is not None:
         _draw_body_region(frame, geom, nearest_label, hit, _ov)
+        _draw_midback_angle(frame, geom, _ov)
 
     _draw_nose_trapezoid(frame, trap_pts, hit, zone_label, nose_xy, pulse, _ov)
 
@@ -182,6 +183,39 @@ def _draw_body_region(
                 1,
                 cv2.LINE_AA,
             )
+
+
+def _draw_midback_angle(frame: np.ndarray, geom: dict, _ov: float) -> None:
+    """Draw the Chest-MidBack-Hip angle (degrees) next to the MidBack keypoint.
+
+    Mirrors tools/1_measure_ear_distance_single_video.py's diagnostic overlay
+    (same text format "{angle:.1f}deg", same placement offset and color) so
+    both surfaces show the same reading in the same style — see that script's
+    compute_head_body_target_geometry()/_mb_angle for the counterpart.
+
+    Purely visual — this value itself does not participate in any hit/contact
+    decision (only curvature_boost, derived from it, feeds into trapezoid
+    sizing). No-op when mid_back confidence was too low (geom["mid_back"] is
+    None) or the angle is NaN.
+    """
+    mid_back = geom.get("mid_back")
+    angle_deg = geom.get("midback_angle_deg", float("nan"))
+    if mid_back is None or not math.isfinite(angle_deg):
+        return
+
+    mb_x = int(float(mid_back[0]) + 10 * _ov)
+    mb_y = int(float(mid_back[1]) - 14 * _ov)
+    text = f"{angle_deg:.1f}deg"
+    font_scale = 0.65 * _ov
+    # 黑色描邊一律都畫（不受任何 heavy-fx 開關限制），確保在任何背景顏色下都看得清楚。
+    cv2.putText(
+        frame, text, (mb_x, mb_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+        (0, 0, 0), max(3, int(4 * _ov)), cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame, text, (mb_x, mb_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+        (255, 40, 220), max(1, int(2 * _ov)), cv2.LINE_AA,
+    )
 
 
 def _draw_nose_trapezoid(

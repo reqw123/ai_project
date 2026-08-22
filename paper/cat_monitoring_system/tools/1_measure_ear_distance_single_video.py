@@ -47,7 +47,7 @@ from utils.constants import (
 
 
 # ===== 可直接修改的預設參數 =====
-VIDEO_PATH = r"C:\Users\homec\Downloads\lick_ai" # 主要作為資料夾來源（會遞迴掃描影片）
+VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\白貓舔舐測試" # 主要作為資料夾來源（會遞迴掃描影片）
 VIDEO_LIST = [
     # 只放「單一影片檔案路徑」
    # r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\cat5.mp4",
@@ -62,7 +62,7 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_127.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_147.pt"
 
 # 輸出 CSV 路徑（可直接在此處修改）
 OUTPUT_CSV_PATH = r"C:\ai_project\paper\output\ear_distance\left_right_ear_distance.csv"
@@ -84,15 +84,16 @@ NODERED_ONLINE_URL = "http://127.0.0.1:1880/lick_python_online"
 _NEED_FRAME = DISPLAY_WINDOW or (STREAM_MODE == 2)
 # ===== 信心值門檻設定（bbox conf / keypoint conf，建議集中看這區） =====
 YOLO_CONF_THRESHOLD = 0.5  # YOLO bbox 偵測信心門檻
-EAR_CONF_THRESHOLD = 0.5  # 左右耳/胸/臀「幾何與耳距有效性」門檻（>此值才視為可用）
+EAR_CONF_THRESHOLD = 0.5  # 耳朵關鍵點最低信心值，低於此值視為耳朵不可見（對齊 plugins/lick_stage/config.py 的 LickConfig.EAR_CONF_THRESHOLD，數值刻意不同）
 # 這也是「梯形橫軸 trap_perp 是否信任耳線方向」的其中一個門檻（絕對信心
 # 門檻）：左右耳信心皆 > 此值（left_ok and right_ok）只是必要條件之一，還要
 # 另外滿足耳距的幾何長度門檻（TRAP_PERP_MIN_EAR_LINE_NORM_RATIO，定義於
 # 梯形方向跨幀穩定化參數區塊）才會採用耳線方向；任一條件不滿足就 fallback
 # 到 chest-hip 方向向量。見 compute_head_body_target_geometry() 內的
 # trap_perp 判斷區塊。
+BODY_KP_CONF = 0.5  # 胸部/髖部/背部中點信心值門檻，用於計算身體尺度（對齊 LickConfig.BODY_KP_CONF；跟 EAR_CONF_THRESHOLD 分開命名，語意不同、目前數值相同）
 DRAW_KP_CONF_THRESHOLD = 0.5  # 骨架與關鍵點「顯示門檻」（>此值才畫；只影響畫面，不影響耳距有效性）
-LIMB_CONF_THRESHOLD = 0.10  # 四肢區域建立門檻（膝與掌都需 > 此值）
+LIMB_CONF_THRESHOLD = 0.10  # 四肢關鍵點最低信心值，低於此值跳過該肢體（對齊 LickConfig.LIMB_CONF_THRESHOLD）
 LOOP_PLAYBACK = True
 WRITE_LOOPED_PASSES_TO_CSV = False  # LOOP_PLAYBACK=True 時，是否把第 2 輪以後的資料也寫入 CSV
 
@@ -103,20 +104,20 @@ KP_NOSE       = 0
 KP_CHEST      = 3  # 前胸/胸口（前肢附著點）— 對應 stgcn chest_joint=3
 KP_MID_BACK   = 4  # 背部中點（標記在貓咪背部正上方，非 chest-hip 連線上的投影點）— 對應 ext_body_zones 的 KP_MID_BACK=4
 KP_HIP        = 5  # 臀部（後肢附著點）— 對應 stgcn lower_body_joint=5
-KP_FRONT_LEFT_KNEE = 6
-KP_FRONT_LEFT_PAW = 7
-KP_FRONT_RIGHT_KNEE = 8
-KP_FRONT_RIGHT_PAW = 9
-KP_HIND_LEFT_KNEE = 10
-KP_HIND_LEFT_PAW = 11
-KP_HIND_RIGHT_KNEE = 12
-KP_HIND_RIGHT_PAW = 13
+KP_FL_KNEE = 6
+KP_FL_PAW = 7
+KP_FR_KNEE = 8
+KP_FR_PAW = 9
+KP_HL_KNEE = 10
+KP_HL_PAW = 11
+KP_HR_KNEE = 12
+KP_HR_PAW = 13
 KP_TAIL_ROOT = 14
 KP_TAIL_MID = 15
 KP_TAIL_TIP = 16
 
 # ===== 面相偵測參數（可依資料再微調） =====
-NOSE_CONF_THRESHOLD = 0.3  # 鼻子可用門檻（同時用於本體幾何與背向規則）
+NOSE_CONF_THRESHOLD = 0.3  # 鼻子關鍵點最低信心值，低於此值視為鼻子不可用（影響接觸判定與頭部朝向判斷，對齊 LickConfig.NOSE_CONF_THRESHOLD）
 STATE_SMOOTH_WINDOW = 30
 
 # ===== 舊版螢幕座標 fallback（通常不建議啟用） =====
@@ -141,13 +142,15 @@ FRONT_CAMERA_ANGLE_MIN_DEG = 45.0
 FRONT_CAMERA_NORM_MIN = 0.30
 BACK_CAMERA_NOSE_CONF_MAX = 0.5
 BACK_CAMERA_DIST_MIN_PX = 3.0
-BACK_VIEW_REQUIRE_LOW_NOSE_CONF = True
+BACK_VIEW_REQUIRE_LOW_NOSE = True
 
 # ===== 正面視角守門（避免 body scale 退化時誤判） =====
-FRONT_VIEW_GUARD_ENABLED = True
-# 以畫面對角線正規化後的 body scale 門檻，避免受解析度影響
+FRONT_VIEW_GUARD_ENABLED = True  # 對齊 LickConfig.FRONT_VIEW_GUARD_ENABLED
+# 以畫面對角線正規化後的 body scale 門檻，避免受解析度影響。主系統
+# check_front_view_guard() 目前只看 BODY_EAR_RATIO_MAX 這一個條件，尚未移植
+# 這道 BODY_SCALE_NORM 判定，此常數為獨立腳本自訂，命名不用對齊主系統。
 FRONT_VIEW_BODY_SCALE_NORM_MAX = 0.015
-FRONT_VIEW_BODY_EAR_RATIO_MAX = 0.75
+FRONT_VIEW_BODY_EAR_RATIO_MAX = 0.75  # 對齊 LickConfig.FRONT_VIEW_BODY_EAR_RATIO_MAX
 
 STATE_UNKNOWN = "UNKNOWN"
 STATE_FRONT = "FACING_CAMERA"
@@ -156,11 +159,6 @@ STATE_FRONT_RIGHT = "FRONT_RIGHT"
 STATE_BACK = "BACK_VIEW"
 STATE_FRONT_VIEW = "FRONT_VIEW"
 STATE_NO_CAT = "NO_CAT"
-
-ELLIPSE_SAMPLE_COUNT = 40
-_ELLIPSE_SAMPLE_ANGLES = np.linspace(0.0, 2.0 * np.pi, ELLIPSE_SAMPLE_COUNT, endpoint=False)
-_ELLIPSE_COS = np.cos(_ELLIPSE_SAMPLE_ANGLES)
-_ELLIPSE_SIN = np.sin(_ELLIPSE_SAMPLE_ANGLES)
 
 WINDOW_SCALE_STEP = 0.10
 WINDOW_SCALE_MIN = 0.50
@@ -175,72 +173,107 @@ ENABLE_HEAVY_VISUAL_EFFECTS = False
 _HEAVY_FX = bool(ENABLE_HEAVY_VISUAL_EFFECTS)   # 預計算，避免每幀 bool() 呼叫
 _EMA_BYPASS = EMA_ALPHA >= 1.0 - 1e-9           # 預計算，避免每幀浮點比較
 
-# ===== 頭部朝向身體區域判斷與可視化參數 =====
+# 下面幾個區塊的分組與順序對齊 plugins/lick_stage/config.py 的 LickConfig（接觸幾何
+# 尺寸夾鉗 → 鼻子接觸梯形幾何參數 → 梯形彎曲自適應 → 身體區域幾何參數 → 四肢 → 腳尖 →
+# 梯形方向跨幀穩定化），方便未來把這支獨立腳本銜接進主系統當舔舐二階段處理時逐項對照。
+# EMA_ALPHA（對應 LickConfig.EMA_ALPHA）跟其他影片/顯示參數放在檔案開頭「可直接修改的
+# 預設參數」區塊，維持原地不搬進這裡；幾何計算用的輔助函式（_compute_midback_angle_deg
+# 等）統一放在 smooth_state() 之後、_point_in_oriented_ellipse() 之前，讓這裡從「接觸
+# 幾何尺寸夾鉗」到「腳尖」全部是連續的可調參數，不夾雜函式定義。
+
+# ── 接觸幾何尺寸夾鉗（防止極端姿勢下幾何爆炸） ──────────────────────
+# 梯形與四肢區域的等效身體長度範圍，限縮遠近情境的尺寸差距：
+#   MIN：貓較遠（body_len 小）時的下限，防止區域過小漏判
+#   MAX：貓較近（body_len 大）時的上限，防止區域過大誤觸
+# 所有接觸區域尺寸皆以 clamp(body_len, MIN, MAX) 計算，不再線性隨距離無限放大/縮小。
+# 對齊 LickConfig.CONTACT_BODY_LEN_MIN_PX / MAX_PX。
+CONTACT_BODY_LEN_MIN_PX = 300.0  # 身體長度像素下限，低於此值夾鉗到此
+CONTACT_BODY_LEN_MAX_PX = 650.0  # 身體長度像素上限，高於此值夾鉗到此
+
+# ── 鼻子接觸梯形幾何參數 ──────────────────────────────────────────────
+# 全部是相對身體長度的比例常數，不是絕對物理單位：單眼 2D 攝影機無法
+# 分辨「大貓遠」跟「小貓近」，任何看似有物理單位（例如公分）的描述
+# 都只是換算出來的比例，統一用比例常數表達，不假裝有絕對單位。
+NOSE_TRAP_THICKNESS_RATIO = 0.055  # 梯形厚度 = 身體長度 × 此比例（對齊 LickConfig.NOSE_TRAP_THICKNESS_RATIO）
+NOSE_TRAP_THICKNESS_SCALE = 1.0  # 梯形厚度縮放係數（1.0 = 不縮放，對齊 LickConfig.NOSE_TRAP_THICKNESS_SCALE）
+NOSE_TRAP_TOP_W_RATIO = 0.10  # 梯形頂寬 = 身體長度 × 此比例（對齊 LickConfig.NOSE_TRAP_TOP_W_RATIO）
+NOSE_TRAP_BOT_W_RATIO = 0.20  # 梯形底寬 = 身體長度 × 此比例（對齊 LickConfig.NOSE_TRAP_BOT_W_RATIO）
+NOSE_TRAP_W_SCALE = 1.15  # 梯形整體寬度額外放大係數（對齊 LickConfig.NOSE_TRAP_W_SCALE）
+
+# ── 梯形彎曲自適應（Chest-MidBack-Hip 夾角，驅動梯形縮放）──────────────
+# body_len（chest-hip 直線距離）量的是兩點直線距離；貓拱背/蜷曲時，沿著
+# 脊椎的真實身體長度比這條直線長，body_len 會低估「真實」身體尺度，導致
+# 鼻子接觸梯形在最需要精準判定的姿態下反而系統性偏小。這裡用
+# Chest-MidBack-Hip 夾角（以 MidBack 為頂點）當彎曲程度指標，線性映射成
+# 縮放倍率回補，只套用在梯形尺寸上（不影響身體橢圓/四肢區域，那些量測
+# 的是「當下真實」幾何，不該被姿態推測放大縮小）。對齊主系統
+# plugins/lick_stage/config.py 的 LickConfig 與 contact_regions.py（同一套
+# 幾何定義又對齊 processors/skeleton_quality_assessment.py 的
+# compute_midback_angle()／CANDIDATE_MIDBACK_ANGLE_LOW/HIGH_THRESHOLD，
+# 同一份依少量影片校準出來的經驗值，未來重新校準時三處要一起調整）。
+CURVATURE_ANGLE_MAX_DEG = 160.0  # 夾角上限：越接近此值代表脊椎越直（對齊 LickConfig.CURVATURE_ANGLE_MAX_DEG）
+CURVATURE_ANGLE_MIN_DEG = 20.0  # 夾角下限：越接近此值代表拱背/蜷曲程度越明顯（對齊 LickConfig.CURVATURE_ANGLE_MIN_DEG）
+CURVATURE_BOOST_MIN = 0.85  # 對應 CURVATURE_ANGLE_MAX_DEG（打直）時的梯形縮放倍率（打直時縮小）
+CURVATURE_BOOST_MAX = 1.20  # 對應 CURVATURE_ANGLE_MIN_DEG（拱背/蜷曲）時的梯形縮放倍率（拱背時放大）
+
+# ── 身體中心（橢圓）區域幾何參數 ──────────────────────────────────────
 # 身體中心區域（橢圓）：寬=橫向軸（body_normal），高=縱向軸（body_axis）
-BODY_REGION_ELLIPSE_WIDTH_RATIO = 0.65
-BODY_REGION_ELLIPSE_HEIGHT_RATIO = 0.27
-HEAD_RAY_LENGTH_RATIO = 1.60      # 頭部向量延伸射線長度（相對 body_axis）
-HEAD_RAY_MIN_PX = 60.0
+BODY_ELLIPSE_W_RATIO = 0.65  # 身體橢圓寬度 = 身體長度 × 此比例（對齊 LickConfig.BODY_ELLIPSE_W_RATIO）
+BODY_ELLIPSE_H_RATIO = 0.27  # 身體橢圓高度 = 身體長度 × 此比例（對齊 LickConfig.BODY_ELLIPSE_H_RATIO）
+# 下面三個 _ELLIPSE_* 是依 ELLIPSE_SAMPLES 預先算好的三角函式陣列
+# （module-level 預計算，避免每幀重算；主系統 config.py 沒有這三個衍生
+# 陣列——那是 contact_regions.py 的實作細節，不是可調參數）。
+ELLIPSE_SAMPLES = 40  # 橢圓邊界取樣點數（用於判斷鼻子是否在橢圓內）；取樣點越多精度越高，但計算量略增（對齊 LickConfig.ELLIPSE_SAMPLES）
+_ELLIPSE_SAMPLE_ANGLES = np.linspace(0.0, 2.0 * np.pi, ELLIPSE_SAMPLES, endpoint=False)
+_ELLIPSE_COS = np.cos(_ELLIPSE_SAMPLE_ANGLES)
+_ELLIPSE_SIN = np.sin(_ELLIPSE_SAMPLE_ANGLES)
+# 頭部方向射線（僅供畫面可視化參考，不參與任何命中判定）：主系統 LickConfig 尚未移植
+# 此功能，這兩個名稱為獨立腳本自訂，不用對齊主系統命名。
+HEAD_RAY_LENGTH_RATIO = 1.60  # 頭部向量延伸射線長度（相對 body_axis）
+HEAD_RAY_MIN_PX = 60.0  # 頭部射線最短像素長度
 
-# ===== 鼻子接觸區域（梯形）參數：依身體尺度等比適配 =====
-# 厚度原本用「公分」描述、再依 CAT_BODY_LENGTH_CM=40.0（假設每隻貓都一樣長）
-# 換算回像素，但這個換算展開後其實等於 (THICKNESS_CM/CAT_BODY_LENGTH_CM) * eff_len
-# ——一個固定比例乘上 eff_len，跟寬度的算法本質相同，公分只是繞了一圈、沒有
-# 真的量到任何物理尺寸（單眼 2D 攝影機本來就無法分辨「大貓遠」跟「小貓近」）。
-# 這裡直接用比例常數，數值等於原本 2.2/40=0.055，不改變任何輸出結果。
-NOSE_CONTACT_TRAPEZOID_HEIGHT_RATIO = 0.055
-NOSE_CONTACT_TRAPEZOID_HEIGHT_SCALE = 1.0
-NOSE_CONTACT_TRAPEZOID_TOP_WIDTH_RATIO = 0.10
-NOSE_CONTACT_TRAPEZOID_BOTTOM_WIDTH_RATIO = 0.20
-NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE = 1.15
+# ── 四肢（長條）接觸區域幾何參數 ──────────────────────────────────────
+LIMB_CONTACT_SCALE = 1.0  # 四肢接觸區域整體縮放係數（對齊 LickConfig.LIMB_CONTACT_SCALE；同時套用在下面「腳尖」的圓上）
+LIMB_STRIP_HW_RATIO = 0.055  # 四肢長條寬度 = 身體長度 × 此比例（對齊 LickConfig.LIMB_STRIP_HW_RATIO）
+# >0 可留細縫提升視覺分離感；算法跟 LickConfig.LIMB_STRIP_EDGE_GAP 相同，都是
+# eff_len × 此比例 × LIMB_CONTACT_SCALE（見 compute_limb_strip_targets() 內
+# edge_gap 的計算）。
+LIMB_STRIP_EDGE_GAP = 0.0  # 四肢長條與腳尖圓之間的間距 = 身體長度 × 此比例（0 = 緊鄰；對齊 LickConfig.LIMB_STRIP_EDGE_GAP）
 
-# ===== 梯形大小依脊椎彎曲程度自適應（用 mid_back_dist_pct 當彎曲指標）=====
-# body_len（chest-hip 直線距離）量的是「兩點直線距離」；貓拱背/蜷曲時，
-# 沿著脊椎的真實身體長度其實比這條直線長（跟手肘彎曲時，手腕到肩膀的
-# 直線距離比整隻手臂的實際長度短，是同一種幾何道理）。彎越多，body_len
-# 對「真實體長」低估得越嚴重，用 body_len 算出來的梯形也會跟著被低估。
-# mid_back 偏離 chest-hip 中點的比例（mid_back_dist_pct）剛好可以當這個
-# 彎曲程度的指標：打直時 mid_back 接近落在 chest-hip 直線上、偏離量小；
-# 拱背/蜷曲時偏離量變大。這裡把 mid_back_dist_pct 線性映射成一個縮放倍率，
-# 套用在梯形尺寸上做回補；下面兩組端點皆為經驗值，未來有更多實測資料時
-# 可以再校準。
-CURVATURE_PCT_MIN = 0.0     # mid_back_dist_pct 下限：脊椎接近打直
-CURVATURE_PCT_MAX = 30.0    # mid_back_dist_pct 上限：明顯拱背/蜷曲
-CURVATURE_BOOST_MIN = 0.85  # 對應 CURVATURE_PCT_MIN 時的梯形縮放倍率（打直時縮小）
-CURVATURE_BOOST_MAX = 1.20  # 對應 CURVATURE_PCT_MAX 時的梯形縮放倍率（拱背時放大）
+# ── 尾巴（長條）接觸區域幾何參數 ──────────────────────────────────────
+# 定義沿用主專案 plugins/lick_stage/ext_body_zones/config.py 的
+# ExtZoneConfig.TAIL_STRIP_HW_RATIO（該姊妹 plugin 本身「從不繪製任何 overlay」，
+# 統計數字只會出現在 Node-RED 面板/CSV），移植到這支診斷腳本後一併納入
+# infer_nearest_nose_region() 的「最近者勝出」命中仲裁與統計累計。LickConfig 本身
+# 沒有這個常數（尾巴區域是 ExtZoneConfig 姊妹 plugin 的概念），故對齊對象是
+# ExtZoneConfig 而非 LickConfig。不屬於「鼻子梯形／身體中心／四肢／腳尖」四類
+# 之一，獨立成一個小節，緊接在四肢之後。
+#
+# 刻意不設「胸部（NECK_CHEST，圓心＝KP_CHEST）」命中區域：KP_CHEST 天生緊貼
+# 鼻子/嘴巴附近（頭頸解剖上的必然結果），貓低頭理毛時梯形幾乎必然掃過胸口，
+# 不管實際舔的是哪個部位都會誤判成 NECK_CHEST——跟 ext_body_zones 的 HEAD
+# 區域「鼻子必然落在自己頭部圓圈內」同一種結構性偏誤，縮小半徑治標不治本，
+# 故不參與命中仲裁與統計（若日後想加回，先解決這個結構性問題）。
+TAIL_STRIP_HW_RATIO = 0.045  # 尾巴長條寬度 = 身體長度 × 此比例
 
+# ── 腳尖（圓形）接觸區域幾何參數 ──────────────────────────────────────
+LIMB_PAW_CIRCLE_R_RATIO = 0.05  # 腳尖圓圈半徑 = 身體長度 × 此比例（對齊 LickConfig.LIMB_PAW_CIRCLE_R_RATIO，數值刻意不同：主系統為 0.04）
 
-def _curvature_size_boost(mid_back_dist_pct):
-    """依 mid_back_dist_pct（脊椎彎曲指標）算出梯形尺寸縮放倍率。
-
-    在 [CURVATURE_PCT_MIN, CURVATURE_PCT_MAX] 之間線性內插到
-    [CURVATURE_BOOST_MIN, CURVATURE_BOOST_MAX]，超出範圍則夾在端點值，
-    不會無限放大/縮小。mid_back 信心不足（傳入 NaN）時回傳 1.0（不調整，
-    退回原本固定尺寸的行為）。
-    """
-    if not np.isfinite(mid_back_dist_pct):
-        return 1.0
-    span = CURVATURE_PCT_MAX - CURVATURE_PCT_MIN
-    if span <= 1e-9:
-        return 1.0
-    t = (mid_back_dist_pct - CURVATURE_PCT_MIN) / span
-    t = max(0.0, min(1.0, t))
-    return CURVATURE_BOOST_MIN + t * (CURVATURE_BOOST_MAX - CURVATURE_BOOST_MIN)
-
-
-# ===== 梯形方向跨幀穩定化參數（移植自 plugins/lick_stage/analyzer.py 與
-# plugins/lick_stage/config.py 的同款設計；此腳本刻意不 import 模組化程式碼，
-# 獨立重新實作一份，數值與主專案保持一致）=====
+# ── 鼻子接觸梯形方向向量穩定化（解決貓側躺/頭部縮短時梯形抖動亂轉）──
+# 移植自 plugins/lick_stage/analyzer.py 與 plugins/lick_stage/config.py 的同款設計；
+# 此腳本刻意不 import 模組化程式碼，獨立重新實作一份，數值與主專案保持一致。
 # trap_perp（耳線方向）對雜訊極敏感（耳間距短時尤其明顯），用「翻轉感知
 # EMA」+「連續反向才確認」跨幀穩定：新向量若與前一幀方向明顯相反，先翻轉
 # 再平均，只有連續多幀都反向（例如貓真的轉身）才接受為真正的方向改變。
-TRAP_PERP_EMA_ALPHA = 0.35  # trap_perp 的 EMA 係數（越小越穩定，但轉向反應越慢）
-TRAP_PERP_FLIP_MARGIN = 0.15  # 內積需低於 -此值才視為「真的反向」，避免邊界抖動誤觸發翻轉
-TRAP_PERP_FLIP_CONFIRM_FRAMES = 6  # 連續幾幀都判定為「反向」才接受為真正的方向改變
+TRAP_PERP_EMA_ALPHA = 0.35  # trap_perp 的 EMA 係數（越小越穩定，但轉向反應越慢。對齊 LickConfig.TRAP_PERP_EMA_ALPHA）
+TRAP_PERP_FLIP_MARGIN = 0.15  # 內積需低於 -此值才視為「真的反向」，避免邊界抖動誤觸發翻轉（對齊 LickConfig.TRAP_PERP_FLIP_MARGIN）
+TRAP_PERP_FLIP_CONFIRM_FRAMES = 6  # 連續幾幀都判定為「反向」才接受為真正的方向改變（對齊 LickConfig.TRAP_PERP_FLIP_CONFIRM_FRAMES）
 # 耳線（right_ear - left_ear）長度相對身體尺度過短時（貓面對鏡頭、耳朵
 # 距離很近或部分重疊），正規化會把像素級關鍵點雜訊放大成大角度擺動——實測
 # 發現光靠 EAR_CONF_THRESHOLD 信心門檻不夠，就算信心值夠高，耳距太短時
 # 方向依然會不穩定，需要額外的幾何長度門檻才能真正擋掉這類低品質候選值。
+# 主系統 contact_regions.py 目前尚未移植這道長度門檻（只看信心門檻），
+# 以下兩個常數為獨立腳本自訂，命名不用對齊主系統。
 TRAP_PERP_MIN_EAR_LINE_NORM_RATIO = 0.12  # 耳距 / eff_len 需 >= 此值才信任耳線方向
 # 是否啟用上面這道耳距長度門檻；關閉時 trap_perp 只看 EAR_CONF_THRESHOLD
 # 信心門檻（回到「兩耳信心都夠就直接信任耳線方向」的行為），方便對照測試
@@ -254,20 +287,15 @@ ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE = True
 # trap_dir（梯形延伸方向）只在第一次出現時強制指向影像下方一次（鼻子/短邊
 # 保證在上面），之後單純用翻轉感知 EMA 平滑追蹤，不再每幀重新驗證，避免在
 # 梯形接近水平時造成硬性翻轉抖動。
-TRAP_DIR_EMA_ALPHA = 0.12
-TRAP_DIR_FLIP_MARGIN = 0.15
+TRAP_DIR_EMA_ALPHA = 0.12  # 對齊 LickConfig.TRAP_DIR_EMA_ALPHA
+TRAP_DIR_FLIP_MARGIN = 0.15  # 對齊 LickConfig.TRAP_DIR_FLIP_MARGIN
 # 安全網：純 EMA 追蹤不會主動驗證 y>=0，若初始化那一刻剛好定出不符合直覺
 # 的方向，後續會一路穩定地錯下去。這裡連續多幀都偏離 y>=0（不是臨界抖動，
 # 是真的卡在錯誤方向）才強制翻轉拉回，平常的水平抖動只會讓計數器歸零。
-TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES = 10
-# 梯形與四肢區域的等效身體長度範圍，限縮遠近情境的尺寸差距：
-#   MIN：貓較遠（body_len 小）時的下限，防止區域過小漏判
-#   MAX：貓較近（body_len 大）時的上限，防止區域過大誤觸
-# 所有接觸區域尺寸皆以 clamp(body_len, MIN, MAX) 計算，不再線性隨距離無限放大/縮小。
-CONTACT_BODY_LEN_MIN_PX = 300.0
-CONTACT_BODY_LEN_MAX_PX = 650.0
+TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES = 10  # 對齊 LickConfig.TRAP_DIR_WRONG_SIDE_CONFIRM_FRAMES
 
-# ===== 體長滾動視窗穩定化（解決貓轉頭造成的透視縮短誤判成距離變遠）=====
+# ── 體長滾動視窗穩定化（解決貓轉頭造成的透視縮短誤判成距離變遠）──
+# 主系統 LickConfig 尚未移植此功能，以下三個常數為獨立腳本自訂，命名不用對齊主系統。
 # 貓面向/背向鏡頭時，chest-hip 的 2D 投影距離會透視縮短，即使貓跟鏡頭的
 # 實際距離沒變，導致梯形/四肢區域被誤判成「變遠了」而跟著縮小。透視縮短
 # 只會讓 body_len 變小、不會變大，且通常只是幾幀的暫時現象；真正的距離
@@ -289,44 +317,18 @@ BODY_LEN_STABLE_MIN_SAMPLES = 10
 # 開始、貓剛進畫面）直接退回用這一幀自己的 body_len，避免用太少樣本算出來
 # 的百分位數不可靠。
 
-# ===== 四肢接觸區域參數：全部可調、依身體尺度等比適配 =====
-LIMB_CONTACT_SCALE = 1.0
-LIMB_PAW_CIRCLE_RADIUS_RATIO = 0.05
-LIMB_STRIP_HALF_WIDTH_RATIO = 0.055
-# 長條端點與圓邊界的間隙（0=貼齊圓邊界；>0 可留細縫提升視覺分離感）
-LIMB_STRIP_EDGE_GAP_RATIO = 0.0
-
-# ===== 尾巴（TAIL）區域：與 FL/FR/HL/HR/BODY 同等地位 =====
-# 定義沿用主專案 plugins/lick_stage/ext_body_zones/config.py 的
-# TAIL_STRIP_HW_RATIO（該姊妹 plugin 本身「從不繪製任何 overlay」，統計數字
-# 只會出現在 Node-RED 面板/CSV），移植到這支診斷腳本後一併納入
-# infer_nearest_nose_region() 的「最近者勝出」命中仲裁與統計累計。
-#
-# 原本這裡還有一個「胸部（NECK_CHEST）」區域（圓心＝KP_CHEST），但實測發現
-# 結構性誤判：鼻子接觸梯形永遠從鼻尖出發，而 KP_CHEST 天生就緊貼鼻子/嘴巴
-# 附近（頭頸解剖上的必然結果），只要貓咪低頭理毛——不管實際舔的是哪個部位
-# ——梯形貼近鼻尖那一端幾乎必然掃過胸口，跟主專案 ext_body_zones 的 HEAD
-# 區域「鼻子必然落在自己頭部圓圈內」是同一種偏誤。縮小半徑治標不治本（誤判
-# 來源是「離梯形起點太近」，不是「範圍太大」），因此比照 HEAD 的既有處理
-# 方式，直接移除 NECK_CHEST 判定與 overlay，不參與命中仲裁與統計。
-TAIL_STRIP_HALF_WIDTH_RATIO = 0.045  # 尾巴長條寬度 = 身體長度 × 此比例
-
 # ===== 舔舐時間量測（依接觸區域累積秒數） =====
 # 說明：時間僅做「各部位舔舐時長」記錄，不作為舔舐成立判準。
 
+# LIMB_SEGMENTS: (群組標籤, 膝關節索引, 腳掌索引) — 對齊 LickConfig.LIMB_SEGMENTS 直接用短標籤
+# 的寫法（原本這裡是 "LIMB_FL" 等長標籤 + 另一份 LIMB_LABEL_MAP 轉短標籤，兩份底下用到的
+# 地方只會透過對照表轉成短標籤使用，沒有地方直接比對過長標籤字串，簡化成單一清單不影響行為）。
 LIMB_SEGMENTS = [
-    ("LIMB_FL", KP_FRONT_LEFT_KNEE, KP_FRONT_LEFT_PAW),
-    ("LIMB_FR", KP_FRONT_RIGHT_KNEE, KP_FRONT_RIGHT_PAW),
-    ("LIMB_HL", KP_HIND_LEFT_KNEE, KP_HIND_LEFT_PAW),
-    ("LIMB_HR", KP_HIND_RIGHT_KNEE, KP_HIND_RIGHT_PAW),
+    ("FL", KP_FL_KNEE, KP_FL_PAW),  # 前左肢  膝=6, 腳掌=7
+    ("FR", KP_FR_KNEE, KP_FR_PAW),  # 前右肢  膝=8, 腳掌=9
+    ("HL", KP_HL_KNEE, KP_HL_PAW),  # 後左肢  膝=10, 腳掌=11
+    ("HR", KP_HR_KNEE, KP_HR_PAW),  # 後右肢  膝=12, 腳掌=13
 ]
-
-LIMB_LABEL_MAP = {
-    "LIMB_FL": "FL",
-    "LIMB_FR": "FR",
-    "LIMB_HL": "HL",
-    "LIMB_HR": "HR",
-}
 
 # ===== 以鼻子落點推估命中區域 =====
 LICK_ZONE_NO_TARGET = "NO_TARGET"
@@ -351,7 +353,7 @@ _PAW_DEFAULT = ((180, 180, 180), (230, 230, 230), (90, 90, 90), (140, 140, 140))
 # 尾巴（TAIL）：與 FL/FR/HL/HR/BODY 同等地位的正式命中區域，一併參與
 # infer_nearest_nose_region() 的最近區域仲裁與統計累計
 # （entry_count/lick_time_sec/bout_count/bout_time_sec，見 ZONE_STAT_KEYS）。
-# NECK_CHEST 已因結構性誤判移除（見 TAIL_STRIP_HALF_WIDTH_RATIO 定義處說明）。
+# NECK_CHEST 已因結構性誤判移除（見 TAIL_STRIP_HW_RATIO 定義處說明）。
 # 配色比照 _PAW_COLORS 的 4 元組慣例：(命中填色, 命中邊框, 待命填色, 待命邊框)，
 # 色相刻意跟既有四肢/身體橢圓（綠/藍/橙/萊姆/洋紅/黃）都不同，避免視覺混淆。
 LICK_ZONE_TAIL = "TAIL"
@@ -559,7 +561,7 @@ def infer_face_state_cat_centric_metrics(target_geom, nose_ok):
 def infer_face_state_user_rules(head_ear_angle_deg, dist_norm, dist_px, nose_conf):
     """依使用者指定條件優先判定 FRONT/BACK。"""
     # BACK 優先：背向成立時鼻子信心通常偏低。
-    if BACK_VIEW_REQUIRE_LOW_NOSE_CONF and nose_conf <= BACK_CAMERA_NOSE_CONF_MAX:
+    if BACK_VIEW_REQUIRE_LOW_NOSE and nose_conf <= BACK_CAMERA_NOSE_CONF_MAX:
         if (not np.isfinite(dist_px)) or dist_px > BACK_CAMERA_DIST_MIN_PX:
             return STATE_BACK, True
 
@@ -567,7 +569,7 @@ def infer_face_state_user_rules(head_ear_angle_deg, dist_norm, dist_px, nose_con
         if head_ear_angle_deg > FRONT_CAMERA_ANGLE_MIN_DEG and dist_norm > FRONT_CAMERA_NORM_MIN:
             return STATE_FRONT, True
 
-    if (not BACK_VIEW_REQUIRE_LOW_NOSE_CONF) and nose_conf <= BACK_CAMERA_NOSE_CONF_MAX and np.isfinite(dist_px) and dist_px > BACK_CAMERA_DIST_MIN_PX:
+    if (not BACK_VIEW_REQUIRE_LOW_NOSE) and nose_conf <= BACK_CAMERA_NOSE_CONF_MAX and np.isfinite(dist_px) and dist_px > BACK_CAMERA_DIST_MIN_PX:
         return STATE_BACK, True
 
     return STATE_UNKNOWN, False
@@ -582,6 +584,46 @@ def smooth_state(state_hist):
     return state, votes / len(state_hist)
 
 
+def _compute_midback_angle_deg(chest, midback, hip):
+    """算 Chest-MidBack-Hip 夾角（度，MidBack 為頂點）。
+
+    跟 processors/skeleton_quality_assessment.py 的 compute_midback_angle()、
+    plugins/lick_stage/contact_regions.py 的 _compute_midback_angle_deg() 是
+    同一套幾何公式，這裡另外重新實作一份（不 import 其他模組），維持這支
+    獨立腳本不依賴主系統程式碼的既有慣例。呼叫端已經確認過三個關鍵點的
+    信心值，這裡不重複檢查，只在兩個向量長度太短（幾乎重疊）時回傳 NaN。
+    """
+    chest = np.asarray(chest, dtype=np.float64)
+    midback = np.asarray(midback, dtype=np.float64)
+    hip = np.asarray(hip, dtype=np.float64)
+    v1 = chest - midback
+    v2 = hip - midback
+    n1 = float(np.linalg.norm(v1))
+    n2 = float(np.linalg.norm(v2))
+    if n1 < 1e-6 or n2 < 1e-6:
+        return float("nan")
+    cos_angle = float(np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0))
+    return float(np.degrees(np.arccos(cos_angle)))
+
+
+def _curvature_size_boost(midback_angle_deg):
+    """依 midback_angle_deg（脊椎彎曲指標，度）算出梯形尺寸縮放倍率。
+
+    在 [CURVATURE_ANGLE_MIN_DEG, CURVATURE_ANGLE_MAX_DEG] 之間線性內插到
+    [CURVATURE_BOOST_MAX, CURVATURE_BOOST_MIN]（角度是遞減指標：角度越大
+    ／越直，倍率越小），超出範圍則夾在端點值，不會無限放大/縮小。mid_back
+    信心不足（傳入 NaN）時回傳 1.0（不調整，退回原本固定尺寸的行為）。
+    """
+    if not np.isfinite(midback_angle_deg):
+        return 1.0
+    span = CURVATURE_ANGLE_MAX_DEG - CURVATURE_ANGLE_MIN_DEG
+    if span <= 1e-9:
+        return 1.0
+    t = (CURVATURE_ANGLE_MAX_DEG - midback_angle_deg) / span
+    t = max(0.0, min(1.0, t))
+    return CURVATURE_BOOST_MIN + t * (CURVATURE_BOOST_MAX - CURVATURE_BOOST_MIN)
+
+
 def _point_in_oriented_ellipse(point, center, axis_u, axis_v, radius_u, radius_v):
     rel = point - center
     u = float(np.dot(rel, axis_u))
@@ -591,12 +633,12 @@ def _point_in_oriented_ellipse(point, center, axis_u, axis_v, radius_u, radius_v
     return (u * u) / ru2 + (v * v) / rv2 <= (1.0 + 1e-9)
 
 
-def _sample_ellipse_boundary(center, axis_u, axis_v, radius_u, radius_v, sample_count=ELLIPSE_SAMPLE_COUNT):
+def _sample_ellipse_boundary(center, axis_u, axis_v, radius_u, radius_v, sample_count=ELLIPSE_SAMPLES):
     center = np.asarray(center, dtype=np.float64)
     axis_u = np.asarray(axis_u, dtype=np.float64)
     axis_v = np.asarray(axis_v, dtype=np.float64)
 
-    if sample_count == ELLIPSE_SAMPLE_COUNT:
+    if sample_count == ELLIPSE_SAMPLES:
         cos_t = _ELLIPSE_COS
         sin_t = _ELLIPSE_SIN
     else:
@@ -996,11 +1038,10 @@ def compute_limb_joint_targets(kpts, kpt_conf, body_len):
 
     paw_radius = max(
         1e-6,
-        eff_len * LIMB_PAW_CIRCLE_RADIUS_RATIO * LIMB_CONTACT_SCALE,
+        eff_len * LIMB_PAW_CIRCLE_R_RATIO * LIMB_CONTACT_SCALE,
     )
     limb_targets = []
-    for label, _knee_idx, paw_idx in LIMB_SEGMENTS:
-        short_label = LIMB_LABEL_MAP.get(label, label)
+    for short_label, _knee_idx, paw_idx in LIMB_SEGMENTS:
         paw_ok = kpt_conf[paw_idx] > LIMB_CONF_THRESHOLD
 
         if paw_ok:
@@ -1026,19 +1067,18 @@ def compute_limb_strip_targets(kpts, kpt_conf, body_len):
 
     half_width = max(
         1e-6,
-        eff_len * LIMB_STRIP_HALF_WIDTH_RATIO * LIMB_CONTACT_SCALE,
+        eff_len * LIMB_STRIP_HW_RATIO * LIMB_CONTACT_SCALE,
     )
     edge_gap = max(
         0.0,
-        eff_len * LIMB_STRIP_EDGE_GAP_RATIO * LIMB_CONTACT_SCALE,
+        eff_len * LIMB_STRIP_EDGE_GAP * LIMB_CONTACT_SCALE,
     )
     paw_radius = max(
         1e-6,
-        eff_len * LIMB_PAW_CIRCLE_RADIUS_RATIO * LIMB_CONTACT_SCALE,
+        eff_len * LIMB_PAW_CIRCLE_R_RATIO * LIMB_CONTACT_SCALE,
     )
     strip_targets = []
-    for label, knee_idx, paw_idx in LIMB_SEGMENTS:
-        short_label = LIMB_LABEL_MAP.get(label, label)
+    for short_label, knee_idx, paw_idx in LIMB_SEGMENTS:
         knee_ok = kpt_conf[knee_idx] > LIMB_CONF_THRESHOLD
         paw_ok = kpt_conf[paw_idx] > LIMB_CONF_THRESHOLD
         if not (knee_ok and paw_ok):
@@ -1086,7 +1126,7 @@ def compute_limb_strip_targets(kpts, kpt_conf, body_len):
 
 def compute_tail_strip_targets(kpts, kpt_conf, body_len):
     """建立尾巴（Root→Mid→Tip）長條區域，純視覺參考用（見
-    TAIL_STRIP_HALF_WIDTH_RATIO 定義處說明：不參與鼻部命中仲裁/統計）。
+    TAIL_STRIP_HW_RATIO 定義處說明：不參與鼻部命中仲裁/統計）。
     三個尾巴關鍵點信心值皆需 > LIMB_CONF_THRESHOLD 才建立，否則回傳空列表。
     """
     if kpts is None or kpt_conf is None:
@@ -1100,7 +1140,7 @@ def compute_tail_strip_targets(kpts, kpt_conf, body_len):
         return []
 
     eff_len = max(CONTACT_BODY_LEN_MIN_PX, min(CONTACT_BODY_LEN_MAX_PX, body_len))
-    half_width = max(1e-6, eff_len * TAIL_STRIP_HALF_WIDTH_RATIO * LIMB_CONTACT_SCALE)
+    half_width = max(1e-6, eff_len * TAIL_STRIP_HW_RATIO * LIMB_CONTACT_SCALE)
 
     root = np.asarray(kpts[KP_TAIL_ROOT], dtype=np.float64)
     mid = np.asarray(kpts[KP_TAIL_MID], dtype=np.float64)
@@ -1259,8 +1299,8 @@ def compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=None):
     left_ok = kpt_conf[KP_LEFT_EAR] > EAR_CONF_THRESHOLD
     right_ok = kpt_conf[KP_RIGHT_EAR] > EAR_CONF_THRESHOLD
     nose_ok = kpt_conf[KP_NOSE] >= NOSE_CONF_THRESHOLD
-    chest_ok = kpt_conf[KP_CHEST] > EAR_CONF_THRESHOLD
-    hip_ok = kpt_conf[KP_HIP] > EAR_CONF_THRESHOLD
+    chest_ok = kpt_conf[KP_CHEST] > BODY_KP_CONF
+    hip_ok = kpt_conf[KP_HIP] > BODY_KP_CONF
     if not (nose_ok and chest_ok and hip_ok):
         return None
 
@@ -1296,33 +1336,31 @@ def compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=None):
 
     body_center = 0.5 * (chest + hip)
 
-    # mid_back 與 chest-hip 中點（body_center）的距離、正規化為 body_len 的
-    # 百分比，供畫面診斷面板顯示。mid_back 標記在貓咪背部正上方，不在
-    # chest-hip 連線上，這裡單純看兩點的直線距離，不做投影或垂直分解。
-    mid_back_ok = kpt_conf[KP_MID_BACK] > EAR_CONF_THRESHOLD
-    mid_back_dist_pct = float("nan")
+    # Chest-MidBack-Hip 夾角（度，MidBack 為頂點），供畫面診斷面板顯示與梯形
+    # 彎曲回補使用。公式對齊 processors/skeleton_quality_assessment.py 的
+    # compute_midback_angle()，見 _compute_midback_angle_deg() 說明。
+    mid_back_ok = kpt_conf[KP_MID_BACK] > BODY_KP_CONF
+    midback_angle_deg = float("nan")
     if mid_back_ok:
         mid_back = np.asarray(kpts[KP_MID_BACK], dtype=np.float64)
-        mid_back_dist_pct = 100.0 * math.hypot(
-            mid_back[0] - body_center[0], mid_back[1] - body_center[1]
-        ) / body_len
+        midback_angle_deg = _compute_midback_angle_deg(chest, mid_back, hip)
 
     # 梯形尺寸的彎曲回補倍率：見 CURVATURE_* 常數與 _curvature_size_boost()
     # 說明。只套用在梯形（nose_trap_height/trap_top_half/trap_bottom_half），
     # 不影響四肢區域與軀幹橢圓，因為那些的大小跟脊椎彎曲程度沒有直接關係。
-    curvature_boost = _curvature_size_boost(mid_back_dist_pct)
+    curvature_boost = _curvature_size_boost(midback_angle_deg)
 
     # size_ref_len：決定梯形/四肢區域/軀幹橢圓「大小」的體長參考。優先用
     # 呼叫端（main() 迴圈）傳入的 stable_body_len——最近 N 幀 body_len 的高
     # 百分位數，可以濾掉貓轉頭面向/背向鏡頭時透視縮短造成的暫時性縮小；
     # 樣本不足（例如影片剛開始、貓剛出現）時 fallback 用這一幀的原始 body_len。
-    # 注意：body_axis_unit/body_normal/mid_back_dist_pct 仍然用這一幀「原始」
+    # 注意：body_axis_unit/body_normal/midback_angle_deg 仍然用這一幀「原始」
     # body_len 不變，因為那些是描述「現在真實幾何」的量，不是尺寸大小的決策，
     # 不應該被過去幾幀的歷史值影響。
     size_ref_len = stable_body_len if stable_body_len is not None else body_len
 
-    region_rx = max(1e-6, 0.5 * BODY_REGION_ELLIPSE_WIDTH_RATIO * size_ref_len)
-    region_ry = max(1e-6, 0.5 * BODY_REGION_ELLIPSE_HEIGHT_RATIO * size_ref_len)
+    region_rx = max(1e-6, 0.5 * BODY_ELLIPSE_W_RATIO * size_ref_len)
+    region_ry = max(1e-6, 0.5 * BODY_ELLIPSE_H_RATIO * size_ref_len)
 
     ray_len = max(HEAD_RAY_MIN_PX, HEAD_RAY_LENGTH_RATIO * size_ref_len)
     ray_end = ear_center + head_dir * ray_len
@@ -1336,15 +1374,15 @@ def compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=None):
 
     nose_trap_height = max(
         1e-6,
-        NOSE_CONTACT_TRAPEZOID_HEIGHT_RATIO * NOSE_CONTACT_TRAPEZOID_HEIGHT_SCALE * curvature_boost * eff_len,
+        NOSE_TRAP_THICKNESS_RATIO * NOSE_TRAP_THICKNESS_SCALE * curvature_boost * eff_len,
     )
     trap_top_half = max(
         1e-6,
-        0.5 * NOSE_CONTACT_TRAPEZOID_TOP_WIDTH_RATIO * NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE * curvature_boost * eff_len,
+        0.5 * NOSE_TRAP_TOP_W_RATIO * NOSE_TRAP_W_SCALE * curvature_boost * eff_len,
     )
     trap_bottom_half = max(
         1e-6,
-        0.5 * NOSE_CONTACT_TRAPEZOID_BOTTOM_WIDTH_RATIO * NOSE_CONTACT_TRAPEZOID_WIDTH_SCALE * curvature_boost * eff_len,
+        0.5 * NOSE_TRAP_BOT_W_RATIO * NOSE_TRAP_W_SCALE * curvature_boost * eff_len,
     )
 
     # 梯形橫軸（trap_perp）方向是否信任耳線，需同時滿足兩個條件：
@@ -1436,7 +1474,7 @@ def compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=None):
         "ear_line_length_pct": ear_line_length_pct,
         "used_ear_line_for_trap_perp": use_ear_line,
         # mid_back 到 chest-hip 中點的距離 / body_len（NaN＝mid_back 信心不足）
-        "mid_back_dist_pct": mid_back_dist_pct,
+        "midback_angle_deg": midback_angle_deg,
         # 套用在梯形尺寸上的彎曲回補倍率（1.0＝未調整，mid_back 信心不足時恒為 1.0）
         "curvature_boost": curvature_boost,
     }
@@ -1776,7 +1814,7 @@ def main():
     for i, vp in enumerate(video_paths, start=1):
         print(f"  [{i}] {vp}")
     print(f"輸出 CSV: {OUTPUT_CSV_PATH}")
-    print("控制: q=離開, space=暫停/播放, i=資訊顯示, m=切換顯示模式(僅骨架/完整), +=放大, -=縮小, 2=下一部, 1=上一部, r=重置本片")
+    print("控制: q=離開, space=暫停/播放, a/d=暫停時逐幀後退/前進, i=資訊顯示, m=切換顯示模式(僅骨架/完整), +=放大, -=縮小, 2=下一部, 1=上一部, r=重置本片")
 
     try:
         detector = KeypointDetector(
@@ -1797,6 +1835,12 @@ def main():
     summary_rows = []
     show_overlay_info = True
     is_paused = False
+    # 暫停時 a/d 逐幀跳轉用：frame_step_request 記錄下一輪要不要先 seek（-1=後退一幀、
+    # 1=前進一幀，前進不需要 seek，讓迴圈自然往下讀一幀即可）；auto_pause_next_frame
+    # 記錄「這一幀是 a/d 跳轉出來的」，處理完該幀後要自動重新進入暫停狀態，
+    # 不必等使用者再按一次 space（否則會直接接著播放下去，變成不像是「逐幀」）。
+    frame_step_request = 0
+    auto_pause_next_frame = False
     window_scale = 1.0
     current_video_idx = 0
     stop_all = False
@@ -1899,6 +1943,7 @@ def main():
 
     def _handle_key(key, cap_obj, in_pause_loop=False):
         nonlocal show_overlay_info, window_scale, switch_delta, stop_all, is_paused, ui_mode
+        nonlocal frame_step_request, auto_pause_next_frame
         global ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE
 
         if key == ord("q") or key == 3:  # 3 = Ctrl+C 被 OpenCV 視窗攔截
@@ -1940,6 +1985,21 @@ def main():
             return "break"
         if key == ord("r"):
             _reset_video_state(cap_obj=cap_obj, seek_start=True)
+            return "handled"
+        if key == ord("d") and in_pause_loop:
+            # 前進一幀：不用 seek，讓外層迴圈自然往下讀下一個 model input 幀即可；
+            # auto_pause_next_frame 讓那一幀處理完後自動重新暫停，維持「逐幀」的感覺。
+            is_paused = False
+            frame_step_request = 1
+            auto_pause_next_frame = True
+            return "handled"
+        if key == ord("a") and in_pause_loop:
+            # 後退一幀：目前 raw_frame_idx 是「下一次自然讀取」的位置，要回到「目前
+            # 顯示這幀的前一個 model input 幀」需要往回 seek 2 個 frame_step
+            # （frame_step 個對應目前這幀本身，再一個 frame_step 對應上一幀）。
+            is_paused = False
+            frame_step_request = -1
+            auto_pause_next_frame = True
             return "handled"
         if key == ord(" ") and not in_pause_loop:
             is_paused = True
@@ -2038,6 +2098,15 @@ def main():
         _reset_video_state()
 
         while True:
+            if frame_step_request != 0:
+                # a/d 逐幀跳轉：前進（1）不用 seek，讓下面照常往下讀一幀；
+                # 後退（-1）先 seek 回目前這幀的前一個 model input 幀的位置。
+                if frame_step_request < 0:
+                    _seek_target = max(0, raw_frame_idx - 2 * frame_step)
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, _seek_target)
+                    raw_frame_idx = _seek_target
+                frame_step_request = 0
+
             # 跳幀優化：grab() 只移動讀取位置不解碼，比 read() 快數倍
             if frame_step > 1 and (raw_frame_idx % frame_step != 0):
                 if cap.grab():
@@ -2148,9 +2217,9 @@ def main():
                             cv2.LINE_AA,
                         )
 
-                # 正規化有效條件：胸與臀都高於 EAR_CONF_THRESHOLD 才計算 body scale
-                chest_ok = kpt_conf[KP_CHEST] > EAR_CONF_THRESHOLD
-                hip_ok = kpt_conf[KP_HIP] > EAR_CONF_THRESHOLD
+                # 正規化有效條件：胸與臀都高於 BODY_KP_CONF 才計算 body scale
+                chest_ok = kpt_conf[KP_CHEST] > BODY_KP_CONF
+                hip_ok = kpt_conf[KP_HIP] > BODY_KP_CONF
                 if chest_ok and hip_ok:
                     body_scale = math.hypot(
                         kpts[KP_CHEST][0] - kpts[KP_HIP][0],
@@ -2216,7 +2285,7 @@ def main():
 
             if kpts is not None and kpt_conf is not None:
                 if front_view_guard:
-                    if BACK_VIEW_REQUIRE_LOW_NOSE_CONF and nose_conf <= BACK_CAMERA_NOSE_CONF_MAX:
+                    if BACK_VIEW_REQUIRE_LOW_NOSE and nose_conf <= BACK_CAMERA_NOSE_CONF_MAX:
                         state_now = STATE_BACK
                         face_state_cat = STATE_BACK
                     else:
@@ -2237,7 +2306,7 @@ def main():
                     )
                     if state_now == STATE_UNKNOWN:
                         # 低鼻信心規則啟用時，避免以高鼻信心的 cat-centric 結果落入 BACK。
-                        if BACK_VIEW_REQUIRE_LOW_NOSE_CONF and face_state_cat == STATE_BACK and nose_conf > BACK_CAMERA_NOSE_CONF_MAX:
+                        if BACK_VIEW_REQUIRE_LOW_NOSE and face_state_cat == STATE_BACK and nose_conf > BACK_CAMERA_NOSE_CONF_MAX:
                             state_now = STATE_UNKNOWN
                         else:
                             state_now = face_state_cat
@@ -2361,10 +2430,10 @@ def main():
                     )
                     ear_line_color = (120, 255, 120) if _used_ear else (255, 180, 120)
 
-                # mid_back 到 chest-hip 中點的距離 / body_len，純顯示用，
-                # 不影響任何判定邏輯。改成直接標在畫面上 mid_back 關鍵點旁邊
-                # （見下方 draw_ui 區塊），不再放進文字面板。
-                _mb_pct = target_geom.get("mid_back_dist_pct", float("nan"))
+                # Chest-MidBack-Hip 夾角，純顯示用，不影響任何判定邏輯（判定
+                # 邏輯只用它算出的 curvature_boost）。改成直接標在畫面上
+                # mid_back 關鍵點旁邊（見下方 draw_ui 區塊），不再放進文字面板。
+                _mb_angle = target_geom.get("midback_angle_deg", float("nan"))
 
                 # 梯形彎曲回補倍率：1.0 = 未調整（mid_back 信心不足時恒為 1.0）
                 _cboost = target_geom.get("curvature_boost", 1.0)
@@ -2415,13 +2484,13 @@ def main():
                     cv2.circle(display, body_pt, max(3, int(4 * _ov)), (255, 255, 255), -1, cv2.LINE_AA)
                     cv2.circle(display, body_pt, max(2, int(2 * _ov)), (0, 180, 255), -1, cv2.LINE_AA)
 
-                    # mid_back 偏離百分比：直接標在該關鍵點旁邊（取代原本文字
+                    # Chest-MidBack-Hip 夾角：直接標在該關鍵點旁邊（取代原本文字
                     # 面板的 MID_BACK 那一行），信心不足或算不出來時不畫。
-                    if kpt_conf[KP_MID_BACK] > EAR_CONF_THRESHOLD and np.isfinite(_mb_pct):
+                    if kpt_conf[KP_MID_BACK] > BODY_KP_CONF and np.isfinite(_mb_angle):
                         mb_kpt = kpts[KP_MID_BACK]
                         mb_x = int(mb_kpt[0] * sx + 10 * _ov)
                         mb_y = int(mb_kpt[1] * sy - 14 * _ov)
-                        mb_text = f"{_mb_pct:.1f}%"
+                        mb_text = f"{_mb_angle:.1f}deg"
                         mb_fs = 0.65 * _ov
                         # 黑色描邊不受 heavy_fx 開關限制、一律都畫，確保在任何背景
                         # 顏色下都看得清楚（之前只在 heavy_fx 開啟時才畫描邊，預設
@@ -2802,8 +2871,15 @@ def main():
 
             if DISPLAY_WINDOW and STREAM_MODE == 1:
                 cv2.imshow(WINDOW_NAME, display)
-                key = cv2.waitKey(1) & 0xFF
-                action = _handle_key(key, cap_obj=cap, in_pause_loop=False)
+                if auto_pause_next_frame:
+                    # 這一幀是暫停時按 a/d 跳轉出來的：跳過正常等待按鍵，
+                    # 直接強制重新進入暫停狀態，維持「一次只走一幀」的效果。
+                    auto_pause_next_frame = False
+                    is_paused = True
+                    action = "enter_pause"
+                else:
+                    key = cv2.waitKey(1) & 0xFF
+                    action = _handle_key(key, cap_obj=cap, in_pause_loop=False)
                 if action == "break":
                     break
                 if action == "enter_pause":
@@ -2816,7 +2892,7 @@ def main():
                         pause_img = source.copy()
                         cv2.putText(
                             pause_img,
-                            "PAUSED (Space:Play)",
+                            "PAUSED (Space:Play, A/D:Frame)",
                             (int(12 * _ov), int(render_h - 18 * _ov)),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.55 * _ov,

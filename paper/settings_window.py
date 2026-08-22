@@ -1,6 +1,6 @@
 """貓咪監測系統 — 獨立設定管理視窗（tkinter GUI）。
 
-管的是 runtime_settings.json（執行期 JSON 覆寫層），不是 config.py 原始碼，也
+管的是 runtime_settings.current.json（執行期 JSON 覆寫層），不是 config.py 原始碼，也
 不是 stgcn_config.yaml——本視窗完全不會寫入這兩者。欄位、驗證規則、環境變數
 名稱、對應的 config.py class attribute，全部來自 ``settings_manager.FIELD_SCHEMA``
 （單一事實來源）；新增一個可調整欄位只需要在該檔案的 FIELD_SCHEMA 加一筆，並在
@@ -187,7 +187,17 @@ class _ScrollableTab(tk.Frame):
         self.body.bind(
             "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        canvas.create_window((0, 0), window=self.body, anchor="nw")
+        _body_window = canvas.create_window((0, 0), window=self.body, anchor="nw")
+        # 把 body 的寬度綁定到 Canvas 目前的可見寬度：沒有這行，body 的寬度完全由
+        # 「目前顯示內容裡最寬的那一行」決定——像影像來源欄位切換「本機檔案」／
+        # 「攝影機索引」／「URL」三種模式時，各模式底下的控制項自然寬度不一樣，
+        # 會讓整個分頁內容的寬度跟著切換模式忽寬忽窄，使用者看到的就是輸入框、
+        # 按鈕的位置跟著跳動。改成每次 Canvas 尺寸變動（含初次繪製、視窗縮放）
+        # 都同步把 body 這個 window item 的寬度釘死成 Canvas 當下的寬度，內容寬度
+        # 就不會再反過來牽動外層版面。
+        canvas.bind(
+            "<Configure>", lambda e: canvas.itemconfig(_body_window, width=e.width)
+        )
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -232,7 +242,7 @@ class SettingsWindow(tk.Tk):
         }
         # self._main_process 是「目前這個視窗啟動的外部行程」共用欄位——main.py 跟下面
         # 新增的「獨立腳本工具」共用同一個欄位、同一套啟動/關閉/終端機輸出機制，因為
-        # 同一時間本來就只允許跑一個（避免兩支行程搶同一份 runtime_settings.json／模型
+        # 同一時間本來就只允許跑一個（避免兩支行程搶同一份 runtime_settings.current.json／模型
         # 顯存，也让終端機輸出不會兩邊來源混在一起分不清楚）。_active_process_label／
         # _active_kind 記錄「目前（或最後一次）跑的是什麼」，供狀態列文字與按鈕互斥判斷用。
         self._main_process = None  # None＝本視窗目前未啟動任何行程
@@ -310,7 +320,7 @@ class SettingsWindow(tk.Tk):
 
         tk.Label(
             header,
-            text="管理 runtime_settings.json（執行期覆寫）；不會修改 config.py 原始碼，"
+            text="管理 runtime_settings.current.json（執行期覆寫）；不會修改 config.py 原始碼，"
             "也不會碰 ST-GCN 訓練設定（stgcn_config.yaml）",
             bg=COLOR_HEADER_BG, fg=COLOR_HEADER_SUB_FG, font=self._font_subtitle, anchor="w",
         ).pack(fill="x", padx=18, pady=(2, 14))
@@ -568,7 +578,15 @@ class SettingsWindow(tk.Tk):
         tools_dir = _SCRIPT_DIR / "cat_monitoring_system" / "tools"
         if not tools_dir.exists():
             return {}
-        paths = sorted(p for p in tools_dir.rglob("*.py") if "__pycache__" not in p.parts)
+        # 排除底線開頭的檔名（例如 _smoothing_eval_common.py）——這是 Python 慣例的
+        # 「內部共用模組」命名，只被其他腳本 import，本身沒有 if __name__ == "__main__"
+        # 可執行區塊，選了直接執行只會靜靜跑完 import、什麼事都沒發生，對使用者來說
+        # 像是壞掉了；docs/獨立運行腳本索引.md 也不會有這種模組的條目（本來就不是
+        # 獨立腳本），列進下拉選單只會製造一個沒有說明、點了也沒反應的選項。
+        paths = sorted(
+            p for p in tools_dir.rglob("*.py")
+            if "__pycache__" not in p.parts and not p.name.startswith("_")
+        )
         names = [str(p.relative_to(tools_dir)).replace("\\", "/") for p in paths]
         widths = [_display_width(n) for n in names]
         pad_width = max(widths, default=0) + 4
@@ -658,7 +676,7 @@ class SettingsWindow(tk.Tk):
             return
         if not messagebox.askyesno(
             "啟動 main.py",
-            "即將啟動 main.py，套用目前 runtime_settings.json／環境變數的設定內容。\n\n"
+            "即將啟動 main.py，套用目前 runtime_settings.current.json／環境變數的設定內容。\n\n"
             "若您在下方設定表單中有修改但尚未按「儲存設定」，這些修改不會套用到這次啟動。\n\n"
             "是否繼續？",
         ):
@@ -951,11 +969,11 @@ class SettingsWindow(tk.Tk):
             mtime = settings_manager.get_last_modified()
             mtime_str = mtime.strftime("%Y-%m-%d %H:%M:%S") if mtime else "未知"
             self._mtime_var.set(f"🕒 最後修改：{mtime_str}")
-            self._info_var.set(f"📄 runtime_settings.json：{path}")
+            self._info_var.set(f"📄 runtime_settings.current.json：{path}")
         else:
             self._mtime_var.set("🕒 最後修改：（尚未建立設定檔）")
             self._info_var.set(
-                f"📄 runtime_settings.json：{path}（尚未建立）\n"
+                f"📄 runtime_settings.current.json：{path}（尚未建立）\n"
                 "⚠ 目前僅使用環境變數／config.py 內建預設值；按「儲存設定」後才會建立此檔案。"
             )
 
@@ -1799,7 +1817,7 @@ class SettingsWindow(tk.Tk):
             badge_widget.config(bg=BADGE_ENV_BG, fg=BADGE_ENV_FG)
             info["env_note_var"].set(
                 f"⚠ 此欄位目前受環境變數 {field['env_var']} 控制；儲存 JSON 不會立即生效，"
-                "需先取消該環境變數才會改用 runtime_settings.json 的值。"
+                "需先取消該環境變數才會改用 runtime_settings.current.json 的值。"
             )
         elif source == "json":
             badge_var.set("[JSON]")
@@ -1836,7 +1854,7 @@ class SettingsWindow(tk.Tk):
         settings_manager.reload_runtime_settings()
         self._populate_from_effective_state()
         self._refresh_top_info()
-        messagebox.showinfo("載入目前設定", "已重新讀取環境變數／runtime_settings.json／內建預設值。")
+        messagebox.showinfo("載入目前設定", "已重新讀取環境變數／runtime_settings.current.json／內建預設值。")
 
     def _on_save(self):
         data, errors = self._collect_form_data()
@@ -1858,7 +1876,7 @@ class SettingsWindow(tk.Tk):
         if not messagebox.askyesno(
             "還原 GUI 預設值",
             "將表單所有可管理欄位還原為內建預設值（不含 ST-GCN 訓練設定，本來就不在此設定視窗管理），"
-            "是否繼續？\n\n此動作僅套用到表單，仍需按「儲存設定」才會寫入 runtime_settings.json。",
+            "是否繼續？\n\n此動作僅套用到表單，仍需按「儲存設定」才會寫入 runtime_settings.current.json。",
         ):
             return
         defaults = settings_manager.restore_defaults()
@@ -1903,7 +1921,7 @@ class SettingsWindow(tk.Tk):
             return
         if self._show_diff_dialog(changes):
             self._populate_form(data, source_label="form")
-            messagebox.showinfo("匯入設定", "已套用到表單，請按「儲存設定」以正式寫入 runtime_settings.json。")
+            messagebox.showinfo("匯入設定", "已套用到表單，請按「儲存設定」以正式寫入 runtime_settings.current.json。")
 
     def _show_diff_dialog(self, changes) -> bool:
         dialog = tk.Toplevel(self)

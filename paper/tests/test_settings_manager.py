@@ -1,6 +1,6 @@
 """settings_manager.py 的單元測試。
 
-策略同 test_config_unit.py：不動專案根目錄真正的 runtime_settings.json，
+策略同 test_config_unit.py：不動專案根目錄真正的 runtime_settings.current.json，
 用 monkeypatch 把 settings_manager 的模組層路徑常數（RUNTIME_SETTINGS_PATH/
 BACKUP_SETTINGS_PATH）指到 tmp_path，並在每個測試前重設模組層快取
 （_cache/_cache_load_error），確保測試之間互不干擾、也不干擾其他測試檔案
@@ -21,8 +21,8 @@ import settings_manager as sm
 @pytest.fixture(autouse=True)
 def _reset_cache_and_redirect(tmp_path, monkeypatch):
     """每個測試都指到獨立的 tmp_path 檔案，並重設模組層快取。"""
-    monkeypatch.setattr(sm, "RUNTIME_SETTINGS_PATH", tmp_path / "runtime_settings.json")
-    monkeypatch.setattr(sm, "BACKUP_SETTINGS_PATH", tmp_path / "runtime_settings.backup.json")
+    monkeypatch.setattr(sm, "RUNTIME_SETTINGS_PATH", tmp_path / "runtime_settings.current.json")
+    monkeypatch.setattr(sm, "BACKUP_SETTINGS_PATH", tmp_path / "runtime_settings.previous.json")
     monkeypatch.setattr(sm, "_cache", None)
     monkeypatch.setattr(sm, "_cache_load_error", None)
     yield
@@ -377,7 +377,7 @@ class TestDiffSettings:
 
 
 class TestDefaultRuntimeSettingsConsistency:
-    """在乾淨環境（無 CAT_MONITORING_* 環境變數、runtime_settings.json 暫時搬開）
+    """在乾淨環境（無 CAT_MONITORING_* 環境變數、runtime_settings.current.json 暫時搬開）
     的子行程重新 import config，逐一比對 FIELD_SCHEMA 每筆 attr 的值是否等於
     default_runtime_settings.json 對應欄位——防止兩邊日後各自被改動而漂移。
 
@@ -389,9 +389,9 @@ class TestDefaultRuntimeSettingsConsistency:
 
     def test_config_defaults_match_default_runtime_settings_json(self, tmp_path):
         paper_dir = Path(__file__).resolve().parents[1]
-        real_runtime_settings = paper_dir / "runtime_settings.json"
-        real_backup = paper_dir / "runtime_settings.backup.json"
-        moved_aside = tmp_path / "runtime_settings.json.moved_for_test"
+        real_runtime_settings = paper_dir / "runtime_settings.current.json"
+        real_backup = paper_dir / "runtime_settings.previous.json"
+        moved_aside = tmp_path / "runtime_settings.current.json.moved_for_test"
 
         had_real_file = real_runtime_settings.exists()
         if had_real_file:

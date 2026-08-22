@@ -1,8 +1,8 @@
-"""執行期設定（runtime_settings.json）的載入／驗證／合併／原子儲存。
+"""執行期設定（runtime_settings.current.json）的載入／驗證／合併／原子儲存。
 
 **跟 config.py 的關係**：config.py 的每個可納管欄位在計算「硬編碼預設值」時，
 會多包一層 `_runtime_default()`（定義在 config.py，內部呼叫這裡的
-`get_runtime_value()`），讓優先順序變成「環境變數 > runtime_settings.json >
+`get_runtime_value()`），讓優先順序變成「環境變數 > runtime_settings.current.json >
 config.py 內建預設值」。這裡完全不 import config.py（避免循環依賴），也不重複
 抄錄任何硬編碼預設值——GUI 要顯示「目前生效值」時，直接 `getattr` config.py
 的 class attribute 現讀，不由這裡代管一份可能過期的複本。
@@ -28,16 +28,16 @@ import tempfile
 from pathlib import Path
 
 _PAPER_DIR = Path(__file__).resolve().parent
-RUNTIME_SETTINGS_PATH = _PAPER_DIR / "runtime_settings.json"
+RUNTIME_SETTINGS_PATH = _PAPER_DIR / "runtime_settings.current.json"
 DEFAULT_RUNTIME_SETTINGS_PATH = _PAPER_DIR / "default_runtime_settings.json"
-BACKUP_SETTINGS_PATH = _PAPER_DIR / "runtime_settings.backup.json"
+BACKUP_SETTINGS_PATH = _PAPER_DIR / "runtime_settings.previous.json"
 
 
 # ============================================================================
 # FIELD_SCHEMA：唯一的欄位對照表
 # ============================================================================
 # 每筆 dict 欄位：
-#   json_key   dotted key，對應 runtime_settings.json 巢狀路徑
+#   json_key   dotted key，對應 runtime_settings.current.json 巢狀路徑
 #   env_var    config.py 用來覆寫這個欄位的環境變數名稱
 #   attr       (class 名稱, attribute 名稱)，GUI 用 getattr(config.<class>, <attr>) 現讀生效值
 #   tab        GUI 分頁名稱
@@ -407,9 +407,9 @@ FIELD_SCHEMA = [
 ]
 
 TAB_ORDER = [
-    "模型與輸入來源", "YOLO 推論", "ST-GCN 推論", "異常偵測與骨架品質",
-    "執行模式與排程", "Flask 與 Node-RED", "行為追蹤與警報門檻",
-    "貓咪身份驗證", "日誌、CSV、資料庫與輸出路徑", "視覺化與串流顯示", "進階設定",
+    "模型與輸入來源", "YOLO 推論", "ST-GCN 推論",
+    "執行模式與排程", "Flask 與 Node-RED", "視覺化與串流顯示", "異常偵測與骨架品質",
+    "行為追蹤與警報門檻", "貓咪身份驗證", "日誌、CSV、資料庫與輸出路徑", "進階設定",
 ]
 
 # 敏感字串遮蔽：scheme://user:pass@host 型態的憑證，任何要印出來的訊息都先過這裡。
@@ -471,7 +471,7 @@ def _load_json_file(path: Path) -> tuple[dict, str | None]:
 
 
 def load_runtime_settings(force_reload: bool = False) -> dict:
-    """載入 runtime_settings.json，模組層快取。損壞/不存在都安全回傳 {}，絕不 raise。"""
+    """載入 runtime_settings.current.json，模組層快取。損壞/不存在都安全回傳 {}，絕不 raise。"""
     global _cache, _cache_load_error
     if _cache is not None and not force_reload:
         return _cache
@@ -479,7 +479,7 @@ def load_runtime_settings(force_reload: bool = False) -> dict:
     _cache = data
     _cache_load_error = error
     if error:
-        print(f"⚠ runtime_settings.json 讀取失敗，回退到環境變數／內建預設值：{error}")
+        print(f"⚠ runtime_settings.current.json 讀取失敗，回退到環境變數／內建預設值：{error}")
     return _cache
 
 
@@ -502,7 +502,7 @@ def get_runtime_settings_path() -> str:
 
 
 def get_last_modified():
-    """回傳 runtime_settings.json 最後修改時間（datetime），檔案不存在回傳 None。"""
+    """回傳 runtime_settings.current.json 最後修改時間（datetime），檔案不存在回傳 None。"""
     if not RUNTIME_SETTINGS_PATH.exists():
         return None
     import datetime
@@ -516,7 +516,7 @@ def get_last_modified():
 
 
 def get_runtime_value(json_key: str, fallback, value_type=None):
-    """回傳 runtime_settings.json 中 dotted key 對應的值；沒有該欄位或型別不符時回退 fallback。
+    """回傳 runtime_settings.current.json 中 dotted key 對應的值；沒有該欄位或型別不符時回退 fallback。
 
     型別檢查刻意寬鬆處理 int/float 混淆（JSON 數字寫成 5.0 這種情況），其餘型別
     不符就直接印警告、安全回退——這裡讀到的壞值最終會變成 config.py 的
@@ -549,7 +549,7 @@ def get_runtime_value(json_key: str, fallback, value_type=None):
     else:
         return value
     print(
-        f"⚠ runtime_settings.json 欄位 {json_key!r} 型別不符（預期 {value_type.__name__}，"
+        f"⚠ runtime_settings.current.json 欄位 {json_key!r} 型別不符（預期 {value_type.__name__}，"
         f"實際 {type(value).__name__}），回退內建預設值"
     )
     return fallback
@@ -569,7 +569,7 @@ def get_runtime_size(json_key: str, fallback):
         and value["height"] > 0
     ):
         return (value["width"], value["height"])
-    print(f"⚠ runtime_settings.json 欄位 {json_key!r} 格式不符，回退內建預設值")
+    print(f"⚠ runtime_settings.current.json 欄位 {json_key!r} 格式不符，回退內建預設值")
     return fallback
 
 
@@ -826,9 +826,9 @@ def validate_settings(nested_data: dict) -> tuple[bool, list, list]:
 
 
 def save_runtime_settings(nested_data: dict) -> tuple[bool, list, list]:
-    """驗證後原子寫入 runtime_settings.json；驗證失敗完全不動檔案。
+    """驗證後原子寫入 runtime_settings.current.json；驗證失敗完全不動檔案。
 
-    儲存前若已有舊檔，先複製一份到 runtime_settings.backup.json；寫入走
+    儲存前若已有舊檔，先複製一份到 runtime_settings.previous.json；寫入走
     「同目錄暫存檔 + os.replace()」，避免程式中斷留下損壞的 JSON。
     """
     ok, errors, warnings = validate_settings(nested_data)
@@ -859,7 +859,7 @@ def save_runtime_settings(nested_data: dict) -> tuple[bool, list, list]:
 
 
 def export_settings(nested_data: dict, target_path) -> tuple[bool, list, list]:
-    """驗證後另存一份 JSON 到任意路徑（匯出，不影響 runtime_settings.json）。"""
+    """驗證後另存一份 JSON 到任意路徑（匯出，不影響 runtime_settings.current.json）。"""
     ok, errors, warnings = validate_settings(nested_data)
     if not ok:
         return (False, errors, warnings)
@@ -888,7 +888,7 @@ def import_settings(source_path) -> tuple[bool, dict, list, list]:
 
 
 def restore_defaults() -> dict:
-    """讀取 default_runtime_settings.json，回傳 dict 供 GUI 填表用；不寫入 runtime_settings.json。"""
+    """讀取 default_runtime_settings.json，回傳 dict 供 GUI 填表用；不寫入 runtime_settings.current.json。"""
     data, error = _load_json_file(DEFAULT_RUNTIME_SETTINGS_PATH)
     if error:
         print(f"⚠ default_runtime_settings.json 讀取失敗：{error}")
@@ -915,12 +915,12 @@ def diff_settings(old: dict, new: dict) -> list:
 
 
 def _compute_pure_hardcoded_defaults() -> dict:
-    """取得完全不受環境變數／runtime_settings.json 影響的「純硬編碼預設值」。
+    """取得完全不受環境變數／runtime_settings.current.json 影響的「純硬編碼預設值」。
 
-    做法：把 runtime_settings.json 暫時搬開、環境變數清成不含任何
+    做法：把 runtime_settings.current.json 暫時搬開、環境變數清成不含任何
     CAT_MONITORING_* 的乾淨副本，在子行程重新 import config，讀出
     FIELD_SCHEMA 每個 attr 當下的值——這時候 _runtime_default() 內部查
-    runtime_settings.json 一定撲空、環境變數也一定沒設，回傳的就是 config.py
+    runtime_settings.current.json 一定撲空、環境變數也一定沒設，回傳的就是 config.py
     寫死的那個字面值本身。跟 test_settings_manager.py 的一致性測試用同一招，
     刻意不用 importlib.reload(config)：同一行程內 reload 會產生新的 class
     物件，其他早就 import 過 config 的模組（這裡是 settings_manager 自己）
@@ -983,7 +983,7 @@ def regenerate_default_runtime_settings() -> tuple[bool, list]:
     區塊會呼叫這裡，`python config.py` 就會順便把這份範本檔同步好。
 
     注意：**只動 default_runtime_settings.json（範本／還原用），不動
-    runtime_settings.json（使用者目前實際套用中的執行期設定）**——後者可能
+    runtime_settings.current.json（使用者目前實際套用中的執行期設定）**——後者可能
     存著使用者刻意透過 GUI 存下來的值，即使剛好跟舊的硬編碼預設值長得一樣，
     也不該被這支函式悄悄覆蓋掉。
     """

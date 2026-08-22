@@ -90,7 +90,7 @@ DEFAULT_FOLDER_KEY = 'z'
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾
 # 'all'    : 合併所有五個行為資料夾（可用 z/x/c/v/b 切換）
 FOLDER_TEST_MODE = 'single'   # 'single' / 'all' / 'z' / 'x' / 'c' / 'v' / 'b'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\Downloads\幻覺貓"
+SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\白貓舔舐測試"
 VIDEO_PATHS = []   # 手動指定影片清單則優先使用（忽略 FOLDER_TEST_MODE）
 
 TARGET_MODEL_FPS = 30.0

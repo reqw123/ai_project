@@ -22,6 +22,7 @@ pytest.importorskip(
 
 from plugins.lick_stage.contact_regions import (
     _aabb_overlap,
+    _compute_midback_angle_deg,
     _curvature_size_boost,
     _distance_point_to_segment,
     _point_in_oriented_ellipse,
@@ -76,25 +77,50 @@ class TestTrapDirFromPerp:
 
 
 # ============================================================================
+# _compute_midback_angle_deg()
+# ============================================================================
+
+
+class TestComputeMidbackAngleDeg:
+    def test_right_angle(self):
+        # chest=(1,0), midback=(0,0), hip=(0,1) → v1=(1,0), v2=(0,1) → 90 度
+        assert _compute_midback_angle_deg((1, 0), (0, 0), (0, 1)) == pytest.approx(90.0)
+
+    def test_collinear_gives_180(self):
+        # chest/hip 在 midback 兩側同一直線上 → 180 度（接近共線）
+        assert _compute_midback_angle_deg((-1, 0), (0, 0), (1, 0)) == pytest.approx(180.0)
+
+    def test_same_side_gives_0(self):
+        # chest/hip 在 midback 同一側同一直線上 → 0 度（夾角過尖的極端）
+        assert _compute_midback_angle_deg((1, 0), (0, 0), (2, 0)) == pytest.approx(0.0)
+
+    def test_degenerate_vector_returns_nan(self):
+        # chest 與 midback 重合，v1 長度為 0，無法定義夾角
+        assert np.isnan(_compute_midback_angle_deg((0, 0), (0, 0), (0, 1)))
+
+
+# ============================================================================
 # _curvature_size_boost()
 # ============================================================================
 
 
 class TestCurvatureSizeBoost:
-    def test_min_percentage_gives_min_boost(self):
-        assert _curvature_size_boost(_C.CURVATURE_PCT_MIN) == pytest.approx(
+    def test_max_angle_gives_min_boost(self):
+        """夾角最大（脊椎最直）→ 縮放倍率最小。"""
+        assert _curvature_size_boost(_C.CURVATURE_ANGLE_MAX_DEG) == pytest.approx(
             _C.CURVATURE_BOOST_MIN
         )
 
-    def test_max_percentage_gives_max_boost(self):
-        assert _curvature_size_boost(_C.CURVATURE_PCT_MAX) == pytest.approx(
+    def test_min_angle_gives_max_boost(self):
+        """夾角最小（脊椎最彎/蜷曲）→ 縮放倍率最大。"""
+        assert _curvature_size_boost(_C.CURVATURE_ANGLE_MIN_DEG) == pytest.approx(
             _C.CURVATURE_BOOST_MAX
         )
 
-    def test_midpoint_percentage_gives_midpoint_boost(self):
-        mid_pct = (_C.CURVATURE_PCT_MIN + _C.CURVATURE_PCT_MAX) / 2
+    def test_midpoint_angle_gives_midpoint_boost(self):
+        mid_angle = (_C.CURVATURE_ANGLE_MIN_DEG + _C.CURVATURE_ANGLE_MAX_DEG) / 2
         expected = (_C.CURVATURE_BOOST_MIN + _C.CURVATURE_BOOST_MAX) / 2
-        assert _curvature_size_boost(mid_pct) == pytest.approx(expected)
+        assert _curvature_size_boost(mid_angle) == pytest.approx(expected)
 
     def test_nan_input_returns_neutral_scale(self):
         assert _curvature_size_boost(float("nan")) == 1.0
@@ -102,13 +128,17 @@ class TestCurvatureSizeBoost:
     def test_none_input_returns_neutral_scale(self):
         assert _curvature_size_boost(None) == 1.0
 
-    def test_below_min_is_clamped(self):
-        assert _curvature_size_boost(_C.CURVATURE_PCT_MIN - 100) == pytest.approx(
+    def test_above_max_angle_is_clamped(self):
+        """比 CURVATURE_ANGLE_MAX_DEG 更直（角度更大）仍然只夾在
+        CURVATURE_BOOST_MIN，不會更小。"""
+        assert _curvature_size_boost(_C.CURVATURE_ANGLE_MAX_DEG + 20) == pytest.approx(
             _C.CURVATURE_BOOST_MIN
         )
 
-    def test_above_max_is_clamped(self):
-        assert _curvature_size_boost(_C.CURVATURE_PCT_MAX + 100) == pytest.approx(
+    def test_below_min_angle_is_clamped(self):
+        """比 CURVATURE_ANGLE_MIN_DEG 更彎（角度更小）仍然只夾在
+        CURVATURE_BOOST_MAX，不會更大。"""
+        assert _curvature_size_boost(_C.CURVATURE_ANGLE_MIN_DEG - 10) == pytest.approx(
             _C.CURVATURE_BOOST_MAX
         )
 

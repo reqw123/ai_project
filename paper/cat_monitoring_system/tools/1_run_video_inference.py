@@ -75,12 +75,12 @@ RATING_LETTERS = ("A", "B", "C", "D", "E")
 # 測試資料夾模式
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
-FOLDER_TEST_MODE = 'all'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\Videos\NVIDIA\Desktop\0721_13"  # 'single' 模式使用的扁平資料夾
+FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
+SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\白貓舔舐測試"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_145.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_147.pt"
 STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_124_xy_conf_v_bone_att_on\124_best_model.pth"
 INFERENCE_DEVICE = 'cuda'   
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致

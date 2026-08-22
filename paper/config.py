@@ -124,9 +124,9 @@ def _parse_hhmm(value: str) -> tuple[int, int] | None:
 
 def _runtime_default(json_key: str, fallback, value_type=None):
     """JSON 執行期覆寫層的「預設值」來源：settings_manager.get_runtime_value() 讀
-    runtime_settings.json，欄位缺漏/檔案不存在時直接回傳 fallback（原本寫死的
+    runtime_settings.current.json，欄位缺漏/檔案不存在時直接回傳 fallback（原本寫死的
     字面值）。這個函式回傳的值只是拿去當 `_env_*()` 的 `default` 參數——最終
-    優先順序仍是「環境變數（_env_* 本身的邏輯）> runtime_settings.json（這裡）
+    優先順序仍是「環境變數（_env_* 本身的邏輯）> runtime_settings.current.json（這裡）
     > 寫死的 fallback」，`_env_*` 系列函式本身完全不變。
 
     刻意用 try/except 包住整個查詢：settings_manager.py 缺失、import 失敗、
@@ -138,7 +138,7 @@ def _runtime_default(json_key: str, fallback, value_type=None):
 
         return get_runtime_value(json_key, fallback, value_type=value_type)
     except Exception as e:
-        print(f"⚠ 讀取 runtime_settings.json 失敗（{json_key}），使用內建預設值: {e}")
+        print(f"⚠ 讀取 runtime_settings.current.json 失敗（{json_key}），使用內建預設值: {e}")
         return fallback
 
 
@@ -149,7 +149,7 @@ def _runtime_default_size(json_key: str, fallback):
 
         return get_runtime_size(json_key, fallback)
     except Exception as e:
-        print(f"⚠ 讀取 runtime_settings.json 失敗（{json_key}），使用內建預設值: {e}")
+        print(f"⚠ 讀取 runtime_settings.current.json 失敗（{json_key}），使用內建預設值: {e}")
         return fallback
 
 
@@ -219,7 +219,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 def _resolve_project_path(path_str: str) -> str:
     """把相對路徑接到 _PROJECT_ROOT 上，絕對路徑原樣回傳。
 
-    讓 runtime_settings.json／環境變數可以直接寫 "yolo_models\\v11s_143.pt"
+    讓 runtime_settings.current.json／環境變數可以直接寫 "yolo_models\\v11s_143.pt"
     這種相對路徑，不受實際執行時的工作目錄（CWD）影響——不像 LOG_DIR/OUTPUT_DIR
     那樣依賴 CWD 剛好等於專案根目錄，這裡固定以原始碼所在專案為錨點解析。
     """
@@ -448,67 +448,6 @@ class STGCNTrainingConfig:
         return cls._load_error is None
 
 
-# ==================== 異常檢測參數 ====================
-class AnomalyDetectionConfig:
-    """靜止偵測與運動分析
-
-    v2 起 motion_score 單位為 body_fraction × 100（每幀位移 / 胸→髖距離 × 100），
-    與訓練管線 normalize_skeleton_coords 一致，消除拍攝距離影響。
-    閾值參考值：靜止呼吸 < 2；舔毛/抓撓 5-15；走路 > 10
-    """
-
-    # 2026-08-15：這四個欄位原本是純寫死常數，沒有 env 覆寫。納入 GUI 設定系統時
-    # 補上對應環境變數（CAT_MONITORING_MAX_MOTION 等），屬於新增而非移除既有機制，
-    # 讓它們也能走「環境變數 > runtime_settings.json > 內建預設值」這條鏈。
-    MAX_MOTION = _env_float(
-        "CAT_MONITORING_MAX_MOTION",
-        _runtime_default("anomaly_detection.max_motion", 20.0, value_type=float),
-    )  # motion_score 正規化分母（body_fraction×100）；走路約 10-20
-    KP_CONF_THRES = _env_float(
-        "CAT_MONITORING_KP_CONF_THRES",
-        _runtime_default("anomaly_detection.kp_conf_thres", 0.5, value_type=float),
-    )  # 只使用高於此信心的關鍵點計算 motion_score
-    ROLLING_WINDOW_SIZE = _env_int(
-        "CAT_MONITORING_ROLLING_WINDOW_SIZE",
-        _runtime_default("anomaly_detection.rolling_window_size", 30, value_type=int),
-    )  # 滾動均值視窗大小（幀數，30fps ≈ 1 秒）
-    STILL_MOTION_THRESHOLD = _env_float(
-        "CAT_MONITORING_STILL_MOTION_THRESHOLD",
-        _runtime_default("anomaly_detection.still_motion_threshold", 3.0, value_type=float),
-    )  # 滾動均值低於此值（body_fraction×100）判為靜止；呼吸抖動約 < 2
-
-
-# ==================== Skeleton Quality Assessment（骨架品質雙重判定）====================
-class SQAConfig:
-    """「GCN 分類為主、幾何判斷為輔」雙重判定總開關。
-
-    ENABLE_SQA_DUAL_JUDGMENT=True 時，FrameProcessor 會在每次 ST-GCN
-    推論同一個窗口後，額外呼叫 skeleton_quality_assessment.evaluate_
-    window() 做幾何合理性檢查；只要被判定為不可信，就把該幀的分類結果
-    覆蓋成 LOW_CONF（信心值歸零）——跟診斷腳本 test_bone_length_
-    stability.py（模式2）驗證過的覆蓋規則一致。
-
-    這是唯一的總開關；3 項個別指標（midback_offset_ratio/midback_angle/
-    body_axis_score_jitter）各自要不要參與判定，由
-    cat_monitoring_system/processors/skeleton_quality_assessment.py 模組內的
-    ENABLE_MIDBACK_OFFSET_CHECK/ENABLE_MIDBACK_ANGLE_CHECK/
-    ENABLE_SCORE_JITTER_CHECK 三個變數各自控制，不在這裡設定——刻意保持
-    低耦合：config.py 只決定「要不要啟用這整套機制」，機制內部的細節
-    門檻/開關留在模組自己的檔案裡管理，兩者不互相知道對方的存在。
-
-    evaluate_window() 本身是 fail-safe（任何內部錯誤都回傳
-    reliable=True，等同不覆蓋），FrameProcessor 呼叫端也會再包一層
-    try/except——即使這個模組完全壞掉或被整個刪除，都不會影響主系統
-    其餘功能運行，最多只是這個雙重判定不生效。
-
-    正式套用前建議先在 GUI 模式肉眼比對過覆蓋規則是否合理， 確認沒問題後再開啟。
-    """
-
-    ENABLE_SQA_DUAL_JUDGMENT = _env_bool(
-        "CAT_MONITORING_ENABLE_SQA_DUAL_JUDGMENT",
-        _runtime_default("anomaly_detection.enable_sqa_dual_judgment", True, value_type=bool),
-    )
-
 
 # ==================== 執行模式參數 ====================
 class RunModeConfig:
@@ -692,7 +631,7 @@ class NodeRedConfig:
     )
 
     # 端點預設由上面的 HOST/PORT（已含 env/JSON 覆寫結果）推導；仍可個別用環境變數
-    # 或 runtime_settings.json 的 advanced.* 覆寫成完全不同的網址。
+    # 或 runtime_settings.current.json 的 advanced.* 覆寫成完全不同的網址。
     ENDPOINT_NOTIFY = _env_str(
         "CAT_MONITORING_NODERED_ENDPOINT_NOTIFY",
         _runtime_default(
@@ -732,6 +671,111 @@ class NodeRedConfig:
         _runtime_default("nodered.global_context_path", r"C:\a\global.json", value_type=str),
     )
 
+
+# ==================== 顯示和視覺化參數 ====================
+# 骨架/文字顏色與字型等實際繪圖參數已改由 utils/constants.py 與
+# processors/visualizer.py 內部管理（此處舊有的同名設定從未被讀取），
+# 故僅保留仍會影響串流行為的參數。
+class VisualizationConfig:
+    """串流輸出參數"""
+
+    # STREAM_DISPLAY_SIZE: None 代表維持原始解析度；(寬, 高) 例如 (480, 480) 代表先縮小再編碼，降低頻寬但犧牲畫質。
+    STREAM_DISPLAY_SIZE = _env_size(
+        "CAT_MONITORING_STREAM_DISPLAY_SIZE",
+        _runtime_default_size("visualization.stream_display_size", None),
+    )
+
+    # CLIP_SECONDS: /video_clip 保留的 ring buffer 秒數；記憶體佔用會隨這個值線性增加，但不會因長時間運行持續暴增。
+    CLIP_SECONDS = _env_int(
+        "CAT_MONITORING_CLIP_SECONDS",
+        _runtime_default("visualization.clip_seconds", 5, value_type=int),
+    )
+
+    # SHOW_NOSE_TRAPEZOID: True = 在串流畫面上繪製鼻子接觸梯形 overlay（lick_stage plugin 專用）
+    # 設為 False 可在不移除 plugin 的情況下完全隱藏此視覺效果。
+    SHOW_NOSE_TRAPEZOID = _env_bool(
+        "CAT_MONITORING_SHOW_NOSE_TRAPEZOID",
+        _runtime_default("visualization.show_nose_trapezoid", True, value_type=bool),
+    )
+
+    # 以下三個是 FrameProcessor.show_skeleton/show_label/show_bbox 的「啟動預設值」，
+    # 決定 Python 進程一啟動時畫面上預設要不要畫這些疊圖；啟動後仍可透過 GUI 模式
+    # 鍵盤 s/l/b 或 server 模式 /api/overlay 在執行期即時切換，不受這裡影響
+    # （這裡只決定重啟後、切回來時的初始狀態）。
+    SHOW_BBOX = _env_bool(
+        "CAT_MONITORING_SHOW_BBOX",
+        _runtime_default("visualization.show_bbox", True, value_type=bool),
+    )  # 是否繪製 YOLO 偵測框(bbox)與信心值文字
+    SHOW_SKELETON = _env_bool(
+        "CAT_MONITORING_SHOW_SKELETON",
+        _runtime_default("visualization.show_skeleton", True, value_type=bool),
+    )  # 是否繪製骨架關鍵點與連線
+    SHOW_GCN_RESULT = _env_bool(
+        "CAT_MONITORING_SHOW_GCN_RESULT",
+        _runtime_default("visualization.show_gcn_result", True, value_type=bool),
+    )  # 是否顯示 ST-GCN 行為分類結果與機率條
+
+
+# ==================== 異常檢測參數 ====================
+class AnomalyDetectionConfig:
+    """靜止偵測與運動分析
+
+    v2 起 motion_score 單位為 body_fraction × 100（每幀位移 / 胸→髖距離 × 100），
+    與訓練管線 normalize_skeleton_coords 一致，消除拍攝距離影響。
+    閾值參考值：靜止呼吸 < 2；舔毛/抓撓 5-15；走路 > 10
+    """
+
+    # 2026-08-15：這四個欄位原本是純寫死常數，沒有 env 覆寫。納入 GUI 設定系統時
+    # 補上對應環境變數（CAT_MONITORING_MAX_MOTION 等），屬於新增而非移除既有機制，
+    # 讓它們也能走「環境變數 > runtime_settings.current.json > 內建預設值」這條鏈。
+    MAX_MOTION = _env_float(
+        "CAT_MONITORING_MAX_MOTION",
+        _runtime_default("anomaly_detection.max_motion", 20.0, value_type=float),
+    )  # motion_score 正規化分母（body_fraction×100）；走路約 10-20
+    KP_CONF_THRES = _env_float(
+        "CAT_MONITORING_KP_CONF_THRES",
+        _runtime_default("anomaly_detection.kp_conf_thres", 0.5, value_type=float),
+    )  # 只使用高於此信心的關鍵點計算 motion_score
+    ROLLING_WINDOW_SIZE = _env_int(
+        "CAT_MONITORING_ROLLING_WINDOW_SIZE",
+        _runtime_default("anomaly_detection.rolling_window_size", 30, value_type=int),
+    )  # 滾動均值視窗大小（幀數，30fps ≈ 1 秒）
+    STILL_MOTION_THRESHOLD = _env_float(
+        "CAT_MONITORING_STILL_MOTION_THRESHOLD",
+        _runtime_default("anomaly_detection.still_motion_threshold", 3.0, value_type=float),
+    )  # 滾動均值低於此值（body_fraction×100）判為靜止；呼吸抖動約 < 2
+
+
+# ==================== Skeleton Quality Assessment（骨架品質雙重判定）====================
+class SQAConfig:
+    """「GCN 分類為主、幾何判斷為輔」雙重判定總開關。
+
+    ENABLE_SQA_DUAL_JUDGMENT=True 時，FrameProcessor 會在每次 ST-GCN
+    推論同一個窗口後，額外呼叫 skeleton_quality_assessment.evaluate_
+    window() 做幾何合理性檢查；只要被判定為不可信，就把該幀的分類結果
+    覆蓋成 LOW_CONF（信心值歸零）——跟診斷腳本 test_bone_length_
+    stability.py（模式2）驗證過的覆蓋規則一致。
+
+    這是唯一的總開關；3 項個別指標（midback_offset_ratio/midback_angle/
+    body_axis_score_jitter）各自要不要參與判定，由
+    cat_monitoring_system/processors/skeleton_quality_assessment.py 模組內的
+    ENABLE_MIDBACK_OFFSET_CHECK/ENABLE_MIDBACK_ANGLE_CHECK/
+    ENABLE_SCORE_JITTER_CHECK 三個變數各自控制，不在這裡設定——刻意保持
+    低耦合：config.py 只決定「要不要啟用這整套機制」，機制內部的細節
+    門檻/開關留在模組自己的檔案裡管理，兩者不互相知道對方的存在。
+
+    evaluate_window() 本身是 fail-safe（任何內部錯誤都回傳
+    reliable=True，等同不覆蓋），FrameProcessor 呼叫端也會再包一層
+    try/except——即使這個模組完全壞掉或被整個刪除，都不會影響主系統
+    其餘功能運行，最多只是這個雙重判定不生效。
+
+    正式套用前建議先在 GUI 模式肉眼比對過覆蓋規則是否合理， 確認沒問題後再開啟。
+    """
+
+    ENABLE_SQA_DUAL_JUDGMENT = _env_bool(
+        "CAT_MONITORING_ENABLE_SQA_DUAL_JUDGMENT",
+        _runtime_default("anomaly_detection.enable_sqa_dual_judgment", True, value_type=bool),
+    )
 
 # ==================== 行為追蹤參數 ====================
 class BehaviorTrackingConfig:
@@ -876,7 +920,7 @@ class CatIdentityConfig:
     TARGET_CAT_PROFILE_PATH/OTHER_CAT_PROFILE_PATH 指向的基準檔案已存在，
     預設部署下這層過濾也不會生效，所有偵測到的貓一律視為目標貓。需要啟用
     身分過濾時，設定環境變數 CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION=true
-    （或透過 settings_window.py 存進 runtime_settings.json）。
+    （或透過 settings_window.py 存進 runtime_settings.current.json）。
 
     啟用後：FrameProcessor 只有在判定「這是目標貓（TARGET_CAT_PROFILE_PATH）」
     時才會把偵測結果送進行為分類/追蹤/CSV/Node-RED；判定為其他貓或無法判定
@@ -953,50 +997,6 @@ class LoggingConfig:
     )
 
 
-# ==================== 顯示和視覺化參數 ====================
-# 骨架/文字顏色與字型等實際繪圖參數已改由 utils/constants.py 與
-# processors/visualizer.py 內部管理（此處舊有的同名設定從未被讀取），
-# 故僅保留仍會影響串流行為的參數。
-class VisualizationConfig:
-    """串流輸出參數"""
-
-    # STREAM_DISPLAY_SIZE: None 代表維持原始解析度；(寬, 高) 例如 (480, 480) 代表先縮小再編碼，降低頻寬但犧牲畫質。
-    STREAM_DISPLAY_SIZE = _env_size(
-        "CAT_MONITORING_STREAM_DISPLAY_SIZE",
-        _runtime_default_size("visualization.stream_display_size", None),
-    )
-
-    # CLIP_SECONDS: /video_clip 保留的 ring buffer 秒數；記憶體佔用會隨這個值線性增加，但不會因長時間運行持續暴增。
-    CLIP_SECONDS = _env_int(
-        "CAT_MONITORING_CLIP_SECONDS",
-        _runtime_default("visualization.clip_seconds", 5, value_type=int),
-    )
-
-    # SHOW_NOSE_TRAPEZOID: True = 在串流畫面上繪製鼻子接觸梯形 overlay（lick_stage plugin 專用）
-    # 設為 False 可在不移除 plugin 的情況下完全隱藏此視覺效果。
-    SHOW_NOSE_TRAPEZOID = _env_bool(
-        "CAT_MONITORING_SHOW_NOSE_TRAPEZOID",
-        _runtime_default("visualization.show_nose_trapezoid", True, value_type=bool),
-    )
-
-    # 以下三個是 FrameProcessor.show_skeleton/show_label/show_bbox 的「啟動預設值」，
-    # 決定 Python 進程一啟動時畫面上預設要不要畫這些疊圖；啟動後仍可透過 GUI 模式
-    # 鍵盤 s/l/b 或 server 模式 /api/overlay 在執行期即時切換，不受這裡影響
-    # （這裡只決定重啟後、切回來時的初始狀態）。
-    SHOW_BBOX = _env_bool(
-        "CAT_MONITORING_SHOW_BBOX",
-        _runtime_default("visualization.show_bbox", True, value_type=bool),
-    )  # 是否繪製 YOLO 偵測框(bbox)與信心值文字
-    SHOW_SKELETON = _env_bool(
-        "CAT_MONITORING_SHOW_SKELETON",
-        _runtime_default("visualization.show_skeleton", True, value_type=bool),
-    )  # 是否繪製骨架關鍵點與連線
-    SHOW_GCN_RESULT = _env_bool(
-        "CAT_MONITORING_SHOW_GCN_RESULT",
-        _runtime_default("visualization.show_gcn_result", True, value_type=bool),
-    )  # 是否顯示 ST-GCN 行為分類結果與機率條
-
-
 # ==================== 系統識別 ====================
 class SystemInfo:
     """系統識別和版本信息"""
@@ -1065,11 +1065,12 @@ def get_config_summary() -> str:
     ║          貓咪監測系統配置摘要                         ║
     ╚════════════════════════════════════════════════════════╝
 
-    📋 系統資訊  (硬編碼於 SystemInfo 類別: SYSTEM_NAME, VERSION, MODEL_TYPE, OUTPUT_WIDTH/HEIGHT；無 env 覆寫)
-      - 名稱    : {SystemInfo.SYSTEM_NAME}
-      - 版本    : {SystemInfo.VERSION}
-      - 模型    : {SystemInfo.MODEL_TYPE}
-      - 輸出尺寸: {SystemInfo.OUTPUT_WIDTH} × {SystemInfo.OUTPUT_HEIGHT}  （會透過 cv2.VideoCapture.set() 要求攝影機來源改用此解析度擷取；對影片檔/串流無效）
+    📁 路徑配置
+      - YOLO 模型   : {ModelPaths.YOLO_MODEL}
+      - ST-GCN 模型 : {ModelPaths.STGCN_MODEL}
+      - 輸入視訊    : {ModelPaths.VIDEO_INPUT}
+      - 日誌目錄    : {ModelPaths.LOG_DIR}
+      - 輸出目錄    : {ModelPaths.OUTPUT_DIR}
 
     📷 YOLO 參數
       - 圖像尺寸          : {YOLOConfig.IMAGE_SIZE}
@@ -1098,6 +1099,41 @@ def get_config_summary() -> str:
       - 關節先驗權重內容  : {_train_joint_prior_weights if _train_use_joint_prior_weights else "(未啟用)"}
       - 行為前綴對應      : {_train_behavior_prefixes}
 
+    🕐 執行模式與排程
+      - 執行模式          : {RunModeConfig.MODE}  ("server" 或 "gui")
+      - 啟動即自動處理    : {RunModeConfig.AUTO_START_PROCESSING}  （False=等第一個 /stream 等請求才啟動處理管線）
+      - 排程開始時間      : {RunModeConfig.SCHEDULED_START_TIME or "(未設定)"}
+      - 排程結束時間      : {RunModeConfig.SCHEDULED_END_TIME or "(未設定，開始後永遠運行)"}
+      - 目前是否在排程區間內: {RunModeConfig.is_within_active_window()}  （即時判斷，印出當下這一刻的狀態）
+
+    🌐 Flask 服務
+      - 主機        : {FlaskConfig.HOST}:{FlaskConfig.PORT}
+      - JPEG 品質   : {FlaskConfig.JPEG_QUALITY}
+      - Debug 模式  : {FlaskConfig.DEBUG}
+      - Threaded    : {FlaskConfig.THREADED}
+
+    🧮 個體化基線儀表板（Python 端唯讀展示頁）
+      - 啟用          : {BaselineDashboardConfig.ENABLED}  （False=不匯入 dashboard/ 模組，不佔用任何資源）
+      - 前端輪詢間隔  : {BaselineDashboardConfig.POLL_INTERVAL_SEC} s
+      - 背景重算間隔  : {BaselineDashboardConfig.RECOMPUTE_INTERVAL_SEC} s
+
+    🔗 Node-RED 連線
+      - 主機        : {NodeRedConfig.HOST}:{NodeRedConfig.PORT}
+      - 推送間隔    : {NodeRedConfig.PUSH_INTERVAL} s
+      - 超時        : {NodeRedConfig.TIMEOUT} s
+      - Notify 端點   : {NodeRedConfig.ENDPOINT_NOTIFY}
+      - Result v1 端點: {NodeRedConfig.ENDPOINT_RESULT}
+      - Result v2 端點: {NodeRedConfig.ENDPOINT_RESULT_V2}
+      - 個體化基線共用儲存: {NodeRedConfig.GLOBAL_CONTEXT_PATH}
+
+    🎞️ 串流視覺化
+      - 串流縮放尺寸      : {VisualizationConfig.STREAM_DISPLAY_SIZE}
+      - Ring Buffer 秒數  : {VisualizationConfig.CLIP_SECONDS} s
+      - 鼻子梯形 overlay  : {VisualizationConfig.SHOW_NOSE_TRAPEZOID}
+      - 偵測框 bbox (啟動預設): {VisualizationConfig.SHOW_BBOX}  （執行期間可用鍵盤 b 切換(僅限 gui 模式)）
+      - 骨架關鍵點 (啟動預設): {VisualizationConfig.SHOW_SKELETON}  （執行期間可用鍵盤 s 切換(僅限 gui 模式)）
+      - GCN 分類結果+機率條 (啟動預設): {VisualizationConfig.SHOW_GCN_RESULT}  （執行期間可用鍵盤 l 切換(僅限 gui 模式)）
+
     🛑 靜止偵測（滾動均值閾值，純 CSV 記錄；單位 body_fraction×100）
       - 最大動作值        : {AnomalyDetectionConfig.MAX_MOTION}  （body_fraction×100；走路約 10-20）
       - 關鍵點信心門檻    : {AnomalyDetectionConfig.KP_CONF_THRES}
@@ -1107,13 +1143,6 @@ def get_config_summary() -> str:
     🔬 Skeleton Quality Assessment（骨架品質雙重判定）
       - 總開關 ENABLE_SQA_DUAL_JUDGMENT: {SQAConfig.ENABLE_SQA_DUAL_JUDGMENT}
         （個別指標開關在 cat_monitoring_system/processors/skeleton_quality_assessment.py 模組內設定，此處不重複顯示）
-
-    🕐 執行模式與排程
-      - 執行模式          : {RunModeConfig.MODE}  ("server" 或 "gui")
-      - 啟動即自動處理    : {RunModeConfig.AUTO_START_PROCESSING}  （False=等第一個 /stream 等請求才啟動處理管線）
-      - 排程開始時間      : {RunModeConfig.SCHEDULED_START_TIME or "(未設定)"}
-      - 排程結束時間      : {RunModeConfig.SCHEDULED_END_TIME or "(未設定，開始後永遠運行)"}
-      - 目前是否在排程區間內: {RunModeConfig.is_within_active_window()}  （即時判斷，印出當下這一刻的狀態）
 
     🏷️ 行為追蹤門檻
       - ST-GCN 行為標籤門檻  : {BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD}
@@ -1139,46 +1168,17 @@ def get_config_summary() -> str:
       - 目標貓特徵基準檔          : {CatIdentityConfig.TARGET_CAT_PROFILE_PATH}
       - 其他已知貓特徵基準檔      : {CatIdentityConfig.OTHER_CAT_PROFILE_PATH}  （留空或檔案不存在時自動退化為單貓模式）
 
-    🌐 Flask 服務
-      - 主機        : {FlaskConfig.HOST}:{FlaskConfig.PORT}
-      - JPEG 品質   : {FlaskConfig.JPEG_QUALITY}
-      - Debug 模式  : {FlaskConfig.DEBUG}
-      - Threaded    : {FlaskConfig.THREADED}
-
-    🧮 個體化基線儀表板（Python 端唯讀展示頁）
-      - 啟用          : {BaselineDashboardConfig.ENABLED}  （False=不匯入 dashboard/ 模組，不佔用任何資源）
-      - 前端輪詢間隔  : {BaselineDashboardConfig.POLL_INTERVAL_SEC} s
-      - 背景重算間隔  : {BaselineDashboardConfig.RECOMPUTE_INTERVAL_SEC} s
-
-    🎞️ 串流視覺化
-      - 串流縮放尺寸      : {VisualizationConfig.STREAM_DISPLAY_SIZE}
-      - Ring Buffer 秒數  : {VisualizationConfig.CLIP_SECONDS} s
-      - 鼻子梯形 overlay  : {VisualizationConfig.SHOW_NOSE_TRAPEZOID}
-      - 偵測框 bbox (啟動預設): {VisualizationConfig.SHOW_BBOX}  （執行期間可用鍵盤 b 切換(僅限 gui 模式)）
-      - 骨架關鍵點 (啟動預設): {VisualizationConfig.SHOW_SKELETON}  （執行期間可用鍵盤 s 切換(僅限 gui 模式)）
-      - GCN 分類結果+機率條 (啟動預設): {VisualizationConfig.SHOW_GCN_RESULT}  （執行期間可用鍵盤 l 切換(僅限 gui 模式)）
-
-    🔗 Node-RED 連線
-      - 主機        : {NodeRedConfig.HOST}:{NodeRedConfig.PORT}
-      - 推送間隔    : {NodeRedConfig.PUSH_INTERVAL} s
-      - 超時        : {NodeRedConfig.TIMEOUT} s
-      - Notify 端點   : {NodeRedConfig.ENDPOINT_NOTIFY}
-      - Result v1 端點: {NodeRedConfig.ENDPOINT_RESULT}
-      - Result v2 端點: {NodeRedConfig.ENDPOINT_RESULT_V2}
-      - 個體化基線共用儲存: {NodeRedConfig.GLOBAL_CONTEXT_PATH}
-
     📄 日誌設定
       - 主要 CSV          : {LoggingConfig.CSV_PATH}
       - 行為區段 CSV      : {LoggingConfig.SEGMENTS_CSV_PATH}
       - Tracker 狀態檔    : {LoggingConfig.TRACKER_STATE_PATH}  （重啟後恢復當日累積資料）
       - 多天歷史 SQLite   : {LoggingConfig.DAILY_HISTORY_DB_PATH}
 
-    📁 路徑配置
-      - YOLO 模型   : {ModelPaths.YOLO_MODEL}
-      - ST-GCN 模型 : {ModelPaths.STGCN_MODEL}
-      - 輸入視訊    : {ModelPaths.VIDEO_INPUT}
-      - 日誌目錄    : {ModelPaths.LOG_DIR}
-      - 輸出目錄    : {ModelPaths.OUTPUT_DIR}
+    📋 系統資訊  (硬編碼於 SystemInfo 類別: SYSTEM_NAME, VERSION, MODEL_TYPE, OUTPUT_WIDTH/HEIGHT；無 env 覆寫)
+      - 名稱    : {SystemInfo.SYSTEM_NAME}
+      - 版本    : {SystemInfo.VERSION}
+      - 模型    : {SystemInfo.MODEL_TYPE}
+      - 輸出尺寸: {SystemInfo.OUTPUT_WIDTH} × {SystemInfo.OUTPUT_HEIGHT}  （會透過 cv2.VideoCapture.set() 要求攝影機來源改用此解析度擷取；對影片檔/串流無效）
 
     ╔════════════════════════════════════════════════════════╗
     """
@@ -1305,7 +1305,7 @@ if __name__ == "__main__":
     # "server" 改成 "gui"）之後，default_runtime_settings.json（設定視窗
     # 「還原 GUI 預設值」用的範本）不會自動跟著變——那份 JSON 是獨立檔案，兩邊
     # 各自維護容易漂移。這裡讓 `python config.py` 順手把範本同步好，不用再手動
-    # 對照兩邊改。只動範本檔，不動 runtime_settings.json（使用者實際套用中的
+    # 對照兩邊改。只動範本檔，不動 runtime_settings.current.json（使用者實際套用中的
     # 設定，不該被這個動作悄悄覆蓋）。
     try:
         from settings_manager import regenerate_default_runtime_settings

@@ -44,7 +44,7 @@ class LickConfig:
 
     # ── 關鍵點信心值門檻 ──────────────────────────────────────────────────
     EAR_CONF_THRESHOLD = 0.3  # 耳朵關鍵點最低信心值，低於此值視為耳朵不可見
-    NOSE_CONF_THRESHOLD = 0.3  # 鼻子關鍵點最低信心值，低於此值不執行接觸判定
+    NOSE_CONF_THRESHOLD = 0.3  # 鼻子關鍵點最低信心值，低於此值視為鼻子不可用（影響接觸判定與頭部朝向判斷）
     LIMB_CONF_THRESHOLD = 0.10  # 四肢關鍵點最低信心值，低於此值跳過該肢體
     BODY_KP_CONF = 0.5  # 胸部/髖部信心值門檻，用於計算身體尺度
 
@@ -79,38 +79,55 @@ class LickConfig:
     FRONT_VIEW_GUARD_ENABLED = True  # 是否啟用正面保護機制
     FRONT_VIEW_BODY_EAR_RATIO_MAX = 0.75  # 耳間距/身體尺度比值超過此值即觸發保護
 
-    # ── 身體區域幾何參數 ──────────────────────────────────────────────────
-    BODY_ELLIPSE_W_RATIO = 0.65  # 身體橢圓寬度 = 身體長度 × 此比例
-    BODY_ELLIPSE_H_RATIO = 0.27  # 身體橢圓高度 = 身體長度 × 此比例
+    # ── 接觸幾何尺寸夾鉗（防止極端姿勢下幾何爆炸） ──────────────────────
+    # 身體長度像素上下限，下面「鼻子接觸梯形」與「四肢／腳尖」都共用同一組
+    # 夾鉗（各自在使用處呼叫 clamp(body_len, MIN, MAX)），置於這裡是因為
+    # 它是後面幾個區塊共用的前置參考值，不屬於任何單一區塊。
+    CONTACT_BODY_LEN_MIN_PX = 300.0  # 身體長度像素下限，低於此值夾鉗到此
+    CONTACT_BODY_LEN_MAX_PX = 650.0  # 身體長度像素上限，高於此值夾鉗到此
 
     # ── 鼻子接觸梯形幾何參數 ──────────────────────────────────────────────
-    NOSE_TRAP_THICKNESS_CM = 2.2  # 梯形厚度（以貓身體長度換算的公分數）
+    # 全部是相對身體長度的比例常數，不是絕對物理單位：單眼 2D 攝影機無法
+    # 分辨「大貓遠」跟「小貓近」，任何看似有物理單位（例如公分）的描述
+    # 都只是換算出來的比例，統一用比例常數表達，不假裝有絕對單位。
+    NOSE_TRAP_THICKNESS_RATIO = 0.055  # 梯形厚度 = 身體長度 × 此比例
     NOSE_TRAP_THICKNESS_SCALE = 1.0  # 梯形厚度縮放係數（1.0 = 不縮放）
     NOSE_TRAP_TOP_W_RATIO = 0.10  # 梯形頂寬 = 身體長度 × 此比例
     NOSE_TRAP_BOT_W_RATIO = 0.20  # 梯形底寬 = 身體長度 × 此比例
     NOSE_TRAP_W_SCALE = 1.15  # 梯形整體寬度額外放大係數
-    CAT_BODY_LENGTH_CM = 40.0  # 貓咪標準身體長度（公分），用於像素/公分換算
 
-    # ── 梯形彎曲自適應（mid_back 偏離 chest-hip 中點的比例，驅動梯形縮放）──
+    # ── 梯形彎曲自適應（Chest-MidBack-Hip 夾角，驅動梯形縮放）──────────────
     # mid_back 標記在貓咪背部最高點（非 chest-hip 連線中點）。貓咪拱背/蜷曲
     # 理毛時，該點會明顯偏離 chest-hip 直線，此時 body_len（chest-hip 直線
     # 距離）會因姿態彎曲而低估「真實」身體尺度，導致鼻子接觸梯形在最需要
-    # 精準判定的姿態下反而系統性偏小。用 mid_back_dist_pct（mid_back 到
-    # chest-hip 中點的正規化距離百分比）線性內插出一個縮放倍率，只套用在
+    # 精準判定的姿態下反而系統性偏小。這裡用 Chest-MidBack-Hip 夾角（以
+    # MidBack 為頂點）當彎曲程度指標，線性映射成縮放倍率回補，只套用在
     # 梯形尺寸上（不影響身體橢圓/四肢區域，那些量測的是「當下真實」幾何，
-    # 不該被歷史或姿態推測放大縮小）。
-    CURVATURE_PCT_MIN = 0.0  # mid_back_dist_pct 下限：脊椎接近打直
-    CURVATURE_PCT_MAX = 30.0  # mid_back_dist_pct 上限：明顯拱背/蜷曲
-    CURVATURE_BOOST_MIN = 0.85  # 對應 CURVATURE_PCT_MIN 時的梯形縮放倍率（打直時縮小）
-    CURVATURE_BOOST_MAX = 1.20  # 對應 CURVATURE_PCT_MAX 時的梯形縮放倍率（拱背時放大）
+    # 不該被姿態推測放大縮小）。
+    #
+    # 公式與角度區間跟 processors/skeleton_quality_assessment.py 的
+    # compute_midback_angle()／CANDIDATE_MIDBACK_ANGLE_LOW/HIGH_THRESHOLD
+    # 共用同一套幾何定義與經驗值（該模組依少量影片校準，未來重新校準時
+    # 兩處要一起調整）；contact_regions.py 內另外重新實作一份同款公式
+    # （不 import processors/ 模組），維持本 plugin 低耦合、可獨立抽離的
+    # 既有設計原則。
+    CURVATURE_ANGLE_MAX_DEG = 160.0  # 夾角上限：越接近此值代表脊椎越直（對齊 SQA CANDIDATE_MIDBACK_ANGLE_HIGH_THRESHOLD）
+    CURVATURE_ANGLE_MIN_DEG = 20.0  # 夾角下限：越接近此值代表拱背/蜷曲程度越明顯（對齊 SQA CANDIDATE_MIDBACK_ANGLE_LOW_THRESHOLD）
+    CURVATURE_BOOST_MIN = 0.85  # 對應 CURVATURE_ANGLE_MAX_DEG（打直）時的梯形縮放倍率（打直時縮小）
+    CURVATURE_BOOST_MAX = 1.20  # 對應 CURVATURE_ANGLE_MIN_DEG（拱背/蜷曲）時的梯形縮放倍率（拱背時放大）
 
-    # ── 接觸幾何尺寸夾鉗（防止極端姿勢下幾何爆炸） ──────────────────────
-    CONTACT_BODY_LEN_MIN_PX = 300.0  # 身體長度像素下限，低於此值夾鉗到此
-    CONTACT_BODY_LEN_MAX_PX = 650.0  # 身體長度像素上限，高於此值夾鉗到此
-    LIMB_CONTACT_SCALE = 1.0  # 四肢接觸區域整體縮放係數
-    LIMB_PAW_CIRCLE_R_RATIO = 0.04  # 腳尖圓圈半徑 = 身體長度 × 此比例
+    # ── 身體中心（橢圓）區域幾何參數 ──────────────────────────────────────
+    BODY_ELLIPSE_W_RATIO = 0.65  # 身體橢圓寬度 = 身體長度 × 此比例
+    BODY_ELLIPSE_H_RATIO = 0.27  # 身體橢圓高度 = 身體長度 × 此比例
+    ELLIPSE_SAMPLES = 40  # 橢圓邊界取樣點數（用於判斷鼻子是否在橢圓內）；取樣點越多精度越高，但計算量略增
+
+    # ── 四肢（長條）接觸區域幾何參數 ──────────────────────────────────────
+    LIMB_CONTACT_SCALE = 1.0  # 四肢接觸區域整體縮放係數（同時套用在下面的長條與腳尖圓上）
     LIMB_STRIP_HW_RATIO = 0.055  # 四肢長條寬度 = 身體長度 × 此比例
-    LIMB_STRIP_EDGE_GAP = 0.0  # 四肢長條與腳尖圓之間的間距（像素，0 = 緊鄰）
+    LIMB_STRIP_EDGE_GAP = 0.0  # 四肢長條與腳尖圓之間的間距 = 身體長度 × 此比例（0 = 緊鄰）
+
+    # ── 腳尖（圓形）接觸區域幾何參數 ──────────────────────────────────────
+    LIMB_PAW_CIRCLE_R_RATIO = 0.05  # 腳尖圓圈半徑 = 身體長度 × 此比例
 
     # ── 關鍵點 EMA 平滑（1.0 = 不平滑，直接使用原始值） ─────────────────
     # 只影響本 plugin 內部的接觸判定/overlay 穩定度，與 ST-GCN 推論用的
@@ -163,9 +180,6 @@ class LickConfig:
     # ── 區域標籤 ─────────────────────────────────────────────────────────
     ZONE_NO_TARGET = "NO_TARGET"  # 鼻子未命中任何區域
     ZONE_BODY = "BODY_CENTER"  # 命中身體中心區域
-
-    # ── 橢圓邊界取樣點數（用於判斷鼻子是否在橢圓內） ────────────────────
-    ELLIPSE_SAMPLES = 40  # 取樣點越多精度越高，但計算量略增
 
     # ── Node-RED 推送設定 ─────────────────────────────────────────────────
     # 主機/port 預設跟主專案共用（見檔案開頭說明）；CAT_MONITORING_LICK_NODERED_URL
