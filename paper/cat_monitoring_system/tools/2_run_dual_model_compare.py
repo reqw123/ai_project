@@ -52,7 +52,7 @@ from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 # ═══════════════════════════════════════════════════════
 MODEL_A = dict(
     label="Model A",
-    yolo_path=r"C:\ai_project\yolo_models\v11s_146.pt",
+    yolo_path=r"C:\ai_project\yolo_models\v11s_144.pt",
     stgcn_path=r"C:\ai_project\stgcn_models\run_124_xy_conf_v_bone_att_on\124_best_model.pth",
     feature_mode=None,   # None = 用下面 STGCN_FEATURE_MODE 的預設值
     ema_alpha=1.0,
@@ -74,7 +74,8 @@ DRAW_KP_CONF_THRESHOLD = 0.5
 SEQUENCE_LENGTH = 16
 CLASSIFY_STRIDE = 2
 STGCN_NORMALIZE = True
-STGCN_FEATURE_MODE = str(os.getenv("STGCN_FEATURE_MODE", "xy")).strip().lower()
+STGCN_FEATURE_MODE = "xy"  # checkpoint 讀取失敗時的 fallback 值；正常情況下比較邏輯會依
+                            # 各自 checkpoint 的 bn_input 通道數自動校正為實際的 feature mode
 
 # ── 五個行為資料夾（按 z/x/c/v/b 切換，只有 FOLDER_TEST_MODE='all' 時才有作用）──
 _BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
@@ -92,6 +93,11 @@ DEFAULT_FOLDER_KEY = 'z'
 FOLDER_TEST_MODE = 'single'   # 'single' / 'all' / 'z' / 'x' / 'c' / 'v' / 'b'
 SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\白貓舔舐測試"
 VIDEO_PATHS = []   # 手動指定影片清單則優先使用（忽略 FOLDER_TEST_MODE）
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該單一影片路徑（覆蓋 FOLDER_TEST_MODE / VIDEO_PATHS）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_PATHS = [_env_test_video]
 
 TARGET_MODEL_FPS = 30.0
 ENABLE_FPS_DOWNSAMPLE = True

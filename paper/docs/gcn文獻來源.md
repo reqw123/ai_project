@@ -6,8 +6,10 @@
 
 ---
 
+<a id="sec-1"></a>
 ## 一、基礎架構
 
+<a id="sec-1-1"></a>
 ### 1.1 原始 ST-GCN
 
 | 項目 | 內容 |
@@ -16,6 +18,7 @@
 | **核心貢獻** | 將骨架序列建模為時空圖，交替做空間圖卷積（捕捉關節關係）與時間卷積（捕捉動作演化） |
 | **本專案採用** | 整體 STGCNBlock 架構（Spatial GCN → Temporal Conv → 殘差相加）完全沿用此框架 |
 
+<a id="sec-1-2"></a>
 ### 1.2 圖的對稱正規化 D⁻¹/²AD⁻¹/²
 
 | 項目 | 內容 |
@@ -24,6 +27,7 @@
 | **核心貢獻** | 對稱正規化消除高度數節點（如前胸，連接頭部+前肢+軀幹）對訊息傳遞的主導效應，並提升訓練穩定性 |
 | **本專案採用** | `normalize_adjacency_matrix()` 對三個 partition 矩陣各自正規化 |
 
+<a id="sec-1-3"></a>
 ### 1.3 K=3 空間分區策略（root / close / further）
 
 | 項目 | 內容 |
@@ -32,6 +36,7 @@
 | **三分區定義** | A_root（自連結 I）、A_close（1-hop 鄰居）、A_further（2-hop 且非直接相連） |
 | **本專案採用** | `get_stgcn_partition_adjacency()`；三個分區各對應一組 Conv 權重，再加權融合 |
 
+<a id="sec-1-4"></a>
 ### 1.4 殘差連結（Residual Connection）
 
 | 項目 | 內容 |
@@ -41,8 +46,10 @@
 
 ---
 
+<a id="sec-2"></a>
 ## 二、已採用的現代改良技術
 
+<a id="sec-2-1"></a>
 ### 2.1 可學習分區重要性（Learnable Partition Importance）
 
 | 項目 | 內容 |
@@ -52,6 +59,7 @@
 | **本專案採用** | 簡化版：每個 partition 配一個可學習純量 `partition_importance`（`nn.Parameter`），訓練時自動調整三分區的相對權重，不修改鄰接矩陣本身 |
 | **實作位置** | `SpatialGraphConv.partition_importance`，`einsum` 後乘 `partition_importance` 再 `sum(dim=1)` |
 
+<a id="sec-2-2"></a>
 ### 2.2 多尺度時間卷積（Multi-Scale Temporal Convolution）
 
 | 項目 | 內容 |
@@ -62,6 +70,7 @@
 | **感受野** | k=3 ≈ 0.1s（細粒度）/ k=5 ≈ 0.17s（中）/ k=9 ≈ 0.3s（粗粒度，walk 一步週期） |
 | **實作位置** | `MultiScaleTemporalConv`；`branch_logits` 初始化為全零 → 三分支初始等權各 1/3 |
 
+<a id="sec-2-3"></a>
 ### 2.3 關節空間注意力（Joint Spatial Attention）
 
 | 項目 | 內容 |
@@ -73,6 +82,7 @@
 | **作用機制** | 讓模型自動學習「哪個時間步哪個關節更重要」，抑制低信心或不相關關節的訊號 |
 | **可開關** | `USE_ATTENTION` 控制；載入 checkpoint 時從 `joint_attention.*` key 存在與否自動判定 |
 
+<a id="sec-2-3-1"></a>
 #### 2.3.1 JointAttention 詳細設計
 
 ```
@@ -89,6 +99,7 @@ bn_x × attn  (broadcast along C dim)
 input_dropout → 進入 STGCNBlock 堆疊
 ```
 
+<a id="sec-2-3-2"></a>
 #### 2.3.2 JointAttention 的限制與比較
 
 | 面向 | 本實作 JointAttention | Graph Attention (GAT 風格) | Transformer Self-Attention |
@@ -101,8 +112,10 @@ input_dropout → 進入 STGCNBlock 堆疊
 
 **本設計的核心限制**：不能捕捉「關節 A 因為關節 B 的狀態而變重要」這種跨關節的動態依賴關係。
 
+<a id="sec-2-4"></a>
 ### 2.4 骨架特徵多通道工程
 
+<a id="sec-2-4-1"></a>
 #### 2.4.1 骨段向量特徵（Bone Feature）
 
 | 項目 | 內容 |
@@ -112,6 +125,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **定義** | `bone[i] = joint[i] − joint[parent[i]]`，即相對父節點的偏移向量，編碼局部肢體方向 |
 | **本專案採用** | 合併為單流多通道（而非獨立 bone stream），bone_x / bone_y 作為特徵通道 6-7 |
 
+<a id="sec-2-4-2"></a>
 #### 2.4.2 關節速度特徵（Joint Velocity）
 
 | 項目 | 內容 |
@@ -120,6 +134,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **定義** | `v[t] = xy[t] − xy[t-1]`，一階時間差分，第一幀為 0 |
 | **本專案採用** | vx / vy 作為特徵通道 4-5 |
 
+<a id="sec-2-4-3"></a>
 #### 2.4.3 骨段速度特徵（Bone Motion）
 
 | 項目 | 內容 |
@@ -128,6 +143,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **作用** | 捕捉肢體方向的變化率，對 shake（頭頸快速翻轉）判別力強 |
 | **文獻** | 延伸自 DGNN/2s-AGCN 的 bone stream 概念，結合 velocity 的時間差分思路 |
 
+<a id="sec-2-4-4"></a>
 #### 2.4.4 關鍵點信心值通道（Keypoint Confidence）
 
 | 項目 | 內容 |
@@ -135,6 +151,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **作用** | 將 YOLO 逐關節信心值直接作為特徵通道，讓模型學習「低信心座標不可靠」 |
 | **文獻** | 本領域無直接對應論文，屬 domain-specific 工程設計；概念上呼應 Sun et al., *"Deep High-Resolution Representation Learning for Human Pose Estimation"*, CVPR 2019 中對關鍵點不確定性的處理思路 |
 
+<a id="sec-2-5"></a>
 ### 2.5 骨架前處理正規化
 
 骨架序列在送入模型前依序經過四道前處理步驟。以下分別說明各步驟的目的、實作函式、以及在文獻中的對應程度。
@@ -146,6 +163,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | ③ | `orientation_normalize()` | 旋轉使 mid_back→hip 軸對齊 y 軸正向 |
 | ④ | `normalize_skeleton_coords()` | 以 mid_back 為原點 + 胸髖距為尺度縮放 |
 
+<a id="sec-2-5-1"></a>
 #### 2.5.1 `interpolate_missing()` — 缺失關鍵點插值
 
 | 項目 | 內容 |
@@ -154,6 +172,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **文獻** | 標準時序資料缺失值處理慣例；無特定論文，廣泛用於 pose estimation 後處理 |
 | **本設計特點** | 訓練與推論使用不同閾值：訓練閾值寬鬆以保留更多樣本；推論閾值嚴格以防止噪點傳播 |
 
+<a id="sec-2-5-2"></a>
 #### 2.5.2 `flip_normalize()` — 水平翻轉朝向統一
 
 | 項目 | 內容 |
@@ -165,6 +184,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **本設計與文獻的差異** | 現有 2D ST-GCN 論文**無直接對應**的 2D 水平翻轉正規化（pre-normalization）做法；本做法是針對 2D 俯視角貓咪影片的 domain-specific 設計，以 mid_back/hip 的 x 座標差值替代 3D 叉積 |
 | **已知限制** | 當貓咪直接朝向或遠離鏡頭時，mid_back.x ≈ hip.x，翻轉決策不穩定（雜訊主導） |
 
+<a id="sec-2-5-3"></a>
 #### 2.5.3 `orientation_normalize()` — 骨架軸對齊旋轉
 
 | 項目 | 內容 |
@@ -175,6 +195,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **文獻對應（骨架正規化綜述）** | 「Preprocessing steps such as normalizing coordinates to a body-centric frame via **translation to the middle spine joint, rotation to align shoulder and spine vectors**, and scaling based on torso length are commonly applied.」（3D Skeleton-Based Action Recognition: A Review, arXiv 2506.00915） |
 | **本設計與文獻的關係** | 概念與 NTU RGB-D / 2s-AGCN 的 spine 軸對齊**完全一致**，本實作為 2D 降維版（2D 旋轉矩陣替代 3D 旋轉），可直接引用上述論文並說明「adapted to 2D by replacing 3D rotation with a 2D rotation matrix」 |
 
+<a id="sec-2-5-4"></a>
 #### 2.5.4 `normalize_skeleton_coords()` — 中心化 + 體型縮放
 
 | 項目 | 內容 |
@@ -188,6 +209,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 
 ---
 
+<a id="sec-3"></a>
 ## 三、訓練策略文獻對照
 
 | 技術 | 文獻 | 本專案實作 |
@@ -201,6 +223,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **早停（Early Stopping）** | Prechelt, *"Early Stopping — But When?"*, Neural Networks 1998 | `patience=10` |
 | **影片級資料切分** | Zoph et al., *"Neural Architecture Search with Reinforcement Learning"*（含 data leakage 討論）；Tran et al., *"Learning Spatiotemporal Features with 3D CNNs"*, ICCV 2015（video-level split 實踐） | 以影片為單位 train/val split，防止滑動窗重疊序列造成資料洩漏 |
 
+<a id="sec-3-1"></a>
 ### 3.1 資料增強文獻對照
 
 | 增強方式 | 文獻 | 本專案設定 |
@@ -211,8 +234,10 @@ input_dropout → 進入 STGCNBlock 堆疊
 
 ---
 
+<a id="sec-4"></a>
 ## 四、尚未採用的主要技術（優化方向）
 
+<a id="sec-4-1"></a>
 ### 4.1 動態鄰接矩陣（Dynamic / Channel-wise Topology）
 
 | 項目 | 內容 |
@@ -222,6 +247,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **未採用原因** | 計算量增加（需對每 batch 動態生成鄰接矩陣）；小資料集 + 5 類場景中過擬合風險提高 |
 | **若採用預期收益** | 模型能依貓咪姿態動態強調不同關節連結，如 lick 時頭頸連結強、walk 時前後肢連結強 |
 
+<a id="sec-4-2"></a>
 ### 4.2 圖注意力（Graph Attention Network 風格）
 
 | 項目 | 內容 |
@@ -232,6 +258,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **vs 本實作 JointAttention** | GAT 的 attention 在邊上（關節間），本實作的 attention 在節點上（關節獨立）；GAT 能捕捉「關節 A 因 B 的狀態而變重要」的依賴 |
 | **未採用原因** | 實作複雜度高；O(V²) 邊注意力在 17 節點的小圖上優勢有限 |
 
+<a id="sec-4-3"></a>
 ### 4.3 時空 Transformer（Spatio-Temporal Transformer）
 
 | 項目 | 內容 |
@@ -241,6 +268,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **核心思路** | 以 Multi-Head Self-Attention 替代 GCN，可捕捉任意長距離關節/時間依賴 |
 | **未採用原因** | 需要大量訓練資料才能發揮優勢；序列長度 T=16、關節數 V=17 的設定讓 Self-Attention 的優勢不顯著；推論延遲增加 |
 
+<a id="sec-4-4"></a>
 ### 4.4 雙流架構（Two-Stream: Joint + Bone）
 
 | 項目 | 內容 |
@@ -251,6 +279,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **未採用原因** | 訓練成本加倍；現有多通道單流已包含相同資訊，在 5 類小場景下效益有限 |
 | **若採用預期收益** | ensemble 通常可提升 1-3% 準確率，對論文表格有幫助 |
 
+<a id="sec-4-5"></a>
 ### 4.5 InfoGCN（資訊幾何 + 可學習圖）
 
 | 項目 | 內容 |
@@ -259,6 +288,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 | **核心思路** | 以資訊最大化目標學習骨架表示，結合 context-dependent 鄰接矩陣與注意力嵌入 |
 | **未採用原因** | 架構複雜；SOTA 主要在 NTU RGB+D 等大型人體資料集驗證，轉移到貓體小資料集的效益未知 |
 
+<a id="sec-4-6"></a>
 ### 4.6 PoseC3D（體素化骨架 + 3D CNN）
 
 | 項目 | 內容 |
@@ -269,6 +299,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 
 ---
 
+<a id="sec-5"></a>
 ## 五、技術選型總表（論文用速查）
 
 | 技術 | 採用 | 文獻 | 關鍵字（搜尋用） |
@@ -303,6 +334,7 @@ input_dropout → 進入 STGCNBlock 堆疊
 
 ---
 
+<a id="sec-6"></a>
 ## 六、本設計的定位
 
 本實作約等於 **2020–2021 年的實用改良版 ST-GCN**，在以下維度做了取捨：
@@ -323,4 +355,4 @@ input_dropout → 進入 STGCNBlock 堆疊
 
 ---
 
-*對應詳細實作說明見 `0_STGCN_DESIGN_ANALYSIS.md`*
+*對應詳細實作說明見 [`0_STGCN_DESIGN_ANALYSIS.md`](0_STGCN_DESIGN_ANALYSIS.md)*

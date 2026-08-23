@@ -463,9 +463,15 @@ def run_gui(videos, detector):
 # ── 主程式 ────────────────────────────────────────────────────────────────────
 
 def main():
-    videos = load_videos(VIDEO_FOLDER)
+    # 若設定 TEST_VIDEO_PATH 環境變數，優先使用該路徑（覆蓋 VIDEO_FOLDER）；
+    # 可為單一影片檔案，或跟 VIDEO_FOLDER 一樣的資料夾。
+    env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+    if env_test_video and Path(env_test_video).is_file():
+        videos = [env_test_video]
+    else:
+        videos = load_videos(env_test_video or VIDEO_FOLDER)
     if not videos:
-        print(f"[ERROR] 資料夾內找不到影片：{VIDEO_FOLDER}")
+        print(f"[ERROR] 資料夾內找不到影片：{env_test_video or VIDEO_FOLDER}")
         return
     print(f"[INFO] 載入 {len(videos)} 支影片")
     for i, v in enumerate(videos):

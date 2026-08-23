@@ -46,8 +46,8 @@ YOLO_CONF_THRESHOLD = 0.5
 
 STGCN_NORMALIZE = True
 SEQUENCE_LENGTH = 16
-_raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy")
-STGCN_FEATURE_MODE = str(_raw_stgcn_mode).strip().lower()
+STGCN_FEATURE_MODE = "xy"  # checkpoint 讀取失敗時的 fallback 值；正常情況下 load_models() 會依
+                            # checkpoint 的 bn_input 通道數自動校正為實際的 feature mode（見下方）
 _FEATURE_MODE_MAP = {
     "xyconf": "xy_conf",
     "xyv_conf": "xy_conf_v",

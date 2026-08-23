@@ -72,6 +72,12 @@ SINGLE_FOLDER_PATH = r"C:\Users\homec\Videos\NVIDIA\Desktop\Desktop 2026.07.21 -
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該單一影片路徑（覆蓋 FOLDER_TEST_MODE / VIDEO_PATHS）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_PATHS = [_env_test_video]
+
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
 STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_121_xy_conf_v_bone_att_on\121_best_model.pth"
 INFERENCE_DEVICE = 'cuda'
@@ -79,8 +85,8 @@ YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
 YOLO_CONF_THRESHOLD = 0.5
 STGCN_NORMALIZE = True
 SEQUENCE_LENGTH = 16
-_raw_stgcn_mode = os.getenv("STGCN_FEATURE_MODE", "xy")
-STGCN_FEATURE_MODE = str(_raw_stgcn_mode).strip().lower()
+STGCN_FEATURE_MODE = "xy"  # checkpoint 讀取失敗時的 fallback 值；正常情況下 main() 會依
+                            # checkpoint 的 bn_input 通道數自動校正為實際的 feature mode（見下方）
 # Normalize legacy/variant feature-mode names to canonical names used by the STGCN module
 # Canonical names: "xy", "xy_conf", "xy_conf_v", "xy_conf_v_bone", "xy_conf_v_bone_bmotion"
 _FEATURE_MODE_MAP = {

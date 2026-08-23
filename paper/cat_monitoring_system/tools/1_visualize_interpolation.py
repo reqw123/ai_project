@@ -41,6 +41,7 @@ vs「時間軸插值補全後」的骨架差異，用來實際驗證插值在不
 畫面上的文字全部使用英文——OpenCV 內建的 Hershey 字型不支援中文字元，
 中文會被畫成一堆問號/亂碼方框，這裡刻意避開。
 """
+import os
 import sys
 from pathlib import Path
 from collections import deque
@@ -59,6 +60,11 @@ from models.stgcn_model import interpolate_missing
 
 # ═══════════════════════════════ 使用者設定區 ═══════════════════════════════
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_PATH = _env_test_video
 
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_133.pt"
 INFERENCE_DEVICE = "cuda"

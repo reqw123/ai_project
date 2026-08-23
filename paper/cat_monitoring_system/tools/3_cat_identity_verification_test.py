@@ -36,6 +36,7 @@
 
 這是驗證「這個方法可不可行」用的測試腳本，還沒接回正式的 KeypointDetector。
 """
+import os
 import csv
 import json
 from collections import Counter, defaultdict, deque
@@ -100,6 +101,12 @@ VERIFY_SOURCE = [
     r"C:\Users\homec\Downloads\2026-07-18 10_32_00_0.mp4",
     r"C:\Users\homec\Downloads\2026-07-18 10_32_31_0.mp4"
 ]
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先只用該影片路徑做 verify（覆蓋上面的 VERIFY_SOURCE；
+# 不影響 RUN_MODE="enroll"/"diagnose"，那兩種模式本來就不讀 VERIFY_SOURCE）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VERIFY_SOURCE = [_env_test_video]
 
 SHOW_PREVIEW = True   # verify 時是否開即時預覽視窗
 PREVIEW_DISPLAY_SIZE = (1280, 720)   # 預覽視窗顯示大小（寬, 高），等比縮放＋黑邊，不裁切畫面

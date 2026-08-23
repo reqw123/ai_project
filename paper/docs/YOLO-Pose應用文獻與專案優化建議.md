@@ -28,53 +28,63 @@
 
 ## 逐篇 WHY / HOW / WHAT
 
+<a id="sec-1"></a>
 ### 1. YOLO-Pose（Maji, Nagori, Mathew & Poddar, 2022）
 - **WHY**：傳統多人姿態估計要嘛是 top-down（先偵測人再估姿態，慢）要嘛是 bottom-up（先估關鍵點再分組，需要複雜後處理），兩者都不是端到端優化。
 - **HOW**：把姿態估計當成物件偵測的延伸，單次前向傳播同時輸出 bounding box 與關鍵點，直接用 Object Keypoint Similarity（OKS）當 loss 訓練，不用 surrogate loss、不用 test-time augmentation。
 - **WHAT**：COCO 上達到 SOTA，且完全不需要關鍵點分組後處理。
 - 開源：https://github.com/TexasInstruments/edgeai-yolov5 、https://github.com/TexasInstruments/edgeai-yolox
 
+<a id="sec-2"></a>
 ### 2. T-LEAP（cow, 2021）
 - **WHY**：靜態（單幀）姿態估計模型在動物被遮蔽（例如柵欄、其他牛隻擋住）時準確度大幅下降，但酪農場的步態分析（跛行偵測）恰好最需要在這種真實雜訊環境下維持準確度。
 - **HOW**：把基礎 LEAP 姿態模型擴充成吃「前面連續幾幀」的時序資訊（T-LEAP），而非逐幀獨立推論。架構上用 3D 卷積把時間維度也納入卷積運算，`seq_length` 參數可設 1（=靜態 LEAP）到 4（=T-LEAP），PyTorch 實作。
 - **WHAT**：無遮蔽時兩版準確度都到 99%；人工加入遮蔽後，時序版比靜態版最多提升 32.9%；換成沒看過的牛時仍有 87.6% 準確度（已知牛 93.8%）。
 - 開源：https://github.com/hrussel/t-leap （README 未明確說明 `seq_length` 視窗是「只看過去幀」還是「涵蓋未來幀」，這點會直接影響能不能無延遲用在即時串流上，詳見下方「深入」章節）
 
+<a id="sec-3"></a>
 ### 3. DeepLabCut multi-animal（Lauer et al., 2022, Nature Methods）
 - **WHY**：多隻動物互動時（尤其外觀相似的同種動物）會互相遮蔽，關鍵點很難正確對應到「是哪一隻動物的」，一般多人姿態估計的方法在近距離互動的同種動物身上表現不好。
 - **HOW**：(1) 用 part affinity fields 資料驅動地決定骨架連線（不用手動設計骨架拓樸）；(2) 局部先用橢圓/框追蹤器產生短 tracklet，再用網路流優化（結合運動/距離/形狀/動態多種成本函數）把短 tracklet 縫合成長軌跡；(3) 身分預測用監督式學習（有標記動物）或無監督 transformer-based metric learning（無標記動物）。
 - **WHAT**：關鍵點誤差 2.65–5.25 像素，優於 SOTA COCO 模型（HRNet-AE、ResNet-AE）；獼猴頭部關鍵點身分預測準確率達 99.2%；在鼠/獼猴/14 條魚群等多種場景驗證過。
 - 開源：https://github.com/DeepLabCut/DeepLabCut ，基準資料集 https://benchmark.deeplabcut.org/
 
+<a id="sec-4"></a>
 ### 4. YOLO-BCD（sheep, Sun et al., 2025, Sensors）
 - **WHY**：農場環境光照多變、常有遮蔽，一般姿態模型參數量大、算力需求高，不適合即時農場部署。
 - **HOW**：多層級輕量化設計，強化特徵融合機制 + 空間-通道注意力模組（multi-module fusion）。
 - **WHAT**：389.12 FPS、5.5 GFLOPs、2.433M 參數，91.7% 辨識準確度（三種姿勢：站立/趴臥/側臥）。
 
+<a id="sec-5"></a>
 ### 5. CBR-YOLO（beef cattle, 2024）——⚠️僅摘要層級核對
 - **WHY**：一般行為辨識模型在多變天氣場景（不同光照、能見度）下辨識能力不穩定。
 - **HOW**：以 YOLOv8 為基礎的輕量化改進模型（CBR-YOLO），文字說明強調多場景天氣穩健性，但因全文存取受阻，改進細節（哪些模組被替換）無法進一步核實。
 - **WHAT**：平均準確率 90.2%，優於 12 種 SOTA 物件偵測模型（此數字來自搜尋引擎摘要，未經全文核對，引用時應標註為二手資訊）。
 
+<a id="sec-6"></a>
 ### 6. Cattle rumination keypoint detection（2024）
 - **WHY**：反芻行為（rumination）是牛隻健康指標，但人工觀察或穿戴式裝置都不理想（費工或可能傷害動物），需要非接觸式自動化方案。
 - **HOW**：改良版 YOLOv8-pose（加 SimSPPF 降低運算複雜度、ECA 注意力機制、RepGFPN 重構 neck），只偵測**鼻子與嘴巴兩個關鍵點**，計算兩點歐氏距離產生「咀嚼運動曲線」，低通濾波去噪後用多條件門檻峰值偵測數咀嚼次數。
 - **WHAT**：96% mAP（比基礎版提升 2.8%）；10 支測試影片咀嚼次數平均誤差僅 5.6%（標準誤差 2.23%）；同時能估算反芻時長、咀嚼頻率。
 
+<a id="sec-7"></a>
 ### 7. Lightweight cattle pose（reparameterization + attention, PLOS ONE 2024）
 - **WHY**：傳統 heatmap-based 姿態估計方法計算複雜度高、偵測速度慢，不利複雜農場環境即時部署。
 - **HOW**：EfficientRepBiPAN——訓練時多分支結構、推論時（依 RepVGG 方法論）轉換成單分支結構做重參數化；搭配 SimAM（3D 無參數注意力機制），統一通道與空間尺度、不額外增加參數量就能強化特徵判別力。
 - **WHAT**：AP₀.₅ 比基礎 YOLOv8n-pose 提升 4.3%（達 92.3%），參數量減少 0.16M、運算量減少 1.0 GFLOPs，收斂速度也更快。
 - 開源：僅資料集（figshare, DOI 10.6084/m9.figshare.25989082），程式碼未提及。
 
+<a id="sec-8"></a>
 ### 8. Deep learning for visual animal monitoring：comprehensive review（2025）——⚠️僅摘要層級核對
 - **WHY/HOW/WHAT**：全文存取受阻（403），僅能引用搜尋引擎摘要層級資訊——涵蓋偵測、追蹤、姿態估計、行為分類四個階段的動物監測文獻系統性回顧。因無法核對全文的具體 gap 分析內容，這篇在本文件中主要當作「這個領域現在怎麼分類自己的研究範疇」的框架參考，不引用其具體結論數字。
 
+<a id="sec-9"></a>
 ### 9. Appearance-based canine multi-animal monitoring pipeline（Frontiers, 2026）
 - **WHY**：藥物安全性試驗中，實驗室犬隻的行為評估仰賴技術員在房內觀察，費時費力又容易有人為偏誤，需要不影響動物福祉的連續、客觀監測方式。
 - **HOW**：五段式管線——(1) YOLOv2 偵測所有犬隻（F1 94.8%）；(2) ResNet-18 辨識三種顏色反光背心做身分分類（80.3%）+ 修改版 Jonker-Volgenant 演算法搭配 Kalman filter 做跨幀跨鏡頭關聯；(3) ResNet-18 姿態分類器（躺/坐/站/起身/趴下五類，95.2%）；(4) ViT-S/16 行為分類器（進食/飲水，含時序上下文，94%）；(5) 擴充版 ViT-S/16 臨床觀察分類器（11 種臨床徵象如共濟失調、抽搐、震顫，79% top-1）。
 - **WHAT**：群養動物重識別準確率 95.3–96.2%；AI 活動追蹤跟加速度計量測相關係數 r=0.965；180 萬+ 標註幀訓練，1800 萬+ 幀現場驗證；成功偵測到藥物誘發的共濟失調、不自主運動等徵象，與獸醫觀察吻合。
 
+<a id="sec-10"></a>
 ### 10. Ultralytics YOLO11 dog-pose custom training（廠商技術文件，非同儕審查論文）
 - **WHY**：YOLO11 本身沒有現成的犬類關鍵點模型，需要客製化訓練才能用於寵物姿態分析。
 - **HOW**：提供 Dog-Pose 資料集（6,773 訓練 + 1,703 驗證圖片，**24 個關鍵點**）供客製化訓練 YOLO11-pose，並提出可結合穿戴式裝置（智慧項圈）做健康指標監測、即時分析姿態抓跛行/僵硬等異常動作的應用構想。

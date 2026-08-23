@@ -61,6 +61,7 @@ Mode 7 — ROI Padding Impact on Keypoint Stability
   3. 執行腳本，影片播完後自動輸出結果
   4. 輸出根目錄：OUTPUT_DIR / {mode_subdir} / run_YYYYMMDD_HHMMSS/
 """
+import os
 import sys
 import csv
 import cv2
@@ -89,6 +90,11 @@ from utils.constants import BLACK, COLOR_HEAD
 ANALYSIS_MODE = 6
 # ── 影片路徑 ────────────────────────────────────────────────────────
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\7月2日 (4).mp4"
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_PATH = _env_test_video
 
 # ── 輸出根目錄 ──────────────────────────────────────────────────────
 OUTPUT_DIR = Path(r"C:\ai_project\paper\output\jitter_analysis")

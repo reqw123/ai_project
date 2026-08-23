@@ -86,6 +86,7 @@ Temporal Consistency（看窗口內隨時間的變化）：
      名稱>.json，記錄這批「正常」影片 3 項指標的統計基準；之後每次跑
      模式1 開始時都會列出所有這樣的基準檔，輸入編號手動選擇要套用哪一份
 """
+import os
 import sys
 import csv
 import json
@@ -160,6 +161,13 @@ VIDEO_FOLDER = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測�
 VIDEO_FOLDER_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
 # 只有 INPUT_MODE = "folder" 時才會用到：資料夾底下（不含子資料夾）
 # 副檔名符合上面清單的影片檔，依檔名排序後最多取前 10 支。
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先只處理該單一影片路徑
+# （強制切回 INPUT_MODE="paths"，覆蓋上面 VIDEO_PATHS / INPUT_MODE="folder" 設定）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    INPUT_MODE = "paths"
+    VIDEO_PATHS = [_env_test_video]
 
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"
 INFERENCE_DEVICE = "cuda"

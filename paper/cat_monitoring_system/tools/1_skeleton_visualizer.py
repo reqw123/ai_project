@@ -8,6 +8,7 @@
 此版本只保留骨架偵測與視覺化，不包含接觸區域、行為統計或 CSV 匯出。
 """
 
+import os
 import sys
 from pathlib import Path
 from collections import deque
@@ -289,6 +290,12 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先只處理該單一影片路徑（覆蓋 VIDEO_LIST / VIDEO_PATH 資料夾掃描）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_LIST = [_env_test_video]
+    MAX_VIDEOS = 1
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
 
 INFERENCE_DEVICE = "cuda"

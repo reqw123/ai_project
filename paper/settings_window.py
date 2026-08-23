@@ -19,15 +19,11 @@ config.py 對應屬性外包一層 ``_runtime_default()``——不需要碰這�
 """
 
 import os
-import queue
 import re
 import shutil
-import signal
 import subprocess
 import sys
-import threading
-import time
-import unicodedata
+from datetime import datetime
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, ttk
@@ -44,14 +40,43 @@ _MAIN_PY_PATH = _SCRIPT_DIR / "cat_monitoring_system" / "main.py"
 import config  # noqa: E402
 import settings_manager  # noqa: E402
 from settings_manager import FIELD_SCHEMA, TAB_ORDER, _MISSING, _get_nested, _redact, _set_nested  # noqa: E402
+from settings_gui.console_panel import ConsolePanel  # noqa: E402
+from settings_gui.process_manager import ProcessManager  # noqa: E402
+from settings_gui.field_search import FieldSearchBar  # noqa: E402
+from settings_gui import tab_docs_panel  # noqa: E402
+from settings_gui.style import (  # noqa: E402
+    BTN_PRIMARY_BG,
+    BTN_PRIMARY_ACTIVE,
+    BTN_SECONDARY_BG,
+    BTN_SECONDARY_ACTIVE,
+    BTN_INFO_BG,
+    BTN_INFO_ACTIVE,
+    BTN_INFO_FG,
+    BTN_WARN_FG,
+    COLOR_CONSOLE_BG,
+    COLOR_HEADER_BG,
+    COLOR_HEADER_FG,
+    COLOR_TOOL_DESC_BG,
+    COLOR_TOOL_DESC_BORDER,
+    COLOR_TOOL_DESC_ACCENT,
+    COLOR_TOOL_DESC_FG,
+    CONSOLE_DEFAULT_HEIGHT,
+    CONSOLE_FONT_FAMILY,
+    SPACE_XS,
+    SPACE_SM,
+    SPACE_MD,
+    SPACE_LG,
+    _display_width,
+    _styled_button,
+)
 
 # ── 視覺樣式：沿用 analytics/manage_baseline_history.py 的同一組常數 ─────────
+# （終端機面板／子行程管理相關的常數與 _styled_button 已搬到 settings_gui/style.py，
+#  上面用 import 拿回來；以下留著的是只有本檔案自己會用到的樣式常數。）
 
 _FONT_FAMILY = "Microsoft JhengHei"
 
 COLOR_BG_MAIN = "#eef2f6"
-COLOR_HEADER_BG = "#2c3e50"
-COLOR_HEADER_FG = "#ffffff"
 COLOR_HEADER_SUB_FG = "#b7c4cf"
 COLOR_INFO_BG = "#e8f1fb"
 COLOR_INFO_FG = "#2c4053"
@@ -63,14 +88,12 @@ COLOR_ERROR_FG = "#c0392b"
 COLOR_WARNING_FG = "#b36b00"
 COLOR_SUCCESS_FG = "#1a7a1a"
 
-BTN_PRIMARY_BG = "#27ae60"
-BTN_PRIMARY_ACTIVE = "#219150"
-BTN_SECONDARY_BG = "#5d7285"
-BTN_SECONDARY_ACTIVE = "#4a5d6e"
 BTN_WARN_BG = "#e67e22"
 BTN_WARN_ACTIVE = "#cf711d"
-BTN_NEUTRAL_BG = "#95a5a6"
-BTN_NEUTRAL_ACTIVE = "#7f8c8d"
+# 原本這裡還有一組 BTN_NEUTRAL_*（純灰）給「取消」「關閉」這類收尾動作用，跟
+# BTN_SECONDARY_*（藍灰）語意上重疊，2026-08 版面美化時合併掉了——那兩個按鈕
+# 現在改用 BTN_SECONDARY_BG 但加 `outline=True`（見 settings_gui/style.py 的
+# _styled_button），用「有沒有實心填色」而不是另開一個新色相來分辨重要性。
 
 BADGE_ENV_BG = "#f5b7b1"
 BADGE_ENV_FG = "#78281f"
@@ -81,28 +104,9 @@ BADGE_DEFAULT_FG = "#4d5656"
 BADGE_FORM_BG = "#f9e79f"
 BADGE_FORM_FG = "#7d6608"
 
-# 底部「main.py 終端機輸出」面板：刻意用深色終端機配色跟上方淡色表單拉開視覺區隔，
-# 一眼就能認出這塊是「輸出訊息」而不是可編輯欄位。
-COLOR_CONSOLE_BG = "#1e1e1e"
-COLOR_CONSOLE_FG = "#d4d4d4"
-COLOR_CONSOLE_MUTED_FG = "#7f8c8d"
-COLOR_CONSOLE_GRIP_BG = "#3a3f44"  # 可拖拉調整高度的把手，比面板底色略亮，暗示「這裡能拖」
 COLOR_TOOL_LISTBOX_BG = "#eaf4fc"  # 獨立腳本工具下拉選單展開後的淡藍色底，掃視一長串腳本名稱更輕鬆
-COLOR_TOOL_DESC_BG = "#eaf4fc"  # 常駐說明卡片底色，跟下拉選單同一色系，視覺上關聯在一起
-COLOR_TOOL_DESC_BORDER = "#aed6f1"
-COLOR_TOOL_DESC_ACCENT = "#1b4f72"  # 卡片左側色條 + 呼應下拉選單選取列的深藍
-COLOR_TOOL_DESC_FG = "#1b2631"  # 深色文字，淡藍底上要維持可讀性
-
-CONSOLE_DEFAULT_HEIGHT = 260  # 預設展開高度
-CONSOLE_MIN_HEIGHT = 50  # 拖拉能縮到的最小高度，比收合狀態(34px)略高，仍看得到一點點輸出內容
-CONSOLE_COLLAPSED_HEIGHT = 34  # 內縮後只剩標題列那一條水平線的高度
-CONSOLE_MAX_HEIGHT_RESERVE = 200  # 標題列高度還量不到時的退回值（拖到最高＝扣掉標題列高度）
-CONSOLE_DEFAULT_HEIGHT_FRACTION = 0.75  # 終端機面板「初始」高度＝視窗高度的這個比例
-
-CONSOLE_FONT_FAMILY = "Consolas"
-CONSOLE_DEFAULT_FONT_SIZE = 20  # 原本 10 的 2 倍；Ctrl+0／Ctrl+numpad0 重設回這個大小
-CONSOLE_MIN_FONT_SIZE = 6
-CONSOLE_MAX_FONT_SIZE = 28
+# COLOR_TOOL_DESC_*（常駐說明卡片配色）搬到 settings_gui/style.py 了——分頁右欄的
+# tab_docs_panel.py 也要用同一組配色，放在共用模組才不會 import 回這支檔案造成循環。
 
 # 布林旗標（開關型設定）的視覺樣式——刻意跟數字/字串欄位的樸素外觀拉開差異，
 # 讓「這是一個開關」在掃視整頁時能立刻被認出來，不用逐行讀 label 文字。
@@ -111,6 +115,10 @@ FLAG_ON_FG = "#ffffff"
 FLAG_OFF_BG = "#aeb6bf"
 FLAG_OFF_FG = "#2c3e50"
 FLAG_ROW_BG = "#f4faf6"  # 布林欄位那一整列的底色，跟其他欄位列的白底做出區隔
+
+# 全域欄位搜尋命中時，欄位列的高亮外框色——跟其餘配色（藍/綠/橘/紅系）都不撞，
+# 一眼認出「這是搜尋結果」，不會誤認成布林開關或徽章的既有配色語意。
+SEARCH_HIGHLIGHT_BORDER = "#e91e8c"
 
 # 每個分頁一個代表色：分頁切換鈕本身直接用這個顏色上色（不用 ttk.Notebook——
 # 它在 Windows 原生佈景主題下無法讓每個分頁按鈕有不同底色，所以分頁列改成自己
@@ -131,14 +139,6 @@ TAB_COLORS = {
 }
 
 
-def _styled_button(parent, text, command, bg, active_bg, fg="#ffffff", font=None):
-    return tk.Button(
-        parent, text=text, command=command, bg=bg, fg=fg,
-        activebackground=active_bg, activeforeground=fg, relief="flat",
-        font=font or (_FONT_FAMILY, 12, "bold"), padx=14, pady=6, cursor="hand2",
-    )
-
-
 def _lighten(hex_color: str, factor: float) -> str:
     """把顏色往白色混合 factor 比例（0~1，越大越淡）；分頁未選取時用淡版底色，
     選取時用原色，兩種狀態都看得出屬於哪個分頁、又能分辨目前選到哪一個。"""
@@ -148,12 +148,6 @@ def _lighten(hex_color: str, factor: float) -> str:
     g = int(g + (255 - g) * factor)
     b = int(b + (255 - b) * factor)
     return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def _display_width(text: str) -> int:
-    """算字串的「顯示寬度」（全形/中文字元算 2 個半形字寬，其餘算 1）——用在等寬
-    字型的清單裡要用空白對齊多欄內容時，len() 對中文字元會低估實際佔用的寬度。"""
-    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
 
 
 # 依 value_type 對應 config.py 現有的 _env_* 解析函式，讓「顯示某欄位目前受環境
@@ -182,6 +176,7 @@ class _ScrollableTab(tk.Frame):
         # 底下終端機面板拖到最高時卡在提早的高度（content_area 撐住不縮），設成 1 只是
         # 蓋掉這個預設請求值，實際渲染時仍會被 pack(fill="both", expand=True) 撐滿可用空間。
         canvas = tk.Canvas(self, bg=COLOR_TAB_BG, highlightthickness=0, width=1, height=1)
+        self.canvas = canvas  # 存成屬性，讓外部（例如欄位搜尋跳轉後的捲動定位）能直接操作
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
         self.body = tk.Frame(canvas, bg=COLOR_TAB_BG)
         self.body.bind(
@@ -221,6 +216,7 @@ class SettingsWindow(tk.Tk):
         self.configure(bg=COLOR_BG_MAIN)
         self.minsize(1000, 900)  # 下方新增終端機輸出面板固定高度，原本 640 會把分頁表單擠壓到快捲不動
         self._size_window_near_fullscreen()
+        self._apply_ttk_style()
 
         # 所有字體統一放大 1.2 倍（基準字級 × _FONT_SCALE，四捨五入）。
         self._font_title = tkfont.Font(family=_FONT_FAMILY, size=22, weight="bold")
@@ -240,21 +236,16 @@ class SettingsWindow(tk.Tk):
             f["json_key"]: getattr(getattr(config, f["attr"][0]), f["attr"][1])
             for f in FIELD_SCHEMA
         }
-        # self._main_process 是「目前這個視窗啟動的外部行程」共用欄位——main.py 跟下面
-        # 新增的「獨立腳本工具」共用同一個欄位、同一套啟動/關閉/終端機輸出機制，因為
-        # 同一時間本來就只允許跑一個（避免兩支行程搶同一份 runtime_settings.current.json／模型
-        # 顯存，也让終端機輸出不會兩邊來源混在一起分不清楚）。_active_process_label／
-        # _active_kind 記錄「目前（或最後一次）跑的是什麼」，供狀態列文字與按鈕互斥判斷用。
-        self._main_process = None  # None＝本視窗目前未啟動任何行程
-        self._active_process_label = None  # 例："main.py" 或某個腳本的檔名；None＝從未啟動過
-        self._active_kind = None  # "main" | "tool" | None
+        # main.py 跟下面新增的「獨立腳本工具」共用同一套啟動/關閉/終端機輸出機制
+        # （ProcessManager，見 settings_gui/process_manager.py），因為同一時間本來就
+        # 只允許跑一個（避免兩支行程搶同一份 runtime_settings.current.json／模型顯存，
+        # 也讓終端機輸出不會兩邊來源混在一起分不清楚）。on_state_change 掛
+        # _update_process_buttons_state，讓 ProcessManager 每次狀態改變（啟動/關閉/
+        # 輪詢發現行程已死）都會回頭更新這裡的按鈕與狀態列文字。ProcessManager 建構
+        # 時 console（ConsolePanel）還沒蓋出來（_build_middle_area() 比 _build_process_bar()
+        # 晚），所以 .console 是事後在 _build_middle_area() 裡才指派。
+        self._process_manager = ProcessManager(self, on_state_change=self._update_process_buttons_state)
         self._tool_script_var = tk.StringVar(value="")  # 「獨立腳本工具」下拉/瀏覽選中的 .py 路徑
-        # main.py 的 stdout/stderr 用背景執行緒逐行讀取後丟進這個 queue，再由主執行緒
-        # 透過 self.after() 輪詢取出、寫進右側終端機面板——tkinter 元件只能在主執行緒
-        # 操作，讀取行程輸出又是阻塞式的 readline()，所以不能省略這層 queue 直接跨執行緒改 Text。
-        self._log_queue = queue.Queue()
-        self._log_reader_thread = None
-        self._log_line_count = 0
         # 關閉本視窗（不管是按右上角 X 還是下方「關閉」按鈕）視同 main.py 關閉請求，
         # 避免不小心關掉設定視窗後，main.py 還在背景跑、卻再也找不到入口能停止它。
         self.protocol("WM_DELETE_WINDOW", self._on_window_close)
@@ -266,7 +257,7 @@ class SettingsWindow(tk.Tk):
         self._build_bottom_bar()
 
         self._populate_from_effective_state()
-        self._poll_main_process()
+        self._process_manager.poll()
 
         # 到這裡整個視窗的固定佔用區塊（標題/流程列/獨立腳本工具列/資訊列/分頁按鈕列/
         # 底部按鈕列）都已經建好，現在才量得到它們的真實高度——用這個真實高度把終端機
@@ -275,14 +266,14 @@ class SettingsWindow(tk.Tk):
         # 只剩一小截、甚至看不到欄位是可接受的結果；用比例而非寫死像素值，是因為不同
         # 螢幕解析度／系統 DPI 縮放下可用空間差異很大，比例才會等比縮放。
         self.update_idletasks()
-        self._apply_sane_console_default_height()
+        self._console_panel.apply_sane_default_height()
         # 終端機面板在 _build_middle_area() 就建立了，早於 _build_bottom_bar()；Tk 同層
         # 元件預設的堆疊順序是「後建立的蓋在先建立的上面」，所以底部按鈕列這時候會蓋在
-        # 終端機面板之上，跟「終端機蓋過其他內容」的設計相反。_place_console() 每次呼叫
-        # 都會 lift() 一次，但 _apply_sane_console_default_height() 只在高度真的改變時
-        # 才會呼叫它，剛好沒改變的話就不會補這次 lift()——這裡直接無條件再 lift() 一次，
+        # 終端機面板之上，跟「終端機蓋過其他內容」的設計相反。ConsolePanel.place() 每次
+        # 呼叫都會 lift() 一次，但 apply_sane_default_height() 只在高度真的改變時才會
+        # 呼叫它，剛好沒改變的話就不會補這次 lift()——這裡直接無條件再 lift() 一次，
         # 確保不管前面有沒有觸發 place，終端機面板一定疊在所有其他元件最上層。
-        self._console_container.lift()
+        self._console_panel.lift()
 
     def _size_window_near_fullscreen(self):
         """開窗時盡量佔滿螢幕（接近全屏，但保留標題列/工作列，不用真正的無邊框全螢幕），
@@ -298,6 +289,56 @@ class SettingsWindow(tk.Tk):
         w, h = int(screen_w * 0.92), int(screen_h * 0.88)
         x, y = (screen_w - w) // 2, (screen_h - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _apply_ttk_style(self):
+        """ttk.Scrollbar／ttk.Combobox 這類元件預設吃 Windows 原生佈景主題，很多
+        顏色設定（尤其捲動軸的滑塊/滑軌顏色）在原生佈景下會被系統忽略，實際跑
+        起來滑塊幾乎跟滑軌同色、幾乎看不到有一條線可以拖——分頁按鈕列的橫向捲動
+        軸、分頁右欄新加的橫向捲動軸、每個分頁內容區的垂直捲動軸都是這個問題。
+        切換成 'clam' 佈景：這是 Tk 內建、純用 Tk 自己畫（不呼叫系統原生繪製）的
+        佈景，顏色設定才會真的生效，滑塊改成藍灰色（跟按鈕次要色同一組），滑軌
+        用主背景色，兩者對比夠明顯，一眼就看得到那條線、也看得出滑塊在哪一段。
+        """
+        style = ttk.Style(self)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            return  # 這個環境沒有 'clam' 佈景可用，維持系統預設，不強求
+
+        # 'clam' 佈景的滑塊（thumb）子元件預設還是會用 lightcolor/darkcolor 畫一圈
+        # 立體斜角（跟滑軌對比出「整條灰灰的、中間一小段顏色不一樣」的斑駁感），
+        # 而且預設會在滑塊中間畫一個 grip（一小撮凸起的裝飾點，顏色又是另外算的）
+        # ——這正是「灰色中間小段白白的」的來源：thumb 的底色雖然設定了，但
+        # lightcolor/darkcolor 沒有一起蓋掉、grip 也沒有關掉，兩個各自預設的
+        # 顏色疊在一起，看起來就是一條灰撲撲的軌道中間卡一小段對不上色的東西。
+        # 修法：lightcolor/darkcolor 都設成跟滑塊底色同一色（斜角消失，變成
+        # 扁平色塊）、gripcount=0（完全不畫那個裝飾點）。Horizontal／Vertical
+        # 兩個方向的樣式分開明講設定（不只設共用的 "TScrollbar"）：不同 ttk 版本
+        # 對子樣式是否會自動繼承共用樣式的顏色設定不完全可靠，明講兩份才保證
+        # 兩個方向的捲動軸都吃到一樣的扁平配色。
+        for orient_style in ("Horizontal.TScrollbar", "Vertical.TScrollbar"):
+            style.configure(
+                orient_style, background=BTN_SECONDARY_BG, troughcolor=COLOR_BG_MAIN,
+                bordercolor=COLOR_BG_MAIN, lightcolor=BTN_SECONDARY_BG,
+                darkcolor=BTN_SECONDARY_BG, arrowcolor="#ffffff", relief="flat",
+                gripcount=0,
+            )
+            style.map(orient_style, background=[("active", BTN_SECONDARY_ACTIVE)])
+
+        # 分頁右欄「欄位說明」面板的橫向捲動軸——之前為了跟使用者一起確認拉桿
+        # 行為，暫時用很搶眼的桃紅色跟其他捲動軸區隔開來，方便指認「就是這一條」。
+        # 拉桿行為已經確認沒問題，定案改成跟這塊面板本身配色一致的深藍
+        # （COLOR_TOOL_DESC_ACCENT，跟卡片左側色條、標題文字同一個顏色）——這條
+        # 捲軸本來就只服務「欄位說明文件」這塊面板，用同一色系而不是另外挑一個
+        # 不相干的顏色，一眼就看得出「這是說明文件面板的一部分」，也不會像桃紅色
+        # 那樣在一堆藍灰色系按鈕/元件裡顯得突兀。
+        style.configure(
+            "DocsPanel.Horizontal.TScrollbar", background=COLOR_TOOL_DESC_ACCENT,
+            troughcolor=COLOR_BG_MAIN, bordercolor=COLOR_BG_MAIN,
+            lightcolor=COLOR_TOOL_DESC_ACCENT, darkcolor=COLOR_TOOL_DESC_ACCENT, gripcount=0,
+            arrowcolor="#ffffff", relief="flat",
+        )
+        style.map("DocsPanel.Horizontal.TScrollbar", background=[("active", "#2e6da4")])
 
     # ── 版面 ─────────────────────────────────────────────────────────
 
@@ -331,7 +372,7 @@ class SettingsWindow(tk.Tk):
         不用再去檔案總管或終端機找路徑。第二排是「獨立腳本工具」：下拉選單列出
         cat_monitoring_system/tools/ 底下的 .py，也可以「瀏覽...」選任意 .py（例如
         專案裡其他資料夾的除錯/評估腳本），跟 main.py 共用同一套啟動/關閉/終端機輸出
-        機制、同一時間只能跑一個（見 __init__ 裡 self._main_process 的說明）。"""
+        機制、同一時間只能跑一個（見 __init__ 裡 self._process_manager 的說明）。"""
         bar = tk.Frame(self, bg=COLOR_HEADER_BG)
         bar.pack(fill="x")
         self._process_bar_frame = bar
@@ -346,18 +387,23 @@ class SettingsWindow(tk.Tk):
 
         _styled_button(
             inner, "🗕 縮小視窗", self._on_minimize, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
-            font=self._font_hint,
-        ).pack(side="right", padx=(8, 0))
+            font=self._font_hint, outline=True,
+        ).pack(side="right", padx=(SPACE_SM, 0))
         self._stop_main_btn = _styled_button(
-            inner, "⏹ 關閉 main.py", self._on_stop_main, BTN_WARN_BG, BTN_WARN_ACTIVE,
-            font=self._font_hint,
+            inner, "⏹ 關閉 main.py", self._on_stop_main, BTN_INFO_BG, BTN_INFO_ACTIVE,
+            # 這顆跟下面「停止腳本」原本共用橘色警告色，改成淡藍色後跟「還原 GUI
+            # 預設值」那顆分開，不再是同一組配色。BTN_INFO_BG 是刻意偏亮的淡藍，
+            # 白字對比不夠（第一版用過，使用者回報字會糊），改配深藏青字
+            # （BTN_INFO_FG），沿用粗體字型（筆畫較寬，蓋色面積更多，字比較扎實，
+            # 維持跟其他按鈕一致的粗體視覺語言）。
+            fg=BTN_INFO_FG, font=(_FONT_FAMILY, 11, "bold"),
         )
-        self._stop_main_btn.pack(side="right", padx=(8, 0))
+        self._stop_main_btn.pack(side="right", padx=(SPACE_SM, 0))
         self._start_main_btn = _styled_button(
             inner, "▶ 啟動 main.py", self._on_start_main, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE,
             font=self._font_hint,
         )
-        self._start_main_btn.pack(side="right", padx=(8, 0))
+        self._start_main_btn.pack(side="right", padx=(SPACE_SM, 0))
 
         # 「獨立腳本工具」自成一個外框，跟上面 main.py 那排用一條分隔線隔開，
         # 字級／間距刻意比其他按鈕列大一號——下拉選單是這裡的主角（要能一眼看清楚
@@ -436,6 +482,36 @@ class SettingsWindow(tk.Tk):
                 combo["values"] = all_display_names
 
         combo.bind("<KeyRelease>", _refresh_tool_combo_filter)
+
+        # 影片路徑覆寫（選填）：填了就在「▶ 執行所選腳本」啟動子行程時，額外塞一個
+        # TEST_VIDEO_PATH 環境變數進去（見 _on_start_tool）。只對有讀這個環境變數的
+        # 腳本有效（目前是 1_run_video_inference.py／2_run_dual_model_compare.py／
+        # 1_measure_ear_distance_single_video.py 這三支），其餘腳本會安靜忽略、跟沒填
+        # 一樣——本視窗本來就不檢查每支腳本內部邏輯（見上面「瀏覽...」按鈕旁的提示文字），
+        # 這個欄位延續同一個原則，不對「填了但腳本不支援」的情況另外提示或報錯。
+        tool_row_video = tk.Frame(tool_outer, bg=COLOR_HEADER_BG)
+        tool_row_video.pack(fill="x", padx=10, pady=(0, 4))
+        tk.Label(
+            tool_row_video, text="🎬 影片路徑（選填）:", bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
+            font=self._font_hint,
+        ).pack(side="left")
+        self._tool_video_path_var = tk.StringVar(value="")
+        tk.Entry(
+            tool_row_video, textvariable=self._tool_video_path_var, font=self._font_hint,
+        ).pack(side="left", fill="x", expand=True, padx=(6, 8))
+        # 原本是單一「瀏覽...」按鈕彈出選單選「檔案」或「資料夾」——彈出選單本身
+        # 是原生元件，不管怎麼配色都不會有實心按鈕那種立體感/一致外觀（見
+        # _on_browse_tool_video 原本的說明）。改成直接放兩顆並排的小按鈕，兩個
+        # 選項都看得到、不用多一次點擊才知道有哪些選項，也才能套用跟其他按鈕
+        # 一致的樣式系統。
+        _styled_button(
+            tool_row_video, "🎬 選擇影片", self._pick_tool_video_file, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+            font=self._font_hint, compact=True,
+        ).pack(side="left", padx=(0, SPACE_XS))
+        _styled_button(
+            tool_row_video, "📁 選擇資料夾", self._pick_tool_video_folder, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+            font=self._font_hint, compact=True,
+        ).pack(side="left")
 
         # 常駐說明卡片：選定（或篩選/打字剛好完全對到）某支腳本時，這裡會顯示
         # docs/獨立運行腳本索引.md 記錄的功能說明——常忘記腳本名稱或功能時不用切去
@@ -520,26 +596,24 @@ class SettingsWindow(tk.Tk):
 
         browse_btn = _styled_button(
             tool_row2, "瀏覽...", self._on_browse_tool_script, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
-            font=self._font_label,
+            font=self._font_label, compact=True,
         )
-        browse_btn.pack(side="left", padx=(0, 8))
+        browse_btn.pack(side="left", padx=(0, SPACE_SM))
         open_file_btn = _styled_button(
             tool_row2, "開啟檔案", self._on_open_tool_script_file, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
-            font=self._font_label,
+            font=self._font_label, compact=True,
         )
-        open_file_btn.pack(side="left", padx=(0, 8))
+        open_file_btn.pack(side="left", padx=(0, SPACE_SM))
         self._start_tool_btn = _styled_button(
             tool_row2, "▶ 執行所選腳本", self._on_start_tool, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE,
-            font=self._font_label,
+            font=self._font_label, compact=True,
         )
-        self._start_tool_btn.pack(side="left", padx=(0, 8))
+        self._start_tool_btn.pack(side="left", padx=(0, SPACE_SM))
         self._stop_tool_btn = _styled_button(
-            tool_row2, "⏹ 停止腳本", self._on_stop_tool, BTN_WARN_BG, BTN_WARN_ACTIVE,
-            font=self._font_label,
+            tool_row2, "⏹ 停止腳本", self._on_stop_tool, BTN_INFO_BG, BTN_INFO_ACTIVE,
+            fg=BTN_INFO_FG, font=self._font_label_bold, compact=True,
         )
         self._stop_tool_btn.pack(side="left")
-        for _btn in (browse_btn, open_file_btn, self._start_tool_btn, self._stop_tool_btn):
-            _btn.config(pady=4)  # _styled_button 預設 pady=6，這裡縮小到約 0.8 倍跟整塊區域一致
 
         tk.Label(
             tool_outer,
@@ -646,109 +720,29 @@ class SettingsWindow(tk.Tk):
         獨立腳本工具若還在本視窗啟動的範圍內執行中，視同一併請求關閉，並實際等到
         確認結束才讓視窗消失，不是送出信號就放著不管——避免「視窗關掉了，行程其實
         還在跑」的情況。"""
-        if self._main_process is not None and self._main_process.poll() is None:
+        pm = self._process_manager
+        if pm.is_running:
             if not messagebox.askyesno(
                 "關閉設定視窗",
-                f"{self._active_process_label} 目前正在執行中（PID {self._main_process.pid}）。\n\n"
+                f"{pm.active_label} 目前正在執行中（PID {pm.process.pid}）。\n\n"
                 "關閉本視窗會一併送出關閉信號，避免關掉視窗後失去控制、"
                 "無法再停止正在執行的程式。\n\n是否繼續？",
             ):
                 return
-            self._process_status_var.set(f"🖥️ 正在關閉 {self._active_process_label}…")
+            self._process_status_var.set(f"🖥️ 正在關閉 {pm.active_label}…")
             self.update_idletasks()
-            if not self._request_main_shutdown():
+            if not pm.request_shutdown_and_wait():
                 messagebox.showwarning(
                     "關閉設定視窗",
-                    f"{self._active_process_label} 似乎沒有在預期時間內結束，請自行檢查工作管理員確認狀態。",
+                    f"{pm.active_label} 似乎沒有在預期時間內結束，請自行檢查工作管理員確認狀態。",
                 )
         self.destroy()
 
     def _on_start_main(self):
-        if self._main_process is not None and self._main_process.poll() is None:
-            messagebox.showinfo(
-                "啟動 main.py",
-                f"{self._active_process_label} 執行中（PID {self._main_process.pid}），"
-                "請先停止後再啟動 main.py（同一時間只能執行一個）。",
-            )
-            return
-        if not _MAIN_PY_PATH.exists():
-            messagebox.showerror("啟動 main.py", f"找不到 main.py：{_MAIN_PY_PATH}")
-            return
-        if not messagebox.askyesno(
-            "啟動 main.py",
-            "即將啟動 main.py，套用目前 runtime_settings.current.json／環境變數的設定內容。\n\n"
-            "若您在下方設定表單中有修改但尚未按「儲存設定」，這些修改不會套用到這次啟動。\n\n"
-            "是否繼續？",
-        ):
-            return
-        try:
-            # stdout/stderr 導向 pipe 讓下方終端機面板即時讀取，不再依賴「本視窗是否
-            # 在終端機裡啟動」——雙擊執行 settings_window.py（沒有終端機視窗）時，
-            # main.py 的輸出過去完全看不到，這是這裡改用 PIPE 的主要動機。
-            # stdin 也導向 pipe：不設的話子行程預設會繼承本視窗自己的 stdin（如果是被
-            # cmd/bat 啟動的話），main.py 若用到 input() 之類的互動輸入，畫面會停在
-            # 一個使用者根本看不到、也打不到字的地方，變成「卡住卻不知道在等什麼」。
-            # 改成 PIPE 後，下方終端機面板新增的輸入框才能把文字寫進子行程的 stdin。
-            # PYTHONIOENCODING/PYTHONUTF8：main.py 印的訊息大量使用中文與 emoji，子行程
-            # 若沿用系統預設的 ANSI 編碼（如 cp950）寫出 stdout，跟這裡用 utf-8 解碼會對不上、
-            # 印出亂碼，所以強制子行程一律以 UTF-8 寫出。
-            child_env = os.environ.copy()
-            child_env["PYTHONIOENCODING"] = "utf-8"
-            child_env["PYTHONUTF8"] = "1"
-            popen_kwargs = {
-                "cwd": str(_SCRIPT_DIR),
-                "env": child_env,
-                "stdin": subprocess.PIPE,
-                "stdout": subprocess.PIPE,
-                "stderr": subprocess.STDOUT,
-                "text": True,
-                "encoding": "utf-8",
-                "errors": "replace",
-                "bufsize": 1,
-            }
-            if os.name == "nt":
-                # 只用 CREATE_NEW_PROCESS_GROUP（不加 CREATE_NEW_CONSOLE）：
-                # Windows 的 GenerateConsoleCtrlEvent（CTRL_BREAK_EVENT 底層機制）只能送到
-                # 「跟呼叫端共用同一個主控台」的行程群組——先前版本額外加了
-                # CREATE_NEW_CONSOLE 讓 main.py 開獨立主控台視窗顯示輸出，結果反而讓
-                # 「關閉 main.py」按鈕送出的 CTRL_BREAK_EVENT 永遠送不到（不同主控台，
-                # 對方收不到信號），這是關閉沒有生效的根本原因。改成不開新主控台，
-                # 輸出改走 stdout=PIPE 由右側面板顯示，兩者互不衝突，關閉功能維持生效。
-                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-            self._main_process = subprocess.Popen([sys.executable, str(_MAIN_PY_PATH)], **popen_kwargs)
-        except OSError as e:
-            messagebox.showerror("啟動 main.py", f"啟動失敗：{e}")
-            return
-        self._active_process_label = "main.py"
-        self._active_kind = "main"
-        self._update_process_buttons_state()
-        self._on_clear_console()
-        self._console_append(f"— main.py 已啟動（PID {self._main_process.pid}） —\n", tag="muted")
-        self._start_log_reader(self._main_process)
-        self._bring_child_window_to_front(self._main_process)
-        messagebox.showinfo(
-            "啟動 main.py",
-            f"main.py 已啟動（PID {self._main_process.pid}）。\n\n"
-            "輸出會即時顯示在下方「終端機輸出」面板中。",
-        )
+        self._process_manager.start_main(_MAIN_PY_PATH, _SCRIPT_DIR)
 
     def _on_stop_main(self):
-        if self._active_kind != "main" or self._main_process is None or self._main_process.poll() is not None:
-            messagebox.showinfo("關閉 main.py", "目前沒有偵測到由本視窗啟動、仍在執行中的 main.py。")
-            self._update_process_buttons_state()
-            return
-        self._process_status_var.set("🖥️ 正在關閉 main.py…")
-        self.update_idletasks()
-        stopped = self._request_main_shutdown()
-        self._update_process_buttons_state()
-        if stopped:
-            messagebox.showinfo("關閉 main.py", "main.py 已確認結束。")
-        else:
-            messagebox.showwarning(
-                "關閉 main.py",
-                "已送出關閉信號並嘗試強制結束，但仍無法確認 main.py 已停止，"
-                "請自行檢查工作管理員確認狀態。",
-            )
+        self._process_manager.stop_main()
 
     def _on_browse_tool_script(self):
         initial_dir = str(_SCRIPT_DIR / "cat_monitoring_system" / "tools")
@@ -759,6 +753,27 @@ class SettingsWindow(tk.Tk):
         )
         if path:
             self._tool_script_var.set(path)
+
+    def _pick_tool_video_file(self):
+        """跟 _pick_tool_video_folder 並排成兩顆按鈕（見 _build_process_bar 的
+        tool_row_video）——原本是單一按鈕彈出 tk.Menu 選單問要選檔案還是資料夾，
+        改成直接給兩顆按鈕，兩個選項一眼就看得到，也不用忍受原生選單元件沒辦法
+        套用一致樣式的問題（TEST_VIDEO_PATH 腳本端本來就同時吃檔案跟資料夾，
+        見上面的提示文字）。"""
+        path = filedialog.askopenfilename(
+            title="選擇影片檔案",
+            filetypes=[
+                ("影片檔案", "*.mp4 *.avi *.mov *.mkv *.wmv *.m4v *.mpg *.mpeg *.webm"),
+                ("所有檔案", "*.*"),
+            ],
+        )
+        if path:
+            self._tool_video_path_var.set(path)
+
+    def _pick_tool_video_folder(self):
+        path = filedialog.askdirectory(title="選擇影片資料夾")
+        if path:
+            self._tool_video_path_var.set(path)
 
     def _on_open_tool_script_file(self):
         """用文字編輯器開啟目前選定的腳本原始碼——這些獨立工具大多是「先打開改
@@ -804,128 +819,32 @@ class SettingsWindow(tk.Tk):
         if not script_file.exists():
             messagebox.showerror("執行腳本", f"找不到檔案：\n{script_path}")
             return
-        if self._main_process is not None and self._main_process.poll() is None:
-            messagebox.showinfo(
-                "執行腳本",
-                f"{self._active_process_label} 執行中（PID {self._main_process.pid}），"
-                "請先停止後再執行其他腳本（同一時間只能執行一個）。",
-            )
-            return
-        if not messagebox.askyesno(
-            "執行腳本",
-            f"即將執行：{script_file.name}\n\n完整路徑：{script_path}\n\n"
-            "這是一支獨立腳本工具，本視窗不會檢查或修改它內部寫死的路徑/參數，"
-            "請自行確認內容符合你要的設定。\n\n是否繼續？",
-        ):
-            return
-        try:
-            # 跟 _on_start_main 共用同一套 PIPE + UTF-8 強制編碼的邏輯，理由同上；
-            # cwd 用腳本自己所在的資料夾，比照「假裝 cd 進去該資料夾再執行」的直覺，
-            # 因為這些獨立腳本大多是各自獨立維護、原本就預期在自己的資料夾下執行。
-            child_env = os.environ.copy()
-            child_env["PYTHONIOENCODING"] = "utf-8"
-            child_env["PYTHONUTF8"] = "1"
-            popen_kwargs = {
-                "cwd": str(script_file.parent),
-                "env": child_env,
-                "stdin": subprocess.PIPE,
-                "stdout": subprocess.PIPE,
-                "stderr": subprocess.STDOUT,
-                "text": True,
-                "encoding": "utf-8",
-                "errors": "replace",
-                "bufsize": 1,
-            }
-            if os.name == "nt":
-                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-            self._main_process = subprocess.Popen([sys.executable, str(script_file)], **popen_kwargs)
-        except OSError as e:
-            messagebox.showerror("執行腳本", f"啟動失敗：{e}")
-            return
-        self._active_process_label = script_file.name
-        self._active_kind = "tool"
-        self._update_process_buttons_state()
-        self._on_clear_console()
-        self._console_append(f"— {script_file.name} 已啟動（PID {self._main_process.pid}） —\n", tag="muted")
-        self._start_log_reader(self._main_process)
-        self._bring_child_window_to_front(self._main_process)
+        video_path = self._tool_video_path_var.get().strip()
+        extra_env = {"TEST_VIDEO_PATH": video_path} if video_path else None
+        self._process_manager.start_tool(script_file, extra_env=extra_env)
 
     def _on_stop_tool(self):
-        if self._active_kind != "tool" or self._main_process is None or self._main_process.poll() is not None:
-            messagebox.showinfo("停止腳本", "目前沒有偵測到由本視窗啟動、仍在執行中的腳本。")
-            self._update_process_buttons_state()
-            return
-        label = self._active_process_label
-        self._process_status_var.set(f"🖥️ 正在停止 {label}…")
-        self.update_idletasks()
-        stopped = self._request_main_shutdown()
-        self._update_process_buttons_state()
-        if stopped:
-            messagebox.showinfo("停止腳本", f"{label} 已確認結束。")
-        else:
-            messagebox.showwarning(
-                "停止腳本",
-                f"已送出關閉信號並嘗試強制結束，但仍無法確認 {label} 已停止，"
-                "請自行檢查工作管理員確認狀態。",
-            )
-
-    def _request_main_shutdown(self, graceful_timeout=4.0, force_timeout=2.0) -> bool:
-        """請求 self._main_process（可能是 main.py，也可能是獨立腳本工具）結束，
-        回傳 True 代表最終確認已經不在執行。
-
-        兩段式：先送 CTRL_BREAK_EVENT（main.py 有 _install_hard_shutdown_on_ctrl_c()
-        接管 SIGBREAK，會先嘗試清理 CSV/segment logger/Node-RED session 再結束，本身
-        內建 3 秒 watchdog；一般獨立腳本沒有這層特別處理，收到 CTRL_BREAK_EVENT 多半
-        直接被 Windows 結束掉，效果上也是「停下來」），等 graceful_timeout 秒讓它有
-        機會走完清理流程；逾時仍在跑，才 terminate() 強制砍斷，再等 force_timeout 秒
-        確認真的死透。「關閉 main.py」「停止腳本」按鈕跟「關掉設定視窗」共用這個函式，
-        確保三個入口都是真的確認生效、不是送出信號就假設成功。
-        """
-        if self._main_process is None or self._main_process.poll() is not None:
-            return True
-        try:
-            if os.name == "nt":
-                self._main_process.send_signal(signal.CTRL_BREAK_EVENT)
-            else:
-                self._main_process.send_signal(signal.SIGINT)
-        except OSError:
-            pass
-
-        deadline = time.monotonic() + graceful_timeout
-        while time.monotonic() < deadline:
-            if self._main_process.poll() is not None:
-                return True
-            time.sleep(0.2)
-
-        if self._main_process.poll() is None:
-            try:
-                self._main_process.terminate()
-            except OSError:
-                pass
-            deadline = time.monotonic() + force_timeout
-            while time.monotonic() < deadline:
-                if self._main_process.poll() is not None:
-                    return True
-                time.sleep(0.2)
-
-        return self._main_process.poll() is not None
+        self._process_manager.stop_tool()
 
     def _update_process_buttons_state(self):
-        """main.py 與獨立腳本工具共用 self._main_process 這一個欄位（同一時間只能跑一個），
-        所以兩組「啟動」按鈕永遠一起致能/禁用；「停止」按鈕則依 self._active_kind 只讓
-        對應那一顆生效，避免「明明在跑腳本，卻按了寫著『關閉 main.py』的按鈕」這種文字
-        跟實際動作對不上的情況。"""
-        running = self._main_process is not None and self._main_process.poll() is None
+        """main.py 與獨立腳本工具共用 ProcessManager 的 self.process 這一個欄位（同一
+        時間只能跑一個），所以兩組「啟動」按鈕永遠一起致能/禁用；「停止」按鈕則依
+        pm.active_kind 只讓對應那一顆生效，避免「明明在跑腳本，卻按了寫著『關閉
+        main.py』的按鈕」這種文字跟實際動作對不上的情況。這個函式是 ProcessManager
+        的 on_state_change callback，行程狀態一有變化（啟動/關閉/輪詢發現已死）就會
+        被呼叫。"""
+        pm = self._process_manager
+        running = pm.is_running
         if running:
-            self._process_status_var.set(f"🖥️ {self._active_process_label} 執行中（PID {self._main_process.pid}）")
+            self._process_status_var.set(f"🖥️ {pm.active_label} 執行中（PID {pm.process.pid}）")
             self._start_main_btn.config(state="disabled")
             self._start_tool_btn.config(state="disabled")
-            self._stop_main_btn.config(state="normal" if self._active_kind == "main" else "disabled")
-            self._stop_tool_btn.config(state="normal" if self._active_kind == "tool" else "disabled")
+            self._stop_main_btn.config(state="normal" if pm.active_kind == "main" else "disabled")
+            self._stop_tool_btn.config(state="normal" if pm.active_kind == "tool" else "disabled")
         else:
-            was_started = self._active_process_label is not None
+            was_started = pm.active_label is not None
             self._process_status_var.set(
-                f"🖥️ {self._active_process_label} 已結束" if was_started else "🖥️ 尚未啟動任何程式"
+                f"🖥️ {pm.active_label} 已結束" if was_started else "🖥️ 尚未啟動任何程式"
             )
             self._start_main_btn.config(state="normal")
             self._start_tool_btn.config(state="normal")
@@ -933,22 +852,11 @@ class SettingsWindow(tk.Tk):
             self._stop_tool_btn.config(state="disabled")
 
         # 終端機面板的輸入列在本函式第一次被呼叫時（_build_process_bar 尾端）還沒
-        # 建出來（_build_middle_area／_build_console_panel 是之後才跑的），用
-        # getattr 擋一下，之後每次呼叫這兩個 widget 就一定存在了。
-        stdin_entry = getattr(self, "_stdin_entry", None)
-        send_stdin_btn = getattr(self, "_send_stdin_btn", None)
-        if stdin_entry is not None and send_stdin_btn is not None:
-            state = "normal" if running else "disabled"
-            stdin_entry.config(state=state)
-            send_stdin_btn.config(state=state)
-
-    def _poll_main_process(self):
-        """每 2 秒檢查一次子行程是否還活著——不管是 main.py 還是獨立腳本工具，都有可能
-        不是被「關閉／停止」按鈕結束的（使用者直接把主控台視窗叉掉、或程式自己崩潰），
-        這裡確保按鈕狀態不會卡住。"""
-        if self._main_process is not None:
-            self._update_process_buttons_state()
-        self.after(2000, self._poll_main_process)
+        # 建出來（_build_middle_area 是之後才跑的），用 getattr 擋一下，之後每次
+        # 呼叫這個 panel 就一定存在了。
+        console = getattr(self, "_console_panel", None)
+        if console is not None:
+            console.set_input_enabled(running)
 
     def _build_info_bar(self):
         wrap = tk.Frame(self, bg=COLOR_BG_MAIN)
@@ -979,394 +887,31 @@ class SettingsWindow(tk.Tk):
 
     def _build_middle_area(self):
         """分頁設定表單維持完整版面（永遠是滿版 pack，不因為終端機而縮水）。終端機
-        輸出面板改用 place() 做成一塊貼齊視窗左右邊界與底部、可自由調整高度的浮動
-        面板——不參與 pack 版面協商，所以拉高時是直接「疊在」表單上面蓋過去，不是
-        跟表單擠位置；可以一路拉到貼齊標題列下緣（見 _console_max_height()），此時
-        流程列／獨立腳本工具列／資訊列／分頁按鈕列／表單內容／底部按鈕列都會被蓋住，
-        這是刻意允許的效果，使用者要操作這些時把終端機拖小或收合即可隨時蓋回去。"""
+        輸出面板（ConsolePanel，見 settings_gui/console_panel.py）改用 place() 做成
+        一塊貼齊視窗左右邊界與底部、可自由調整高度的浮動面板——不參與 pack 版面
+        協商，所以拉高時是直接「疊在」表單上面蓋過去，不是跟表單擠位置；可以一路
+        拉到貼齊標題列下緣（見 ConsolePanel.max_height()），此時流程列／獨立腳本
+        工具列／資訊列／分頁按鈕列／表單內容／底部按鈕列都會被蓋住，這是刻意允許
+        的效果，使用者要操作這些時把終端機拖小或收合即可隨時蓋回去。"""
         middle = tk.Frame(self, bg=COLOR_BG_MAIN)
         middle.pack(fill="both", expand=True)
         self._build_tabs(middle)
 
         console_container = tk.Frame(self, bg=COLOR_CONSOLE_BG, height=CONSOLE_DEFAULT_HEIGHT)
         console_container.pack_propagate(False)  # 固定高度，不因裡面的 Text 內容而被撐大
-        self._build_console_panel(console_container)
-        self._place_console(CONSOLE_DEFAULT_HEIGHT)
-
-    def _place_console(self, height):
-        """終端機面板固定用 place() 貼齊視窗左右邊界，高度由參數決定——這一個函式是
-        所有「改變終端機高度」操作（拖拉／收合展開／初始套用比例）共用的唯一進出口，
-        確保每次呼叫方式都一致，也確保面板永遠疊在其他內容之上（每次呼叫都 lift()
-        一次，不受其他元件建立順序影響）。
-
-        底部不是貼齊視窗最底端（那樣會蓋到「儲存設定」那排按鈕，按不到），而是貼齊
-        底部按鈕列的「上緣」——用 self._bottom_bar_frame.winfo_y()（它在 self 座標系
-        下的 y 位置，因為底部按鈕列本來就是 self 的直接子元件）當作面板下緣的錨點，
-        往上量 height 這麼高。_build_bottom_bar() 還沒建立、拿不到這個參照時，先退回
-        貼齊視窗底部（僅發生在建構過程最初那一次呼叫，稍後 _bottom_bar_frame 建好後
-        的下一次呼叫就會修正到正確位置）。"""
-        bottom_bar = getattr(self, "_bottom_bar_frame", None)
-        floor_y = bottom_bar.winfo_y() if bottom_bar is not None else self.winfo_height()
-        self._console_container.place(x=0, y=floor_y, anchor="sw", relwidth=1.0, height=height)
-        self._console_container.lift()
-
-    def _build_console_panel(self, parent):
-        """終端機面板可拖拉調整高度（頂部把手）、也可用箭頭按鈕一鍵內縮成一條水平線
-        （收合時只留標題列，箭頭仍看得到，再點一次箭頭恢復收合前的高度）。"""
-        self._console_container = parent
-        self._console_collapsed = False
-        self._console_expanded_height = CONSOLE_DEFAULT_HEIGHT
-
-        # 拖拉把手：一條比面板底色略亮的細線，滑鼠移上去會變成上下箭頭游標，
-        # 拖動時即時調整面板高度——收合時這條把手會跟著隱藏（沒有東西可以拖）。
-        grip = tk.Frame(parent, bg=COLOR_CONSOLE_GRIP_BG, height=5, cursor="sb_v_double_arrow")
-        grip.pack(fill="x", side="top")
-        grip.bind("<ButtonPress-1>", self._on_console_drag_start)
-        grip.bind("<B1-Motion>", self._on_console_drag_motion)
-        self._console_grip = grip
-
-        header = tk.Frame(parent, bg=COLOR_HEADER_BG, cursor="sb_v_double_arrow")
-        header.pack(fill="x", side="top")
-        header.bind("<ButtonPress-1>", self._on_console_drag_start)
-        header.bind("<B1-Motion>", self._on_console_drag_motion)
-        self._console_header = header
-
-        self._console_toggle_btn = tk.Button(
-            header, text="▼", command=self._toggle_console_collapse, bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
-            activebackground=COLOR_HEADER_BG, activeforeground=COLOR_HEADER_FG, relief="flat", bd=0,
-            font=self._font_label_bold, cursor="hand2", padx=8,
-        )
-        self._console_toggle_btn.pack(side="left")
-        tk.Label(
-            header, text="🖥️ 終端機輸出（main.py／獨立腳本工具共用；可拖拉頂端調整高度）",
-            bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG, font=self._font_label_bold, anchor="w",
-        ).pack(side="left", padx=(0, 10), pady=6)
-
-        # 工具列 + Text 輸出區包成一個子容器，收合時整包 pack_forget()，
-        # 展開時整包用 before/after 對齊 grip／header 之間的正確順序重新插回。
-        body = tk.Frame(parent, bg=COLOR_CONSOLE_BG)
-        body.pack(fill="both", expand=True, side="top")
-        self._console_body = body
-
-        toolbar = tk.Frame(body, bg=COLOR_CONSOLE_BG)
-        toolbar.pack(fill="x", padx=8, pady=(6, 4))
-        self._autoscroll_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(
-            toolbar, text="自動捲動", variable=self._autoscroll_var, bg=COLOR_CONSOLE_BG,
-            fg=COLOR_CONSOLE_FG, selectcolor=COLOR_CONSOLE_BG, activebackground=COLOR_CONSOLE_BG,
-            activeforeground=COLOR_CONSOLE_FG, font=self._font_hint, bd=0, highlightthickness=0,
-        ).pack(side="left")
-        _styled_button(
-            toolbar, "清除", self._on_clear_console, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
-            font=self._font_hint,
-        ).pack(side="right")
-        _styled_button(
-            toolbar, "另存為檔案...", self._on_save_console, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
-            font=self._font_hint,
-        ).pack(side="right", padx=(0, 6))
-
-        text_frame = tk.Frame(body, bg=COLOR_CONSOLE_BG)
-        text_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
-        self._console_font_size = CONSOLE_DEFAULT_FONT_SIZE
-        # height=1：Text 元件不指定 height 時預設請求 24 行的高度，字級越大這個「預設
-        # 請求」就越誇張（20pt 時逼近 780px），會讓 pack 版面協商誤以為這個元件的最小
-        # 需求就是那麼高，擠壓到排在它後面的「輸入」列（見 _on_send_stdin 那一列）幾乎
-        # 沒有空間、被壓成 1px 看不見。設成 height=1 只是蓋掉這個預設請求值，實際渲染
-        # 時仍會被 pack(fill="both", expand=True) 撐滿可用空間，跟先前修 Canvas
-        # 預設地板過大是同一類問題、同一種修法。
-        self._console_text = tk.Text(
-            text_frame, bg=COLOR_CONSOLE_BG, fg=COLOR_CONSOLE_FG, insertbackground=COLOR_CONSOLE_FG,
-            font=(CONSOLE_FONT_FAMILY, self._console_font_size), wrap="word", state="disabled",
-            relief="flat", padx=6, pady=4, height=1,
-        )
-        console_scroll = ttk.Scrollbar(text_frame, orient="vertical", command=self._console_text.yview)
-        self._console_text.configure(yscrollcommand=console_scroll.set)
-        self._console_text.pack(side="left", fill="both", expand=True)
-        console_scroll.pack(side="right", fill="y")
-        self._console_text.tag_configure("muted", foreground=COLOR_CONSOLE_MUTED_FG)
-
-        # Ctrl+/- 縮放終端機文字大小，原理同 VS Code：用 bind_all（不是只綁在
-        # self._console_text 上）讓快捷鍵不管目前焦點在視窗裡哪個元件都會生效，不用
-        # 特地點進輸出區才能用。"+" 鍵在大多數鍵盤佈局要按 Shift，實際收到的事件是
-        # <Control-plus>；沒按 Shift 直接按實體 "=" 鍵送出的是 <Control-equal>，
-        # 兩種都綁，數字鍵盤的 +/- 也一併綁（<Control-KP_Add>/<Control-KP_Subtract>）。
-        # Ctrl+0／Ctrl+數字鍵盤0 重設回預設字級，同樣比照 VS Code 的習慣。
-        for seq in ("<Control-plus>", "<Control-equal>", "<Control-KP_Add>"):
-            self.bind_all(seq, lambda _e: self._adjust_console_font_size(1))
-        for seq in ("<Control-minus>", "<Control-KP_Subtract>"):
-            self.bind_all(seq, lambda _e: self._adjust_console_font_size(-1))
-        for seq in ("<Control-0>", "<Control-KP_0>"):
-            self.bind_all(seq, lambda _e: self._reset_console_font_size())
-
-        # 輸入列：main.py／獨立腳本工具如果跑到 input() 之類需要互動輸入的地方
-        # （例如某些工具腳本開場問「請選擇執行模式 1/2」），行程會停在那裡等，光看
-        # 輸出面板完全看不出來、也沒地方能回應——這一列讓使用者能直接把文字送進
-        # 子行程的 stdin。沒有行程在跑時停用，避免誤按送出目標不存在的輸入。
-        input_row = tk.Frame(body, bg=COLOR_CONSOLE_BG)
-        input_row.pack(fill="x", padx=8, pady=(0, 8))
-        tk.Label(
-            input_row, text="輸入：", bg=COLOR_CONSOLE_BG, fg=COLOR_CONSOLE_FG,
-            font=("Consolas", 10, "bold"),
-        ).pack(side="left")
-        self._stdin_var = tk.StringVar()
-        self._stdin_entry = tk.Entry(
-            input_row, textvariable=self._stdin_var, font=("Consolas", 10),
-            bg="#2a2d31", fg=COLOR_CONSOLE_FG, insertbackground=COLOR_CONSOLE_FG,
-            relief="flat", disabledbackground="#242628", state="disabled",
-        )
-        self._stdin_entry.pack(side="left", fill="x", expand=True, padx=(6, 6), ipady=3)
-        self._stdin_entry.bind("<Return>", lambda _e: self._on_send_stdin())
-        self._send_stdin_btn = _styled_button(
-            input_row, "傳送", self._on_send_stdin, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE,
-            font=self._font_hint,
-        )
-        self._send_stdin_btn.config(state="disabled")
-        self._send_stdin_btn.pack(side="left")
-        tk.Label(
-            input_row, text="（沒有行程在跑時停用；main.py／腳本停在等待輸入時，在這裡打字後按 Enter 或「傳送」）",
-            bg=COLOR_CONSOLE_BG, fg=COLOR_CONSOLE_MUTED_FG, font=self._font_hint,
-        ).pack(side="left", padx=(8, 0))
-
-        self._console_append(
-            "（尚未啟動任何程式；按上方「▶ 啟動 main.py」或選好腳本後按「▶ 執行所選腳本」，輸出會即時顯示在這裡）\n",
-            tag="muted",
-        )
-        self.after(80, self._drain_log_queue)
-
-    def _on_send_stdin(self):
-        if self._main_process is None or self._main_process.poll() is not None or self._main_process.stdin is None:
-            return
-        text = self._stdin_var.get()
-        try:
-            self._main_process.stdin.write(text + "\n")
-            self._main_process.stdin.flush()
-        except (BrokenPipeError, OSError, ValueError) as e:
-            self._console_append(f"\n[傳送輸入失敗：{e}]\n", tag="muted")
-            return
-        self._console_append(f"> {text}\n")
-        self._console_text.see("end")  # 使用者剛互動過，不管「自動捲動」有沒有勾都捲到底比較符合直覺
-        self._stdin_var.set("")
-
-    def _console_window_height(self):
-        """視窗目前的真實高度；還沒完成第一次幾何配置（量到 <=1）時退回用螢幕高度頂著。"""
-        win_h = self.winfo_height()
-        return win_h if win_h > 1 else self.winfo_screenheight()
-
-    def _console_max_height(self):
-        """拖拉能撐到的最大高度：貼齊視窗底部往上量，最多到「標題列」下緣為止——
-        終端機面板是浮動疊層（place()，見 _build_middle_area），不是跟表單搶版面，
-        所以能一路蓋過流程列／獨立腳本工具列／資訊列／分頁按鈕列／表單內容／底部
-        按鈕列，唯獨標題本身（貓咪監測系統 — 設定管理）永遠留在最上面看得到。
-        header 高度在視窗還沒完成第一次幾何配置前可能量到 0，此時退回用
-        CONSOLE_MAX_HEIGHT_RESERVE 這個粗估值頂著，避免除出負數或撞到下限。"""
-        win_h = self._console_window_height()
-        header_h = getattr(self, "_header_frame", None)
-        header_h = header_h.winfo_height() if header_h is not None else 0
-        reserve = header_h if header_h > 0 else CONSOLE_MAX_HEIGHT_RESERVE
-        return max(CONSOLE_MIN_HEIGHT, win_h - reserve)
-
-    def _apply_sane_console_default_height(self):
-        """視窗剛建好、量得到真實幾何尺寸時呼叫一次：先把「展開時要多高」定案成視窗
-        高度的 CONSOLE_DEFAULT_HEIGHT_FRACTION（預設 75%），但畫面上一開始是收合
-        狀態——只留標題那一條水平線，不會一開機就蓋住表單/按鈕，使用者要看終端機
-        輸出時自己點箭頭展開，展開後直接是這個算好的 75% 高度，不用手動拖。用
-        「視窗高度的比例」而不是寫死的像素值，是因為不同螢幕解析度／系統 DPI 縮放
-        下，視窗實際可用的垂直空間差異很大，寫死像素值在小螢幕上可能整個蓋過頭、
-        在大螢幕上又顯得太小，比例才會等比縮放。"""
-        win_h = self._console_window_height()
-        header_h = getattr(self, "_header_frame", None)
-        if header_h is None or header_h.winfo_height() <= 0:
-            return  # 幾何配置還不可信，維持建構時給的 CONSOLE_DEFAULT_HEIGHT，不冒然套用
-        target = round(win_h * CONSOLE_DEFAULT_HEIGHT_FRACTION)
-        sane = max(CONSOLE_MIN_HEIGHT, min(target, self._console_max_height()))
-        self._place_console(sane)
-        self.update_idletasks()  # 讓下面 _toggle_console_collapse() 收合時，能正確量到 sane 這個高度存起來
-        if not self._console_collapsed:
-            self._toggle_console_collapse()
-
-    def _on_console_drag_start(self, event):
-        if self._console_collapsed:
-            return
-        self._console_drag_start_y = event.y_root
-        self._console_drag_start_height = self._console_container.winfo_height()
-
-    def _on_console_drag_motion(self, event):
-        if self._console_collapsed:
-            return
-        delta = self._console_drag_start_y - event.y_root  # 往上拖＝正值＝面板變高
-        new_height = self._console_drag_start_height + delta
-        new_height = max(CONSOLE_MIN_HEIGHT, min(new_height, self._console_max_height()))
-        self._place_console(new_height)
-        self._console_expanded_height = new_height
-
-    def _toggle_console_collapse(self):
-        """收合：記住目前高度，只留 grip 上方那條 header 水平線（箭頭仍看得到）。
-        展開：用 before=/after= 把 grip、body 依原本順序插回 header 上下兩側，
-        並還原收合前的高度。"""
-        self._console_collapsed = not self._console_collapsed
-        if self._console_collapsed:
-            self._console_expanded_height = self._console_container.winfo_height()
-            self._console_grip.pack_forget()
-            self._console_body.pack_forget()
-            self._place_console(CONSOLE_COLLAPSED_HEIGHT)
-            self._console_toggle_btn.config(text="▲")
-        else:
-            self._console_grip.pack(fill="x", side="top", before=self._console_header)
-            self._console_body.pack(fill="both", expand=True, side="top")
-            self._place_console(self._console_expanded_height)
-            self._console_toggle_btn.config(text="▼")
-
-    def _console_append(self, text, tag=None):
-        self._console_text.configure(state="normal")
-        self._console_text.insert("end", text, (tag,) if tag else ())
-        # 長時間跑下來輸出量可能很大，Text 內容超過上限就砍掉前面舊的部分，
-        # 避免記憶體無限增長——保留「最新」的訊息比保留最舊的更有用。
-        self._log_line_count += text.count("\n")
-        if self._log_line_count > 5000:
-            self._console_text.delete("1.0", f"{self._log_line_count - 4000}.0")
-            self._log_line_count = 4000
-        if self._autoscroll_var.get():
-            self._console_text.see("end")
-        self._console_text.configure(state="disabled")
-
-    def _on_clear_console(self):
-        self._console_text.configure(state="normal")
-        self._console_text.delete("1.0", "end")
-        self._console_text.configure(state="disabled")
-        self._log_line_count = 0
-
-    def _adjust_console_font_size(self, delta):
-        new_size = max(CONSOLE_MIN_FONT_SIZE, min(CONSOLE_MAX_FONT_SIZE, self._console_font_size + delta))
-        if new_size == self._console_font_size:
-            return
-        self._console_font_size = new_size
-        self._console_text.configure(font=(CONSOLE_FONT_FAMILY, self._console_font_size))
-
-    def _reset_console_font_size(self):
-        if self._console_font_size == CONSOLE_DEFAULT_FONT_SIZE:
-            return
-        self._console_font_size = CONSOLE_DEFAULT_FONT_SIZE
-        self._console_text.configure(font=(CONSOLE_FONT_FAMILY, self._console_font_size))
-
-    def _on_save_console(self):
-        path = filedialog.asksaveasfilename(
-            title="另存主控台輸出", defaultextension=".txt",
-            initialfile="main_py_console.txt", filetypes=[("文字檔", "*.txt"), ("所有檔案", "*.*")],
-        )
-        if not path:
-            return
-        try:
-            Path(path).write_text(self._console_text.get("1.0", "end"), encoding="utf-8")
-        except OSError as e:
-            messagebox.showerror("另存主控台輸出", f"儲存失敗：{e}")
-            return
-        messagebox.showinfo("另存主控台輸出", f"已儲存到：\n{path}")
-
-    def _start_log_reader(self, process):
-        """背景執行緒逐行讀取子行程的 stdout（stderr 已合併進去），讀到 EOF
-        （行程結束、pipe 關閉）就丟一個 None 進 queue 當結束訊號。"""
-
-        def _reader():
-            try:
-                for line in iter(process.stdout.readline, ""):
-                    self._log_queue.put(line)
-            except (OSError, ValueError):
-                pass
-            finally:
-                self._log_queue.put(None)
-
-        self._log_reader_thread = threading.Thread(target=_reader, daemon=True)
-        self._log_reader_thread.start()
-
-    def _bring_child_window_to_front(self, process):
-        """背景執行緒輪詢，等子行程（main.py／獨立腳本）自己開出的 GUI 視窗出現後
-        自動拉到最上層、取得焦點，不用手動 Alt+Tab 切過去。
-
-        這些腳本大多要先載入 YOLO/ST-GCN 模型才會真的開窗，時間不固定（幾秒到
-        十幾秒），所以用輪詢而不是啟動後立刻找一次。找視窗只認「屬於這個 PID
-        的可見頂層視窗」，不比對標題文字——各腳本視窗標題五花八門（tkinter 預設
-        標題、cv2.imshow 的檔名...），比對 PID 才不用每支腳本都額外維護一份標題
-        清單，且對之後新增的腳本自動適用。
-
-        需要 pywin32（win32gui/win32process/win32con）；環境沒裝的話直接跳過，
-        不影響腳本本身執行、也不彈錯誤訊息——這只是「省得手動切視窗」的錦上添花
-        功能，缺了頂多要自己切一下，不該讓整個啟動流程失敗。
-        """
-        try:
-            import win32api
-            import win32con
-            import win32gui
-            import win32process
-        except ImportError:
-            return
-
-        def _worker():
-            deadline = time.time() + 20.0  # 模型載入可能要幾秒到十幾秒，給足時間再放棄
-            target_hwnd = None
-            while time.time() < deadline:
-                if process.poll() is not None:
-                    return  # 行程提早結束（例如啟動失敗），沒視窗好找
-                found = []
-
-                def _enum_handler(hwnd, _extra):
-                    if not win32gui.IsWindowVisible(hwnd):
-                        return
-                    if win32gui.GetParent(hwnd) != 0:
-                        return  # 只找頂層視窗，排除子控制項
-                    if not win32gui.GetWindowText(hwnd):
-                        return  # 排除沒標題的隱藏輔助視窗
-                    _, found_pid = win32process.GetWindowThreadProcessId(hwnd)
-                    if found_pid == process.pid:
-                        found.append(hwnd)
-
-                try:
-                    win32gui.EnumWindows(_enum_handler, None)
-                except Exception:
-                    pass
-                if found:
-                    target_hwnd = found[0]
-                    break
-                time.sleep(0.3)
-
-            if target_hwnd is None:
-                return
-
-            try:
-                if win32gui.IsIconic(target_hwnd):
-                    win32gui.ShowWindow(target_hwnd, win32con.SW_RESTORE)
-                # Windows 預設會擋「非目前使用中程式」呼叫 SetForegroundWindow（避免
-                # 程式亂搶焦點）。這裡用常見的繞法：先把自己這條執行緒的輸入佇列跟
-                # 目前前景視窗的執行緒 attach 在一起，讓系統把接下來的
-                # SetForegroundWindow 視為「使用者自己切換」而放行，做完再 detach。
-                fg_hwnd = win32gui.GetForegroundWindow()
-                current_thread_id = win32api.GetCurrentThreadId()
-                fg_thread_id = win32process.GetWindowThreadProcessId(fg_hwnd)[0] if fg_hwnd else 0
-                attached = False
-                if fg_thread_id and fg_thread_id != current_thread_id:
-                    attached = win32process.AttachThreadInput(current_thread_id, fg_thread_id, True)
-                try:
-                    win32gui.SetForegroundWindow(target_hwnd)
-                finally:
-                    if attached:
-                        win32process.AttachThreadInput(current_thread_id, fg_thread_id, False)
-            except Exception:
-                pass
-
-        threading.Thread(target=_worker, daemon=True).start()
-
-    def _drain_log_queue(self):
-        drained = 0
-        try:
-            while drained < 500:  # 單次 tick 最多處理 500 行，避免瞬間大量輸出卡住 GUI 主執行緒
-                line = self._log_queue.get_nowait()
-                if line is None:
-                    self._console_append(f"\n— {self._active_process_label} 行程已結束 —\n", tag="muted")
-                else:
-                    self._console_append(line)
-                drained += 1
-        except queue.Empty:
-            pass
-        self.after(80, self._drain_log_queue)
+        self._console_panel = ConsolePanel(self, console_container)
+        # ProcessManager 建構時 ConsolePanel 還沒蓋出來（見 __init__ 開頭說明），
+        # 兩邊互相需要對方：ProcessManager 啟動子行程後要往終端機寫訊息，
+        # ConsolePanel 的輸入列要把文字送進子行程 stdin——都在這裡補上。
+        self._process_manager.console = self._console_panel
+        self._console_panel.set_stdin_handler(self._process_manager.send_stdin)
+        # 終端機面板每次改變高度/位置都要讓分頁右欄那條浮動橫向捲軸（見
+        # _reposition_active_docs_hscroll）跟著重新貼齊「終端機正上方」，在第一次
+        # place() 之前就先掛好這個回呼，之後不管是這裡、拖拉、收合展開、或
+        # __init__ 最後的 apply_sane_default_height() 觸發的每一次 place()，
+        # 都會自動補這次重新定位，不用另外在每個呼叫點各自記得呼叫一次。
+        self._console_panel.set_on_resize(self._reposition_active_docs_hscroll)
+        self._console_panel.place(CONSOLE_DEFAULT_HEIGHT)
 
     def _build_tabs(self, parent):
         """分頁列刻意不用 ttk.Notebook——它在 Windows 原生佈景主題下無法讓每個分頁
@@ -1380,11 +925,17 @@ class SettingsWindow(tk.Tk):
 
         # 分頁按鈕列改成可橫向捲動：分頁一多，按鈕排成一列會超出視窗寬度，用
         # Canvas + 橫向 ttk.Scrollbar 包住，滑桿可以拉、滑鼠停在按鈕列上滾輪也能橫向捲。
+        # 全域欄位搜尋欄常駐貼在同一列的右側（tab_bar_row 裡跟 tab_canvas 並排，
+        # 搜尋欄本身不隨分頁按鈕橫向捲動）；橫向捲軸 tab_hscroll 維持在 tab_bar_row
+        # 下面單獨一列，寬度還是貼齊整個 tab_bar_outer，不受搜尋欄影響。
         tab_bar_outer = tk.Frame(parent, bg=COLOR_BG_MAIN)
         tab_bar_outer.pack(fill="x", padx=16, pady=(0, 4))
         self._tab_bar_outer = tab_bar_outer
 
-        tab_canvas = tk.Canvas(tab_bar_outer, bg=COLOR_BG_MAIN, highlightthickness=0)
+        tab_bar_row = tk.Frame(tab_bar_outer, bg=COLOR_BG_MAIN)
+        tab_bar_row.pack(fill="x", side="top")
+
+        tab_canvas = tk.Canvas(tab_bar_row, bg=COLOR_BG_MAIN, highlightthickness=0)
         tab_hscroll = ttk.Scrollbar(tab_bar_outer, orient="horizontal", command=tab_canvas.xview)
         tab_bar = tk.Frame(tab_canvas, bg=COLOR_BG_MAIN)
         tab_bar.bind(
@@ -1392,7 +943,8 @@ class SettingsWindow(tk.Tk):
         )
         tab_canvas.create_window((0, 0), window=tab_bar, anchor="nw")
         tab_canvas.configure(xscrollcommand=tab_hscroll.set)
-        tab_canvas.pack(side="top", fill="x")
+        self._field_search = FieldSearchBar(self, tab_bar_row, bg=COLOR_BG_MAIN)
+        tab_canvas.pack(side="left", fill="x", expand=True)
         tab_hscroll.pack(side="top", fill="x")
 
         def _on_tabbar_wheel(event):
@@ -1404,10 +956,44 @@ class SettingsWindow(tk.Tk):
         content_area = tk.Frame(parent, bg=COLOR_TAB_BG)
         content_area.pack(fill="both", expand=True, padx=16, pady=(0, 8))
         self._content_area = content_area
+        # 視窗被縮放時，content_area／right_col 的實際寬度會跟著變，浮動的說明
+        # 文件橫向捲軸（見 _reposition_active_docs_hscroll）要重新量一次位置，
+        # 不然縮放後會跟右欄對不齊。終端機面板尺寸改變不會觸發這個事件（place()
+        # 是獨立於 pack/grid 版面協商之外的疊加層，不會連帶讓 content_area 觸發
+        # <Configure>），那邊另外用 ConsolePanel.set_on_resize() 掛回呼處理。
+        content_area.bind("<Configure>", lambda _e: self._reposition_active_docs_hscroll())
 
         self._tab_buttons = {}
         self._tab_frames = {}
         self._tab_accents = {}
+        # 每個分頁右半邊的容器：塞的是 tab_docs_panel 畫出來的欄位說明文件卡片
+        # （見下方迴圈）；分頁內容（banner + 欄位列）只塞進左半邊的 left_col，
+        # 兩欄用 grid + uniform 群組強制等寬（不會因為左邊欄位內容變寬/變窄而跟著晃動）。
+        self._tab_right_columns = {}
+        # 每個分頁對應的 tab_docs_panel.render() 回傳值裡的 "resync"：一個「把
+        # 橫向捲軸歸零、重新同步」的 callable，在 _select_tab() 真正切換到該分頁、
+        # 即將顯示的當下呼叫（見 tab_docs_panel.render() 的說明）。
+        self._tab_docs_resync = {}
+        # 每個分頁對應的橫向捲軸元件本身（tab_docs_panel.render() 回傳值裡的
+        # "hscroll"）。這條捲軸不跟著分頁內容排版，是浮動貼在「終端機面板正
+        # 上方、跟右欄同寬」的固定位置（見 _reposition_active_docs_hscroll()），
+        # 同一時間只有目前選取中分頁的那一條會被 place() 出來，其餘用
+        # place_forget() 收起。
+        self._tab_docs_hscroll = {}
+        # 目前 place() 顯示中的那一條 hscroll（None＝目前分頁沒有可用的說明文件、
+        # 沒有東西可以顯示）；_select_tab() 切換分頁、視窗/終端機尺寸改變時都要
+        # 重新定位它，見 _reposition_active_docs_hscroll()。
+        self._active_docs_hscroll = None
+        # 目前搜尋高亮住的欄位（json_key 清單）；換一次搜尋或清空搜尋都要先清掉
+        # 上一次的高亮，狀態存在這裡，見 _highlight_fields()。
+        self._highlighted_field_keys = []
+
+        # 分頁右欄的說明文件內容只需要解析一次（不是每個分頁各解析一次整份文件），
+        # 迴圈外先呼叫一次 tab_docs_panel.parse()，迴圈內用 .get(tab_name, []) 取用。
+        # 內容是「這個分頁對應哪個模組/核心函式」（見
+        # docs/設定分頁模組與核心函式對照表.md），不是逐欄位的 JSON 路徑對照表
+        # （那份是 docs/設定視窗欄位對照表.md，這裡沒有用到）。
+        tab_docs = tab_docs_panel.parse(_SCRIPT_DIR / "docs" / "設定分頁模組與核心函式對照表.md")
 
         for tab_name in TAB_ORDER:
             emoji, accent = TAB_COLORS.get(tab_name, ("⬜", COLOR_HEADER_BG))
@@ -1424,7 +1010,29 @@ class SettingsWindow(tk.Tk):
             tab = _ScrollableTab(content_area)
             self._tab_frames[tab_name] = tab
 
-            banner = tk.Frame(tab.body, bg=accent)
+            # 分頁內容區分成左右兩欄：左欄放 banner + 所有欄位列（原本會撐滿整個
+            # tab.body 寬度），右欄目前刻意留空。columnconfigure 用同一個 uniform
+            # 群組名稱("tab_half")讓兩欄強制等寬（各佔 50%），不受左欄內容實際
+            # 需要的寬度影響——如果不用 uniform，Tk 的 pack/grid 預設是依內容需求
+            # 分配寬度，欄位多的分頁左欄會比欄位少的分頁寬，兩欄就不會對齊。
+            columns = tk.Frame(tab.body, bg=COLOR_TAB_BG)
+            columns.pack(fill="both", expand=True)
+            columns.columnconfigure(0, weight=1, uniform="tab_half")
+            columns.columnconfigure(1, weight=1, uniform="tab_half")
+            columns.rowconfigure(0, weight=1)
+
+            left_col = tk.Frame(columns, bg=COLOR_TAB_BG)
+            left_col.grid(row=0, column=0, sticky="nsew")
+            right_col = tk.Frame(columns, bg=COLOR_TAB_BG)
+            right_col.grid(row=0, column=1, sticky="nsew", padx=(14, 0))
+            self._tab_right_columns[tab_name] = right_col
+            docs_result = tab_docs_panel.render(
+                right_col, tab_docs.get(tab_name, []), self, tab_name, content_area
+            )
+            self._tab_docs_resync[tab_name] = docs_result["resync"]
+            self._tab_docs_hscroll[tab_name] = docs_result["hscroll"]
+
+            banner = tk.Frame(left_col, bg=accent)
             banner.pack(fill="x")
             tk.Label(
                 banner, text=f"{emoji} {tab_name}", bg=accent, fg="#ffffff",
@@ -1432,14 +1040,14 @@ class SettingsWindow(tk.Tk):
             ).pack(fill="x", padx=14, pady=8)
 
             for field in fields_by_tab.get(tab_name, []):
-                self._build_field_row(tab.body, field, accent)
+                self._build_field_row(left_col, field, accent)
             if tab_name == "ST-GCN 推論":
                 tk.Label(
-                    tab.body,
+                    left_col,
                     text="ℹ️ 訓練用參數（SEQUENCE_LENGTH／FEATURE_MODE／NUM_CLASSES）由"
                     " stgcn_config.yaml 管理，不在此設定視窗顯示或覆寫。",
                     bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
-                    anchor="w", justify="left", wraplength=1200,
+                    anchor="w", justify="left", wraplength=750,
                 ).pack(fill="x", padx=14, pady=(6, 10))
 
         # Canvas 不會像 Frame 一樣自動長到內容的高度，按鈕全部排好後量出實際需要的
@@ -1463,16 +1071,145 @@ class SettingsWindow(tk.Tk):
                 light = _lighten(accent, 0.72)
                 btn.config(bg=light, fg=accent, activebackground=light, activeforeground=accent)
 
+        # 右欄說明文件面板的橫向捲軸要在這個分頁「真正被畫到畫面上」之後才重新
+        # 歸零／同步一次（用 after_idle 排到 frame.pack() 造成的版面更新處理完
+        # 之後才執行）：分頁在還沒被選取之前是 pack_forget 狀態、沒有被映射到
+        # 畫面上，這段期間對 ttk.Scrollbar 呼叫 .set() 更新的只是內部狀態，
+        # 不保證元件之後顯示出來時會照著重繪滑塊——實測會出現滑塊視覺位置卡在
+        # 建構當下（版面還沒定案）算出來的錯誤比例，一直沒跟著之後的真實版面
+        # 更新過來。改成分頁被選取時才呼叫，確保這一次呼叫發生在元件保證會被
+        # 畫出來的狀態下。
+        resync = self._tab_docs_resync.get(tab_name)
+        if resync is not None:
+            self.after_idle(resync)
+
+        # 說明文件面板的橫向捲軸不跟著分頁內容排版（見 tab_docs_panel.render()
+        # 的說明），同一時間只顯示「目前分頁」那一條，切分頁時要把上一條收起、
+        # 換成這一條，並重新定位到「終端機面板正上方」。跟 resync 一樣要排到
+        # after_idle：這裡也依賴 frame.pack() 造成的版面更新先跑完，才量得到
+        # 這個分頁的 right_col 真實寬度/位置。
+        old_hscroll = self._active_docs_hscroll
+        if old_hscroll is not None:
+            old_hscroll.place_forget()
+        self._active_docs_hscroll = self._tab_docs_hscroll.get(tab_name)
+        self.after_idle(self._reposition_active_docs_hscroll)
+
+    def _reposition_active_docs_hscroll(self):
+        """把目前分頁的說明文件橫向捲軸（`self._active_docs_hscroll`）用
+        `place()` 固定貼在「終端機輸出面板正上方、跟右欄同寬」的位置——這條
+        捲軸的母元件是 `content_area`（見 tab_docs_panel.render() 呼叫端傳入的
+        `hscroll_master`），不是分頁內容本身，所以位置要靠這裡手動算，不會隨著
+        分頁版面自動排好。
+
+        呼叫時機（凡是「這條捲軸該出現在哪裡」可能改變的時候都要呼叫一次）：
+        - `_select_tab()`：換了分頁，換了另一條 hscroll、換了另一個 right_col。
+        - `content_area` 尺寸改變（視窗縮放）：見下面的 `<Configure>` 綁定。
+        - 終端機面板尺寸/位置改變（拖拉／收合展開／初始套用比例）：見
+          `ConsolePanel.set_on_resize()` 掛的回呼，接到這裡。
+
+        還沒建到終端機面板（`_console_panel`）或底部按鈕列存在之前（建構過程
+        最初 `_select_tab(TAB_ORDER[0])` 那一次呼叫）沒有基準點可以定位，先跳過
+        ——終端機面板真正 place() 出來的那一刻（`_build_middle_area()` 最後）
+        會經由 `set_on_resize` 回頭補呼叫一次，屆時基準點就都齊了。
+
+        `getattr(..., None)` 不直接用 `self._active_docs_hscroll`：這個方法也被
+        `content_area` 的 `<Configure>` 事件回呼掛著，理論上要等 `_build_tabs()`
+        把這個屬性設好之後事件才會真的被處理，但用 getattr 多一層防呆不用去
+        依賴這個時序假設一定成立。"""
+        hscroll = getattr(self, "_active_docs_hscroll", None)
+        if hscroll is None:
+            return
+        console = getattr(self, "_console_panel", None)
+        if console is None:
+            return
+        tab_name = next(
+            (name for name, h in self._tab_docs_hscroll.items() if h is hscroll), None
+        )
+        right_col = self._tab_right_columns.get(tab_name) if tab_name is not None else None
+        if right_col is None:
+            return
+
+        self._content_area.update_idletasks()
+        # x/width 用 right_col 目前的實際畫面位置/寬度（跟分頁哪一欄對齊）；
+        # y 用終端機面板容器的畫面頂端（跟終端機正上方對齊，不管終端機目前是
+        # 展開、收合還是被拖到多高）。兩邊都是螢幕絕對座標（winfo_rootx/rooty），
+        # 換算成 content_area 座標系底下的相對值，因為 place() 的 x/y 是相對母
+        # 元件（這裡是 content_area）算的，不是相對整個螢幕。
+        origin_x = self._content_area.winfo_rootx()
+        origin_y = self._content_area.winfo_rooty()
+        x = right_col.winfo_rootx() - origin_x
+        width = right_col.winfo_width()
+        y = console.container.winfo_rooty() - origin_y
+        hscroll.place(x=x, y=y, anchor="sw", width=width)
+        hscroll.lift()
+
+    def _set_tab_match_badges(self, matches_by_tab):
+        """依序幫每個分頁按鈕的文字補上/拿掉「(N)」符合數量後綴——
+        FieldSearchBar（settings_gui/field_search.py）搜尋結果的窄接口回呼。
+        matches_by_tab 是 {分頁名稱: 符合欄位數}，沒有出現在裡面的分頁一律視為 0
+        （拿掉後綴，恢復成原本沒有搜尋時的按鈕文字）。"""
+        for tab_name, btn in self._tab_buttons.items():
+            emoji, _ = TAB_COLORS.get(tab_name, ("⬜", COLOR_HEADER_BG))
+            count = matches_by_tab.get(tab_name, 0)
+            suffix = f" ({count})" if count else ""
+            btn.config(text=f"{emoji} {tab_name}{suffix}")
+
+    def _highlight_fields(self, json_keys):
+        """幫指定欄位的外層 container 加高亮外框，並先清掉上一次的高亮——
+        FieldSearchBar 每次重新搜尋都會呼叫這個方法（空清單＝單純清掉舊高亮，
+        對應搜尋欄被清空的情況）。"""
+        for key in self._highlighted_field_keys:
+            info = self._field_widgets.get(key)
+            if info is not None:
+                info["container"].config(highlightthickness=0)
+                info["accent_strip"].config(bg=info["accent_color"], width=4)
+        self._highlighted_field_keys = list(json_keys)
+        for key in json_keys:
+            info = self._field_widgets.get(key)
+            if info is not None:
+                # 只改左側色條的顏色/寬度不夠明顯（原本每列本來就有一條分頁代表色的
+                # 細條，改個顏色不容易注意到）；同時加粗外框＋把色條加寬變成高亮色，
+                # 兩個訊號疊加才夠顯眼，一眼就能在一整頁欄位裡找到搜尋命中的是哪一列。
+                info["container"].config(
+                    highlightbackground=SEARCH_HIGHLIGHT_BORDER,
+                    highlightcolor=SEARCH_HIGHLIGHT_BORDER,
+                    highlightthickness=3,
+                )
+                info["accent_strip"].config(bg=SEARCH_HIGHLIGHT_BORDER, width=10)
+
+    def _scroll_field_into_view(self, tab_name, json_key):
+        """把指定欄位捲進該分頁的可視範圍——算它的 container 相對 tab.body 頂端的
+        垂直位置，換算成 ConsolePanel／_ScrollableTab 共用的 canvas.yview_moveto()
+        要的 0~1 比例。"""
+        info = self._field_widgets.get(json_key)
+        tab = self._tab_frames.get(tab_name)
+        if info is None or tab is None:
+            return
+        tab.canvas.update_idletasks()
+        body_height = tab.body.winfo_height()
+        if body_height <= 0:
+            return
+        container = info["container"]
+        # container 的父層是 left_col、left_col 的父層是 columns、columns 的父層
+        # 才是 tab.body（見 _build_tabs 的三層 grid/pack 結構），三層都從 (0,0)
+        # 起始排版，直接加總三層 winfo_y() 就是 container 相對 tab.body 頂端的
+        # 實際 y 座標。
+        y = container.winfo_y() + container.master.winfo_y() + container.master.master.winfo_y()
+        fraction = max(0.0, min(1.0, y / body_height))
+        tab.canvas.yview_moveto(fraction)
+
     def _build_bottom_bar(self):
         bottom = tk.Frame(self, bg=COLOR_BG_MAIN)
         bottom.pack(fill="x", padx=16, pady=(0, 12))
         self._bottom_bar_frame = bottom
         _styled_button(bottom, "載入目前設定", self._on_load_current, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE).pack(side="left")
-        _styled_button(bottom, "還原 GUI 預設值", self._on_restore_defaults, BTN_WARN_BG, BTN_WARN_ACTIVE).pack(side="left", padx=(8, 0))
-        _styled_button(bottom, "匯出設定", self._on_export, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE).pack(side="left", padx=(8, 0))
-        _styled_button(bottom, "匯入設定", self._on_import, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE).pack(side="left", padx=(8, 0))
-        _styled_button(bottom, "關閉", self._on_window_close, BTN_NEUTRAL_BG, BTN_NEUTRAL_ACTIVE).pack(side="right")
-        _styled_button(bottom, "儲存設定", self._on_save, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE).pack(side="right", padx=(0, 8))
+        _styled_button(
+            bottom, "還原 GUI 預設值", self._on_restore_defaults, BTN_WARN_BG, BTN_WARN_ACTIVE, fg=BTN_WARN_FG,
+        ).pack(side="left", padx=(SPACE_SM, 0))
+        _styled_button(bottom, "匯出設定", self._on_export, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE).pack(side="left", padx=(SPACE_SM, 0))
+        _styled_button(bottom, "匯入設定", self._on_import, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE).pack(side="left", padx=(SPACE_SM, 0))
+        _styled_button(bottom, "關閉", self._on_window_close, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE, outline=True).pack(side="right")
+        _styled_button(bottom, "儲存設定", self._on_save, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE).pack(side="right", padx=(0, SPACE_SM))
 
     # ── 欄位列渲染 ────────────────────────────────────────────────────
 
@@ -1486,7 +1223,8 @@ class SettingsWindow(tk.Tk):
 
         container = tk.Frame(parent, bg=COLOR_TAB_BG)
         container.pack(fill="x", pady=(5, 0))
-        tk.Frame(container, bg=accent, width=4).pack(side="left", fill="y")
+        accent_strip = tk.Frame(container, bg=accent, width=4)
+        accent_strip.pack(side="left", fill="y")
 
         row = tk.Frame(container, bg=row_bg)
         row.pack(side="left", fill="both", expand=True, padx=(10, 14))
@@ -1504,7 +1242,10 @@ class SettingsWindow(tk.Tk):
         badge = tk.Label(row, textvariable=badge_var, font=self._font_hint, padx=6, pady=2)
         badge.pack(side="right", anchor="n")
 
-        info = {"field": field, "badge_var": badge_var, "badge_widget": badge}
+        info = {
+            "field": field, "badge_var": badge_var, "badge_widget": badge,
+            "container": container, "accent_strip": accent_strip, "accent_color": accent,
+        }
 
         if vt == "bool":
             var = tk.BooleanVar()
@@ -1550,7 +1291,10 @@ class SettingsWindow(tk.Tk):
                 if path:
                     v.set(path)
 
-            _styled_button(control, "瀏覽...", _browse, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE, font=self._font_hint).pack(side="left", padx=(6, 0))
+            _styled_button(
+                control, "瀏覽...", _browse, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+                font=self._font_hint, compact=True,
+            ).pack(side="left", padx=(SPACE_SM, 0))
             info["var"] = var
         elif vt == "folder":
             var = tk.StringVar()
@@ -1561,7 +1305,10 @@ class SettingsWindow(tk.Tk):
                 if path:
                     v.set(path)
 
-            _styled_button(control, "選擇資料夾...", _browse, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE, font=self._font_hint).pack(side="left", padx=(6, 0))
+            _styled_button(
+                control, "選擇資料夾...", _browse, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+                font=self._font_hint, compact=True,
+            ).pack(side="left", padx=(SPACE_SM, 0))
             info["var"] = var
         elif vt == "video_input":
             # 影像來源本質上是三種完全不同格式的東西（本機路徑／攝影機 index／URL），
@@ -1605,8 +1352,8 @@ class SettingsWindow(tk.Tk):
 
             _styled_button(
                 file_row, "瀏覽...", _browse_video, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
-                font=self._font_hint,
-            ).pack(side="left", padx=(6, 0))
+                font=self._font_hint, compact=True,
+            ).pack(side="left", padx=(SPACE_SM, 0))
 
             camera_row = tk.Frame(sub_row, bg=row_bg)
             tk.Label(camera_row, text="攝影機索引：", bg=row_bg, fg=COLOR_LABEL_FG, font=self._font_hint).pack(side="left")
@@ -1653,7 +1400,7 @@ class SettingsWindow(tk.Tk):
 
             tk.Label(
                 parent, textvariable=hint_var, bg=COLOR_TAB_BG, fg=COLOR_HINT_FG,
-                font=self._font_hint, anchor="w", justify="left", wraplength=1200,
+                font=self._font_hint, anchor="w", justify="left", wraplength=750,
             ).pack(fill="x", padx=14, pady=(2, 0))
         elif vt == "size":
             enabled_var = tk.BooleanVar()
@@ -1683,7 +1430,7 @@ class SettingsWindow(tk.Tk):
         env_note_var = tk.StringVar(value="")
         tk.Label(
             parent, textvariable=env_note_var, bg=COLOR_TAB_BG, fg=COLOR_WARNING_FG,
-            font=self._font_hint, anchor="w", justify="left", wraplength=880,
+            font=self._font_hint, anchor="w", justify="left", wraplength=750,
         ).pack(fill="x", padx=14, pady=(0, 6))
         info["env_note_var"] = env_note_var
 
@@ -1891,9 +1638,15 @@ class SettingsWindow(tk.Tk):
         if errors:
             messagebox.showerror("匯出設定", "以下欄位輸入格式有誤，請修正後再試：\n\n" + "\n".join(errors))
             return
+        # 預設檔名帶上「匯出當下」的時間戳記（YYYYMMDD_HHMMSS，跟專案裡
+        # eval_results/ 底下既有的時間戳記資料夾同一種格式，不用另外發明新格式）
+        # 當流水編號：每次匯出檔名自然不同，不會互相覆蓋，檔名本身照字面排序就是
+        # 照時間排序，方便直接比對不同時間點匯出的版本差異。使用者仍可以在存檔
+        # 對話框裡自己改檔名，這裡只是給一個不用手動想名字的預設值。
+        default_name = f"runtime_settings_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         path = filedialog.asksaveasfilename(
             title="匯出設定", defaultextension=".json",
-            initialfile="runtime_settings_export.json", filetypes=[("JSON", "*.json")],
+            initialfile=default_name, filetypes=[("JSON", "*.json")],
         )
         if not path:
             return
@@ -1955,8 +1708,8 @@ class SettingsWindow(tk.Tk):
             result["apply"] = True
             dialog.destroy()
 
-        _styled_button(btn_row, "取消", dialog.destroy, BTN_NEUTRAL_BG, BTN_NEUTRAL_ACTIVE).pack(side="right")
-        _styled_button(btn_row, "套用到表單", _apply, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE).pack(side="right", padx=(0, 8))
+        _styled_button(btn_row, "取消", dialog.destroy, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE, outline=True).pack(side="right")
+        _styled_button(btn_row, "套用到表單", _apply, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE).pack(side="right", padx=(0, SPACE_SM))
 
         self.wait_window(dialog)
         return result["apply"]

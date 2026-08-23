@@ -7,8 +7,10 @@
 
 ---
 
+<a id="sec-1"></a>
 ## 一、圖拓撲設計（Graph Topology）
 
+<a id="sec-1-1"></a>
 ### 1.1 靜態鄰接矩陣（Static Adjacency Matrix）
 
 ```python
@@ -27,6 +29,7 @@ edges = [
 - **對稱性**：雙向邊，A[i,j] = A[j,i] = 1
 - **貓體特化**：17 個關節點完全重映射自 COCO 17 點，對應鼻尖、雙耳、前胸、背中、髖部、四肢、尾巴，與人體 ST-GCN 的骨架定義不同
 
+<a id="sec-1-2"></a>
 ### 1.2 三分組分區鄰接矩陣（K=3 Partition Adjacency）
 
 ```python
@@ -44,6 +47,7 @@ A_further = clip((A² > 0) - (A > 0), 0, 1)        # 2-hop 兩步鄰居
 
 **設計動機**：不同距離的關節對行為辨識貢獻不同（如 walk 的前後肢同步需要遠鄰傳遞），分區讓模型能對不同鄰域賦予不同權重。
 
+<a id="sec-1-3"></a>
 ### 1.3 對稱正規化（Symmetric Normalization）
 
 ```python
@@ -57,8 +61,10 @@ normalized = D_inv_sqrt @ adj_matrix @ D_inv_sqrt
 
 ---
 
+<a id="sec-2"></a>
 ## 二、模型架構設計（Model Architecture）
 
+<a id="sec-2-1"></a>
 ### 2.1 整體結構概覽
 
 ```
@@ -77,6 +83,7 @@ normalized = D_inv_sqrt @ adj_matrix @ D_inv_sqrt
     └── Linear(128 → 5)          ← 5 類行為分類
 ```
 
+<a id="sec-2-2"></a>
 ### 2.2 關節注意力機制（JointAttention）
 
 ```python
@@ -100,6 +107,7 @@ x    = bn_x * attn              # 逐元素縮放
 - **設計動機**：貓咪不同行為的關鍵關節不同（lick 著重頭部、walk 著重四肢、shake 著重頭頸），Attention 讓模型自動學習哪些關節更重要
 - **可開關**：`USE_ATTENTION=0` 時替換為 `nn.Identity()`，用於消融對照
 
+<a id="sec-2-3"></a>
 ### 2.3 可學習的分區重要性（Learnable Partition Importance）
 
 ```python
@@ -116,6 +124,7 @@ x = x.sum(dim=1)
 - 讓模型訓練時自動調整「自連結 / 近鄰 / 遠鄰」三個分區的相對重要性
 - 初始化為全 1，不偏向任一分區
 
+<a id="sec-2-4"></a>
 ### 2.4 多尺度時間卷積（Multi-Scale Temporal Convolution）
 
 ```python
@@ -143,6 +152,7 @@ def forward(self, x):
 - 初始化 `branch_logits=0` → 初始三分支等權（各 1/3）
 - 每個 STGCNBlock 有獨立的 branch_logits，不同深度可學習不同時間尺度偏好
 
+<a id="sec-2-5"></a>
 ### 2.5 殘差連結（Residual Connection）
 
 ```python
@@ -171,6 +181,7 @@ def forward(self, x):
 - Block 2（64→128, stride=2）使用 1×1 Conv 殘差，同時處理通道擴張與時間降採樣
 - 防止深層梯度消失，允許特徵繞過部分 Block 直接傳遞
 
+<a id="sec-2-6"></a>
 ### 2.6 多層 Dropout 正則化
 
 | 位置 | 類型 | 比例 | 作用 |
@@ -179,6 +190,7 @@ def forward(self, x):
 | 每個 Block 後 | `Dropout2d` | 0.15 | 空間-時間 dropout，防止過擬合 |
 | 全連接前 | `Dropout` | 0.50 | 強正則，在僅有 128 維特徵時尤為重要 |
 
+<a id="sec-2-7"></a>
 ### 2.7 全局自適應池化（AdaptiveAvgPool2d）
 
 ```python
@@ -191,8 +203,10 @@ self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
 
 ---
 
+<a id="sec-3"></a>
 ## 三、特徵工程（Feature Engineering）
 
+<a id="sec-3-1"></a>
 ### 3.1 五種特徵通道模式
 
 | 模式 | 通道數 | 特徵組成 |
@@ -203,6 +217,7 @@ self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
 | `xy_conf_v_bone` | 7 | x, y, conf, vx, vy, bone_x, bone_y |
 | `xy_conf_v_bone_bmotion` | 9 | x, y, conf, vx, vy, bone_x, bone_y, bone_mx, bone_my |
 
+<a id="sec-3-2"></a>
 ### 3.2 速度特徵（Velocity Feature）
 
 ```python
@@ -215,6 +230,7 @@ velocity[1:] = sequence[1:] - sequence[:-1]  # 一階時間差分
 - 第一幀速度為零（邊界條件）
 - 對 walk（持續位移）與 shake（快速振盪）最具判別力
 
+<a id="sec-3-3"></a>
 ### 3.3 骨段向量特徵（Bone Feature）
 
 ```python
@@ -228,6 +244,7 @@ bone[:, 0, :] = 0.0                        # 根節點（nose）骨段為 0
 - 根節點（索引 0，鼻尖）定義為 0，不做相減
 - 在正規化座標上計算，尺度不受體型影響
 
+<a id="sec-3-4"></a>
 ### 3.4 骨段速度特徵（Bone Motion Feature）
 
 ```python
@@ -240,6 +257,7 @@ bone_motion[1:] = bone[1:] - bone[:-1]    # 骨段向量的時間差分
 - 捕捉肢體方向的變化率，對 shake（方向快速翻轉）特別有效
 - 是位置速度之外的第二層時間動態資訊
 
+<a id="sec-3-5"></a>
 ### 3.5 關鍵點信心值通道（Confidence Channel）
 
 - 直接將 YOLO 輸出的逐關節信心值作為特徵通道輸入模型
@@ -248,10 +266,12 @@ bone_motion[1:] = bone[1:] - bone[:-1]    # 骨段向量的時間差分
 
 ---
 
+<a id="sec-4"></a>
 ## 四、前處理管線（Pre-processing Pipeline）
 
 > **關鍵設計**：訓練與推論使用完全相同的前處理順序，確保分布一致性。
 
+<a id="sec-4-1"></a>
 ### 4.1 時序插值補點（interpolate_missing）
 
 ```python
@@ -265,6 +285,7 @@ for v in range(17):
 - 閾值 0.1（比推論時的 0.5 低，保留更多有效幀）
 - 若整段全部低信心，設為 0（中心化後的原點）
 
+<a id="sec-4-2"></a>
 ### 4.2 左右翻轉對齊（flip_normalize）
 
 ```python
@@ -280,6 +301,7 @@ if should_flip:
 - 序列級多數決：只用兩個關節都有效的幀投票，避免遮蔽幀污染決策
 - 必須在 `orientation_normalize` 之前執行
 
+<a id="sec-4-3"></a>
 ### 4.3 方向正規化（orientation_normalize）
 
 ```python
@@ -294,6 +316,7 @@ rot_angles = π/2 - angles          # 目標角度為 90°（y 軸正向）
 - 旋轉後 mid_back 始終在 hip 上方，骨架姿態方向一致
 - **選擇 mid_back→hip 軸而非 nose→hip**：nose 常被遮蔽，軀幹中段關節更穩定
 
+<a id="sec-4-4"></a>
 ### 4.4 中心化與尺度正規化（normalize_skeleton_coords）
 
 ```python
@@ -309,6 +332,7 @@ seq /= body_size
 - 消除個體體型差異（大貓 vs 小貓）
 - 以軀幹長度（前胸到髖部）為尺度，不受四肢姿態影響
 
+<a id="sec-4-5"></a>
 ### 4.5 前處理順序的設計理由
 
 ```
@@ -320,8 +344,10 @@ interpolate_missing  →  flip_normalize  →  orientation_normalize  →  norma
 
 ---
 
+<a id="sec-5"></a>
 ## 五、訓練策略（Training Strategy）
 
+<a id="sec-5-1"></a>
 ### 5.1 類別加權損失函數（Class-Weighted Loss）
 
 ```python
@@ -333,6 +359,7 @@ criterion = CrossEntropyLoss(weight=class_weights, label_smoothing=...)
 - 自動計算各類別權重：稀少類別（如 shake）獲得更高損失權重
 - 防止模型偏向訓練樣本多的類別
 
+<a id="sec-5-2"></a>
 ### 5.2 Label Smoothing
 
 ```python
@@ -344,6 +371,7 @@ criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=ε)
 - 防止模型對訓練標籤過度自信，提升泛化能力
 - 對行為邊界區段的噪聲標籤具有容忍性
 
+<a id="sec-5-3"></a>
 ### 5.3 加權隨機採樣器（WeightedRandomSampler）
 
 ```python
@@ -354,6 +382,7 @@ sampler = WeightedRandomSampler(sample_weights, num_samples=len(train), replacem
 - 在每個 epoch 的 mini-batch 層級也平衡類別分布
 - 與類別加權損失函數雙重解決類別不平衡
 
+<a id="sec-5-4"></a>
 ### 5.4 模型 EMA（Exponential Moving Average）
 
 ```python
@@ -370,6 +399,7 @@ if k.endswith(('running_mean', 'running_var')):
 - **BatchNorm 特殊處理**：running_mean/running_var 直接複製最新值，避免統計量滯後導致推論輸出退化
 - `decay=0.999`：平均跨度約 1000 個 update 步驟
 
+<a id="sec-5-5"></a>
 ### 5.5 學習率調度（ReduceLROnPlateau）
 
 ```python
@@ -380,6 +410,7 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.5)
 - 連續 5 個 epoch val_loss 未改善時，LR 乘以 0.5
 - 自適應調整，不需手動設定 milestone
 
+<a id="sec-5-6"></a>
 ### 5.6 梯度裁剪（Gradient Clipping）
 
 ```python
@@ -389,12 +420,14 @@ torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 - 防止梯度爆炸，對 RNN/GCN 類模型尤為重要
 - max_norm=1.0 是較保守的設定
 
+<a id="sec-5-7"></a>
 ### 5.7 早停（Early Stopping）
 
 ```python
 # patience=10：連續 10 個 epoch val_loss 未改善即停止
 ```
 
+<a id="sec-5-8"></a>
 ### 5.8 影片級資料切分（Video-Level Split）
 
 ```python
@@ -407,6 +440,7 @@ train_vids, val_vids = train_test_split(video_ids, ...)
 - 強制模型在未見過的影片上泛化
 - 自動修補 val 缺類：若某類別只有 1 支影片全在 train，會強制移 1 支到 val
 
+<a id="sec-5-9"></a>
 ### 5.9 優化器選擇（可配置）
 
 | 優化器 | 特性 |
@@ -417,10 +451,12 @@ train_vids, val_vids = train_test_split(video_ids, ...)
 
 ---
 
+<a id="sec-6"></a>
 ## 六、資料增強（Data Augmentation）
 
 > 僅在訓練階段套用，驗證/推論不使用。
 
+<a id="sec-6-1"></a>
 ### 6.1 時間增強（Temporal Augmentation）
 
 ```python
@@ -433,6 +469,7 @@ train_vids, val_vids = train_test_split(video_ids, ...)
 | 隨機幀丟棄 | max_drop=2 | 模擬幀率不穩或跳幀 |
 | 座標抖動 | jitter_std=0.01 | 模擬 YOLO 偵測雜訊 |
 
+<a id="sec-6-2"></a>
 ### 6.2 空間增強（Spatial Augmentation）
 
 ```python
@@ -449,8 +486,10 @@ train_vids, val_vids = train_test_split(video_ids, ...)
 
 ---
 
+<a id="sec-7"></a>
 ## 七、推論策略（Inference Strategy）
 
+<a id="sec-7-1"></a>
 ### 7.1 滑動窗（Sliding Window）
 
 ```python
@@ -458,6 +497,7 @@ train_vids, val_vids = train_test_split(video_ids, ...)
 # 16 幀 × (1/30s) ≈ 0.53 秒一次推論
 ```
 
+<a id="sec-7-2"></a>
 ### 7.2 信心門檻回退（Confidence Threshold Fallback）
 
 ```python
@@ -469,6 +509,7 @@ if confidence < 0.80:
 - 防止模型在姿態模糊時給出錯誤標籤
 - 0.80 的高門檻確保只有高信心的預測才輸出
 
+<a id="sec-7-3"></a>
 ### 7.3 自動 Checkpoint 通道數推斷
 
 ```python
@@ -486,6 +527,7 @@ use_attention = any(k.startswith('joint_attention.') for k in state_dict.keys())
 
 ---
 
+<a id="sec-8"></a>
 ## 八、技術設計總表（論文用）
 
 | 技術類別 | 設計名稱 | 實作位置 | 對應論文術語 |

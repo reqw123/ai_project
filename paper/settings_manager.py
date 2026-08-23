@@ -34,9 +34,9 @@ BACKUP_SETTINGS_PATH = _PAPER_DIR / "runtime_settings.previous.json"
 
 
 # ============================================================================
-# FIELD_SCHEMA：唯一的欄位對照表
+# FIELD_SCHEMA：唯一的欄位對照表        
 # ============================================================================
-# 每筆 dict 欄位：
+# 每筆 dict 欄位：  
 #   json_key   dotted key，對應 runtime_settings.current.json 巢狀路徑
 #   env_var    config.py 用來覆寫這個欄位的環境變數名稱
 #   attr       (class 名稱, attribute 名稱)，GUI 用 getattr(config.<class>, <attr>) 現讀生效值

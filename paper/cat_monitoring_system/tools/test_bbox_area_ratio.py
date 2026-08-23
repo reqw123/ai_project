@@ -49,6 +49,12 @@ INFERENCE_DEVICE = "cuda"
 
 # ── 模式 1：即時影片/攝影機量測 ──────────────────────────────────────────
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\暫存\two_cat\1 (229).mp4"  # 0 = 預設攝影機（webcam）；改成影片檔路徑字串即可測試指定影片
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH，僅影響模式 1）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_PATH = _env_test_video
+
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_134.pt"
 LOOP_PLAYBACK = True  # 影片播完是否自動從頭重播（webcam 模式下無影響）
 

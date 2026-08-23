@@ -6,6 +6,7 @@
 2. 將較完整的原始/EMA 平滑後資料保存成 NPZ
 3. 產生摘要 Markdown，方便快速檢視每支影片的輸出檔案與基本統計
 """
+import os
 import sys
 import csv
 from datetime import datetime
@@ -29,8 +30,14 @@ from models.stgcn_model import (
 # 配置
 VIDEO_PATHS = [
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\7月2日 (4).mp4",
-   
+
 ]
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先只處理該單一影片路徑（覆蓋上面的 VIDEO_PATHS）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_PATHS = [_env_test_video]
+
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
