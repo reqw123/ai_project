@@ -393,8 +393,13 @@ def draw_no_cat_overlay(frame, text="No cat detected"):
 _PANEL_LAYOUT_CACHE: dict = {}
 
 
-def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, behavior_current_confidences=None, behavior_occurrence_counts=None):
-    """行為面板：每列顯示行為名稱、信心長條（一個）、累積持續秒數、發生次數。"""
+def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, behavior_current_confidences=None, behavior_occurrence_counts=None, total_duration_sec=None):
+    """行為面板：每列顯示行為名稱、信心長條（一個）、累積持續秒數、發生次數。
+
+    total_duration_sec：影片總秒數，顯示在 TIMER 後面（例如 "12.34s / 65.00s"）；
+    呼叫端只有在來源是「讀得到總長度的影片檔」時才會傳這個值——即時串流／攝影機
+    這類沒有固定總長度的來源，呼叫端會傳 None，這裡就只顯示已播放秒數，不會硬湊
+    一個不存在的總長度出來。"""
     h, w = frame.shape[:2]
     cache_key = (w, h)
     layout = _PANEL_LAYOUT_CACHE.get(cache_key)
@@ -475,7 +480,10 @@ def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, beha
     cv2.putText(frame, title, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, title_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
     cv2.putText(frame, title, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, title_fs, (255, 245, 180), text_th, cv2.LINE_AA)
 
-    timer = f"TIMER {float(elapsed_sec):7.2f}s"
+    if total_duration_sec is not None and total_duration_sec > 0:
+        timer = f"TIMER {float(elapsed_sec):7.2f}s / {float(total_duration_sec):.2f}s"
+    else:
+        timer = f"TIMER {float(elapsed_sec):7.2f}s"
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (170, 250, 255), text_th, cv2.LINE_AA)
 
@@ -1197,6 +1205,59 @@ def main():
         local_last_behavior_for_occurrence = LOW_CONF_ID
         reset_behavior_display_state()
 
+    def seek_to_seconds(target_sec):
+        """按 t 鍵跳轉播放位置用：把播放位置移到 target_sec 秒（超出範圍會夾到
+        [0, 影片總長] 之間），並清空累積的偵測/追蹤狀態——時間軸跳躍後，緩衝區裡
+        舊時間點的關鍵點序列/EMA/追蹤鎖定已經沒有意義，比照 'r' 重置鍵的處理方式
+        清空（reset_video_runtime_state() 內部連 raw_frames_read 也會歸零，這裡
+        呼叫完之後再手動改成跳轉後的幀數，對齊新的播放位置）。
+
+        呼叫前呼叫端要自行確認 total_frames > 0（讀不到總長度的來源，例如即時
+        串流，沒有『跳到第幾秒』這個概念，不支援跳轉）。"""
+        nonlocal raw_frames_read
+        clamped_sec = max(0.0, min(target_sec, duration))
+        target_frame = int(round(clamped_sec * source_fps))
+        target_frame = max(0, min(target_frame, max(0, total_frames - 1)))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+        reset_video_runtime_state()
+        raw_frames_read = target_frame
+        print(
+            f"\n⏩ 已跳轉到 {clamped_sec:.2f}s"
+            f"（第 {target_frame} 幀 / 共 {total_frames} 幀，影片總長 {duration:.2f}s）"
+        )
+
+    def handle_seek_key():
+        """按 t 鍵的共用處理邏輯（播放中／暫停中兩個按鍵分支都會呼叫）：確認這個
+        來源支援跳轉（total_frames > 0），跟使用者要秒數（用 input()，讀取這個
+        終端機視窗的輸入，不是 OpenCV 視窗——按 t 之後要切到執行這支腳本的終端機
+        視窗輸入數字），驗證後呼叫 seek_to_seconds()。跳轉發生在「這支影片第一輪
+        還沒播完」的時候，比照這支腳本裡其他所有會打斷正常線性播放的操作（切
+        影片/切資料夾/評分移動影片），把 switched_before_first_pass_complete
+        標成 True——時間軸被跳著看過，這一輪統計已經不是「完整播過一次」，不該
+        被當成正常結果寫進最終的 CSV 報告。
+
+        回傳 True 代表真的跳轉成功了（呼叫端可能想藉此決定要不要恢復播放）。"""
+        nonlocal switched_before_first_pass_complete
+        if total_frames <= 0:
+            print("\n⚠ 這個來源沒有已知的總長度（例如即時串流），無法跳轉時間點")
+            return False
+        try:
+            raw_answer = input(f"\n跳轉到第幾秒？(0~{duration:.2f}，Enter 取消): ").strip()
+        except EOFError:
+            raw_answer = ""
+        if not raw_answer:
+            print("已取消跳轉")
+            return False
+        try:
+            target_sec = float(raw_answer)
+        except ValueError:
+            print(f"⚠ 輸入無效「{raw_answer}」，未跳轉")
+            return False
+        if not first_pass_completed:
+            switched_before_first_pass_complete = True
+        seek_to_seconds(target_sec)
+        return True
+
     if display_window:
         if DISPLAY_SIZE is not None:
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -1311,7 +1372,7 @@ def main():
         print(f"模型輸入時基: {model_input_fps:.2f} fps (frame_step={frame_step})")
         print(f"時長: {duration:.1f} 秒")
         if is_test_mode:
-            print("控制: q=退出  space=暫停  r=重置  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  Shift+A~E=評分並移動影片")
+            print("控制: q=退出  space=暫停  r=重置  t=跳轉時間點  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  Shift+A~E=評分並移動影片")
         if loop_playback:
             print("🔁 循環播放模式（當前影片播完會重播）")
         print("-" * 60)
@@ -1405,6 +1466,10 @@ def main():
                 local_frames_processed += 1
 
             frame_time_sec = raw_frames_read / source_fps if source_fps > 0 else 0.0
+            # 只有讀得到總長度的影片檔才顯示「已播放/總長度」；即時串流／攝影機
+            # 這類沒有固定總長度的來源（is_stream_url 或 duration<=0）一律忽略這部分，
+            # TIMER 只顯示已播放秒數（見 draw_behavior_duration_panel 的說明）。
+            panel_total_duration = duration if (not is_stream_url and duration > 0) else None
 
             # YOLO-Pose 偵測（單一追蹤目標，供 ST-GCN 行為分類/統計使用，行為不變）。
             # 多貓偵測（純顯示用）：以前是另外對同一幀再跑一次 YOLO 取得所有實例
@@ -1644,7 +1709,7 @@ def main():
                     else:
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
-                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts)
+                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts, total_duration_sec=panel_total_duration)
                 else:
                     show_frame = frame.copy()
                     if kpts is not None:
@@ -1663,7 +1728,7 @@ def main():
                     else:
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
-                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts)
+                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts, total_duration_sec=panel_total_duration)
                 _h, _w = show_frame.shape[:2]
                 _ui = compute_ui_scale(_w, _h)
                 # 多貓畫框：把這一幀偵測到、但不是目前追蹤鎖定目標的貓也畫出來
@@ -1681,7 +1746,7 @@ def main():
                 _fn  = FOLDER_MAP.get(current_folder_key, ("", "?"))[1]
                 _nav = (f"[{current_folder_key.upper()}]{_fn}  "
                         f"{current_video_idx + 1}/{len(video_paths)}  "
-                        f"| z WALK  x LICK  c SCRATCH  v SHAKE  b STOP  | Shift+A~E 評分  | a/d 逐幀")
+                        f"| z WALK  x LICK  c SCRATCH  v SHAKE  b STOP  | Shift+A~E 評分  | a/d 逐幀  | t 跳轉")
                 _fs = 0.42 * _ui
                 _th = max(1, int(_ui))
                 # Compute text size to ensure background rectangle fully covers label
@@ -1762,6 +1827,9 @@ def main():
                     reset_video_runtime_state()
                     restart_audio()
                     print("\n↺ 已重置：回到影片開頭並清空偵測狀態")
+                    continue
+                if key == ord('t'):
+                    handle_seek_key()
                     continue
                 if key == ord(' '):
                     paused = not paused
@@ -1865,6 +1933,16 @@ def main():
                             restart_audio()
                             print("\n↺ 已重置：回到影片開頭並清空偵測狀態")
                             break
+                        elif k2 == ord('t'):
+                            # 跳轉成功才離開暫停迴圈：只推進「這一幀」（沿用 d 鍵
+                            # 逐幀前進的 step_one_frame_and_repause 機制）把跳轉
+                            # 目標那一幀讀出來顯示，讀完立刻自動重新暫停在那一幀，
+                            # 不會跳轉完就直接連續播下去。取消或輸入無效則維持
+                            # 暫停、留在這個迴圈繼續等下一個按鍵，什麼都不做。
+                            if handle_seek_key():
+                                paused = False
+                                step_one_frame_and_repause = True
+                                break
 
             if stop_requested or switch_delta != 0:
                 break

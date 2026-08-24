@@ -65,8 +65,8 @@ def _vrj(s: str, w: int) -> str:
 # ═══════════════════════════════════════════════════════
 #  設定區  ── 修改這裡，不需要命令列參數
 # ═══════════════════════════════════════════════════════
-OLD_MODEL_PATH   = r"C:\ai_project\yolo_models\v11s_146.pt"
-NEW_MODEL_PATH   = r"C:\ai_project\yolo_models\v11s_147.pt"
+OLD_MODEL_PATH   = r"C:\ai_project\yolo_models\v11s_148.pt"
+NEW_MODEL_PATH   = r"C:\ai_project\yolo_models\v11s_149.pt"
 OUTPUT_DIR       = r"C:\ai_project\paper\cat_monitoring_system\eval_results\pose_compare"
 INFERENCE_DEVICE = "cuda"   # "cuda" 或 "cpu"
 EMA_ALPHA_OLD    = 1.0      # Old model EMA 平滑係數（1.0 = 不平滑；0.5 = 半衰期平滑）
