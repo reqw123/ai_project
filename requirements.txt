@@ -1,0 +1,64 @@
+# 貓咪行為辨識系統 — Python 依賴清單
+#
+# 本檔是從目前實際在跑的 conda 環境「yolo_new」（Python 3.11.15）用
+# `pip freeze` 匯出後手動篩過的結果（2026-08-25），只留下這個專案
+# （paper/ 底下的核心 pipeline + settings_window + tools/ 少數獨立腳本）
+# 真的有 import 用到的套件，過濾掉同一個 conda 環境裡跟本專案無關的
+# 其他套件（例如 openai／ollama／polars／ttkbootstrap／tkinterdnd2／
+# python-vlc，這些是這台機器上其他工具留下的，跟本專案沒有 import 關係）。
+#
+# 安裝方式：
+#   conda create -n yolo_new python=3.11
+#   conda activate yolo_new
+#   pip install -r requirements.txt
+#
+# 換一台電腦（尤其是不同顯卡/驅動）時，torch/torchvision/torchaudio 的
+# CUDA build 版本不保證能裝得起來——如果 cu121 在新機器上裝不了，去
+# https://pytorch.org/get-started/locally/ 查對應新機器 CUDA 版本的安裝
+# 指令，再手動改掉下面這三行，其餘套件不受影響。
+
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
+torchaudio==2.5.1+cu121
+
+# ==================== 核心 pipeline 依賴 ====================
+# main.py（推論主流程）、settings_window.py（設定 GUI）都需要
+ultralytics==8.4.87
+opencv-python==4.13.0.92
+numpy==2.4.4
+scipy==1.17.1
+scikit-learn==1.9.0
+matplotlib==3.11.0
+Pillow==12.2.0
+PyYAML==6.0.3
+Flask==3.1.3
+requests==2.34.2
+psutil==7.2.2
+tqdm==4.68.3
+pytest==9.1.1
+
+# ==================== 選用依賴 ====================
+# 缺裝不會讓主要功能壞掉，只是對應的附加功能會靜默停用（或印一行警告）。
+pywin32==312
+# settings_window.py 啟動子行程後，把子行程視窗自動拉到最上層／取得焦點；
+# 缺裝時 process_manager.py 只會在終端機印警告，不影響腳本本身執行。
+
+paho-mqtt
+# plugins/lick_stage/ext_body_zones/output.py 的 ZoneMqttPublisher；
+# 缺裝時該 MQTT 發布功能靜默停用（見該檔案 docstring）。
+
+# ==================== 僅 tools/ 底下少數獨立研究腳本用到 ====================
+# 不是核心 pipeline 必要依賴，只有要跑對應那支腳本時才需要裝。
+yt-dlp==2026.7.4
+# tools/1_自動抓取.py：批次下載貓咪行為影片
+
+seaborn
+# tools/eval_ema_ablation.py、tools/eval_gcn_compare.py、
+# tools/eval_model_worst_videos.py：評估結果畫圖
+
+pygame
+# tools/1_run_video_inference.py：推論時同步播放音訊
+
+pillow-heif
+# tools/1_heic_av_png.py：HEIC 轉 PNG

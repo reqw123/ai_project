@@ -281,8 +281,9 @@ class ProcessManager:
         清單，且對之後新增的腳本自動適用。
 
         需要 pywin32（win32gui/win32process/win32con）；環境沒裝的話直接跳過，
-        不影響腳本本身執行、也不彈錯誤訊息——這只是「省得手動切視窗」的錦上添花
-        功能，缺了頂多要自己切一下，不該讓整個啟動流程失敗。
+        不影響腳本本身執行、也不彈錯誤訊息（不該讓整個啟動流程失敗）——但會在終端機
+        印一行警告，提醒「這只是少了自動置頂的錦上添花功能」，不用真的去查程式碼
+        才知道發生什麼事。
         """
         try:
             import win32api
@@ -290,6 +291,11 @@ class ProcessManager:
             import win32gui
             import win32process
         except ImportError:
+            print(
+                "[settings_gui] 未安裝 pywin32，略過「子行程視窗自動置頂」功能"
+                "（不影響腳本本身執行；如需此功能請執行 pip install pywin32）。",
+                file=sys.stderr,
+            )
             return
 
         def _worker():
