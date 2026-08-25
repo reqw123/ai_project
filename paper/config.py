@@ -237,7 +237,7 @@ class ModelPaths:
             "CAT_MONITORING_YOLO_MODEL",
             _runtime_default(
                 "model_paths.yolo_model",
-                str(Path("yolo_models") / "v11s_134.pt"),
+                str(Path("yolo_models") / "v11s_147.pt"),
                 value_type=str,
             ),
         )
