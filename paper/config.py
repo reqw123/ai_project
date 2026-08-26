@@ -458,7 +458,7 @@ class RunModeConfig:
     """
 
     MODE = _env_str(
-        "CAT_MONITORING_RUN_MODE", _runtime_default("run_mode.mode", "gui", value_type=str)
+        "CAT_MONITORING_RUN_MODE", _runtime_default("run_mode.mode", "server", value_type=str)
     )
 
     # server 模式下，處理管線（開影片、載入 YOLO/ST-GCN、tracker 統計、CSV、Node-RED 推送）
@@ -666,6 +666,16 @@ class NodeRedConfig:
     # 只記錄路徑，尚未讀取／解析——之後 Python 端需要直接讀取這份資料時，
     # 由此常數取得路徑，避免路徑散落各處造成不一致（對照 tracker_state.json
     # 過去在 config.py 跟 Node-RED function node 裡各自寫死一份路徑的教訓）。
+    # 2026-08-26：這個路徑刻意「沒有」跟著 TRACKER_STATE_PATH/DAILY_HISTORY_DB_PATH
+    # 一起搬進 baseline_data/——真正的即時寫入者是 Node-RED（C:\Users\homec\.node-red\
+    # settings.js 裡 functionGlobalContext.gfile 寫死的 'C:\\a\\global.json'，不受這個
+    # git 專案版本控制），Python 端目前只有唯讀工具（_tools/1_read_context.py、
+    # _tools/2_backfill_daily_store.py、node_red_tests/fetch_real_history.py）會讀。
+    # 若把這裡改指向專案目錄，Node-RED 之後寫入的新資料 Python 端就再也讀不到
+    # （兩邊分岔），除非同時把 settings.js 的路徑也一併改掉——這次搬遷刻意不動
+    # Node-RED 端，所以維持指向 C:\a\global.json。paper/baseline_data/global.json
+    # 只是搬遷當下複製的一份快照，供離線查閱/可攜參考用，不是即時來源，不會自動更新。
+    # 見 docs/資料層架構現況與統一管理評估.md 第十四節。
     GLOBAL_CONTEXT_PATH = _env_str(
         "CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH",
         _runtime_default("nodered.global_context_path", r"C:\a\global.json", value_type=str),
@@ -962,21 +972,44 @@ class CatIdentityConfig:
 class LoggingConfig:
     """日誌記錄設置"""
 
-    # Tracker 狀態持久化路徑（重啟後恢復當日累積資料）
-    TRACKER_STATE_PATH = _env_str(
-        "CAT_MONITORING_TRACKER_STATE_PATH",
-        _runtime_default("logging.tracker_state_path", r"C:\a\tracker_state.json", value_type=str),
+    # Tracker 狀態持久化路徑（重啟後恢復當日累積資料）。
+    # 2026-08-26：原本寫死 C:\a\tracker_state.json（跟專案原始碼分開存放，換一台
+    # 機器/重新 clone 就找不到），這個檔案完全由 Python 端自己讀寫（behavior_tracker.py
+    # 的 json.dump/json.load，Node-RED 不碰），搬進專案目錄下的 baseline_data/、
+    # 改用 _resolve_project_path() 以相對路徑解析，換機器/換 clone 路徑不用再改設定。
+    # 見 docs/資料層架構現況與統一管理評估.md 第十四節。
+    # 注意：_resolve_project_path() 的錨點是 _PROJECT_ROOT（paper/ 的上一層，見該常數
+    # 註解），不是 paper/ 本身，所以這裡的相對路徑要帶上 "paper/" 前綴才會落在
+    # paper/baseline_data/（跟 CSV_PATH/SEGMENTS_CSV_PATH 等其他 LoggingConfig 輸出
+    # 一致，都放在 paper/ 底下，而不是跟 yolo_models/、stgcn_models/ 一樣放在專案根目錄）。
+    TRACKER_STATE_PATH = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_TRACKER_STATE_PATH",
+            _runtime_default(
+                "logging.tracker_state_path",
+                str(Path("paper") / "baseline_data" / "tracker_state.json"),
+                value_type=str,
+            ),
+        )
     )
 
     # Python 端獨立的多天歷史（analytics/daily_store.py，SQLite）。刻意跟
     # NodeRedConfig.GLOBAL_CONTEXT_PATH（C:\a\global.json，Node-RED 自己的
     # v2_daily_history）分開存放、互不相干——見
     # docs/資料層架構現況與統一管理評估.md 第九節「Python 端獨立多天歷史」。
-    DAILY_HISTORY_DB_PATH = _env_str(
-        "CAT_MONITORING_DAILY_HISTORY_DB_PATH",
-        _runtime_default(
-            "logging.daily_history_db_path", r"C:\a\daily_history.db", value_type=str
-        ),
+    # 2026-08-26：同樣是純 Python 端讀寫（daily_store.py 的 sqlite3），搬進專案目錄下
+    # 的 baseline_data/，跟上面 TRACKER_STATE_PATH 同一套 _resolve_project_path() 相對
+    # 路徑解析邏輯。跟 GLOBAL_CONTEXT_PATH 不同：這個路徑不涉及 Node-RED，搬遷不會
+    # 造成任何資料來源分歧（見第十四節）。
+    DAILY_HISTORY_DB_PATH = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_DAILY_HISTORY_DB_PATH",
+            _runtime_default(
+                "logging.daily_history_db_path",
+                str(Path("paper") / "baseline_data" / "daily_history.db"),
+                value_type=str,
+            ),
+        )
     )
 
     # CSV 絕對路徑（可由環境變數覆寫）

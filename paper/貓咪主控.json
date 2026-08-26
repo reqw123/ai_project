@@ -1,6 +1,6 @@
 [
     {
-        "id": "bfa5243aa9dbd045",
+        "id": "f4eda3299d3b0323",
         "type": "tab",
         "label": "😺 貓咪健康監測系統",
         "disabled": false,
@@ -8,9 +8,9 @@
         "env": []
     },
     {
-        "id": "bbde1158c677172e",
+        "id": "f426248965398860",
         "type": "group",
-        "z": "bfa5243aa9dbd045",
+        "z": "f4eda3299d3b0323",
         "style": {
             "stroke": "#999999",
             "stroke-opacity": "1",
@@ -21,44 +21,45 @@
             "color": "#a4a4a4"
         },
         "nodes": [
-            "8f6f3b14776f3669",
-            "d6e190b919318a3c",
-            "30da3f410d1765f6",
-            "3983485996d5065e",
-            "daaf9ebe1faab10e",
-            "d8f7c7b342c1c921",
-            "99a7ef0dd1376acc",
-            "799e0dede85749f3",
-            "65b701debfe78a33",
-            "e44fc3a6ca18e58e",
-            "aeb537e3fd5d7337",
-            "f0016264d8649aa6",
-            "524a127640fe5d6c",
-            "793915e032b38cba",
-            "d5c828d35f1f7f4c",
-            "7cc379c356e990ca",
-            "399e987cbe61bbb0",
-            "eab9ac534573a527",
-            "4f8d16570a761e27",
-            "64b97575e8f22a8b",
-            "bed09e3c3ffd1809",
-            "edb4a5e67457e0d5",
-            "b649dbe9fd77dc03",
-            "f6215532c20e0ba5",
-            "1e18d7e1ffa6ed4f",
-            "e1f2a3b4c5d60902",
-            "e1f2a3b4c5d60903"
+            "b916fb9f4369651c",
+            "904dddfe811f73ea",
+            "eb4bdb746e36ecbc",
+            "5bf466c4f76749f3",
+            "70d395a7440ae540",
+            "22c7af979a7f23db",
+            "5a519856735420ba",
+            "ea9d3c3ae899d6e0",
+            "18bd938767341aaa",
+            "ed6ddec43ff3b995",
+            "2543bffc7a4c0211",
+            "c5ed87fb15f1a540",
+            "15ba52aa220a49ec",
+            "a3a3f2717f2c23b3",
+            "30173466804c74ed",
+            "619a6aa170ad688b",
+            "f30bd82b571da632",
+            "149b500fbcdb91ff",
+            "7b7c938ec49010e5",
+            "6a13701fa5bb4b8a",
+            "44b9b160fc151e98",
+            "072713907d36b765",
+            "fbb18e0f5f03bd50",
+            "0333d140db4f4e3d",
+            "da2966d972e017d9",
+            "a248b98abd6c740a",
+            "0e7eb68ccb225926",
+            "29fca2527798c9cf"
         ],
-        "x": 340,
-        "y": 20,
-        "w": 1320,
-        "h": 760
+        "x": 234,
+        "y": 19,
+        "w": 1092,
+        "h": 742
     },
     {
-        "id": "8f6f3b14776f3669",
+        "id": "b916fb9f4369651c",
         "type": "http in",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "python_online",
         "url": "/python_online",
         "method": "post",
@@ -69,15 +70,15 @@
         "y": 460,
         "wires": [
             [
-                "d6e190b919318a3c"
+                "904dddfe811f73ea"
             ]
         ]
     },
     {
-        "id": "d6e190b919318a3c",
+        "id": "904dddfe811f73ea",
         "type": "json",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "parse_json",
         "property": "payload",
         "action": "obj",
@@ -86,15 +87,15 @@
         "y": 460,
         "wires": [
             [
-                "99a7ef0dd1376acc"
+                "5a519856735420ba"
             ]
         ]
     },
     {
-        "id": "30da3f410d1765f6",
+        "id": "eb4bdb746e36ecbc",
         "type": "inject",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "發送訊息到discord",
         "props": [
             {
@@ -112,15 +113,15 @@
         "y": 660,
         "wires": [
             [
-                "daaf9ebe1faab10e"
+                "70d395a7440ae540"
             ]
         ]
     },
     {
-        "id": "3983485996d5065e",
+        "id": "5bf466c4f76749f3",
         "type": "http request",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "送到 Discord",
         "method": "POST",
         "ret": "txt",
@@ -140,10 +141,10 @@
         ]
     },
     {
-        "id": "daaf9ebe1faab10e",
+        "id": "70d395a7440ae540",
         "type": "function",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "組成 Discord Webhook 格式",
         "func": "\n\n// Discord Python 上線通知\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// IP\n// =========================\nlet ip = msg.payload?.ip || \"未知IP\";\n\n// 保存 IP 到持久化全域 context，讓重連/重啟後仍可取用\ntry {\n    global.get(\"gfile\").set(\"python_ip\", ip);\n} catch (e) {\n    global.set(\n        \"python_ip\",\n        ip\n    );\n}\n\n// =========================\n// Discord Payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                \"🟢 Python AI 已上線\",\n\n            description:\n                `偵測到 Python 推論系統啟動`,\n\n            color:\n                65280,\n\n            fields: [\n\n                {\n                    name: \"Python IP\",\n                    value: String(ip),\n                    inline: false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
         "outputs": 1,
@@ -156,15 +157,15 @@
         "y": 720,
         "wires": [
             [
-                "3983485996d5065e"
+                "5bf466c4f76749f3"
             ]
         ]
     },
     {
-        "id": "d8f7c7b342c1c921",
+        "id": "22c7af979a7f23db",
         "type": "http response",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "response_200",
         "statusCode": "200",
         "headers": {},
@@ -173,10 +174,10 @@
         "wires": []
     },
     {
-        "id": "99a7ef0dd1376acc",
+        "id": "5a519856735420ba",
         "type": "function",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "build_response",
         "func": "let ip = null;\ntry {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"gfile\").get(\"python_ip\") || global.get(\"python_ip\") || null);\n} catch (e) {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\") || null);\n}\nif (ip) {\n    try {\n        global.get(\"gfile\").set(\"python_ip\", ip);\n    } catch (e) {\n        global.set(\"python_ip\", ip);\n    }\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = ip ? `http://${ip}:5000/stream` : \"\";\nnode.warn(\"python_online received IP: \" + (ip || 'null'));\nreturn msg;",
         "outputs": 1,
@@ -189,18 +190,18 @@
         "y": 460,
         "wires": [
             [
-                "daaf9ebe1faab10e",
-                "d8f7c7b342c1c921",
-                "399e987cbe61bbb0",
-                "1e18d7e1ffa6ed4f"
+                "70d395a7440ae540",
+                "22c7af979a7f23db",
+                "f30bd82b571da632",
+                "da2966d972e017d9"
             ]
         ]
     },
     {
-        "id": "799e0dede85749f3",
+        "id": "ea9d3c3ae899d6e0",
         "type": "inject",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "啟動時發送串流",
         "props": [
             {
@@ -218,15 +219,15 @@
         "y": 560,
         "wires": [
             [
-                "65b701debfe78a33"
+                "18bd938767341aaa"
             ]
         ]
     },
     {
-        "id": "65b701debfe78a33",
+        "id": "18bd938767341aaa",
         "type": "function",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "從持久化context恢復串流",
         "func": "let ip = null;\ntry {\n    ip = global.get(\"gfile\").get(\"python_ip\") || global.get(\"python_ip\") || null;\n} catch (e) {\n    ip = global.get(\"python_ip\") || null;\n}\nif (!ip) {\n    return null;\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
         "outputs": 1,
@@ -239,16 +240,16 @@
         "y": 560,
         "wires": [
             [
-                "399e987cbe61bbb0",
-                "1e18d7e1ffa6ed4f"
+                "f30bd82b571da632",
+                "da2966d972e017d9"
             ]
         ]
     },
     {
-        "id": "e44fc3a6ca18e58e",
+        "id": "ed6ddec43ff3b995",
         "type": "http in",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "接收Python數據",
         "url": "/yolo_result",
         "method": "post",
@@ -259,16 +260,16 @@
         "y": 140,
         "wires": [
             [
-                "f0016264d8649aa6",
-                "aeb537e3fd5d7337"
+                "c5ed87fb15f1a540",
+                "2543bffc7a4c0211"
             ]
         ]
     },
     {
-        "id": "aeb537e3fd5d7337",
+        "id": "2543bffc7a4c0211",
         "type": "http response",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "回應200",
         "statusCode": "200",
         "headers": {},
@@ -277,10 +278,10 @@
         "wires": []
     },
     {
-        "id": "f0016264d8649aa6",
+        "id": "c5ed87fb15f1a540",
         "type": "json",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "解析JSON",
         "property": "payload",
         "action": "obj",
@@ -289,15 +290,15 @@
         "y": 140,
         "wires": [
             [
-                "524a127640fe5d6c"
+                "15ba52aa220a49ec"
             ]
         ]
     },
     {
-        "id": "524a127640fe5d6c",
+        "id": "15ba52aa220a49ec",
         "type": "function",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "數據分發器",
         "func": "let data = msg.payload;\nif (!data) return null;\n\nif (!data.current)     data.current     = {};\nif (!data.today_stats) data.today_stats = {};\n\nlet stats = data.today_stats;\nstats.walk             = stats.walk             || 0;\nstats.walk_time        = stats.walk_time        || 0;\nstats.lick             = stats.lick             || 0;\nstats.lick_time        = stats.lick_time        || 0;\nstats.scratch          = stats.scratch          || 0;\nstats.scratch_time     = stats.scratch_time     || 0;\nstats.shake            = stats.shake            || 0;\nstats.shake_time       = stats.shake_time       || 0;\nstats.stop             = stats.stop             || 0;\nstats.stop_time        = stats.stop_time        || 0;\nstats.not_detected_time = stats.not_detected_time || 0;\nstats.active_time      = stats.active_time      || 0;\nstats.low_conf         = stats.low_conf         || 0;\nstats.low_conf_time     = stats.low_conf_time     || 0;\n\nif (Array.isArray(data.behavior_log)) {\n    data.behavior_log = data.behavior_log.map(function(item) {\n        return {\n            behavior: item.behavior || 'unknown',\n            time:     item.time     || '--:--',\n            duration: item.duration || 0,\n            emoji:    getEmoji(item.behavior)\n        };\n    });\n} else {\n    data.behavior_log = [];\n}\n\nif (!data.current.emoji)     data.current.emoji     = getEmoji(data.current.behavior);\nif (!data.current.timestamp) data.current.timestamp = new Date().toLocaleTimeString();\n\n\n\n// 行為開始時間追蹤（供時間軸進行中計時器使用）\nlet _curBeh = (data.current && data.current.behavior) || null;\nlet _prevBeh = flow.get('tl_cur_behavior');\nlet _startMs  = flow.get('tl_start_ms') || Date.now();\nif (_curBeh !== _prevBeh) {\n    _startMs = Date.now();\n    flow.set('tl_cur_behavior', _curBeh);\n    flow.set('tl_start_ms', _startMs);\n}\nif (data.current) data.current.start_epoch_ms = _startMs;\n\n// 今日各行為平均時長（供時間軸風險評估）\ndata.avg_duration = {};\nfor (let _b of ['walk','lick','scratch','shake','stop']) {\n    let _cnt = stats[_b] || 0;\n    let _t   = stats[_b + '_time'] || 0;\n    data.avg_duration[_b] = _cnt >= 2 ? Math.round(_t / _cnt * 10) / 10 : 0;\n}\n\nmsg.payload = data;\n\n// CSV：每 5 分鐘寫一次（與 v2 flow 一致）\nlet now     = Date.now();\nlet lastCsv = flow.get('last_csv_write') || 0;\nlet doCsv   = (now - lastCsv) >= 300000;\nif (doCsv) flow.set('last_csv_write', now);\n\nlet csvMsg = doCsv ? { payload: {\n    timestamp:         (function(){var d=new Date(),p=function(n){return String(n).padStart(2,\"0\")};return d.getFullYear()+\"-\"+p(d.getMonth()+1)+\"-\"+p(d.getDate())+\" \"+p(d.getHours())+\":\"+p(d.getMinutes())+\":\"+p(d.getSeconds());})(),\n    walk:              stats.walk,              walk_time:         stats.walk_time,\n    lick:              stats.lick,              lick_time:         stats.lick_time,\n    scratch:           stats.scratch,           scratch_time:      stats.scratch_time,\n    shake:             stats.shake,             shake_time:        stats.shake_time,\n    stop:              stats.stop,              stop_time:         stats.stop_time,\n    active_time:       stats.active_time,\n    low_conf:          stats.low_conf,\n    low_conf_time:     stats.low_conf_time,\n    not_detected_time: stats.not_detected_time,\n    activity_score:    data.activity_score || 0\n}} : null;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    { payload: data.activity_score || 0 },\n    msg,\n    csvMsg,\n    msg\n];\n\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case 'scratch': return '🐾';\n        case 'lick':    return '🧼';\n        case 'walk':    return '🚶';\n        case 'shake':   return '🔄';\n        case 'stop':    return '⏹';\n        case 'not':     return '📷';\n        default:        return '🐱';\n    }\n}",
         "outputs": 7,
@@ -310,31 +311,31 @@
         "y": 140,
         "wires": [
             [
-                "eab9ac534573a527"
+                "149b500fbcdb91ff"
             ],
             [
-                "4f8d16570a761e27"
+                "7b7c938ec49010e5"
             ],
             [
-                "64b97575e8f22a8b"
+                "6a13701fa5bb4b8a"
             ],
             [
-                "7cc379c356e990ca"
+                "619a6aa170ad688b"
             ],
             [],
             [
-                "793915e032b38cba"
+                "a3a3f2717f2c23b3"
             ],
             [
-                "edb4a5e67457e0d5"
+                "072713907d36b765"
             ]
         ]
     },
     {
-        "id": "793915e032b38cba",
+        "id": "a3a3f2717f2c23b3",
         "type": "csv",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "建立CSV",
         "sep": ",",
         "hdrin": false,
@@ -350,18 +351,18 @@
         "y": 400,
         "wires": [
             [
-                "d5c828d35f1f7f4c"
+                "30173466804c74ed"
             ]
         ]
     },
     {
-        "id": "d5c828d35f1f7f4c",
+        "id": "30173466804c74ed",
         "type": "file",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "儲存CSV",
-        "filename": "C:\\\\a\\\\noda_data.csv",
-        "filenameType": "str",
+        "filename": "CAT_MONITORING_NODA_DATA_CSV_PATH",
+        "filenameType": "env",
         "appendNewline": true,
         "createDir": true,
         "overwriteFile": "false",
@@ -373,10 +374,21 @@
         ]
     },
     {
-        "id": "7cc379c356e990ca",
+        "id": "29fca2527798c9cf",
+        "type": "comment",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
+        "name": "⚠️ 個體化基線 CSV／狀態檔路徑改用環境變數（2026-08-26）",
+        "info": "# 個體化基線相關路徑改用環境變數\n\n這個節點（「儲存CSV」）跟 `cat_health_v3_flow.json` 裡的 `baseline.csv`／`daily_history.csv`／`deviation_log.csv` 3 個 file 節點，`filenameType` 都已經從寫死字串（`str`）改成 `env`，實際路徑改由下面這些環境變數提供：\n\n| 環境變數名稱 | 目前值 | 用在哪個節點 |\n|---|---|---|\n| `CAT_MONITORING_NODA_DATA_CSV_PATH` | `C:\\a\\noda_data.csv` | 本節點「儲存CSV」 |\n| `CAT_MONITORING_BASELINE_CSV_PATH` | `C:\\a\\baseline.csv` | cat_health_v3_flow.json：baseline.csv |\n| `CAT_MONITORING_NODERED_DAILY_HISTORY_CSV_PATH` | `C:\\a\\daily_history.csv` | cat_health_v3_flow.json：daily_history.csv |\n| `CAT_MONITORING_DEVIATION_LOG_CSV_PATH` | `C:\\a\\deviation_log.csv` | cat_health_v3_flow.json：deviation_log.csv |\n| `CAT_MONITORING_TRACKER_STATE_PATH`（可選，程式碼已有 fallback） | `C:\\ai_project\\paper\\baseline_data\\tracker_state.json` | 本分頁「事件時間軸引擎」function node |\n\n**這些值已經設定在兩個地方（擇一即可，兩邊都設也不衝突）：**\n1. 使用者設置 → 環境配置（全局環境變數面板，存在 `flows.json` 的 global-config 節點）\n2. Windows 使用者環境變數（`[Environment]::SetEnvironmentVariable(...,'User')` 設定，需要重新登入/開機後新啟動的行程才讀得到）\n\n**⚠️ 換機器/搬遷時**：只要在新機器上比照設定這 5 個環境變數指到新位置即可，**不需要**改這些節點本身的設定。\n\n**⚠️ 沒設環境變數會怎樣**：前 4 個 CSV 節點沒有 fallback，環境變數沒設時 `filename` 會解析成空字串，該節點會跳出「未指定檔名」警告並跳過寫入（不會讓 Node-RED 崩潰，但那筆資料會遺失）；只有 `CAT_MONITORING_TRACKER_STATE_PATH` 因為寫在 function node 程式碼裡（`env.get(...) || fallback`）沒設也不會壞。\n\n詳細背景見 repo 內 `paper/docs/資料層架構現況與統一管理評估.md` 第十四節。",
+        "x": 570,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "619a6aa170ad688b",
         "type": "ui_gauge",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "活動力儀表",
         "group": "group_gauge_cat",
         "order": 5,
@@ -402,10 +414,10 @@
         "wires": []
     },
     {
-        "id": "399e987cbe61bbb0",
+        "id": "f30bd82b571da632",
         "type": "ui_template",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "group": "group_stream_cat",
         "name": "影像串流",
         "order": 6,
@@ -424,10 +436,10 @@
         ]
     },
     {
-        "id": "eab9ac534573a527",
+        "id": "149b500fbcdb91ff",
         "type": "ui_template",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "group": "group_status_cat",
         "name": "即時狀態卡片",
         "order": 1,
@@ -446,10 +458,10 @@
         ]
     },
     {
-        "id": "4f8d16570a761e27",
+        "id": "7b7c938ec49010e5",
         "type": "ui_template",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "group": "group_timeline_cat",
         "name": "行為時間紀錄",
         "order": 2,
@@ -468,10 +480,10 @@
         ]
     },
     {
-        "id": "64b97575e8f22a8b",
+        "id": "6a13701fa5bb4b8a",
         "type": "ui_template",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "group": "group_stats_cat",
         "name": "詳細統計",
         "order": 3,
@@ -490,10 +502,10 @@
         ]
     },
     {
-        "id": "bed09e3c3ffd1809",
+        "id": "44b9b160fc151e98",
         "type": "ui_template",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "group": "group_alerts_cat",
         "name": "健康警示",
         "order": 4,
@@ -512,28 +524,26 @@
         ]
     },
     {
-        "id": "e1f2a3b4c5d60902",
+        "id": "a248b98abd6c740a",
         "type": "link in",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "來自 cat_health_v3 行為偏差融合引擎（2026-08-09 分工明確：僅供顯示，不重算）",
-        "links": [
-            "e1f2a3b4c5d60901"
-        ],
+        "links": [],
         "x": 1090,
         "y": 240,
         "wires": [
             [
-                "bed09e3c3ffd1809",
-                "e1f2a3b4c5d60903"
+                "44b9b160fc151e98",
+                "0e7eb68ccb225926"
             ]
         ]
     },
     {
-        "id": "e1f2a3b4c5d60903",
+        "id": "0e7eb68ccb225926",
         "type": "debug",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "🧪 健康警示除錯（暫時，確認無誤可刪）",
         "active": true,
         "tosidebar": true,
@@ -548,12 +558,12 @@
         "wires": []
     },
     {
-        "id": "edb4a5e67457e0d5",
+        "id": "072713907d36b765",
         "type": "function",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "name": "事件時間軸引擎",
-        "func": "// fs loaded via node libs: {\"var\":\"fs\",\"module\":\"fs\"}\nconst TRACKER_PATH = 'C:\\\\a\\\\tracker_state.json';\n\nlet data = msg.payload;\nif (!data || !data.current) return null;\n\nlet curBeh = data.current.behavior;\nif (!curBeh || curBeh === 'not') return null;\n\n// ── Read tracker_state.json (authoritative daily totals) ──────────\nlet tracker = {};\ntry {\n    tracker = JSON.parse(fs.readFileSync(TRACKER_PATH, 'utf8'));\n} catch(e) {\n    node.warn('tracker_state.json: ' + e.message);\n}\n\n// ── Date helpers ─────────────────────────────────────────────────\nfunction pad(n){ return String(n).padStart(2,'0'); }\nfunction fmtTime(d){\n    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+\n           ' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());\n}\nlet now      = new Date();\nlet nowMs    = now.getTime();\nlet nowStr   = fmtTime(now);\nlet todayStr = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());\nlet isToday  = (tracker.date === todayStr);\n\n// Derive start_time from Python's end_time (HH:MM:SS) and duration (sec)\nfunction deriveStart(endHMS, durSec) {\n    let pts = (endHMS||'00:00:00').split(':').map(Number);\n    let endSec   = (pts[0]||0)*3600 + (pts[1]||0)*60 + (pts[2]||0);\n    let startSec = Math.max(0, endSec - Math.round(durSec));\n    return todayStr+' '+pad(Math.floor(startSec/3600))+':'+\n           pad(Math.floor((startSec%3600)/60))+':'+pad(startSec%60);\n}\n\n// ── Accumulate Python's behavior_log (deduplicate by time+beh+dur) ─\nlet sessionEvents = flow.get('evt_session') || [];\nlet sessionKeys   = new Set(flow.get('evt_keys') || []);\nlet sessionDate   = flow.get('evt_date') || '';\n\nif (sessionDate && sessionDate !== todayStr) {\n    sessionEvents = [];\n    sessionKeys   = new Set();\n}\nflow.set('evt_date', todayStr);\n\nlet inLog   = data.behavior_log || [];\nlet changed = false;\nfor (let i = 0; i < inLog.length; i++) {\n    let rec = inLog[i];\n    if (!rec || !rec.behavior || rec.behavior === 'not' || !rec.time) continue;\n    let dur = Math.max(1, Math.round(rec.duration || 1));\n    let key = rec.time + '|' + rec.behavior + '|' + dur;\n    if (sessionKeys.has(key)) continue;\n    sessionKeys.add(key);\n    let nextId = sessionEvents.length > 0 ? sessionEvents[sessionEvents.length-1].event_id + 1 : 1;\n    sessionEvents.push({\n        event_id:   nextId,\n        behavior:   rec.behavior,\n        end_time:   todayStr + ' ' + rec.time,\n        start_time: deriveStart(rec.time, rec.duration || 0),\n        duration:   dur\n    });\n    changed = true;\n}\nif (changed) {\n    if (sessionEvents.length > 500) {\n        // trim oldest keys too\n        let trimmed = sessionEvents.slice(-500);\n        let keptKeys = new Set(trimmed.map(function(e){\n            return e.end_time.slice(11,19)+'|'+e.behavior+'|'+e.duration;\n        }));\n        sessionKeys = keptKeys;\n        sessionEvents = trimmed;\n    }\n    flow.set('evt_session', sessionEvents);\n    flow.set('evt_keys', Array.from(sessionKeys));\n}\n\n// ── Merge adjacent same-behavior events (Python sends ~2s segments) ─\n// Adjacent = gap ≤ 2s between end_time of one and start_time of the next\nfunction _tsec(dt) {\n    var t = dt.slice(11,19).split(':').map(Number);\n    return t[0]*3600 + t[1]*60 + t[2];\n}\nlet mergedEvents = (function(evts) {\n    if (evts.length < 2) return evts.slice();\n    var res = [{ event_id:evts[0].event_id, behavior:evts[0].behavior,\n                 start_time:evts[0].start_time, end_time:evts[0].end_time,\n                 duration:evts[0].duration }];\n    for (var i = 1; i < evts.length; i++) {\n        var prev = res[res.length-1], cur = evts[i];\n        if (prev.behavior === cur.behavior &&\n            _tsec(cur.start_time) - _tsec(prev.end_time) <= 2) {\n            prev.end_time = cur.end_time;\n            prev.duration = _tsec(cur.end_time) - _tsec(prev.start_time);\n        } else {\n            res.push({ event_id:cur.event_id, behavior:cur.behavior,\n                       start_time:cur.start_time, end_time:cur.end_time,\n                       duration:cur.duration });\n        }\n    }\n    return res;\n})(sessionEvents);\n\n// ── Current event live timer (Node-RED side) ──────────────────────\nlet currentEvt = flow.get('evt_cur') || null;\nif (!currentEvt || currentEvt.behavior !== curBeh) {\n    currentEvt = { behavior: curBeh, start_time: nowStr, start_ms: nowMs };\n}\nif (!currentEvt.start_ms) currentEvt.start_ms = nowMs;\ncurrentEvt.duration_running = Math.max(0, Math.round((nowMs - currentEvt.start_ms) / 1000));\nflow.set('evt_cur', currentEvt);\n\n// ── Per-behavior stats: tracker_state.json for count/total/avg ────\n// IQR / mode / max / min derived from accumulated session events\nlet bCount = (isToday && tracker.behavior_count) ? tracker.behavior_count : {};\nlet bTime  = (isToday && tracker.behavior_time)  ? tracker.behavior_time  : {};\n\n// 優先用 HTTP payload（每 2s 更新），避免等 30s 存檔才反映\nlet _statsMinMax = (data.today_stats) || {};\nlet minDur = _statsMinMax.behavior_min_duration\n             || ((isToday && tracker.behavior_min_duration) ? tracker.behavior_min_duration : {});\nlet maxDur = _statsMinMax.behavior_max_duration\n             || ((isToday && tracker.behavior_max_duration) ? tracker.behavior_max_duration : {});\n\nlet stats = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let count  = Math.round(bCount[b] || 0);\n    let totSec = bTime[b] || 0;\n    if (count === 0) {\n        stats[b] = { count:0, total_duration:0, avg_duration:0,\n                     max_duration:0, min_duration:0,\n                     mode_duration:null, mode_count:0,\n                     outlier_high:null, outlier_low:null };\n        return;\n    }\n    let durs = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .map(function(e){ return e.duration; });\n\n    let outlierHigh = null, outlierLow = null;\n    if (durs.length >= 5) {\n        let sorted = durs.slice().sort(function(a,b){ return a-b; });\n        let n  = sorted.length;\n        let q1 = sorted[Math.floor(n * 0.25)];\n        let q3 = sorted[Math.floor(n * 0.75)];\n        let iqr = q3 - q1;\n        if (iqr > 0) {\n            outlierHigh = Math.round(q3 + 1.5 * iqr);\n            outlierLow  = Math.max(1, Math.round(q1 - 1.5 * iqr));\n        }\n    }\n    let modeKey = null, modeCnt = 0;\n    if (durs.length >= 2) {\n        let buckets = {};\n        durs.forEach(function(d){\n            buckets[d] = (buckets[d]||0) + 1;\n        });\n        Object.keys(buckets).forEach(function(k){\n            if (buckets[k] > modeCnt) { modeCnt = buckets[k]; modeKey = Number(k); }\n        });\n    }\n    stats[b] = {\n        count:         count,\n        total_duration: Math.round(totSec),\n        avg_duration:   Math.round(totSec / count * 10) / 10,\n        max_duration:   maxDur[b] != null ? Math.max(1, Math.round(maxDur[b])) : (durs.length > 0 ? Math.max.apply(null, durs) : 0),\n        min_duration:   minDur[b] != null ? Math.max(1, Math.round(minDur[b])) : (durs.length > 0 ? Math.min.apply(null, durs) : 0),\n        mode_duration:  modeCnt >= 2 ? modeKey : null,\n        mode_count:     modeCnt >= 2 ? modeCnt : 0,\n        outlier_high:   outlierHigh,\n        outlier_low:    outlierLow\n    };\n});\n\n// ── Per-behavior event arrays with outlier flag ───────────────────\nlet byBehavior = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let s = stats[b];\n    byBehavior[b] = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .slice(-20).reverse()\n        .map(function(ev) {\n            let outlier = null;\n            if (s.outlier_high !== null && ev.duration > s.outlier_high) outlier = 'high';\n            else if (s.outlier_low !== null && ev.duration < s.outlier_low) outlier = 'low';\n            return { event_id:ev.event_id, behavior:ev.behavior,\n                     start_time:ev.start_time, end_time:ev.end_time,\n                     duration:ev.duration, outlier:outlier };\n        });\n});\n\nlet todayTotal = Object.values(bCount).reduce(function(a,v){ return a+Math.round(v||0); }, 0);\n\nmsg.payload = {\n    current_event: {\n        behavior:         currentEvt.behavior,\n        start_time:       currentEvt.start_time,\n        duration_running: currentEvt.duration_running,\n        status:           'running'\n    },\n    event_table:       mergedEvents.slice(-20).reverse(),\n    event_by_behavior: byBehavior,\n    event_stats:       stats,\n    total_events:      todayTotal\n};\nreturn msg;",
+        "func": "// fs loaded via node libs: {\"var\":\"fs\",\"module\":\"fs\"}\nconst TRACKER_PATH = env.get('CAT_MONITORING_TRACKER_STATE_PATH') || 'C:\\\\ai_project\\\\paper\\\\baseline_data\\\\tracker_state.json';\n\nlet data = msg.payload;\nif (!data || !data.current) return null;\n\nlet curBeh = data.current.behavior;\nif (!curBeh || curBeh === 'not') return null;\n\n// ── Read tracker_state.json (authoritative daily totals) ──────────\nlet tracker = {};\ntry {\n    tracker = JSON.parse(fs.readFileSync(TRACKER_PATH, 'utf8'));\n} catch(e) {\n    node.warn('tracker_state.json: ' + e.message);\n}\n\n// ── Date helpers ─────────────────────────────────────────────────\nfunction pad(n){ return String(n).padStart(2,'0'); }\nfunction fmtTime(d){\n    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+\n           ' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());\n}\nlet now      = new Date();\nlet nowMs    = now.getTime();\nlet nowStr   = fmtTime(now);\nlet todayStr = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());\nlet isToday  = (tracker.date === todayStr);\n\n// Derive start_time from Python's end_time (HH:MM:SS) and duration (sec)\nfunction deriveStart(endHMS, durSec) {\n    let pts = (endHMS||'00:00:00').split(':').map(Number);\n    let endSec   = (pts[0]||0)*3600 + (pts[1]||0)*60 + (pts[2]||0);\n    let startSec = Math.max(0, endSec - Math.round(durSec));\n    return todayStr+' '+pad(Math.floor(startSec/3600))+':'+\n           pad(Math.floor((startSec%3600)/60))+':'+pad(startSec%60);\n}\n\n// ── Accumulate Python's behavior_log (deduplicate by time+beh+dur) ─\nlet sessionEvents = flow.get('evt_session') || [];\nlet sessionKeys   = new Set(flow.get('evt_keys') || []);\nlet sessionDate   = flow.get('evt_date') || '';\n\nif (sessionDate && sessionDate !== todayStr) {\n    sessionEvents = [];\n    sessionKeys   = new Set();\n}\nflow.set('evt_date', todayStr);\n\nlet inLog   = data.behavior_log || [];\nlet changed = false;\nfor (let i = 0; i < inLog.length; i++) {\n    let rec = inLog[i];\n    if (!rec || !rec.behavior || rec.behavior === 'not' || !rec.time) continue;\n    let dur = Math.max(1, Math.round(rec.duration || 1));\n    let key = rec.time + '|' + rec.behavior + '|' + dur;\n    if (sessionKeys.has(key)) continue;\n    sessionKeys.add(key);\n    let nextId = sessionEvents.length > 0 ? sessionEvents[sessionEvents.length-1].event_id + 1 : 1;\n    sessionEvents.push({\n        event_id:   nextId,\n        behavior:   rec.behavior,\n        end_time:   todayStr + ' ' + rec.time,\n        start_time: deriveStart(rec.time, rec.duration || 0),\n        duration:   dur\n    });\n    changed = true;\n}\nif (changed) {\n    if (sessionEvents.length > 500) {\n        // trim oldest keys too\n        let trimmed = sessionEvents.slice(-500);\n        let keptKeys = new Set(trimmed.map(function(e){\n            return e.end_time.slice(11,19)+'|'+e.behavior+'|'+e.duration;\n        }));\n        sessionKeys = keptKeys;\n        sessionEvents = trimmed;\n    }\n    flow.set('evt_session', sessionEvents);\n    flow.set('evt_keys', Array.from(sessionKeys));\n}\n\n// ── Merge adjacent same-behavior events (Python sends ~2s segments) ─\n// Adjacent = gap ≤ 2s between end_time of one and start_time of the next\nfunction _tsec(dt) {\n    var t = dt.slice(11,19).split(':').map(Number);\n    return t[0]*3600 + t[1]*60 + t[2];\n}\nlet mergedEvents = (function(evts) {\n    if (evts.length < 2) return evts.slice();\n    var res = [{ event_id:evts[0].event_id, behavior:evts[0].behavior,\n                 start_time:evts[0].start_time, end_time:evts[0].end_time,\n                 duration:evts[0].duration }];\n    for (var i = 1; i < evts.length; i++) {\n        var prev = res[res.length-1], cur = evts[i];\n        if (prev.behavior === cur.behavior &&\n            _tsec(cur.start_time) - _tsec(prev.end_time) <= 2) {\n            prev.end_time = cur.end_time;\n            prev.duration = _tsec(cur.end_time) - _tsec(prev.start_time);\n        } else {\n            res.push({ event_id:cur.event_id, behavior:cur.behavior,\n                       start_time:cur.start_time, end_time:cur.end_time,\n                       duration:cur.duration });\n        }\n    }\n    return res;\n})(sessionEvents);\n\n// ── Current event live timer (Node-RED side) ──────────────────────\nlet currentEvt = flow.get('evt_cur') || null;\nif (!currentEvt || currentEvt.behavior !== curBeh) {\n    currentEvt = { behavior: curBeh, start_time: nowStr, start_ms: nowMs };\n}\nif (!currentEvt.start_ms) currentEvt.start_ms = nowMs;\ncurrentEvt.duration_running = Math.max(0, Math.round((nowMs - currentEvt.start_ms) / 1000));\nflow.set('evt_cur', currentEvt);\n\n// ── Per-behavior stats: tracker_state.json for count/total/avg ────\n// IQR / mode / max / min derived from accumulated session events\nlet bCount = (isToday && tracker.behavior_count) ? tracker.behavior_count : {};\nlet bTime  = (isToday && tracker.behavior_time)  ? tracker.behavior_time  : {};\n\n// 優先用 HTTP payload（每 2s 更新），避免等 30s 存檔才反映\nlet _statsMinMax = (data.today_stats) || {};\nlet minDur = _statsMinMax.behavior_min_duration\n             || ((isToday && tracker.behavior_min_duration) ? tracker.behavior_min_duration : {});\nlet maxDur = _statsMinMax.behavior_max_duration\n             || ((isToday && tracker.behavior_max_duration) ? tracker.behavior_max_duration : {});\n\nlet stats = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let count  = Math.round(bCount[b] || 0);\n    let totSec = bTime[b] || 0;\n    if (count === 0) {\n        stats[b] = { count:0, total_duration:0, avg_duration:0,\n                     max_duration:0, min_duration:0,\n                     mode_duration:null, mode_count:0,\n                     outlier_high:null, outlier_low:null };\n        return;\n    }\n    let durs = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .map(function(e){ return e.duration; });\n\n    let outlierHigh = null, outlierLow = null;\n    if (durs.length >= 5) {\n        let sorted = durs.slice().sort(function(a,b){ return a-b; });\n        let n  = sorted.length;\n        let q1 = sorted[Math.floor(n * 0.25)];\n        let q3 = sorted[Math.floor(n * 0.75)];\n        let iqr = q3 - q1;\n        if (iqr > 0) {\n            outlierHigh = Math.round(q3 + 1.5 * iqr);\n            outlierLow  = Math.max(1, Math.round(q1 - 1.5 * iqr));\n        }\n    }\n    let modeKey = null, modeCnt = 0;\n    if (durs.length >= 2) {\n        let buckets = {};\n        durs.forEach(function(d){\n            buckets[d] = (buckets[d]||0) + 1;\n        });\n        Object.keys(buckets).forEach(function(k){\n            if (buckets[k] > modeCnt) { modeCnt = buckets[k]; modeKey = Number(k); }\n        });\n    }\n    stats[b] = {\n        count:         count,\n        total_duration: Math.round(totSec),\n        avg_duration:   Math.round(totSec / count * 10) / 10,\n        max_duration:   maxDur[b] != null ? Math.max(1, Math.round(maxDur[b])) : (durs.length > 0 ? Math.max.apply(null, durs) : 0),\n        min_duration:   minDur[b] != null ? Math.max(1, Math.round(minDur[b])) : (durs.length > 0 ? Math.min.apply(null, durs) : 0),\n        mode_duration:  modeCnt >= 2 ? modeKey : null,\n        mode_count:     modeCnt >= 2 ? modeCnt : 0,\n        outlier_high:   outlierHigh,\n        outlier_low:    outlierLow\n    };\n});\n\n// ── Per-behavior event arrays with outlier flag ───────────────────\nlet byBehavior = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let s = stats[b];\n    byBehavior[b] = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .slice(-20).reverse()\n        .map(function(ev) {\n            let outlier = null;\n            if (s.outlier_high !== null && ev.duration > s.outlier_high) outlier = 'high';\n            else if (s.outlier_low !== null && ev.duration < s.outlier_low) outlier = 'low';\n            return { event_id:ev.event_id, behavior:ev.behavior,\n                     start_time:ev.start_time, end_time:ev.end_time,\n                     duration:ev.duration, outlier:outlier };\n        });\n});\n\nlet todayTotal = Object.values(bCount).reduce(function(a,v){ return a+Math.round(v||0); }, 0);\n\nmsg.payload = {\n    current_event: {\n        behavior:         currentEvt.behavior,\n        start_time:       currentEvt.start_time,\n        duration_running: currentEvt.duration_running,\n        status:           'running'\n    },\n    event_table:       mergedEvents.slice(-20).reverse(),\n    event_by_behavior: byBehavior,\n    event_stats:       stats,\n    total_events:      todayTotal\n};\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -569,15 +579,15 @@
         "y": 460,
         "wires": [
             [
-                "b649dbe9fd77dc03"
+                "fbb18e0f5f03bd50"
             ]
         ]
     },
     {
-        "id": "b649dbe9fd77dc03",
+        "id": "fbb18e0f5f03bd50",
         "type": "ui_template",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "group": "66d2f5137a604c19",
         "name": "行為事件分析",
         "order": 1,
@@ -590,16 +600,16 @@
         "templateScope": "local",
         "className": "",
         "x": 1220,
-        "y": 480,
+        "y": 520,
         "wires": [
             []
         ]
     },
     {
-        "id": "f6215532c20e0ba5",
+        "id": "0333d140db4f4e3d",
         "type": "ui_template",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "group": "",
         "name": "🎨 Dashboard Global Theme",
         "order": 0,
@@ -618,10 +628,10 @@
         ]
     },
     {
-        "id": "1e18d7e1ffa6ed4f",
+        "id": "da2966d972e017d9",
         "type": "ui_template",
-        "z": "bfa5243aa9dbd045",
-        "g": "bbde1158c677172e",
+        "z": "f4eda3299d3b0323",
+        "g": "f426248965398860",
         "group": "",
         "name": "懸浮影像（全域）",
         "order": 0,
@@ -726,7 +736,7 @@
         "hidden": false
     },
     {
-        "id": "6f3da29561aa983c",
+        "id": "43fd96d07e0476fc",
         "type": "global-config",
         "env": [],
         "modules": {

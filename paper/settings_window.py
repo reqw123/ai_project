@@ -257,6 +257,9 @@ class SettingsWindow(tk.Tk):
         self._build_bottom_bar()
 
         self._populate_from_effective_state()
+        # 裝在初次載入「之後」——避免初次載入時逐欄位 set() 觸發下面這個同步邏輯，
+        # 誤判成「使用者剛剛改了 Host/Port」而動到端點欄位（見方法內註解）。
+        self._wire_nodered_endpoint_autosync()
         self._process_manager.poll()
 
         # 到這裡整個視窗的固定佔用區塊（標題/流程列/獨立腳本工具列/資訊列/分頁按鈕列/
@@ -1284,10 +1287,24 @@ class SettingsWindow(tk.Tk):
             var = tk.StringVar()
             tk.Entry(control, textvariable=var, font=self._font_label).pack(side="left", fill="x", expand=True)
             browse_filter = field.get("browse_filter")
+            # validate == "output_path" 的欄位（tracker_state_path／daily_history_db_path／
+            # global_context_path／csv_path／segments_csv_path）是「程式自己會寫出去的檔案」，
+            # 不是「選一個已存在的檔案來讀」——用 askopenfilename 會在檔案還不存在時（例如
+            # 搬到新機器、新 clone、或使用者想改指到一個全新的位置）沒辦法順利選定，只能整段
+            # 手動打字。2026-08-26 發現：改用 asksaveasfilename（跟下面「匯出設定」按鈕一致），
+            # 讓使用者可以瀏覽到想要的資料夾、直接打檔名建立新路徑；其餘 value_type == "file"
+            # 欄位（例如 cat_identity 的特徵基準檔，validate == "optional_file_warn"）語意是
+            # 「讀取既有檔案」，維持 askopenfilename 不變。
+            is_output_path = field.get("validate") == "output_path"
 
-            def _browse(v=var, bf=browse_filter):
+            def _browse(v=var, bf=browse_filter, is_output=is_output_path):
                 filetypes = [bf, ("所有檔案", "*.*")] if bf else [("所有檔案", "*.*")]
-                path = filedialog.askopenfilename(title="選擇檔案", filetypes=filetypes)
+                if is_output:
+                    path = filedialog.asksaveasfilename(
+                        title="選擇路徑", filetypes=filetypes, confirmoverwrite=False,
+                    )
+                else:
+                    path = filedialog.askopenfilename(title="選擇檔案", filetypes=filetypes)
                 if path:
                     v.set(path)
 
@@ -1585,6 +1602,59 @@ class SettingsWindow(tk.Tk):
             value, source = self._resolve_field_display(field)
             self._set_field_value(key, value)
             self._apply_source(key, source)
+
+    def _wire_nodered_endpoint_autosync(self):
+        """Host/Port 改變時，「進階設定」的 3 個 Node-RED 端點欄位如果目前的值
+        還是「跟改變前的 Host/Port 組出來的樣子一模一樣」，就視為使用者從沒動過
+        （只是承接 config.py 原本 f"http://{HOST}:{PORT}/..." 那個自動推導預設
+        值），跟著同步更新成新的 Host/Port；一旦某個端點的值不符合這個樣式，代表
+        使用者刻意手動改成別的網址（例如故意指向另一台機器），就不再自動覆蓋。
+
+        背景：`advanced.nodered_endpoint_notify`／`_result`／`_result_v2` 這 3
+        個欄位一旦存過一次 `runtime_settings.current.json`（幾乎必然，因為
+        `_on_save()` 每次都整包寫回全部欄位），`config.py` 的
+        `_runtime_default()` 就會一路優先讀 JSON 裡的字面值，config.py 那行
+        `f"http://{HOST}:{PORT}/..."` 動態組字串永遠不會再被執行到——換 Host/
+        Port 後這 3 個端點會「看起來像自動、實際上是凍結的舊值」。這裡把這段
+        同步邏輯補回 GUI 層，讓「沒被使用者特別改過」的端點欄位可以繼續跟著
+        Host/Port 走，同時不破壞刻意覆寫的情況（`docs/設定視窗欄位對照表.md`
+        對照表裡這 3 個端點原本就設計成「可個別覆寫成完全不同的網址」）。
+        """
+        host_info = self._field_widgets.get("nodered.host")
+        port_info = self._field_widgets.get("nodered.port")
+        if not host_info or not port_info:
+            return
+        endpoint_suffixes = {
+            "advanced.nodered_endpoint_notify": "python_online",
+            "advanced.nodered_endpoint_result": "yolo_result",
+            "advanced.nodered_endpoint_result_v2": "yolo_result_v2",
+        }
+        endpoint_vars = {
+            key: self._field_widgets[key]["var"]
+            for key in endpoint_suffixes
+            if key in self._field_widgets
+        }
+        if not endpoint_vars:
+            return
+
+        last = {"host": host_info["var"].get(), "port": port_info["var"].get()}
+
+        def _on_host_or_port_change(*_a):
+            new_host = host_info["var"].get()
+            new_port = port_info["var"].get()
+            old_host, old_port = last["host"], last["port"]
+            if new_host != old_host or new_port != old_port:
+                for key, suffix in endpoint_suffixes.items():
+                    var = endpoint_vars.get(key)
+                    if var is None:
+                        continue
+                    expected_old = f"http://{old_host}:{old_port}/{suffix}"
+                    if var.get() == expected_old:
+                        var.set(f"http://{new_host}:{new_port}/{suffix}")
+            last["host"], last["port"] = new_host, new_port
+
+        host_info["var"].trace_add("write", _on_host_or_port_change)
+        port_info["var"].trace_add("write", _on_host_or_port_change)
 
     def _populate_form(self, data_dict, source_label="form"):
         for field in FIELD_SCHEMA:

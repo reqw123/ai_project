@@ -24,7 +24,7 @@
     "enable_sqa_dual_judgment": true
   },
   "run_mode": {
-    "mode": "gui",
+    "mode": "server",
     "auto_start_processing": true,
     "scheduled_start_time": "06:00",
     "scheduled_end_time": "12:00"
@@ -75,8 +75,8 @@
     "other_cat_profile_path": "C:\\ai_project\\paper\\cat_monitoring_system\\tools\\cat_profile_cat_b.json"
   },
   "logging": {
-    "tracker_state_path": "C:\\a\\tracker_state.json",
-    "daily_history_db_path": "C:\\a\\daily_history.db",
+    "tracker_state_path": "C:\\ai_project\\paper\\baseline_data\\tracker_state.json",
+    "daily_history_db_path": "C:\\ai_project\\paper\\baseline_data\\daily_history.db",
     "csv_path": "C:\\ai_project\\paper\\cat_monitoring_log.csv",
     "segments_csv_path": "C:\\ai_project\\paper\\behavior_segments_log.csv"
   },
