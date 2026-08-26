@@ -666,16 +666,21 @@ class NodeRedConfig:
     # 只記錄路徑，尚未讀取／解析——之後 Python 端需要直接讀取這份資料時，
     # 由此常數取得路徑，避免路徑散落各處造成不一致（對照 tracker_state.json
     # 過去在 config.py 跟 Node-RED function node 裡各自寫死一份路徑的教訓）。
-    # 2026-08-26：這個路徑刻意「沒有」跟著 TRACKER_STATE_PATH/DAILY_HISTORY_DB_PATH
-    # 一起搬進 baseline_data/——真正的即時寫入者是 Node-RED（C:\Users\homec\.node-red\
-    # settings.js 裡 functionGlobalContext.gfile 寫死的 'C:\\a\\global.json'，不受這個
-    # git 專案版本控制），Python 端目前只有唯讀工具（_tools/1_read_context.py、
-    # _tools/2_backfill_daily_store.py、node_red_tests/fetch_real_history.py）會讀。
-    # 若把這裡改指向專案目錄，Node-RED 之後寫入的新資料 Python 端就再也讀不到
-    # （兩邊分岔），除非同時把 settings.js 的路徑也一併改掉——這次搬遷刻意不動
-    # Node-RED 端，所以維持指向 C:\a\global.json。paper/baseline_data/global.json
-    # 只是搬遷當下複製的一份快照，供離線查閱/可攜參考用，不是即時來源，不會自動更新。
-    # 見 docs/資料層架構現況與統一管理評估.md 第十四節。
+    # 2026-08-26：一度刻意「沒有」跟著 TRACKER_STATE_PATH/DAILY_HISTORY_DB_PATH 一起
+    # 搬進 baseline_data/——真正的即時寫入者是 Node-RED（settings.js 的
+    # functionGlobalContext.gfile 寫死路徑，不受這個 git 專案版本控制），當時只改
+    # Python 端會讓兩邊分岔（Node-RED 繼續寫舊路徑，Python 讀到的變成搬遷當下凍結
+    # 的快照）。
+    # 2026-08-27：改用環境變數 CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH 同時驅動
+    # 兩邊——settings.js 的 gfile 也改成讀同一個環境變數（process.env，不是 Node-RED
+    # 的「全域環境變數」面板，那個存在 flows.json 的 global-config 節點，settings.js
+    # 啟動時還沒載入，用不到），設定這一個環境變數即可讓 Python／Node-RED 同時指向
+    # paper/baseline_data/global.json。這裡的 fallback 刻意維持 C:\a\global.json
+    # （沒有跟著改成新路徑）——settings.js 那邊的 fallback 也是同一個舊路徑，兩邊
+    # fallback 保持一致，這樣即使環境變數還沒生效（例如剛設定、尚未登出重登），
+    # 兩邊還是會一致地退回舊路徑，不會其中一邊已經切新路徑、另一邊還在舊路徑造成
+    # 分岔。
+    # 見 docs/資料層架構現況與統一管理評估.md 第十五節。
     GLOBAL_CONTEXT_PATH = _env_str(
         "CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH",
         _runtime_default("nodered.global_context_path", r"C:\a\global.json", value_type=str),

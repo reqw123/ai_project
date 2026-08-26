@@ -872,6 +872,18 @@ class SettingsWindow(tk.Tk):
             box, textvariable=self._info_var, bg=COLOR_INFO_BG, fg=COLOR_INFO_FG,
             font=self._font_info, anchor="w", justify="left",
         ).pack(fill="x", padx=12, pady=8)
+
+        # 排程提醒：獨立一條、有沒有排程才顯示（空字串時 Label 直接沒有內容，
+        # 不佔視覺注意力；一旦有排程，用跟上面資訊列不同的警示色區隔，掃視時能
+        # 立刻注意到「喔，我有設排程」）。見 _refresh_schedule_reminder() 說明。
+        self._schedule_reminder_var = tk.StringVar(value="")
+        self._schedule_reminder_label = tk.Label(
+            box, textvariable=self._schedule_reminder_var, bg=COLOR_INFO_BG, fg=COLOR_WARNING_FG,
+            font=self._font_label_bold,
+            anchor="w", justify="left",
+        )
+        self._schedule_reminder_label.pack(fill="x", padx=12, pady=(0, 8))
+
         self._refresh_top_info()
 
     def _refresh_top_info(self):
@@ -887,6 +899,55 @@ class SettingsWindow(tk.Tk):
                 f"📄 runtime_settings.current.json：{path}（尚未建立）\n"
                 "⚠ 目前僅使用環境變數／config.py 內建預設值；按「儲存設定」後才會建立此檔案。"
             )
+        self._refresh_schedule_reminder()
+
+    def _refresh_schedule_reminder(self):
+        """排程（執行模式與排程分頁的排程開始/結束時間）有設定時，在資訊列常駐顯示提醒。
+
+        背景：2026-08-26 使用者自己設過排程，事後忘記，看到 /stream 等端點回應
+        503 誤以為是別的地方壞掉，追了一輪才發現是自己設的排程區間把處理管線關掉了。
+        這裡在「一定會看到」的資訊列（不管切到哪個分頁都在畫面上）補上常駐提醒，
+        每次打開設定視窗、存檔、載入目前設定都會重新整理一次，減少再次忘記的機會。
+
+        刻意讀 runtime_settings.current.json 目前的值（跟 `_resolve_field_display()`
+        同一套邏輯），而不是 `config.RunModeConfig` 的 class attribute——後者是
+        Python 進程啟動當下讀到的舊快照，這個視窗存檔當下不會跟著變，會讓提醒文字
+        跟使用者剛存的值對不上；資訊列本來就是「目前設定檔實際內容」的展示用途。
+        """
+        json_data = settings_manager.load_runtime_settings()
+        start = _get_nested(json_data, "run_mode.scheduled_start_time")
+        if start is _MISSING:
+            start = self._baseline_effective.get("run_mode.scheduled_start_time")
+        end = _get_nested(json_data, "run_mode.scheduled_end_time")
+        if end is _MISSING:
+            end = self._baseline_effective.get("run_mode.scheduled_end_time")
+
+        if not start and not end:
+            self._schedule_reminder_var.set("")
+            return
+
+        now = datetime.now()
+        start_hhmm = config._parse_hhmm(start) if start else None
+        end_hhmm = config._parse_hhmm(end) if end else None
+        # 跟 config.py 的 RunModeConfig.is_within_active_window() 是同一套判斷邏輯
+        # （複製一份而不是直接呼叫，是因為那個 classmethod 讀的是 class attribute，
+        # 也就是上面說的「舊快照」問題；這裡故意用剛讀到的新鮮值重算一次）。
+        if start_hhmm is None and end_hhmm is None:
+            active = True
+        elif end_hhmm is None:
+            start_dt = now.replace(hour=start_hhmm[0], minute=start_hhmm[1], second=0, microsecond=0)
+            active = now >= start_dt
+        else:
+            sh, sm = start_hhmm if start_hhmm is not None else (0, 0)
+            start_dt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+            end_dt = now.replace(hour=end_hhmm[0], minute=end_hhmm[1], second=0, microsecond=0)
+            active = (now >= start_dt or now < end_dt) if end_dt <= start_dt else (start_dt <= now < end_dt)
+
+        end_display = end or "(未設定，開始後永遠運行)"
+        status = "✅ 目前在區間內，處理管線正常運作" if active else "⛔ 目前不在區間內，處理管線會暫停／不啟動"
+        self._schedule_reminder_var.set(
+            f"⏰ 已設定排程：{start or '00:00'}–{end_display}（現在 {now.strftime('%H:%M')}）　{status}"
+        )
 
     def _build_middle_area(self):
         """分頁設定表單維持完整版面（永遠是滿版 pack，不因為終端機而縮水）。終端機

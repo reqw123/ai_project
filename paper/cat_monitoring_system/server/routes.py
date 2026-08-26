@@ -263,6 +263,28 @@ def _pause_processing():
         frame_streamer.paused = True
 
 
+def _schedule_unavailable_reason():
+    """若目前處理管線沒啟動，是因為「不在排程執行時段內」，回傳給使用者看的說明文字；
+    其他原因（例如初始化競爭條件、還在載入模型）回傳 None，維持原本簡短的 503，
+    不要誤導成排程問題。
+
+    背景：2026-08-26 使用者自己在設定視窗設過排程（RunModeConfig.SCHEDULED_START_TIME/
+    SCHEDULED_END_TIME），事後忘記自己設過，看到 /stream 等端點回傳空白 503 一度以為是
+    其他地方壞掉，花了一段時間才追回來是排程設定本身的問題。這裡把原因寫進回應內容，
+    下次遇到同樣情況直接打開這些端點（或看 log）就看得到答案，不用重新追一輪。
+    """
+    if _RunModeConfig.is_within_active_window():
+        return None
+    now_str = datetime.datetime.now().strftime("%H:%M")
+    start = _RunModeConfig.SCHEDULED_START_TIME or "00:00"
+    end = _RunModeConfig.SCHEDULED_END_TIME or "(未設定，開始後永遠運行)"
+    return (
+        f"目前不在排程執行時段內（{start}–{end}，現在時間 {now_str}），"
+        "處理管線暫停中，進入排程區間會自動恢復。"
+        "如果想現在就跑，到設定視窗「執行模式與排程」分頁把排程時間清空即可。"
+    )
+
+
 def register_routes(app):
     """向 Flask app 註冊所有 HTTP 路由（串流、快照、影片片段、狀態查詢等）。"""
 
@@ -275,7 +297,8 @@ def register_routes(app):
         # 否則 mjpeg_stream() 內對 None 呼叫 acquire_client() 會直接拋
         # AttributeError（曾在排程開始時間的邊界撞到過）。
         if frame_streamer is None:
-            return Response(b"", status=503, mimetype="text/plain")
+            reason = _schedule_unavailable_reason() or "處理管線尚未就緒，請稍後再試"
+            return Response(reason, status=503, mimetype="text/plain")
 
         def mjpeg_stream():
             """逐幀產生 multipart/x-mixed-replace 格式的 JPEG 資料流。"""
@@ -304,6 +327,9 @@ def register_routes(app):
         """回傳目前最新一幀的單張 JPEG 快照。"""
         _ensure_processor_started()
         if frame_streamer is None:
+            reason = _schedule_unavailable_reason()
+            if reason:
+                return Response(reason, status=503, mimetype="text/plain")
             return Response(b"", status=503, mimetype="image/jpeg")
         # 暫時佔用一個 client slot，確保 JPEG 編碼執行緒會產生最新幀
         frame_streamer.acquire_client()
@@ -324,7 +350,11 @@ def register_routes(app):
         _ensure_processor_started()
         frames = frame_streamer.get_clip_frames() if frame_streamer else []
         if not frames:
-            return jsonify({"error": "no frames available"}), 503
+            reason = _schedule_unavailable_reason()
+            body = {"error": "no frames available"}
+            if reason:
+                body["reason"] = reason
+            return jsonify(body), 503
 
         ts_obj = datetime.datetime.now()
         ts_file = ts_obj.strftime("%Y%m%d_%H%M%S")
@@ -389,7 +419,11 @@ def register_routes(app):
         # 比照 /stream、/snapshot 的保護，避免對 None 呼叫方法直接 500
         # （曾在排程開始時間的邊界撞到過）。
         if frame_processor is None:
-            return jsonify({"count": 0, "segments": []}), 503
+            reason = _schedule_unavailable_reason()
+            body = {"count": 0, "segments": []}
+            if reason:
+                body["reason"] = reason
+            return jsonify(body), 503
         try:
             limit = max(1, min(int(request.args.get("limit", 200)), 1000))
         except (TypeError, ValueError):
@@ -572,7 +606,11 @@ def register_routes(app):
         # 比照 /stream、/snapshot 的保護，避免對 None 呼叫屬性直接 500
         # （曾在排程開始時間的邊界撞到過）。
         if frame_processor is None:
-            return _cors(jsonify({"error": "processor not started"}), 503)
+            reason = _schedule_unavailable_reason()
+            body = {"error": "processor not started"}
+            if reason:
+                body["reason"] = reason
+            return _cors(jsonify(body), 503)
 
         if request.method == "GET":
             return _cors(
