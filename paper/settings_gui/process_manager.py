@@ -290,10 +290,31 @@ class ProcessManager:
             import win32con
             import win32gui
             import win32process
-        except ImportError:
+        except ModuleNotFoundError:
             print(
                 "[settings_gui] 未安裝 pywin32，略過「子行程視窗自動置頂」功能"
-                "（不影響腳本本身執行；如需此功能請執行 pip install pywin32）。",
+                "（不影響腳本本身執行）。如需此功能，請在目前這個 Python 環境安裝：\n"
+                f'  "{sys.executable}" -m pip install pywin32',
+                file=sys.stderr,
+            )
+            return
+        except ImportError as e:
+            # pip 有裝但 import 失敗，最常見是 DLL 載入失敗（pywin32 的安裝後腳本
+            # pywin32_postinstall.py 沒跑過：pythoncom3xx.dll／pywintypes3xx.dll
+            # 只會落在 site-packages\pywin32_system32，但 Python 3.8+ 載入 .pyd 擴充
+            # 模組時只搜尋 python.exe 自己所在的資料夾／System32／明確用
+            # os.add_dll_directory() 註冊過的路徑，不會自動搜尋那個資料夾，也不會搜尋
+            # .pyd 自己所在的資料夾——這台機器先前就遇過同樣的狀況，靠補跑
+            # postinstall 腳本把 DLL 複製到 python.exe 旁邊解決）。跟上面
+            # ModuleNotFoundError 分開處理是因為修法不同：前者要重新安裝，這裡只要
+            # 補跑 postinstall。
+            postinstall = Path(sys.executable).parent / "Scripts" / "pywin32_postinstall.py"
+            print(
+                "[settings_gui] pywin32 已安裝但載入失敗，略過「子行程視窗自動置頂」功能"
+                f"（不影響腳本本身執行）。錯誤訊息：{e}\n"
+                "  最常見原因是 pywin32 的安裝後腳本沒跑過，修復方式：\n"
+                f'  "{sys.executable}" -m pip install --force-reinstall pywin32\n'
+                f'  "{sys.executable}" "{postinstall}" -install',
                 file=sys.stderr,
             )
             return
