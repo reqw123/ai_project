@@ -383,10 +383,15 @@ class SettingsWindow(tk.Tk):
         inner.pack(fill="x", padx=18, pady=(0, 6))
 
         self._process_status_var = tk.StringVar(value="🖥️ 尚未啟動任何程式")
-        tk.Label(
+        # 存 Label 本身（不只是 textvariable）是為了讓 _update_process_buttons_state()
+        # 在「疑似卡在 input() 等待輸入」時能把文字顏色改成警示色（BTN_WARN_BG），
+        # 不是只換文字內容——純文字提醒在使用者沒盯著這排字看時很容易被忽略，
+        # 顏色對比更容易在餘光掃過去時就注意到。
+        self._process_status_label = tk.Label(
             inner, textvariable=self._process_status_var, bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
             font=self._font_label_bold, anchor="w",
-        ).pack(side="left")
+        )
+        self._process_status_label.pack(side="left")
 
         _styled_button(
             inner, "🗕 縮小視窗", self._on_minimize, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
@@ -838,8 +843,30 @@ class SettingsWindow(tk.Tk):
         被呼叫。"""
         pm = self._process_manager
         running = pm.is_running
+
+        # 終端機面板在本函式第一次被呼叫時（_build_process_bar 尾端）還沒建出來
+        # （_build_middle_area 是之後才跑的），用 getattr 擋一下，之後每次呼叫這個
+        # panel 就一定存在了。
+        console = getattr(self, "_console_panel", None)
+
         if running:
-            self._process_status_var.set(f"🖥️ {pm.active_label} 執行中（PID {pm.process.pid}）")
+            # 有些獨立腳本工具開場會用 input() 問一些前置選項（例如「請選擇執行模式
+            # 1/2」），使用者常常沒盯著下方終端機面板看，容易卡在那裡不自知——這裡
+            # 借用 console.likely_waiting_for_input() 的判斷（見 console_panel.py：
+            # 「最後一次輸出沒有以換行結尾」+「已經一段時間沒有新輸出」同時成立），
+            # 疑似卡住時把最上方這排狀態文字連同顏色一起換成明顯的提醒，不用等使用者
+            # 自己想到要去看終端機才發現。
+            waiting = console is not None and console.likely_waiting_for_input()
+            if waiting:
+                idle_sec = console.seconds_idle() or 0.0
+                self._process_status_var.set(
+                    f"⌨️ {pm.active_label} 疑似卡在等待輸入（PID {pm.process.pid}，"
+                    f"已 {idle_sec:.0f} 秒沒有新輸出）－請至下方終端機輸入框輸入"
+                )
+                self._process_status_label.config(fg=BTN_WARN_BG)
+            else:
+                self._process_status_var.set(f"🖥️ {pm.active_label} 執行中（PID {pm.process.pid}）")
+                self._process_status_label.config(fg=COLOR_HEADER_FG)
             self._start_main_btn.config(state="disabled")
             self._start_tool_btn.config(state="disabled")
             self._stop_main_btn.config(state="normal" if pm.active_kind == "main" else "disabled")
@@ -849,15 +876,12 @@ class SettingsWindow(tk.Tk):
             self._process_status_var.set(
                 f"🖥️ {pm.active_label} 已結束" if was_started else "🖥️ 尚未啟動任何程式"
             )
+            self._process_status_label.config(fg=COLOR_HEADER_FG)
             self._start_main_btn.config(state="normal")
             self._start_tool_btn.config(state="normal")
             self._stop_main_btn.config(state="disabled")
             self._stop_tool_btn.config(state="disabled")
 
-        # 終端機面板的輸入列在本函式第一次被呼叫時（_build_process_bar 尾端）還沒
-        # 建出來（_build_middle_area 是之後才跑的），用 getattr 擋一下，之後每次
-        # 呼叫這個 panel 就一定存在了。
-        console = getattr(self, "_console_panel", None)
         if console is not None:
             console.set_input_enabled(running)
 

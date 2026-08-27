@@ -11,15 +11,21 @@ self._field_widgets）沒有耦合，只需要：
 跟子行程（main.py／獨立腳本）的關聯，透過兩個窄接口完成，不直接持有
 subprocess.Popen 物件：
   - `start_log_reader(process, label)`：process_manager.py 啟動子行程成功後呼叫，
-    開一條背景執行緒把 stdout 逐行讀進來顯示；`label` 只在子行程結束時印
-    「— {label} 行程已結束 —」用。
+    開一條背景執行緒把 stdout 逐 byte（非逐行，見該函式說明）讀進來顯示；`label`
+    只在子行程結束時印「— {label} 行程已結束 —」用。
+  - `likely_waiting_for_input()` / `seconds_idle()`：讓呼叫端（settings_window.py
+    的 `_update_process_buttons_state`）判斷子行程是否疑似卡在 input() 之類的
+    互動輸入等待中，用於在狀態列文字加上提醒。
   - `set_stdin_handler(fn)`：process_manager.py 把它自己的 `send_stdin` 方法
     傳進來，使用者在輸入列按 Enter/傳送時，這個 class 只呼叫 `fn(text)`，
     不自己碰 subprocess 物件。
 """
 
+import codecs
+import os
 import queue
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -66,6 +72,11 @@ class ConsolePanel:
         self._log_reader_thread = None
         self._log_line_count = 0
         self._reader_label = None  # 目前這條 log reader 對應哪個行程的顯示名稱
+
+        # 供「疑似卡在 input() 等待輸入」判斷用（見 likely_waiting_for_input()）：
+        # 記錄最後一次收到輸出的時間，以及那次輸出是否以換行結尾。
+        self._last_output_monotonic = None
+        self._last_chunk_ends_newline = True
 
         self._stdin_handler = None  # process_manager.py 事後用 set_stdin_handler() 掛上來
 
@@ -308,12 +319,41 @@ class ConsolePanel:
         if self.autoscroll_var.get():
             self.text.see("end")
         self.text.configure(state="disabled")
+        if text:
+            self._last_output_monotonic = time.monotonic()
+            self._last_chunk_ends_newline = text.endswith("\n")
 
     def clear(self):
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
         self.text.configure(state="disabled")
         self._log_line_count = 0
+
+    def seconds_idle(self):
+        """距離最後一次輸出過了幾秒；本次行程還沒有任何輸出時回傳 None。"""
+        if self._last_output_monotonic is None:
+            return None
+        return time.monotonic() - self._last_output_monotonic
+
+    def likely_waiting_for_input(self, idle_threshold=3.0):
+        """粗略判斷子行程是否卡在 input() 之類的互動輸入等待中。
+
+        核心訊號是「最後一次輸出沒有以換行結尾」：Python 內建 input() 印出提示字
+        （例如「請選擇執行模式 (1/2): 」）後一定會立刻 flush stdout，但提示字本身
+        沒有換行符；配合 start_log_reader() 改用逐 byte 讀取（見該函式說明，不再
+        用 readline() 等一整行），這個提示字會確實出現在終端機面板裡，且是「目前
+        最後一段輸出」。單看這個訊號還不夠——才剛印出提示字的下一瞬間也是這個
+        狀態，所以要求同時「已經一段時間沒有新輸出」（idle_threshold 秒）才視為
+        疑似卡住。只看「太久沒輸出」則會誤判成模型載入、大量幀運算等正常的沉默期
+        （這類輸出正常都會以換行收尾，不會誤觸發）。
+
+        已知取捨：用 \\r 覆寫同一行的進度顯示（例如 tqdm）若更新間隔恰好超過
+        idle_threshold，仍可能被誤判成疑似等待輸入。
+        """
+        idle = self.seconds_idle()
+        if idle is None or self._last_chunk_ends_newline:
+            return False
+        return idle >= idle_threshold
 
     def _adjust_font_size(self, delta):
         new_size = max(CONSOLE_MIN_FONT_SIZE, min(CONSOLE_MAX_FONT_SIZE, self.font_size + delta))
@@ -345,17 +385,54 @@ class ConsolePanel:
     # ── 子行程輸出接進來 ─────────────────────────────────────────────
 
     def start_log_reader(self, process, label):
-        """背景執行緒逐行讀取子行程的 stdout（stderr 已合併進去），讀到 EOF
-        （行程結束、pipe 關閉）就丟一個 None 進 queue 當結束訊號。`label` 只在
-        結束時印「— {label} 行程已結束 —」用，呼叫端（process_manager.py）啟動
-        行程當下就知道是 main.py 還是哪支腳本，這裡不用另外去猜。"""
+        """背景執行緒讀取子行程的 stdout（stderr 已合併進去），讀到 EOF（行程結束、
+        pipe 關閉）就丟一個 None 進 queue 當結束訊號。`label` 只在結束時印
+        「— {label} 行程已結束 —」用，呼叫端（process_manager.py）啟動行程當下就
+        知道是 main.py 還是哪支腳本，這裡不用另外去猜。
+
+        刻意不用 readline() 逐「行」讀：Python 的 input() 印出提示字（例如「請選擇
+        執行模式 (1/2): 」）之後一定會立刻 flush，但提示字本身沒有換行符——用
+        readline() 的話，這一段已經 flush 出來的文字會卡在 parent 端的緩衝區裡，
+        要等到子行程收到輸入、印出下一段「有換行」的內容才會一起冒出來，導致使用者
+        在終端機面板上完全看不到提示字，只覺得畫面卡住卻不知道在等什麼（這也是
+        likely_waiting_for_input() 判斷「疑似卡住」的前提：提示字要先能顯示出來）。
+        改成直接對 stdout 的底層 file descriptor 做 os.read()：只要子行程 flush 過，
+        即使沒有換行也會立刻讀得到、立刻顯示。多位元組 UTF-8 字元可能被切在兩次
+        os.read() 中間，用 incremental decoder 而非每個 chunk 各自 decode，避免中文
+        字被切開後 decode 出亂碼。
+        """
         self._reader_label = label
 
         def _reader():
             try:
-                for line in iter(process.stdout.readline, ""):
-                    self.log_queue.put(line)
-            except (OSError, ValueError):
+                fd = process.stdout.fileno()
+            except (AttributeError, ValueError, OSError):
+                fd = None
+
+            if fd is None:
+                # 拿不到底層 fd 時退回原本逐行讀取的作法，至少維持基本可用。
+                try:
+                    for line in iter(process.stdout.readline, ""):
+                        self.log_queue.put(line)
+                except (OSError, ValueError):
+                    pass
+                finally:
+                    self.log_queue.put(None)
+                return
+
+            decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+            try:
+                while True:
+                    try:
+                        chunk = os.read(fd, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    text = decoder.decode(chunk)
+                    if text:
+                        self.log_queue.put(text)
+            except ValueError:
                 pass
             finally:
                 self.log_queue.put(None)
@@ -366,12 +443,12 @@ class ConsolePanel:
     def _drain_log_queue(self):
         drained = 0
         try:
-            while drained < 500:  # 單次 tick 最多處理 500 行，避免瞬間大量輸出卡住 GUI 主執行緒
-                line = self.log_queue.get_nowait()
-                if line is None:
+            while drained < 500:  # 單次 tick 最多處理 500 個 chunk，避免瞬間大量輸出卡住 GUI 主執行緒
+                chunk = self.log_queue.get_nowait()
+                if chunk is None:
                     self.append(f"\n— {self._reader_label} 行程已結束 —\n", tag="muted")
                 else:
-                    self.append(line)
+                    self.append(chunk)
                 drained += 1
         except queue.Empty:
             pass
