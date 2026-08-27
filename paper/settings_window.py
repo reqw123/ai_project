@@ -116,6 +116,17 @@ FLAG_OFF_BG = "#aeb6bf"
 FLAG_OFF_FG = "#2c3e50"
 FLAG_ROW_BG = "#f4faf6"  # 布林欄位那一整列的底色，跟其他欄位列的白底做出區隔
 
+# 流程狀態列的「狀態膠囊」：直接填色當徽章（深藍 header 上一塊實心色塊），比
+# 純白字＋emoji 更容易在餘光掃過去時就分辨「現在在跑 / 卡住 / 已結束」。每個
+# 狀態一組 (底色, 字色)，由 _set_process_status() 套用。
+STATUS_PILL = {
+    "idle":     ("#5b6b7b", "#e9edf1"),  # 尚未啟動：低調的板岩灰
+    "running":  ("#1e9e57", "#ffffff"),  # 執行中：實心綠
+    "waiting":  ("#e67e22", "#ffffff"),  # 疑似卡在等待輸入：搶眼琥珀
+    "stopping": ("#c0392b", "#ffffff"),  # 正在關閉：紅（動作進行中）
+    "stopped":  ("#8a5a5a", "#f2e6e6"),  # 已結束：黯淡的暗紅
+}
+
 # 全域欄位搜尋命中時，欄位列的高亮外框色——跟其餘配色（藍/綠/橘/紅系）都不撞，
 # 一眼認出「這是搜尋結果」，不會誤認成布林開關或徽章的既有配色語意。
 SEARCH_HIGHLIGHT_BORDER = "#e91e8c"
@@ -362,12 +373,24 @@ class SettingsWindow(tk.Tk):
             font=self._font_title, anchor="e",
         ).pack(side="right")
 
+        subtitle_row = tk.Frame(header, bg=COLOR_HEADER_BG)
+        subtitle_row.pack(fill="x", padx=18, pady=(2, 14))
+        # 📄 設定檔實際路徑：放在右上角「最後修改」時間的正下方（同屬 header 副標列，
+        # 靠右對齊），由原本的資訊列移上來——資訊列現在只留給排程提醒。副標列本來
+        # 就有這行高度，補一個靠右 Label 不需要動到容器大小。先 pack 右邊這條、
+        # 左邊副標再用 expand 吃剩餘寬度，視窗變窄時是截斷副標而不是把路徑擠掉。
+        self._info_var = tk.StringVar(value="")
+        self._info_label = tk.Label(
+            subtitle_row, textvariable=self._info_var, bg=COLOR_HEADER_BG, fg=COLOR_HEADER_SUB_FG,
+            font=self._font_subtitle, anchor="e", justify="right",
+        )
+        self._info_label.pack(side="right", padx=(24, 0))
         tk.Label(
-            header,
+            subtitle_row,
             text="管理 runtime_settings.current.json（執行期覆寫）；不會修改 config.py 原始碼，"
             "也不會碰 ST-GCN 訓練設定（stgcn_config.yaml）",
             bg=COLOR_HEADER_BG, fg=COLOR_HEADER_SUB_FG, font=self._font_subtitle, anchor="w",
-        ).pack(fill="x", padx=18, pady=(2, 14))
+        ).pack(side="left", fill="x", expand=True)
 
     def _build_process_bar(self):
         """main.py 啟動／關閉／縮小本視窗——放在標題正下方、永遠可見（不用捲動就找得到），
@@ -382,16 +405,17 @@ class SettingsWindow(tk.Tk):
         inner = tk.Frame(bar, bg=COLOR_HEADER_BG)
         inner.pack(fill="x", padx=18, pady=(0, 6))
 
-        self._process_status_var = tk.StringVar(value="🖥️ 尚未啟動任何程式")
-        # 存 Label 本身（不只是 textvariable）是為了讓 _update_process_buttons_state()
-        # 在「疑似卡在 input() 等待輸入」時能把文字顏色改成警示色（BTN_WARN_BG），
-        # 不是只換文字內容——純文字提醒在使用者沒盯著這排字看時很容易被忽略，
-        # 顏色對比更容易在餘光掃過去時就注意到。
+        self._process_status_var = tk.StringVar(value="⚪  尚未啟動任何程式")
+        # 這排狀態文字做成「狀態膠囊」：實心底色的徽章（見 STATUS_PILL），底色隨
+        # 狀態變（灰＝未啟動、綠＝執行中、琥珀＝疑似卡住、紅＝關閉中／已結束）。
+        # 純文字＋emoji 在使用者沒盯著看時容易被忽略，整塊換色在餘光掃過去時就
+        # 分辨得出來。文字與配色一律走 _set_process_status()。
         self._process_status_label = tk.Label(
-            inner, textvariable=self._process_status_var, bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
-            font=self._font_label_bold, anchor="w",
+            inner, textvariable=self._process_status_var,
+            bg=STATUS_PILL["idle"][0], fg=STATUS_PILL["idle"][1],
+            font=self._font_label_bold, anchor="w", padx=12, pady=3,
         )
-        self._process_status_label.pack(side="left")
+        self._process_status_label.pack(side="left", pady=4)
 
         _styled_button(
             inner, "🗕 縮小視窗", self._on_minimize, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
@@ -737,7 +761,7 @@ class SettingsWindow(tk.Tk):
                 "無法再停止正在執行的程式。\n\n是否繼續？",
             ):
                 return
-            self._process_status_var.set(f"🖥️ 正在關閉 {pm.active_label}…")
+            self._set_process_status(f"⏳  正在關閉 {pm.active_label}…", "stopping")
             self.update_idletasks()
             if not pm.request_shutdown_and_wait():
                 messagebox.showwarning(
@@ -834,6 +858,12 @@ class SettingsWindow(tk.Tk):
     def _on_stop_tool(self):
         self._process_manager.stop_tool()
 
+    def _set_process_status(self, text, kind):
+        """更新流程狀態膠囊的文字與配色（kind 見 STATUS_PILL）。"""
+        bg, fg = STATUS_PILL.get(kind, STATUS_PILL["idle"])
+        self._process_status_var.set(text)
+        self._process_status_label.config(bg=bg, fg=fg)
+
     def _update_process_buttons_state(self):
         """main.py 與獨立腳本工具共用 ProcessManager 的 self.process 這一個欄位（同一
         時間只能跑一個），所以兩組「啟動」按鈕永遠一起致能/禁用；「停止」按鈕則依
@@ -859,24 +889,25 @@ class SettingsWindow(tk.Tk):
             waiting = console is not None and console.likely_waiting_for_input()
             if waiting:
                 idle_sec = console.seconds_idle() or 0.0
-                self._process_status_var.set(
-                    f"⌨️ {pm.active_label} 疑似卡在等待輸入（PID {pm.process.pid}，"
-                    f"已 {idle_sec:.0f} 秒沒有新輸出）－請至下方終端機輸入框輸入"
+                self._set_process_status(
+                    f"⌨️  {pm.active_label} 疑似卡在等待輸入 · PID {pm.process.pid} · "
+                    f"已 {idle_sec:.0f} 秒沒有新輸出 → 請到下方終端機輸入框輸入",
+                    "waiting",
                 )
-                self._process_status_label.config(fg=BTN_WARN_BG)
             else:
-                self._process_status_var.set(f"🖥️ {pm.active_label} 執行中（PID {pm.process.pid}）")
-                self._process_status_label.config(fg=COLOR_HEADER_FG)
+                self._set_process_status(
+                    f"🟢  {pm.active_label} 執行中 · PID {pm.process.pid}", "running"
+                )
             self._start_main_btn.config(state="disabled")
             self._start_tool_btn.config(state="disabled")
             self._stop_main_btn.config(state="normal" if pm.active_kind == "main" else "disabled")
             self._stop_tool_btn.config(state="normal" if pm.active_kind == "tool" else "disabled")
         else:
             was_started = pm.active_label is not None
-            self._process_status_var.set(
-                f"🖥️ {pm.active_label} 已結束" if was_started else "🖥️ 尚未啟動任何程式"
-            )
-            self._process_status_label.config(fg=COLOR_HEADER_FG)
+            if was_started:
+                self._set_process_status(f"⏹  {pm.active_label} 已結束", "stopped")
+            else:
+                self._set_process_status("⚪  尚未啟動任何程式", "idle")
             self._start_main_btn.config(state="normal")
             self._start_tool_btn.config(state="normal")
             self._stop_main_btn.config(state="disabled")
@@ -891,24 +922,32 @@ class SettingsWindow(tk.Tk):
         self._info_bar_frame = wrap
         box = tk.Frame(wrap, bg=COLOR_INFO_BG, highlightbackground=COLOR_INFO_BORDER, highlightthickness=1)
         box.pack(fill="x")
-        self._info_var = tk.StringVar(value="")
-        tk.Label(
-            box, textvariable=self._info_var, bg=COLOR_INFO_BG, fg=COLOR_INFO_FG,
-            font=self._font_info, anchor="w", justify="left",
-        ).pack(fill="x", padx=12, pady=8)
 
-        # 排程提醒：獨立一條、有沒有排程才顯示（空字串時 Label 直接沒有內容，
-        # 不佔視覺注意力；一旦有排程，用跟上面資訊列不同的警示色區隔，掃視時能
-        # 立刻注意到「喔，我有設排程」）。見 _refresh_schedule_reminder() 說明。
+        # 這條資訊列現在只用來顯示排程提醒（設定檔路徑已移到 header 右上角「最後
+        # 修改」時間下方）。沒有排程時整條收起來（見 _set_schedule_reminder()），
+        # 不佔版位。用警示色＋粗體，掃視時能立刻注意到「喔，我有設排程」。
         self._schedule_reminder_var = tk.StringVar(value="")
         self._schedule_reminder_label = tk.Label(
             box, textvariable=self._schedule_reminder_var, bg=COLOR_INFO_BG, fg=COLOR_WARNING_FG,
             font=self._font_label_bold,
             anchor="w", justify="left",
         )
-        self._schedule_reminder_label.pack(fill="x", padx=12, pady=(0, 8))
+        self._schedule_reminder_label.pack(fill="x", padx=12, pady=8)
 
         self._refresh_top_info()
+
+    def _set_schedule_reminder(self, text):
+        """設定排程提醒文字。空字串時把整條資訊列收起來（pack_forget），有內容時
+        重新 pack 回流程列與分頁區之間的原位置（after=_process_bar_frame，確保順序
+        不會跑掉）。"""
+        self._schedule_reminder_var.set(text)
+        if text:
+            if not self._info_bar_frame.winfo_manager():
+                self._info_bar_frame.pack(
+                    fill="x", padx=16, pady=(12, 6), after=self._process_bar_frame
+                )
+        else:
+            self._info_bar_frame.pack_forget()
 
     def _refresh_top_info(self):
         path = settings_manager.get_runtime_settings_path()
@@ -916,13 +955,11 @@ class SettingsWindow(tk.Tk):
             mtime = settings_manager.get_last_modified()
             mtime_str = mtime.strftime("%Y-%m-%d %H:%M:%S") if mtime else "未知"
             self._mtime_var.set(f"🕒 最後修改：{mtime_str}")
-            self._info_var.set(f"📄 runtime_settings.current.json：{path}")
+            self._info_var.set(f"📄 {path}")
         else:
             self._mtime_var.set("🕒 最後修改：（尚未建立設定檔）")
-            self._info_var.set(
-                f"📄 runtime_settings.current.json：{path}（尚未建立）\n"
-                "⚠ 目前僅使用環境變數／config.py 內建預設值；按「儲存設定」後才會建立此檔案。"
-            )
+            # header 副標列維持單行，warning 細節收在括號裡；「儲存設定」後就會建立。
+            self._info_var.set(f"📄 {path}（尚未建立，僅套用環境變數／config.py 預設值）")
         self._refresh_schedule_reminder()
 
     def _refresh_schedule_reminder(self):
@@ -937,7 +974,15 @@ class SettingsWindow(tk.Tk):
         同一套邏輯），而不是 `config.RunModeConfig` 的 class attribute——後者是
         Python 進程啟動當下讀到的舊快照，這個視窗存檔當下不會跟著變，會讓提醒文字
         跟使用者剛存的值對不上；資訊列本來就是「目前設定檔實際內容」的展示用途。
+
+        資訊列（見 _build_info_bar／_set_schedule_reminder）現在專門放這條提醒：
+        有排程才顯示、沒排程整條收起來。設定檔還沒建立時也不顯示（此時排程值只是
+        default_runtime_settings.json 的後備值，還沒真的生效）。
         """
+        if not settings_manager.runtime_settings_exists():
+            self._set_schedule_reminder("")
+            return
+
         json_data = settings_manager.load_runtime_settings()
         start = _get_nested(json_data, "run_mode.scheduled_start_time")
         if start is _MISSING:
@@ -947,12 +992,16 @@ class SettingsWindow(tk.Tk):
             end = self._baseline_effective.get("run_mode.scheduled_end_time")
 
         if not start and not end:
-            self._schedule_reminder_var.set("")
+            self._set_schedule_reminder("")
             return
 
         now = datetime.now()
         start_hhmm = config._parse_hhmm(start) if start else None
         end_hhmm = config._parse_hhmm(end) if end else None
+        # 顯示一律正規化成 HH:MM（例如使用者填 6:00 也顯示成 06:00），跟排程分頁的
+        # 時間欄位格式一致。
+        start_disp = f"{start_hhmm[0]:02d}:{start_hhmm[1]:02d}" if start_hhmm else (start or "00:00")
+        end_disp = f"{end_hhmm[0]:02d}:{end_hhmm[1]:02d}" if end_hhmm else None
         # 跟 config.py 的 RunModeConfig.is_within_active_window() 是同一套判斷邏輯
         # （複製一份而不是直接呼叫，是因為那個 classmethod 讀的是 class attribute，
         # 也就是上面說的「舊快照」問題；這裡故意用剛讀到的新鮮值重算一次）。
@@ -967,10 +1016,10 @@ class SettingsWindow(tk.Tk):
             end_dt = now.replace(hour=end_hhmm[0], minute=end_hhmm[1], second=0, microsecond=0)
             active = (now >= start_dt or now < end_dt) if end_dt <= start_dt else (start_dt <= now < end_dt)
 
-        end_display = end or "(未設定，開始後永遠運行)"
+        end_display = end_disp or "(未設定，開始後永遠運行)"
         status = "✅ 目前在區間內，處理管線正常運作" if active else "⛔ 目前不在區間內，處理管線會暫停／不啟動"
-        self._schedule_reminder_var.set(
-            f"⏰ 已設定排程：{start or '00:00'}–{end_display}（現在 {now.strftime('%H:%M')}）　{status}"
+        self._set_schedule_reminder(
+            f"⏰ 已設定排程：{start_disp}–{end_display}（現在 {now.strftime('%H:%M')}）　{status}"
         )
 
     def _build_middle_area(self):
@@ -1360,10 +1409,68 @@ class SettingsWindow(tk.Tk):
             tk.Entry(control, textvariable=var, font=self._font_label).pack(side="left", fill="x", expand=True)
             info["var"] = var
         elif vt == "hhmm":
+            # 遮罩式時間輸入：時、分各一個 width=2 的小輸入框，中間夾一個「:」Label。
+            # 「:」是 Label 不是輸入字元，位置固定、按 Backspace/Delete 都刪不掉，使用者
+            # 只在冒號前後兩格打數字即可。info["var"] 仍是對外的邏輯值（"" 或正規化過的
+            # "HH:MM"），存檔／_get_field_value 讀這個；兩格的原始輸入放在 _hhmm_parts。
             var = tk.StringVar()
-            tk.Entry(control, textvariable=var, font=self._font_label, width=10).pack(side="left")
-            tk.Label(control, text="  例：06:00，留空代表不啟用", bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint).pack(side="left")
+            hh_var = tk.StringVar()
+            mm_var = tk.StringVar()
             info["var"] = var
+            info["_hhmm_parts"] = (hh_var, mm_var)
+
+            mask = tk.Frame(control, bg=COLOR_TAB_BG)
+            mask.pack(side="left")
+            vcmd = (self.register(self._validate_hhmm_part), "%P")
+            hh_entry = tk.Entry(
+                mask, textvariable=hh_var, width=2, justify="center", font=self._font_label,
+                validate="key", validatecommand=vcmd,
+            )
+            hh_entry.pack(side="left")
+            tk.Label(
+                mask, text=":", bg=COLOR_TAB_BG, fg=COLOR_INFO_FG, font=self._font_label_bold,
+            ).pack(side="left", padx=1)
+            mm_entry = tk.Entry(
+                mask, textvariable=mm_var, width=2, justify="center", font=self._font_label,
+                validate="key", validatecommand=vcmd,
+            )
+            mm_entry.pack(side="left")
+            tk.Label(
+                control, text="  （時 : 分，24 小時制；兩格都留空＝不啟用）",
+                bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
+            ).pack(side="left")
+
+            def _sync_logical(*_a, hv=hh_var, mv=mm_var, out=var):
+                h, m = hv.get(), mv.get()
+                out.set("" if not h and not m else f"{int(h or 0):02d}:{int(m or 0):02d}")
+
+            def _hh_advance(evt, hv=hh_var, nxt=mm_entry):
+                # 打滿兩位數字自動跳到「分」那格；方向鍵/Tab/Backspace 不觸發。
+                if evt.keysym in ("BackSpace", "Delete", "Left", "Right", "Tab", "Home", "End"):
+                    return
+                if len(hv.get()) == 2:
+                    nxt.focus_set()
+                    nxt.icursor("end")
+
+            def _mm_backspace(evt, mv=mm_var, prev=hh_entry):
+                # 「分」那格已空還按 Backspace → 跳回「時」那格繼續刪。
+                if evt.keysym == "BackSpace" and not mv.get():
+                    prev.focus_set()
+                    prev.icursor("end")
+
+            def _normalize(_evt=None, hv=hh_var, mv=mm_var):
+                # 離開焦點時把單位數補零、超出範圍夾回（時 0–23、分 0–59）。
+                if hv.get():
+                    hv.set(f"{min(int(hv.get()), 23):02d}")
+                if mv.get():
+                    mv.set(f"{min(int(mv.get()), 59):02d}")
+
+            hh_var.trace_add("write", _sync_logical)
+            mm_var.trace_add("write", _sync_logical)
+            hh_entry.bind("<KeyRelease>", _hh_advance)
+            mm_entry.bind("<KeyPress>", _mm_backspace)
+            hh_entry.bind("<FocusOut>", _normalize)
+            mm_entry.bind("<FocusOut>", _normalize)
         elif vt == "enum":
             var = tk.StringVar()
             ttk.Combobox(control, textvariable=var, values=field.get("choices", []), state="readonly", width=18).pack(side="left")
@@ -1540,11 +1647,23 @@ class SettingsWindow(tk.Tk):
 
     # ── 讀取／寫入表單值 ─────────────────────────────────────────────
 
+    @staticmethod
+    def _validate_hhmm_part(proposed):
+        """遮罩式時間輸入每一格的按鍵驗證：只允許空字串或 1–2 位數字。"""
+        return proposed == "" or (proposed.isdigit() and len(proposed) <= 2)
+
     def _set_field_value(self, key, value):
         info = self._field_widgets[key]
         vt = info["field"]["value_type"]
         if vt == "bool":
             info["var"].set(bool(value) if value is not None else False)
+        elif vt == "hhmm":
+            # 把 "" / "H:M" / "HH:MM" 拆進時、分兩格；trace 會自動同步 info["var"]。
+            hh_var, mm_var = info["_hhmm_parts"]
+            s = "" if value is None else str(value).strip()
+            h, _, m = s.partition(":") if ":" in s else (s, "", "")
+            hh_var.set(f"{min(int(h), 23):02d}" if h.strip().isdigit() else "")
+            mm_var.set(f"{min(int(m), 59):02d}" if m.strip().isdigit() else "")
         elif vt == "video_input":
             # 依值的型別/格式自動判斷該切到哪個模式：int → 攝影機索引；
             # rtsp/http(s):// 開頭 → URL；其餘一律當成本機路徑。三個模式各自的
