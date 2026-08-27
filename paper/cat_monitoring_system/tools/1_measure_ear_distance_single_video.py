@@ -2,7 +2,7 @@
 多影片左右耳距離監測腳本
 
 功能：
-1) 由 VIDEO_LIST 與 VIDEO_PATH 載入多支影片
+1) 由 VIDEO_LIST 與 VIDEO_PATH 載入多支影片（皆接受單一檔案或資料夾，資料夾會遞迴掃描）
 2) 每幀偵測左右耳關鍵點（LeftEar=1, RightEar=2）
 3) 計算兩點歐式距離（像素）並即時顯示於畫面
 4) 將每幀距離與區域命中資訊寫入 CSV 檔案
@@ -50,7 +50,7 @@ from utils.constants import (
 # ===== 可直接修改的預設參數 =====
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\白貓舔舐測試" # 主要作為資料夾來源（會遞迴掃描影片）
 VIDEO_LIST = [
-    # 只放「單一影片檔案路徑」
+    # 可放「單一影片檔案路徑」或「資料夾路徑」（資料夾會遞迴掃描其下所有影片）
    # r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\泛化測試\cat5.mp4",
     #r"C:\Users\homec\Downloads\OneDrive_2_2026-5-21", 
     #r"C:\Users\homec\Downloads\OneDrive_3_2026-5-21",
@@ -63,11 +63,16 @@ VIDEO_LIST = [
 
 MAX_VIDEOS = 40  # 讀取上限：目前最多 20 部（原 10 部 + 額外 10 部）
 
-# 若設定 TEST_VIDEO_PATH 環境變數，優先只處理該單一影片路徑（覆蓋 VIDEO_LIST / VIDEO_PATH 資料夾掃描）
+# 若設定 TEST_VIDEO_PATH 環境變數，優先處理該路徑（覆蓋 VIDEO_LIST / VIDEO_PATH）。
+# 該路徑可以是單一影片檔案（只處理這一部，MAX_VIDEOS 收斂為 1）或資料夾
+# （沿用 collect_video_paths() 對 VIDEO_LIST 資料夾項目的遞迴掃描，MAX_VIDEOS
+# 維持預設上限，比照 1_run_video_inference.py 的 resolve_video_paths() 對
+# 資料夾來源不特別限制成單一影片）。
 _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video:
     VIDEO_LIST = [_env_test_video]
-    MAX_VIDEOS = 1
+    if not Path(_env_test_video).is_dir():
+        MAX_VIDEOS = 1
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_147.pt"
 
@@ -1708,7 +1713,8 @@ def _is_url(path_str):
 
 def collect_video_paths(max_videos=MAX_VIDEOS):
     """由 VIDEO_LIST 收集影片路徑或 IP 攝影機 URL（最多 max_videos 支）。
-    VIDEO_LIST 接受單一影片檔案路徑或 IP 攝影機 URL；資料夾請改填在 VIDEO_PATH。
+    VIDEO_LIST 接受單一影片檔案路徑、資料夾（會遞迴掃描，作法比照
+    1_run_video_inference.py 的 resolve_video_paths()）或 IP 攝影機 URL。
     """
     videos = []
     seen = set()
@@ -1720,6 +1726,8 @@ def collect_video_paths(max_videos=MAX_VIDEOS):
             videos.append(f)
 
     for entry in VIDEO_LIST:
+        if len(videos) >= max_videos:
+            return videos
         # 檢查是否為 URL（IP 攝影機）
         if _is_url(entry):
             if entry not in seen:
@@ -1734,7 +1742,18 @@ def collect_video_paths(max_videos=MAX_VIDEOS):
             if p.is_file():
                 _add(p)
             elif p.is_dir():
-                print(f"⚠️  VIDEO_LIST 僅接受檔案，資料夾請改填 VIDEO_PATH，已略過: {p}")
+                print(f"📂 VIDEO_LIST 資料夾，遞迴掃描中: {p}")
+                remaining = max_videos - len(videos)
+                if remaining > 0:
+                    sub_videos = collect_video_paths_from_folder(p, remaining, existing_paths=seen)
+                    if not sub_videos:
+                        print(f"⚠️  資料夾內未找到影片，略過: {p}")
+                    for sv in sub_videos:
+                        fp = str(sv.resolve()) if isinstance(sv, Path) else str(sv)
+                        if fp in seen:
+                            continue
+                        seen.add(fp)
+                        videos.append(sv)
         if len(videos) >= max_videos:
             return videos
     return videos
