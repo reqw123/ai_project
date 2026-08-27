@@ -2,7 +2,7 @@
   "model_paths": {
     "yolo_model": "C:\\ai_project\\yolo_models\\v11s_147.pt",
     "stgcn_model": "C:\\ai_project\\stgcn_models\\run_122_xy_conf_v_bone_att_on\\122_best_model.pth",
-    "video_input": "C:\\Users\\homec\\OneDrive\\圖片\\貓咪圖像資料集\\泛化測試\\7月18日.mp4",
+    "video_input": "D:/shake/shake/7月7日 (5)(5).mp4",
     "log_dir": "./logs",
     "output_dir": "./output"
   },
@@ -26,7 +26,7 @@
   "run_mode": {
     "mode": "gui",
     "auto_start_processing": true,
-    "scheduled_start_time": "05:00",
+    "scheduled_start_time": "",
     "scheduled_end_time": ""
   },
   "flask": {
