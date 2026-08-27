@@ -26,7 +26,7 @@
   "run_mode": {
     "mode": "gui",
     "auto_start_processing": true,
-    "scheduled_start_time": "05:00",
+    "scheduled_start_time": "",
     "scheduled_end_time": ""
   },
   "flask": {
