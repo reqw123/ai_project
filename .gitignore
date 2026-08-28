@@ -1,0 +1,40 @@
+# ─── Python bytecode / build ─────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+
+# ─── PyInstaller 中間產物 ─────────────────────────────────
+*.spec
+paper/build/
+paper/dist/
+
+# ─── 測試 / 型別 / lint 快取 ──────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ─── 編輯器 / OS ──────────────────────────────────────────
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ─── 執行期輸出目錄（config.py ModelPaths 預設 ./logs、./output）─
+# 已追蹤的 paper/output/*.csv 不受影響；此規則只避免新增執行期日誌。
+/paper/logs/
+
+# runtime_settings.previous.json 是 settings_manager 存檔時自動產生的備份，
+# 且 paper/tests/test_settings_manager.py 的一致性測試會在 cleanup 時刪除它
+# （已知的測試污染真實檔案問題，見 TODO M-10）——不進版控。
+paper/runtime_settings.previous.json
+
+# 注意：以下刻意「不」忽略——它們已在版控中且含使用者資料/設定：
+#   paper/cat_monitoring_log.csv, paper/behavior_segments_log.csv
+#   paper/output/*.csv, paper/runtime_settings.current.json
+#   yolo_models/*.pt, stgcn_models/**（移出需 history rewrite，見 TODO L-6）

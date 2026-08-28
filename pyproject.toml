@@ -1,0 +1,23 @@
+# 專案工具設定集中處。目前只放 pytest 設定（原 pytest.ini，2026-08-29 遷移）。
+#
+# 為何從 pytest.ini 遷來：pytest.ini 含中文註解（UTF-8），較舊的 iniconfig
+# 會以系統 locale 編碼（Windows-cp950）讀取而拋 UnicodeDecodeError，導致
+# 部分環境完全無法啟動 pytest。pyproject.toml 由 pytest 固定以 UTF-8 讀取，
+# 不受 locale 影響。
+
+[tool.pytest.ini_options]
+# 限定裸執行 `pytest`（不指定路徑）時的預設掃描範圍，避免遞迴掃到專案裡其他
+# 無關腳本（例如 cat_pose/ 底下檔名剛好符合 *_test.py 規則、但其實是互動式
+# 手動除錯工具、import 當下就會開啟 GUI 視窗的腳本）。
+#
+# 明確指定路徑執行時（例如 `pytest cat_pose/some_test.py`）不受此設定影響。
+testpaths = [
+    "paper/cat_monitoring_system/analytics/tests",
+    "paper/cat_monitoring_system/processors/tests",
+    "paper/cat_monitoring_system/trackers/tests",
+    "paper/cat_monitoring_system/server/tests",
+    "paper/cat_monitoring_system/utils/tests",
+    "paper/cat_monitoring_system/plugins/tests",
+    "paper/cat_monitoring_system/models/tests",
+    "paper/tests",
+]

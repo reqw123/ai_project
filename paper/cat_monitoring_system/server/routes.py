@@ -35,10 +35,14 @@ _CONF_THRES = _YOLOConfig.CONFIDENCE_THRESHOLD
 _SEQUENCE_LENGTH = _STGCNConfig.SEQUENCE_LENGTH
 _PORT = _FlaskConfig.PORT
 from analytics import daily_store
+from analytics.live_adapter import (
+    daily_record_from_dict as _daily_record_from_dict,
+    set_active_tracker as _set_active_tracker,
+    today_from_tracker as _today_from_tracker,
+)
 from analytics.baseline import (
     HISTORY_LOAD_LIMIT_DAYS,
     MIN_BASELINE_DAYS_DEFAULT,
-    DailyRecord,
     InsufficientDataError,
     compute_baseline,
 )
@@ -66,40 +70,9 @@ def _resolve_runtime_device(preferred="cuda"):
         return "cpu"
 
 
-def _daily_record_from_dict(d):
-    """解析 /api/deviation 請求 body 裡的一筆每日紀錄。
-
-    ``date`` 欄位僅接受 ISO 格式（YYYY-MM-DD）。呼叫端（目前是
-    cat_health_v3_flow.json 的 v2_daily_history）若使用其他日期格式
-    （例如 toLocaleDateString('zh-TW') 產生的 2026/7/2），需自行正規化
-    後再送進來——這個端點刻意不嘗試猜測/相容多種日期格式，因為
-    behavior_segments_log.csv 已知有 ISO 與本地格式混用的 bug，此處
-    寧可讓格式錯誤在這裡就明確報錯，而不是靜默解析錯誤造成基線算錯。
-    """
-    raw_date = d.get("date")
-    try:
-        day = datetime.date.fromisoformat(str(raw_date)[:10])
-    except (TypeError, ValueError):
-        raise ValueError(f"date 必須是 ISO 格式 (YYYY-MM-DD)，收到: {raw_date!r}")
-
-    kwargs = {"day": day}
-    for field_name in (
-        "monitoring_seconds",
-        "walk_time",
-        "walk_count",
-        "stop_time",
-        "stop_count",
-        "lick_time",
-        "lick_count",
-        "scratch_time",
-        "scratch_count",
-        "shake_count",
-        "active_time",
-        "rest_time",
-    ):
-        if field_name in d:
-            kwargs[field_name] = d[field_name]
-    return DailyRecord(**kwargs)
+# _daily_record_from_dict / _today_from_live_tracker 的實作已移到
+# analytics/live_adapter.py（中性轉接層），讓 dashboard/refresher.py 不必再
+# import server.routes 的私有函式。此處保留同名 wrapper 維持既有呼叫端不變。
 
 
 def _dataclass_to_jsonable(obj):
@@ -109,27 +82,16 @@ def _dataclass_to_jsonable(obj):
 
 
 def _today_from_live_tracker():
-    """把 frame_processor.tracker.get_today_stats() 轉成 compute_deviation()
-    要的欄位形狀（walk_time/walk_count/... 扁平鍵名），供 /api/deviation 在
-    請求沒帶 ``today`` 時當預設值。frame_processor 尚未啟動時回傳 None——
-    刻意不呼叫 _ensure_processor_started()，維持這個端點原本「跟攝影機/
-    YOLO pipeline 無關」的特性，不因為呼叫這個比對端點就把攝影機管線啟動。
+    """把即時 tracker 的 get_today_stats() 轉成 compute_deviation() 要的扁平
+    鍵名，供 /api/deviation 在請求沒帶 ``today`` 時當預設值。frame_processor
+    尚未啟動時回傳 None——刻意不呼叫 _ensure_processor_started()，維持這個
+    端點原本「跟攝影機/YOLO pipeline 無關」的特性。
+
+    實作在 analytics/live_adapter.py；tracker 由 _build_frame_processor()
+    透過 _set_active_tracker() 註冊。這裡仍優先用本模組的 frame_processor
+    全域（與註冊值一致，只是多一層保險）。
     """
-    tracker = getattr(frame_processor, "tracker", None)
-    if tracker is None:
-        return None
-    stats = tracker.get_today_stats()
-    return {
-        "walk_time": stats.get("walk_time", 0),
-        "walk_count": stats.get("walk", 0),
-        "stop_time": stats.get("stop_time", 0),
-        "stop_count": stats.get("stop", 0),
-        "lick_time": stats.get("lick_time", 0),
-        "lick_count": stats.get("lick", 0),
-        "scratch_time": stats.get("scratch_time", 0),
-        "scratch_count": stats.get("scratch", 0),
-        "shake_count": stats.get("shake", 0),
-    }
+    return _today_from_tracker(getattr(frame_processor, "tracker", None))
 
 
 def _resolve_optional_field(
@@ -184,7 +146,7 @@ def _build_frame_processor(enable_nodered=True):
     """建立 FrameProcessor。enable_nodered=False 供本地 GUI 模式使用，
     避免在沒有 Node-RED/Flask 伺服器的情況下仍嘗試推送資料。"""
     runtime_device = _resolve_runtime_device("cuda")
-    return FrameProcessor(
+    processor = FrameProcessor(
         yolo_model_path=_YOLO_MODEL_PATH,
         stgcn_model_path=_STGCN_MODEL_PATH,
         video_path=_VIDEO_PATH,
@@ -199,6 +161,10 @@ def _build_frame_processor(enable_nodered=True):
         normalize=True,
         kp_ema_alpha=_KP_EMA_ALPHA,
     )
+    # 把即時 tracker 註冊到中性轉接層，讓 /api/deviation 與 dashboard/refresher.py
+    # 都能讀「今日即時統計」而不必 import server.routes 的私有函式。
+    _set_active_tracker(processor.tracker)
+    return processor
 
 
 def _try_register_lick_stage(processor, enable_nodered: bool = True) -> None:
@@ -244,6 +210,9 @@ def _ensure_processor_started():
     global frame_streamer, frame_processor
     if frame_processor is not None and frame_streamer is not None:
         if frame_streamer.paused and _RunModeConfig.is_within_active_window():
+            # 重設時間錨點後才解除暫停，避免恢復後第一幀把整段暫停時間
+            # 當成一個巨大 dt 灌進當日統計（見 FrameProcessor.mark_resumed）。
+            frame_processor.mark_resumed()
             frame_streamer.paused = False
         return
     if not _RunModeConfig.is_within_active_window():

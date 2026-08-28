@@ -624,6 +624,33 @@ class FrameProcessor:
         """Register an optional plugin. Called before the first frame."""
         self._plugins.append(plugin)
 
+    def mark_resumed(self) -> None:
+        """在處理管線「從暫停恢復」的當下呼叫，重設所有以 wall-clock 差值累積
+        時間的元件的時間錨點。
+
+        背景：排程「區段執行」暫停期間（server/streaming.py 的 paused 迴圈、
+        或 gui 模式空白鍵暫停）完全不呼叫 process()，因此 BehaviorTracker
+        與各 plugin 內部以 `now - last_*_time` 計算的 dt 不會推進。恢復後的
+        第一次 update() 若不重設錨點，會把「整段暫停時間」當成一個巨大 dt
+        灌進當日統計（hourly_distribution / not_detected_time / 行為時長），
+        產生時間尖峰污染基線。這支方法把錨點對齊到「現在」，讓恢復後第一幀
+        的 dt 回到正常的單幀量級。
+
+        fail-safe：plugin 沒有對應 hook 就跳過，不影響其餘恢復流程。
+        """
+        try:
+            self.tracker.reset_time_anchor()
+        except Exception:
+            pass
+        mono = time.monotonic()
+        for _plugin in self._plugins:
+            for _attr in ("_last_wall_t",):
+                if hasattr(_plugin, _attr):
+                    try:
+                        setattr(_plugin, _attr, mono)
+                    except Exception:
+                        pass
+
     def _draw_identity_badge(self, frame, bbox, is_target, match_key, match_dist):
         """身分驗證結果的獨立視覺提示，跟 Visualizer.draw() 完全分開畫。
 

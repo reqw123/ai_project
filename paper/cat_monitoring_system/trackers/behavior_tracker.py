@@ -476,6 +476,17 @@ class ImprovedBehaviorTracker:
             }
         return stats
 
+    def reset_time_anchor(self) -> None:
+        """把逐幀時間差（dt = now - last_update_time）的錨點對齊到現在。
+
+        供處理管線「從暫停恢復」時呼叫（見 FrameProcessor.mark_resumed）：
+        暫停期間 update() 不會被呼叫，last_update_time 停在暫停前那一刻，
+        若不重設，恢復後第一次 update() 會把整段暫停時間當成一個巨大的
+        單幀 dt 累加進當日統計。只重設錨點，不動任何已累積的統計值。
+        """
+        with self._lock:
+            self.last_update_time = time.time()
+
     def add_monitoring_seconds(self, seconds: float) -> None:
         """累加系統實際運行監測的秒數（供 total_uptime 統計使用）。"""
         with self._lock:

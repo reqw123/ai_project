@@ -4,23 +4,17 @@
 time.sleep 迴圈——那部分是無限迴圈，測不出什麼，用人工檢查
 （見 refresher.py docstring）取代自動化測試就夠了。
 
-`compute_and_cache_once()` 內部延遲匯入 `server.routes`，所以這裡需要
-cv2 才能跑，跟 server/tests/test_routes_api_regression.py 是同一個既有
-限制。
+2026-08-29：`compute_and_cache_once()` 改從 `analytics/live_adapter` 讀即時
+資料，不再延遲匯入 `server.routes`，因此本檔案不再需要 cv2/torch。即時
+tracker 透過 `live_adapter._active_tracker`（正式碼由 `_build_frame_processor()`
+用 `set_active_tracker()` 註冊）注入。
 """
 
 from datetime import date, timedelta
 
 import pytest
 
-pytest.importorskip(
-    "cv2",
-    reason="compute_and_cache_once() 延遲匯入 server.routes，"
-    "該檔案層級 import cv2/torch 才能載入，此環境未安裝",
-)
-
-import server.routes as routes_module
-from analytics import daily_store
+from analytics import daily_store, live_adapter
 from analytics.baseline import DailyRecord
 from config import LoggingConfig
 
@@ -34,11 +28,6 @@ class _FakeTracker:
 
     def get_today_stats(self):
         return self._stats
-
-
-class _FakeFrameProcessor:
-    def __init__(self, stats):
-        self.tracker = _FakeTracker(stats)
 
 
 _DEFAULT_STATS = {
@@ -85,7 +74,7 @@ def _seed_history(db_path, n=7):
 def test_no_frame_processor_returns_false_and_does_not_touch_cache(
     isolated_db, monkeypatch
 ):
-    monkeypatch.setattr(routes_module, "frame_processor", None)
+    monkeypatch.setattr(live_adapter, "_active_tracker", None)
     ok = compute_and_cache_once()
     assert ok is False
     assert cache.get_latest() == {"status": "not_yet_computed"}
@@ -95,7 +84,7 @@ def test_insufficient_history_returns_false_but_writes_insufficient_status(
     isolated_db, monkeypatch
 ):
     monkeypatch.setattr(
-        routes_module, "frame_processor", _FakeFrameProcessor(_DEFAULT_STATS)
+        live_adapter, "_active_tracker", _FakeTracker(_DEFAULT_STATS)
     )
     _seed_history(isolated_db, n=2)  # 少於預設 min_days=7
     ok = compute_and_cache_once()
@@ -109,7 +98,7 @@ def test_sufficient_history_writes_ok_status_with_full_schema(
     isolated_db, monkeypatch
 ):
     monkeypatch.setattr(
-        routes_module, "frame_processor", _FakeFrameProcessor(_DEFAULT_STATS)
+        live_adapter, "_active_tracker", _FakeTracker(_DEFAULT_STATS)
     )
     _seed_history(isolated_db, n=7)
     ok = compute_and_cache_once()
@@ -128,7 +117,7 @@ def test_excluded_dates_from_daily_store_are_respected(isolated_db, monkeypatch)
     set_excluded()）排除的日期，背景排程重算時應該真的少採用那幾天，
     不是「存了但沒人讀」。"""
     monkeypatch.setattr(
-        routes_module, "frame_processor", _FakeFrameProcessor(_DEFAULT_STATS)
+        live_adapter, "_active_tracker", _FakeTracker(_DEFAULT_STATS)
     )
     _seed_history(isolated_db, n=8)
 
@@ -148,7 +137,7 @@ def test_does_not_depend_on_any_nodered_global_state(isolated_db, monkeypatch):
     的依賴」間接驗證——這裡改用『刻意不設定任何 Node-RED 端點/IP』的方式，
     確認純靠 daily_store + 即時 tracker 資料就能算出結果。"""
     monkeypatch.setattr(
-        routes_module, "frame_processor", _FakeFrameProcessor(_DEFAULT_STATS)
+        live_adapter, "_active_tracker", _FakeTracker(_DEFAULT_STATS)
     )
     _seed_history(isolated_db, n=10)
     ok = compute_and_cache_once()

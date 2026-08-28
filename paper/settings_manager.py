@@ -710,7 +710,8 @@ def _validate_required_file(v, label):
 
 
 def _validate_optional_file_warn(v, label):
-    """回傳 (error, warning)：檔案缺漏只警告，不擋存檔——本函式回傳 warning 訊息或 None。"""
+    """回傳 warning 訊息字串或 None（不回 error——這類欄位檔案缺漏只警告、
+    不擋存檔）。validate_settings() 會把非 None 的回傳值收進 warnings 清單。"""
     if v is None:
         return None
     if isinstance(v, int):

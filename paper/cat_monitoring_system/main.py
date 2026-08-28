@@ -275,6 +275,10 @@ def run_gui_mode():
                 break
             elif key == ord(" "):
                 paused = not paused
+                if not paused:
+                    # 從暫停恢復：重設時間錨點，避免暫停期間累積的 wall-clock
+                    # 差值在恢復後第一幀灌進統計（見 FrameProcessor.mark_resumed）。
+                    processor.mark_resumed()
                 print(f"{'⏸ 暫停' if paused else '▶ 播放'}")
             elif key == ord("z"):
                 frame_step_size = max(1, frame_step_size - 1)

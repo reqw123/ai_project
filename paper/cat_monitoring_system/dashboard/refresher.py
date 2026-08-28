@@ -57,13 +57,18 @@ def compute_and_cache_once() -> bool:
     狀態寫進快取，讓頁面能顯示明確的等待訊息，而不是維持在完全沒收過任何
     回應的 ``not_yet_computed``。
     """
-    # 延遲匯入：避免這個模組在載入時就強制要求 cv2/torch 等
-    # server/routes.py 檔案層級的重依賴（跟 routes.py 自己 api_deviation
-    # 的 dashboard.cache 延遲匯入是同一個考量，方向相反而已）。
-    from dashboard.cache import set_latest
-    from server.routes import _dataclass_to_jsonable, _today_from_live_tracker
+    # 2026-08-29：改從 analytics/live_adapter 讀即時資料，不再 import
+    # server.routes 的私有函式（解除 dashboard → server 的反向耦合）。
+    # live_adapter 只依賴 analytics.baseline + stdlib，沒有 cv2/torch 重依賴，
+    # 故可在檔案層級 import；set_latest 仍延遲匯入維持既有 lazy 慣例。
+    import dataclasses
 
-    today = _today_from_live_tracker()
+    from analytics.live_adapter import today_from_tracker
+
+    from dashboard.cache import set_latest
+
+    _dataclass_to_jsonable = dataclasses.asdict
+    today = today_from_tracker()
     if today is None:
         return False  # 攝影機管線還沒啟動，沒有即時資料可算
 

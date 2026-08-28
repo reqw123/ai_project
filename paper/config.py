@@ -477,10 +477,13 @@ class RunModeConfig:
     # 立即開始，不會傻等到隔天。留空（預設）代表不啟用排程，沿用 AUTO_START_PROCESSING
     # 的行為（一啟動就跑或永遠不自動跑）。用於預錄影片、無人值守的排程執行情境
     # （例如固定每天啟動一次，只想在 06:00 才開始處理當天份的影片）。
+    # 2026-08-29：預設改為空字串（不啟用排程）。先前預設 "06:00"~"12:00" 會讓
+    # 開箱即用的系統在 12:00–06:00 之間對 /stream 等端點一律回 503，使用者曾
+    # 因忘記自己沒設過而誤判系統故障（見 server/routes.py::_schedule_unavailable_reason）。
     SCHEDULED_START_TIME = _env_str(
         "CAT_MONITORING_SCHEDULED_START_TIME",
-        _runtime_default("run_mode.scheduled_start_time", "06:00", value_type=str),
-    )  # "06:00"
+        _runtime_default("run_mode.scheduled_start_time", "", value_type=str),
+    )  # 預設 "" = 不啟用排程
     SCHEDULED_START_HHMM = _parse_hhmm(SCHEDULED_START_TIME)
 
     # 排程結束時間（24 小時制 "HH:MM"，例如 "12:00"）。留空（預設）＝不設結束時間，
@@ -492,8 +495,8 @@ class RunModeConfig:
     # 若只設結束、沒設開始，開始時間視為當天 00:00。
     SCHEDULED_END_TIME = _env_str(
         "CAT_MONITORING_SCHEDULED_END_TIME",
-        _runtime_default("run_mode.scheduled_end_time", "12:00", value_type=str),
-    )  # "12:00"
+        _runtime_default("run_mode.scheduled_end_time", "", value_type=str),
+    )  # 預設 "" = 不設結束時間
     SCHEDULED_END_HHMM = _parse_hhmm(SCHEDULED_END_TIME)
 
     @classmethod
@@ -953,23 +956,37 @@ class CatIdentityConfig:
     )
     # 目標貓（唯一會被納入統計）的顏色特徵基準檔路徑，由
     # tools/3_cat_identity_verification_test.py 的 enroll 模式產生
-    TARGET_CAT_PROFILE_PATH = _env_str(
-        "CAT_MONITORING_TARGET_CAT_PROFILE_PATH",
-        _runtime_default(
-            "cat_identity.target_cat_profile_path",
-            r"C:\ai_project\paper\cat_monitoring_system\tools\cat_profile_cat_a.json",
-            value_type=str,
-        ),
+    TARGET_CAT_PROFILE_PATH = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_TARGET_CAT_PROFILE_PATH",
+            _runtime_default(
+                "cat_identity.target_cat_profile_path",
+                str(
+                    Path("paper")
+                    / "cat_monitoring_system"
+                    / "tools"
+                    / "cat_profile_cat_a.json"
+                ),
+                value_type=str,
+            ),
+        )
     )
     # 其他已知貓（例如同住的另一隻貓）的基準檔路徑；留空或檔案不存在時，
     # IdentityVerifier 會自動退化成「只跟目標貓比對距離門檻」的單貓模式
-    OTHER_CAT_PROFILE_PATH = _env_str(
-        "CAT_MONITORING_OTHER_CAT_PROFILE_PATH",
-        _runtime_default(
-            "cat_identity.other_cat_profile_path",
-            r"C:\ai_project\paper\cat_monitoring_system\tools\cat_profile_cat_b.json",
-            value_type=str,
-        ),
+    OTHER_CAT_PROFILE_PATH = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_OTHER_CAT_PROFILE_PATH",
+            _runtime_default(
+                "cat_identity.other_cat_profile_path",
+                str(
+                    Path("paper")
+                    / "cat_monitoring_system"
+                    / "tools"
+                    / "cat_profile_cat_b.json"
+                ),
+                value_type=str,
+            ),
+        )
     )
 
 
@@ -1017,21 +1034,29 @@ class LoggingConfig:
         )
     )
 
-    # CSV 絕對路徑（可由環境變數覆寫）
-    CSV_PATH = _env_str(
-        "CAT_MONITORING_CSV_PATH",
-        _runtime_default(
-            "logging.csv_path", r"C:\ai_project\paper\cat_monitoring_log.csv", value_type=str
-        ),
+    # CSV 路徑：預設相對專案根解析（與 TRACKER_STATE_PATH 一致），env/JSON
+    # 可用絕對路徑覆寫。2026-08-29：原本寫死 C:\ai_project\paper\... 絕對路徑，
+    # 換機器/換 clone 位置就寫錯地方。
+    CSV_PATH = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_CSV_PATH",
+            _runtime_default(
+                "logging.csv_path",
+                str(Path("paper") / "cat_monitoring_log.csv"),
+                value_type=str,
+            ),
+        )
     )
     # 行為區段 CSV（BehaviorSegmentLogger）路徑 — 獨立檔案，避免與 CSV_PATH 混寫
-    SEGMENTS_CSV_PATH = _env_str(
-        "CAT_MONITORING_SEGMENTS_CSV_PATH",
-        _runtime_default(
-            "logging.segments_csv_path",
-            r"C:\ai_project\paper\behavior_segments_log.csv",
-            value_type=str,
-        ),
+    SEGMENTS_CSV_PATH = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_SEGMENTS_CSV_PATH",
+            _runtime_default(
+                "logging.segments_csv_path",
+                str(Path("paper") / "behavior_segments_log.csv"),
+                value_type=str,
+            ),
+        )
     )
 
 

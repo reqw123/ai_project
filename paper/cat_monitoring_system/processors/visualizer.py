@@ -25,12 +25,11 @@ except (
     ImageFont = None
 
 
-HIP_IMAGE_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / r"C:\ai_project\paper\cat_monitoring_system\tools\h6bxw-tkcsv.gif"
-)
+# 貓臉疊圖素材路徑：相對於本檔所在的 cat_monitoring_system/ 套件解析
+# （2026-08-29：原本寫死 C:\ai_project\... 絕對路徑，換機器就找不到）。
+HIP_IMAGE_PATH = Path(__file__).resolve().parent.parent / "tools" / "h6bxw-tkcsv.gif"
 HIP_IMAGE_ALPHA_BOOST = 1.6  # 透明度
-HIP_IMAGE_SCALE = 0  # float | None — None=跟隨 bbox 動態計算；浮點數=原圖等比例倍率（1.0=原尺寸、2.0=放大兩倍）
+HIP_IMAGE_SCALE = 0  # float | None — None=跟隨 bbox 動態計算；浮點數=原圖等比例倍率（1.0=原尺寸、2.0=放大兩倍）；0=停用疊圖
 
 
 def _load_overlay_frames(image_path):
@@ -71,7 +70,21 @@ def _load_overlay_frames(image_path):
     return [image], [100]
 
 
-HIP_IMAGE_FRAMES, HIP_IMAGE_DURATIONS = _load_overlay_frames(HIP_IMAGE_PATH)
+# 延遲載入：h6bxw-tkcsv.gif 可能是數十 MB 的多幀動畫，解碼成整串 BGRA numpy
+# 陣列佔用可觀記憶體。過去在模組 import 時就無條件解碼一次，等於每個 import
+# 到 visualizer 的行程（含 pytest）都要付這個成本，即使 HIP_IMAGE_SCALE=0
+# （停用）或整場沒有貓入鏡也一樣。改成第一次真的要畫疊圖時才載入並快取。
+_overlay_cache: dict = {}
+
+
+def _get_overlay_data():
+    """回傳 (frames, durations_ms)，第一次呼叫時才載入並快取。
+    HIP_IMAGE_SCALE 為 0（停用）時直接回傳空，連檔案都不碰。"""
+    if HIP_IMAGE_SCALE == 0:
+        return [], []
+    if "data" not in _overlay_cache:
+        _overlay_cache["data"] = _load_overlay_frames(HIP_IMAGE_PATH)
+    return _overlay_cache["data"]
 
 # 常用中文字型候選（Windows 優先）
 _FONT_CANDIDATES = [
@@ -257,19 +270,29 @@ class Visualizer:
 
     def __init__(self):
         self._overlay_anim_start = time.monotonic()
-        self._overlay_frames = HIP_IMAGE_FRAMES
-        self._overlay_frame_durations = HIP_IMAGE_DURATIONS
+        # 疊圖幀改為延遲載入（見 _get_overlay_data / _ensure_overlay_loaded）。
+        self._overlay_loaded = False
+        self._overlay_frames: list = []
+        self._overlay_frame_durations: list = []
+        self._overlay_total_duration = 0
+        self._overlay_cumulative: list = []
+
+    def _ensure_overlay_loaded(self):
+        """第一次需要疊圖時才載入幀並預計算累積時間戳（bisect O(log N) 查幀用）。"""
+        if self._overlay_loaded:
+            return
+        self._overlay_loaded = True
+        self._overlay_frames, self._overlay_frame_durations = _get_overlay_data()
         self._overlay_total_duration = (
             sum(self._overlay_frame_durations) if self._overlay_frame_durations else 0
         )
-        # 預計算累積時間戳，供 bisect O(log N) 查找當前動畫幀（取代線性掃描）
         cumsum = 0
-        self._overlay_cumulative: list = []
         for d in self._overlay_frame_durations:
             cumsum += d
             self._overlay_cumulative.append(cumsum)
 
     def _get_overlay_frame(self):
+        self._ensure_overlay_loaded()
         if not self._overlay_frames:
             return None
         if len(self._overlay_frames) == 1 or self._overlay_total_duration <= 0:
