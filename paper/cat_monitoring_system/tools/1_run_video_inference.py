@@ -76,7 +76,7 @@ RATING_LETTERS = ("A", "B", "C", "D", "E")
 # 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
 # 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
 FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\白貓舔舐測試"  # 'single' 模式使用的扁平資料夾
+SINGLE_FOLDER_PATH = r"D:\cnn比對貓"  # 'single' 模式使用的扁平資料夾
 
 # VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
 VIDEO_PATHS = []
@@ -86,7 +86,7 @@ _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video:
     VIDEO_PATHS = [_env_test_video]
 
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_147.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_149.pt"
 STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_124_xy_conf_v_bone_att_on\124_best_model.pth"
 INFERENCE_DEVICE = 'cuda'   
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
@@ -1079,6 +1079,11 @@ def main():
     stop_requested = False
     current_video_idx = 0
     show_overlay_info = True
+    # 測試模式下 video_paths 是啟動時固定的清單；用 A~E 評分會把影片實際移走，
+    # 但清單不會縮。這個計數器記錄「連續幾部影片因為不存在/無法開啟被跳過」，
+    # 一旦跳過數等於清單長度，代表整份清單都沒有可播的影片了 → 收尾結束，
+    # 不要卡在「掃描不到影片」的無限迴圈裡。播成功一部就歸零。
+    consecutive_missing_skips = 0
 
     # a/d 逐幀瀏覽（僅暫停時可用）：用畫面快取往回捲動，不重新呼叫模型
     # pipeline——如果反著重新推論，EMA/keypoints_buffer 等跨幀狀態會被錯誤的
@@ -1301,41 +1306,44 @@ def main():
                 if _s <= current_video_idx < _e:
                     current_folder_key = _fk
                     break
+        def _advance_past_unplayable():
+            """跳過目前這部不能播（不存在／無法開啟）的影片。
+            回傳 True = 整份清單已無影片可播，外層迴圈該結束。"""
+            nonlocal current_video_idx, consecutive_missing_skips
+            consecutive_missing_skips += 1
+            if is_stats_mode:
+                current_video_idx += 1
+                return current_video_idx >= len(video_paths)
+            if consecutive_missing_skips >= len(video_paths):
+                print(f"\n✓ 清單裡 {len(video_paths)} 部影片都已評分移走或無法開啟，結束。")
+                return True
+            current_video_idx = (current_video_idx + 1) % len(video_paths)
+            return False
+
         video_path = video_paths[current_video_idx]
         is_stream_url = _is_stream_url(video_path)
         if not is_stream_url and not Path(video_path).exists():
             print(f"❌ 影片不存在，跳過: {video_path}")
-            if is_stats_mode:
-                current_video_idx += 1
-                if current_video_idx >= len(video_paths):
-                    break
-            else:
-                current_video_idx = (current_video_idx + 1) % len(video_paths)
+            if _advance_past_unplayable():
+                break
             continue
 
         if is_stream_url:
             cap = open_video_capture_with_retry(video_path, retries=5, delay=3)
             if cap is None or not cap.isOpened():
                 print(f"❌ 無法開啟串流 {video_path}，請確認 URL 與網路連線，跳過")
-                if is_stats_mode:
-                    current_video_idx += 1
-                    if current_video_idx >= len(video_paths):
-                        break
-                else:
-                    current_video_idx = (current_video_idx + 1) % len(video_paths)
+                if _advance_past_unplayable():
+                    break
                 continue
         else:
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
                 print(f"❌ 無法開啟影片，跳過: {video_path}")
-                if is_stats_mode:
-                    current_video_idx += 1
-                    if current_video_idx >= len(video_paths):
-                        break
-                else:
-                    current_video_idx = (current_video_idx + 1) % len(video_paths)
+                if _advance_past_unplayable():
+                    break
                 continue
 
+        consecutive_missing_skips = 0   # 成功開啟一部影片 → 歸零
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if is_stream_url and total_frames <= 0:
             total_frames = 0

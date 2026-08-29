@@ -67,6 +67,27 @@ def test_sparse_count_no_false_alarm():
     assert m.tail_p > 0.05
 
 
+def test_normal_day_zero_count_matching_zero_baseline_is_not_a_deviation():
+    """Regression: a healthy cat whose baseline for a rare behavior is ~0
+    (median 0) and who does 0 of it today — the overwhelmingly common case —
+    must score ~0σ, not a phantom large deviation. Previously P(X >= 0) == 1.0
+    fed into _norm_isf returned ≈ -8, which abs() downstream turned into a
+    "Severe Behavioral Deviation" on every ordinary day.
+    """
+    shake_counts = [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+    days = _mk_days(len(shake_counts), shake_count=shake_counts)
+    baseline = compute_baseline(days, min_days=7)
+    assert baseline.metrics["shake_count"].median == 0.0
+
+    dev = compute_deviation(today={"shake_count": 0}, baseline=baseline)
+    m = dev.metrics["shake_count"]
+    assert abs(m.sigma_equivalent) < 1.0, (
+        f"0 events vs a ~0 baseline must not register as a deviation, "
+        f"got sigma_equivalent={m.sigma_equivalent}"
+    )
+    assert (m.deviation_score or 0) < 20
+
+
 def test_sparse_count_still_flags_a_genuine_outbreak():
     """The fix must not become blind to real anomalies: a cat that never
     scratches suddenly scratching 8 times in a day should still register

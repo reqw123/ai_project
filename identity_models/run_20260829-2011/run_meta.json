@@ -1,0 +1,74 @@
+{
+  "run_id": "20260829-2011",
+  "serial": 1,
+  "started_at": "2026-08-29T20:16:52",
+  "total_seconds": 340.2,
+  "total_time": "0:05:40",
+  "train_seconds": 334.1,
+  "train_time": "0:05:34",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "dataset_path": "C:\\ai_project\\paper\\cat_monitoring_system\\tools\\train_data\\cat_identity\\dataset\\crops",
+  "class_names": [
+    "他貓",
+    "目標貓"
+  ],
+  "class_counts": {
+    "他貓": 2489,
+    "目標貓": 1784
+  },
+  "split_mode": "group",
+  "seed": 42,
+  "split_sizes": {
+    "train": 2894,
+    "val": 637,
+    "test": 742
+  },
+  "best_epoch": 1,
+  "best_val_acc": 0.9937,
+  "stopped_epoch": 13,
+  "epochs_cap": 60,
+  "params": {
+    "image_size": 128,
+    "batch_size": 32,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.0001,
+    "freeze_backbone": true,
+    "unfreeze_last_blocks": 1,
+    "early_stopping_patience": 12
+  },
+  "test_metrics": {
+    "overall_accuracy": 0.9987,
+    "precision_macro": 0.9978,
+    "recall_macro": 0.999,
+    "f1_macro": 0.9984,
+    "per_class": {
+      "他貓": {
+        "accuracy": 0.9981,
+        "precision": 1.0,
+        "recall": 0.9981,
+        "f1": 0.999
+      },
+      "目標貓": {
+        "accuracy": 1.0,
+        "precision": 0.9956,
+        "recall": 1.0,
+        "f1": 0.9978
+      }
+    },
+    "confusion_matrix": [
+      [
+        516,
+        1
+      ],
+      [
+        0,
+        225
+      ]
+    ],
+    "n_test": 742
+  },
+  "files": {
+    "best": "001.pt"
+  }
+}

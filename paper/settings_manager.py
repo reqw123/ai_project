@@ -325,16 +325,15 @@ FIELD_SCHEMA = [
         "label": "啟用身份驗證", "value_type": "bool", "validate": "bool",
     },
     {
-        "json_key": "cat_identity.target_cat_profile_path", "env_var": "CAT_MONITORING_TARGET_CAT_PROFILE_PATH",
-        "attr": ("CatIdentityConfig", "TARGET_CAT_PROFILE_PATH"), "tab": "貓咪身份驗證",
-        "label": "目標貓特徵基準檔", "value_type": "file", "validate": "optional_file_warn",
-        "browse_filter": ("特徵基準檔", "*.json"),
+        "json_key": "cat_identity.identity_model_path", "env_var": "CAT_MONITORING_IDENTITY_MODEL_PATH",
+        "attr": ("CatIdentityConfig", "IDENTITY_MODEL_PATH"), "tab": "貓咪身份驗證",
+        "label": "身分辨識 CNN 模型檔", "value_type": "file", "validate": "optional_file_warn",
+        "browse_filter": ("身分辨識 CNN 模型", "*.pt"),
     },
     {
-        "json_key": "cat_identity.other_cat_profile_path", "env_var": "CAT_MONITORING_OTHER_CAT_PROFILE_PATH",
-        "attr": ("CatIdentityConfig", "OTHER_CAT_PROFILE_PATH"), "tab": "貓咪身份驗證",
-        "label": "其他已知貓特徵基準檔（可留空）", "value_type": "file", "validate": "optional_file_warn",
-        "browse_filter": ("特徵基準檔", "*.json"),
+        "json_key": "cat_identity.target_cat_class", "env_var": "CAT_MONITORING_TARGET_CAT_CLASS",
+        "attr": ("CatIdentityConfig", "TARGET_CAT_CLASS"), "tab": "貓咪身份驗證",
+        "label": "目標貓類別名稱（對應模型 class_names）", "value_type": "str", "validate": "str",
     },
     # ── 日誌、CSV、資料庫與輸出路徑 ────────────────────────────────────
     {

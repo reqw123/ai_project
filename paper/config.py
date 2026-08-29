@@ -930,18 +930,22 @@ class CatIdentityConfig:
 
     ENABLE_IDENTITY_VERIFICATION 是身分驗證（多貓辨識）的總開關，補上這個
     假設原本沒有強制檢查的部分——見 detectors/identity_verifier.py。跟
-    SQAConfig 同一套「低耦合、fail-safe」慣例：這裡只決定要不要啟用，機制
-    內部的細節（H-S bin 數、色彩門檻等）留在該模組自己管理；基準檔遺失/
-    載入失敗，或啟用時 detectors/identity_verifier.py 整個被刪除，
-    FrameProcessor 都會自動停用這一層、回退成「偵測到的貓一律視為目標貓」
-    的原本行為，不影響其餘功能運行。目前預設關閉（False）——即使
-    TARGET_CAT_PROFILE_PATH/OTHER_CAT_PROFILE_PATH 指向的基準檔案已存在，
-    預設部署下這層過濾也不會生效，所有偵測到的貓一律視為目標貓。需要啟用
-    身分過濾時，設定環境變數 CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION=true
-    （或透過 settings_window.py 存進 runtime_settings.current.json）。
+    SQAConfig 同一套「低耦合、fail-safe」慣例：這裡只決定要不要啟用、指定
+    模型檔與目標貓類別名稱，機制內部細節（信心門檻、平滑視窗、裁切比例等）
+    留在該模組自己管理；模型檔遺失/載入失敗、torch/torchvision 缺失，或
+    啟用時 detectors/identity_verifier.py 整個被刪除，FrameProcessor 都會
+    自動停用這一層、回退成「偵測到的貓一律視為目標貓」的原本行為，不影響
+    其餘功能運行。目前預設關閉（False）——即使 IDENTITY_MODEL_PATH 指向的
+    模型檔已存在，預設部署下這層過濾也不會生效。需要啟用身分過濾時，設定
+    環境變數 CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION=true（或透過
+    settings_window.py 存進 runtime_settings.current.json）。
 
-    啟用後：FrameProcessor 只有在判定「這是目標貓（TARGET_CAT_PROFILE_PATH）」
-    時才會把偵測結果送進行為分類/追蹤/CSV/Node-RED；判定為其他貓或無法判定
+    方法：ImageNet 預訓練的 MobileNetV3-Small 微調成 N 類貓咪身分分類器
+    （由 tools/cat_identity/2_train.py 訓練，權重存在 C:\\ai_project\\
+    identity_models\\；latest.pt 永遠指向最近一次訓練的 best）。
+
+    啟用後：FrameProcessor 只有在判定「這是目標貓（TARGET_CAT_CLASS）」時
+    才會把偵測結果送進行為分類/追蹤/CSV/Node-RED；判定為其他貓或無法判定
     時，直接視同「這一幀貓不在畫面」處理（沿用既有的貓咪消失容忍/NOT_VISIBLE
     路徑），不會產生任何行為紀錄，也不會計入 Node-RED 的 today_stats。
     """
@@ -954,39 +958,24 @@ class CatIdentityConfig:
         "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION",
         _runtime_default("cat_identity.enable_identity_verification", False, value_type=bool),
     )
-    # 目標貓（唯一會被納入統計）的顏色特徵基準檔路徑，由
-    # tools/3_cat_identity_verification_test.py 的 enroll 模式產生
-    TARGET_CAT_PROFILE_PATH = _resolve_project_path(
+    # 身分辨識 CNN 權重檔（.pt）。由 tools/cat_identity/2_train.py 訓練產生，
+    # 檔案自帶 class_names / image_size / normalize 參數。預設指向
+    # C:\ai_project\identity_models\latest.pt（永遠是最近一次訓練的 best）。
+    IDENTITY_MODEL_PATH = _resolve_project_path(
         _env_str(
-            "CAT_MONITORING_TARGET_CAT_PROFILE_PATH",
+            "CAT_MONITORING_IDENTITY_MODEL_PATH",
             _runtime_default(
-                "cat_identity.target_cat_profile_path",
-                str(
-                    Path("paper")
-                    / "cat_monitoring_system"
-                    / "tools"
-                    / "cat_profile_cat_a.json"
-                ),
+                "cat_identity.identity_model_path",
+                str(Path("identity_models") / "latest.pt"),
                 value_type=str,
             ),
         )
     )
-    # 其他已知貓（例如同住的另一隻貓）的基準檔路徑；留空或檔案不存在時，
-    # IdentityVerifier 會自動退化成「只跟目標貓比對距離門檻」的單貓模式
-    OTHER_CAT_PROFILE_PATH = _resolve_project_path(
-        _env_str(
-            "CAT_MONITORING_OTHER_CAT_PROFILE_PATH",
-            _runtime_default(
-                "cat_identity.other_cat_profile_path",
-                str(
-                    Path("paper")
-                    / "cat_monitoring_system"
-                    / "tools"
-                    / "cat_profile_cat_b.json"
-                ),
-                value_type=str,
-            ),
-        )
+    # 「目標貓」在模型 class_names 裡的類別名稱（唯一會被納入統計的貓）。
+    # 其餘所有類別、以及信心不足判為「未知」的偵測，都視為「不是目標貓」。
+    TARGET_CAT_CLASS = _env_str(
+        "CAT_MONITORING_TARGET_CAT_CLASS",
+        _runtime_default("cat_identity.target_cat_class", "目標貓", value_type=str),
     )
 
 
@@ -1228,8 +1217,8 @@ def get_config_summary() -> str:
     🐱 貓咪身分與身分驗證
       - CAT_ID                    : {CatIdentityConfig.CAT_ID}
       - 身分驗證總開關（多貓過濾）: {CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION}  （False=偵測到的貓一律視為目標貓，不做身分過濾）
-      - 目標貓特徵基準檔          : {CatIdentityConfig.TARGET_CAT_PROFILE_PATH}
-      - 其他已知貓特徵基準檔      : {CatIdentityConfig.OTHER_CAT_PROFILE_PATH}  （留空或檔案不存在時自動退化為單貓模式）
+      - 身分辨識 CNN 模型檔       : {CatIdentityConfig.IDENTITY_MODEL_PATH}
+      - 目標貓類別名稱           : {CatIdentityConfig.TARGET_CAT_CLASS}  （對應模型 class_names；其餘類別/未知都視為非目標貓）
 
     📄 日誌設定
       - 主要 CSV          : {LoggingConfig.CSV_PATH}

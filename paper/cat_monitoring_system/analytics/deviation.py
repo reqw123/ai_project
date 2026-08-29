@@ -312,7 +312,15 @@ def _deviate_count(
         p, sign = upper_p, 1.0
     else:
         p, sign = lower_p, -1.0
-    sigma_eq = sign * _norm_isf(max(min(p, 1.0), MIN_TAIL_P))
+    # ``p`` is the tail probability in the chosen direction. Only the
+    # *surprising* side (p < 0.5) carries deviation signal. When today's count
+    # sits on the unremarkable side of the baseline — the common case of 0
+    # events on a day whose baseline is also ~0, where P(X >= 0) == 1.0 —
+    # clamp to 0.5 so ``_norm_isf`` maps it to ~0σ instead of a large spurious
+    # value (``_norm_isf(1.0)`` ≈ -8, which ``abs()`` downstream turned into a
+    # phantom "Severe" deviation on every normal day).
+    p_surprise = min(max(p, MIN_TAIL_P), 0.5)
+    sigma_eq = sign * _norm_isf(p_surprise)
 
     return MetricDeviation(
         metric=metric,

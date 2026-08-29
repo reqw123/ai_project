@@ -234,9 +234,9 @@ class TestValidateSettings:
         assert ok is True
 
     def test_optional_file_missing_warns_but_does_not_block(self, tmp_path):
-        missing = str(tmp_path / "no_such_profile.json")
+        missing = str(tmp_path / "no_such_model.pt")
         ok, errors, warnings = sm.validate_settings(
-            {"cat_identity": {"target_cat_profile_path": missing}}
+            {"cat_identity": {"identity_model_path": missing}}
         )
         assert ok is True
         assert errors == []
@@ -244,7 +244,7 @@ class TestValidateSettings:
 
     def test_optional_file_empty_string_is_fine(self):
         ok, errors, warnings = sm.validate_settings(
-            {"cat_identity": {"other_cat_profile_path": ""}}
+            {"cat_identity": {"identity_model_path": ""}}
         )
         assert ok is True
         assert warnings == []

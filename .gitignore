@@ -29,6 +29,15 @@ Thumbs.db
 # 已追蹤的 paper/output/*.csv 不受影響；此規則只避免新增執行期日誌。
 /paper/logs/
 
+# 貓咪身分辨識 CNN（tools/cat_identity/）的所有產物——資料量大，不進版控：
+#   dataset/  裁切圖+原圖資料集（1_build_dataset.py）
+#   infer/    影片端逐幀辨識輸出（3_infer_video.py）
+#   trimmed/  剪掉沒貓片段的影片（0_trim_videos.py）
+/paper/cat_monitoring_system/tools/train_data/cat_identity/
+
+# 注意：identity_models/（tools/cat_identity/2_train.py 訓練出的身分 CNN 權重 +
+# 每次訓練產物）刻意「不」忽略——比照 yolo_models / stgcn_models（同層）一起進版控。
+
 # runtime_settings.previous.json 是 settings_manager 存檔時自動產生的備份，
 # 且 paper/tests/test_settings_manager.py 的一致性測試會在 cleanup 時刪除它
 # （已知的測試污染真實檔案問題，見 TODO M-10）——不進版控。
@@ -37,4 +46,4 @@ paper/runtime_settings.previous.json
 # 注意：以下刻意「不」忽略——它們已在版控中且含使用者資料/設定：
 #   paper/cat_monitoring_log.csv, paper/behavior_segments_log.csv
 #   paper/output/*.csv, paper/runtime_settings.current.json
-#   yolo_models/*.pt, stgcn_models/**（移出需 history rewrite，見 TODO L-6）
+#   yolo_models/*.pt, stgcn_models/**, identity_models/**（移出需 history rewrite，見 TODO L-6）

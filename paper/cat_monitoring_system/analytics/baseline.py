@@ -171,7 +171,6 @@ def compute_metric_stats(values: list) -> MetricStats:
     arr = [float(v) for v in values if v is not None]
     n = len(arr)
     if n == 0:
-        now = ""
         return MetricStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
     sorted_arr = sorted(arr)
@@ -220,6 +219,11 @@ def compute_baseline(
     magic ``{"error": ...}`` payload, so callers can't accidentally treat
     a failure as a real baseline.
     """
+    # 防呆：min_days / max_days 若被呼叫端或環境變數設成 0 或負數，會讓下面的
+    # 邏輯出錯（尤其 valid[-0:] 會回傳整個 list 而非空）。至少各夾成 1。
+    min_days = max(1, int(min_days))
+    max_days = max(1, int(max_days))
+
     excluded = set(excluded_dates or [])
 
     valid = [

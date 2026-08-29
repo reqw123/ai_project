@@ -84,3 +84,30 @@ class TestEnvInt:
     def test_invalid_value_falls_back_to_default(self, monkeypatch):
         monkeypatch.setenv(_ENV_NAME, "not_a_number")
         assert _env_int(_ENV_NAME, 7) == 7
+
+    def test_below_min_value_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv(_ENV_NAME, "0")
+        assert _env_int(_ENV_NAME, 7, min_value=1) == 7
+        monkeypatch.setenv(_ENV_NAME, "-3")
+        assert _env_int(_ENV_NAME, 7, min_value=1) == 7
+
+    def test_within_range_returns_parsed_value(self, monkeypatch):
+        monkeypatch.setenv(_ENV_NAME, "14")
+        assert _env_int(_ENV_NAME, 7, min_value=1, max_value=90) == 14
+
+
+class TestBaselineDaysGuard:
+    def test_min_max_days_clamped_to_at_least_one(self):
+        """compute_baseline 收到 0 / 負數的 min_days / max_days 時要夾成 1，
+        而不是讓 valid[-0:] 靜默回傳整個歷史。"""
+        from datetime import date, timedelta
+
+        from analytics.baseline import DailyRecord, compute_baseline
+
+        hist = [
+            DailyRecord(day=date(2026, 1, 1) + timedelta(days=i), monitoring_seconds=7200.0)
+            for i in range(10)
+        ]
+        bl = compute_baseline(hist, min_days=0, max_days=0)
+        assert bl.days_count == 1
+        assert bl.required_days == 1

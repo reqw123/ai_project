@@ -49,10 +49,10 @@ class BaselineConfig:
     # 依據】——沒有找到特定文獻校準這個上限，只是「約一個月」的常識性選擇，
     # 避免基線視窗無限往回看、稀釋掉近期真正相關的行為模式。
     MIN_BASELINE_DAYS_DEFAULT = _env_int(
-        "CAT_MONITORING_ANALYTICS_MIN_BASELINE_DAYS", 7
+        "CAT_MONITORING_ANALYTICS_MIN_BASELINE_DAYS", 7, min_value=1
     )
     MAX_BASELINE_DAYS_DEFAULT = _env_int(
-        "CAT_MONITORING_ANALYTICS_MAX_BASELINE_DAYS", 30
+        "CAT_MONITORING_ANALYTICS_MAX_BASELINE_DAYS", 30, min_value=1
     )
 
     # ── 讀取歷史時的上限筆數（效能用途，非統計方法論參數） ───────────────
@@ -73,6 +73,7 @@ class BaselineConfig:
     HISTORY_LOAD_LIMIT_DAYS = _env_int(
         "CAT_MONITORING_ANALYTICS_HISTORY_LOAD_LIMIT_DAYS",
         MAX_BASELINE_DAYS_DEFAULT * 4,
+        min_value=1,
     )
 
     # ── 單日資料有效門檻（納入/排除標準：監測時數太短的天數視為不可靠） ──
@@ -81,7 +82,7 @@ class BaselineConfig:
     # （例如改成每天只排程監測 2 小時），這個門檻可能需要跟著調整，不然
     # 「有效天數」會系統性偏少。
     MIN_DAILY_MONITORING_SEC_DEFAULT = _env_float(
-        "CAT_MONITORING_ANALYTICS_MIN_DAILY_MONITORING_SEC", 3600.0
+        "CAT_MONITORING_ANALYTICS_MIN_DAILY_MONITORING_SEC", 3600.0, min_value=0.0
     )
 
     # ── Sanity Check 群體參考值 ──────────────────────────────────────────

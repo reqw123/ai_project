@@ -196,7 +196,7 @@
 | `cat_monitoring_system/tools/eval_class_source_distribution.py` | 檢查各行為類別的訓練樣本是否過度集中於少數影片/場景（過擬合假象排查） |
 | `cat_monitoring_system/tools/eval_lighting_distribution.py`（2026-08-11 新增） | 抽樣訓練影片幾幀算 HSV V channel 均值當亮度代理指標，統計各行為類別的光照分布、記錄快照供之後比對；實測發現訓練資料幾乎不含低光照場景（501支僅1.2%落在「很暗」區間） |
 | `cat_monitoring_system/tools/2_run_dual_model_compare.py` | 即時視覺化並排比較兩個模型的推論結果（疊圖顯示），跟 `eval_gcn_compare.py`（數字/統計量比較）用途不同、互補 |
-| `cat_monitoring_system/tools/3_cat_identity_verification_test.py` | 貓咪個體身分辨識測試腳本 |
+| `cat_monitoring_system/tools/cat_identity/` | 貓咪身分辨識 CNN 工具鏈（`0_trim_videos` → `1_build_dataset` → `2_train` → `3_infer_video`） |
 | `cat_monitoring_system/tools/test_bone_length_stability.py` | 骨架穩定度診斷/校準工具（骨段長度一致性、脊椎中點偏移/角度、Body Axis score jitter 等指標的離線分析與正常基線建立，`processors/skeleton_quality_assessment.py` 的邏輯即由此腳本的模式 2 移植而來） |
 | `cat_monitoring_system/tools/1_run_video_inference.py` | 單支影片離線推論 |
 | `cat_monitoring_system/tools/1_skeleton_visualizer.py` | 骨架視覺化腳本 |

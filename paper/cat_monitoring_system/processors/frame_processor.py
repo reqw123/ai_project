@@ -238,10 +238,14 @@ class FrameProcessor:
         if CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION and _IdentityVerifier is not None:
             try:
                 self.identity_verifier = _IdentityVerifier(
-                    target_profile_path=CatIdentityConfig.TARGET_CAT_PROFILE_PATH,
-                    other_profile_path=CatIdentityConfig.OTHER_CAT_PROFILE_PATH,
+                    model_path=CatIdentityConfig.IDENTITY_MODEL_PATH,
+                    target_class=CatIdentityConfig.TARGET_CAT_CLASS,
+                    device=device,
                 )
-                print("✓ 身分驗證已啟用：只有判定為目標貓的偵測結果會計入統計")
+                print(
+                    f"✓ 身分驗證已啟用（CNN）：只有判定為「{CatIdentityConfig.TARGET_CAT_CLASS}」"
+                    f"的偵測結果會計入統計"
+                )
             except Exception as e:
                 print(f"⚠ 身分驗證初始化失敗，已停用（偵測到的貓將一律視為目標貓）：{e}")
                 self.identity_verifier = None
@@ -343,26 +347,26 @@ class FrameProcessor:
         # 出錯不擋掉這一幀，回退成原本「偵測到的貓一律視為目標貓」的行為。
         if kpts is not None and self.identity_verifier is not None:
             try:
-                is_target_cat, match_key, match_dist = self.identity_verifier.verify(
+                is_target_cat, match_key, match_score = self.identity_verifier.verify(
                     frame, bbox
                 )
             except Exception:
-                is_target_cat, match_key, match_dist = True, None, None
+                is_target_cat, match_key, match_score = True, None, None
 
             # 純視覺提示，跟下面的統計判斷（kpts=None）互相獨立：非目標貓的
             # 情況下 Visualizer.draw() 完全不會被呼叫（kpts=None 會跳過整個
             # 疊圖區塊），沒有這個小徽章的話畫面上什麼都不會畫，看起來就像
             # 「什麼都沒偵測到」，沒辦法跟真的沒貓做視覺區分。
             if self.overlay:
-                self._draw_identity_badge(frame, bbox, is_target_cat, match_key, match_dist)
+                self._draw_identity_badge(frame, bbox, is_target_cat, match_key, match_score)
 
             if not is_target_cat:
                 if not self._identity_filtering_active:
                     self._identity_filtering_active = True
-                    _dist_str = f"{match_dist:.3f}" if match_dist is not None else "N/A"
+                    _score_str = f"{match_score:.3f}" if match_score is not None else "N/A"
                     print(
                         f"🚫 身分驗證：畫面中的貓判定為「{match_key or '未知'}」"
-                        f"（距離={_dist_str}），非目標貓，本幀起已從統計中過濾"
+                        f"（信心={_score_str}），非目標貓，本幀起已從統計中過濾"
                     )
                 kpts = None
             elif self._identity_filtering_active:
@@ -651,14 +655,15 @@ class FrameProcessor:
                     except Exception:
                         pass
 
-    def _draw_identity_badge(self, frame, bbox, is_target, match_key, match_dist):
+    def _draw_identity_badge(self, frame, bbox, is_target, match_key, match_score):
         """身分驗證結果的獨立視覺提示，跟 Visualizer.draw() 完全分開畫。
 
         非目標貓的情況下 kpts 會被設成 None，process() 後段整個疊圖區塊
         （包含 Visualizer.draw()）都不會執行，畫面上等於「什麼都沒畫」，
         跟真的沒偵測到貓沒有視覺差異。這裡固定在 bbox 位置畫一個小徽章
         （目標貓=綠色/其他=橘色），兩種狀態都畫，只讀不改 kpts/bbox，
-        不影響任何統計或分類邏輯。"""
+        不影響任何統計或分類邏輯。標籤用 ASCII（OpenCV putText 不支援中文，
+        中文類別名寫死顯示成方框），中文全名走 console 訊息。"""
         if bbox is None:
             return
         h, w = frame.shape[:2]
@@ -670,12 +675,13 @@ class FrameProcessor:
 
         if is_target:
             color = (0, 200, 0)
-            label = "ID: cat1 (target)"
+            label = "ID: target"
         else:
             color = (0, 128, 255)
-            label = f"ID: {match_key or 'unknown'} (filtered)"
-        if match_dist is not None:
-            label += f" d={match_dist:.2f}"
+            who = "unknown" if match_key is None else "other-cat"
+            label = f"ID: {who} (filtered)"
+        if match_score is not None:
+            label += f" conf={match_score:.2f}"
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         text_y = y1 - 10 if y1 - 10 > 10 else y2 + 20

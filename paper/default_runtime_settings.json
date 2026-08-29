@@ -71,8 +71,8 @@
   "cat_identity": {
     "cat_id": "cat_001",
     "enable_identity_verification": false,
-    "target_cat_profile_path": "C:\\ai_project\\paper\\cat_monitoring_system\\tools\\cat_profile_cat_a.json",
-    "other_cat_profile_path": "C:\\ai_project\\paper\\cat_monitoring_system\\tools\\cat_profile_cat_b.json"
+    "identity_model_path": "C:\\ai_project\\identity_models\\latest.pt",
+    "target_cat_class": "目標貓"
   },
   "logging": {
     "tracker_state_path": "C:\\ai_project\\paper\\baseline_data\\tracker_state.json",

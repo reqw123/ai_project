@@ -517,10 +517,14 @@ class SettingsWindow(tk.Tk):
 
         # 影片路徑覆寫（選填）：填了就在「▶ 執行所選腳本」啟動子行程時，額外塞一個
         # TEST_VIDEO_PATH 環境變數進去（見 _on_start_tool）。只對有讀這個環境變數的
-        # 腳本有效（目前是 1_run_video_inference.py／2_run_dual_model_compare.py／
-        # 1_measure_ear_distance_single_video.py 這三支），其餘腳本會安靜忽略、跟沒填
-        # 一樣——本視窗本來就不檢查每支腳本內部邏輯（見上面「瀏覽...」按鈕旁的提示文字），
-        # 這個欄位延續同一個原則，不對「填了但腳本不支援」的情況另外提示或報錯。
+        # 腳本有效——tools/ 底下多數影片類腳本（1_run_video_inference.py／
+        # 2_run_dual_model_compare.py／1_measure_ear_distance_single_video.py／
+        # 1_skeleton_visualizer.py／cat_identity/0_trim_videos.py／
+        # cat_identity/3_infer_video.py …）會拿它覆蓋寫死的來源；
+        # cat_identity/1_build_dataset.py 特別一點，會把它當「INPUT_ROOT」用
+        # （要選底下有 目標貓/他貓 兩個子資料夾的那層父資料夾）。其餘腳本安靜忽略、
+        # 跟沒填一樣——本視窗本來就不檢查每支腳本內部邏輯（見上面「瀏覽...」按鈕旁的
+        # 提示文字），這個欄位延續同一個原則，不對「填了但腳本不支援」另外提示或報錯。
         tool_row_video = tk.Frame(tool_outer, bg=COLOR_HEADER_BG)
         tool_row_video.pack(fill="x", padx=10, pady=(0, 4))
         tk.Label(

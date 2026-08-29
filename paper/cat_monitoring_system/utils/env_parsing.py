@@ -16,6 +16,13 @@
 """
 
 import os
+import sys
+
+
+def _out_of_range(value, min_value, max_value) -> bool:
+    return (min_value is not None and value < min_value) or (
+        max_value is not None and value > max_value
+    )
 
 
 def env_str(name: str, default: str) -> str:
@@ -27,23 +34,47 @@ def env_str(name: str, default: str) -> str:
     return value if value else default
 
 
-def env_int(name: str, default: int) -> int:
-    """讀取整數型環境變數；未設定或轉型失敗時回傳 default。"""
+def env_int(name: str, default: int, min_value=None, max_value=None) -> int:
+    """讀取整數型環境變數；未設定或轉型失敗時回傳 default。
+
+    指定 ``min_value`` / ``max_value`` 時，解析成功但超出範圍的值一樣回退到
+    ``default`` 並印出警告——避免把不合理的設定（例如 baseline 天數設成 0 或
+    負數）靜默吃下去，造成下游計算出現難以察覺的錯誤。
+    """
     value = os.getenv(name)
     if value is None:
         return default
     try:
-        return int(value)
+        parsed = int(value)
     except (TypeError, ValueError):
         return default
+    if _out_of_range(parsed, min_value, max_value):
+        print(
+            f"⚠ 環境變數 {name}={value!r} 超出允許範圍 "
+            f"[{min_value}, {max_value}]，改用預設值 {default}",
+            file=sys.stderr,
+        )
+        return default
+    return parsed
 
 
-def env_float(name: str, default: float) -> float:
-    """讀取浮點數型環境變數；未設定或轉型失敗時回傳 default。"""
+def env_float(name: str, default: float, min_value=None, max_value=None) -> float:
+    """讀取浮點數型環境變數；未設定或轉型失敗時回傳 default。
+
+    ``min_value`` / ``max_value`` 的行為與 :func:`env_int` 相同。
+    """
     value = os.getenv(name)
     if value is None:
         return default
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return default
+    if _out_of_range(parsed, min_value, max_value):
+        print(
+            f"⚠ 環境變數 {name}={value!r} 超出允許範圍 "
+            f"[{min_value}, {max_value}]，改用預設值 {default}",
+            file=sys.stderr,
+        )
+        return default
+    return parsed
