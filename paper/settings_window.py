@@ -41,7 +41,8 @@ import config  # noqa: E402
 import settings_manager  # noqa: E402
 from settings_manager import FIELD_SCHEMA, TAB_ORDER, _MISSING, _get_nested, _redact, _set_nested  # noqa: E402
 from settings_gui.console_panel import ConsolePanel  # noqa: E402
-from settings_gui.process_manager import ProcessManager  # noqa: E402
+from settings_gui.process_manager import ProcessManager, any_running  # noqa: E402
+from identity_trainer_window import IdentityTrainerWindow  # noqa: E402
 from settings_gui.field_search import FieldSearchBar  # noqa: E402
 from settings_gui import tab_docs_panel  # noqa: E402
 from settings_gui.style import (  # noqa: E402
@@ -257,6 +258,7 @@ class SettingsWindow(tk.Tk):
         # 晚），所以 .console 是事後在 _build_middle_area() 裡才指派。
         self._process_manager = ProcessManager(self, on_state_change=self._update_process_buttons_state)
         self._tool_script_var = tk.StringVar(value="")  # 「獨立腳本工具」下拉/瀏覽選中的 .py 路徑
+        self._identity_trainer_win = None  # 「訓練身分模型」子視窗（IdentityTrainerWindow），關閉時設回 None
         # 關閉本視窗（不管是按右上角 X 還是下方「關閉」按鈕）視同 main.py 關閉請求，
         # 避免不小心關掉設定視窗後，main.py 還在背景跑、卻再也找不到入口能停止它。
         self.protocol("WM_DELETE_WINDOW", self._on_window_close)
@@ -756,6 +758,12 @@ class SettingsWindow(tk.Tk):
         獨立腳本工具若還在本視窗啟動的範圍內執行中，視同一併請求關閉，並實際等到
         確認結束才讓視窗消失，不是送出信號就放著不管——避免「視窗關掉了，行程其實
         還在跑」的情況。"""
+        trainer = self._identity_trainer_win
+        if trainer is not None and trainer.winfo_exists():
+            trainer._on_close()
+            if trainer.winfo_exists():  # 使用者在子視窗的確認對話框選了「否」
+                return
+
         pm = self._process_manager
         if pm.is_running:
             if not messagebox.askyesno(
@@ -775,7 +783,36 @@ class SettingsWindow(tk.Tk):
         self.destroy()
 
     def _on_start_main(self):
+        trainer_pm = getattr(self._identity_trainer_win, "_pm", None)
+        blocker = any_running(trainer_pm)
+        if blocker is not None:
+            messagebox.showinfo(
+                "無法啟動 main.py",
+                f"身分模型訓練視窗的「{blocker.active_label}」正在執行中（PID {blocker.process.pid}），"
+                "請先等它結束或停止後再啟動 main.py（避免同時搶 GPU）。",
+            )
+            return
         self._process_manager.start_main(_MAIN_PY_PATH, _SCRIPT_DIR)
+
+    def _on_open_identity_trainer(self):
+        win = self._identity_trainer_win
+        if win is not None and win.winfo_exists():
+            win.deiconify()
+            win.lift()
+            win.focus_force()
+            return
+        self._identity_trainer_win = IdentityTrainerWindow(self)
+
+    def _sync_identity_model_field(self):
+        """身分訓練視窗按「設為監控系統使用的模型」後呼叫：把唯讀的「身分辨識 CNN
+        模型檔」欄位重新讀成剛寫進 runtime_settings.current.json 的值。"""
+        settings_manager.reload_runtime_settings()
+        for f in FIELD_SCHEMA:
+            if f["json_key"] in ("cat_identity.identity_model_path", "cat_identity.target_cat_class"):
+                value, source = self._resolve_field_display(f)
+                self._set_field_value(f["json_key"], value)
+                self._apply_source(f["json_key"], source)
+        self._refresh_top_info()
 
     def _on_stop_main(self):
         self._process_manager.stop_main()
@@ -1129,6 +1166,11 @@ class SettingsWindow(tk.Tk):
         # 上一次的高亮，狀態存在這裡，見 _highlight_fields()。
         self._highlighted_field_keys = []
 
+        # FIELD_SCHEMA 標了 "hidden" 的欄位（例如 cat_identity.target_cat_class）仍要
+        # 建出 widget，讓存檔/載入/匯入的通用迴圈照跑，只是不放進可見的分頁——丟進
+        # 這個永遠不 pack 的 Frame 裡。
+        self._hidden_field_holder = tk.Frame(self)
+
         # 分頁右欄的說明文件內容只需要解析一次（不是每個分頁各解析一次整份文件），
         # 迴圈外先呼叫一次 tab_docs_panel.parse()，迴圈內用 .get(tab_name, []) 取用。
         # 內容是「這個分頁對應哪個模組/核心函式」（見
@@ -1181,7 +1223,24 @@ class SettingsWindow(tk.Tk):
             ).pack(fill="x", padx=14, pady=8)
 
             for field in fields_by_tab.get(tab_name, []):
+                if field.get("hidden"):
+                    self._build_field_row(self._hidden_field_holder, field, accent)
+                    continue
                 self._build_field_row(left_col, field, accent)
+            if tab_name == "貓咪身份驗證":
+                trainer_box = tk.Frame(left_col, bg=COLOR_TAB_BG)
+                trainer_box.pack(fill="x", padx=14, pady=(10, 4))
+                _styled_button(
+                    trainer_box, "🐱 選擇 / 訓練身分認證模型", self._on_open_identity_trainer,
+                    BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE, font=self._font_label,
+                ).pack(side="left")
+                tk.Label(
+                    left_col,
+                    text="開啟專屬視窗：選「我的貓 / 其他貓」影片資料夾 → 自動建立資料集 → 訓練 CNN → "
+                    "一鍵把訓練好的模型設為上面的「身分辨識 CNN 模型檔」。",
+                    bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
+                    anchor="w", justify="left", wraplength=750,
+                ).pack(fill="x", padx=14, pady=(0, 10))
             if tab_name == "ST-GCN 推論":
                 tk.Label(
                     left_col,
@@ -1481,6 +1540,16 @@ class SettingsWindow(tk.Tk):
             info["var"] = var
         elif vt == "file":
             var = tk.StringVar()
+            if field.get("readonly"):
+                # 唯讀顯示：值看得到、可反白複製，但不能手打；不給瀏覽鈕。
+                tk.Entry(
+                    control, textvariable=var, font=self._font_label, state="readonly",
+                    readonlybackground="#eef1f4", fg=COLOR_HINT_FG,
+                ).pack(side="left", fill="x", expand=True)
+                info["var"] = var
+                # 跳過下面的瀏覽鈕與 _browse 定義，直接落到共用的 env_note / hint 收尾
+                self._finish_field_row(parent, field, key, info)
+                return
             tk.Entry(control, textvariable=var, font=self._font_label).pack(side="left", fill="x", expand=True)
             browse_filter = field.get("browse_filter")
             # validate == "output_path" 的欄位（tracker_state_path／daily_history_db_path／
@@ -1640,12 +1709,23 @@ class SettingsWindow(tk.Tk):
             info["height_var"] = height_var
             info["toggle"] = _toggle
 
+        self._finish_field_row(parent, field, key, info)
+
+    def _finish_field_row(self, parent, field, key, info):
+        """每個欄位列共用的收尾：環境變數警告列 + 固定說明(hint) + 登記 widget。"""
         env_note_var = tk.StringVar(value="")
         tk.Label(
             parent, textvariable=env_note_var, bg=COLOR_TAB_BG, fg=COLOR_WARNING_FG,
             font=self._font_hint, anchor="w", justify="left", wraplength=750,
         ).pack(fill="x", padx=14, pady=(0, 6))
         info["env_note_var"] = env_note_var
+
+        # 欄位固定說明（FIELD_SCHEMA 的 "hint"）——常駐灰字，跟上面的環境變數警告分開
+        if field.get("hint"):
+            tk.Label(
+                parent, text=f"ℹ {field['hint']}", bg=COLOR_TAB_BG, fg=COLOR_HINT_FG,
+                font=self._font_hint, anchor="w", justify="left", wraplength=750,
+            ).pack(fill="x", padx=14, pady=(0, 6))
 
         self._field_widgets[key] = info
 

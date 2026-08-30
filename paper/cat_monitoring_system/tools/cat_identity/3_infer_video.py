@@ -45,6 +45,10 @@ import os as _os
 _env = _os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env:
     SOURCE = [_env]
+# identity_trainer_window.py「用影片測試所選模型」會設這個，指定要測哪一個 .pt
+_env_model = _os.getenv("IDENTITY_MODEL_PATH_OVERRIDE", "").strip()
+if _env_model:
+    IDENTITY_MODEL_PATH = _env_model
 
 # ── 身分判定 ──
 CONFIDENCE_THRESHOLD = 0.80    # 平滑前的單幀 softmax 最高值低於此 → 該幀判 Unknown
@@ -169,7 +173,12 @@ def load_identity_model(device):
         transforms.ToTensor(),
         transforms.Normalize(mean, std),
     ])
-    print(f"身分模型：{class_names}  image_size={image_size}  (val_acc={ckpt.get('val_acc')})")
+    # 權重檔自帶的顯示別名（2_train.py 由 CAT_IDENTITY_TARGET_DISPLAY_NAME 寫入）
+    # 覆蓋上面寫死的 DISPLAY_NAMES，讓疊框 / CSV 顯示自訂英文名
+    for _k, _v in (ckpt.get("display_names") or {}).items():
+        if _v:
+            DISPLAY_NAMES[_k] = _v
+    print(f"身分模型：{class_names}  image_size={image_size}  (val_acc={ckpt.get('val_acc')})  顯示名={DISPLAY_NAMES}")
     return model, class_names, image_size, transform
 
 

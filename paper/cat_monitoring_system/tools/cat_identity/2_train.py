@@ -98,6 +98,20 @@ CONFIDENCE_THRESHOLD = 0.80    # 最高 softmax 低於此值 → 輸出 "Unknown
 # 留空 = 用 MODEL_DIR/latest.pt；要指定某次訓練就填該 run 資料夾裡的 <流水號>.pt 路徑
 PREDICT_MODEL_PATH = r""
 
+# ── 環境變數覆蓋（給 identity_trainer_window.py 這類 GUI 用；命令列直接跑就不會設）──
+#   CAT_IDENTITY_DATASET_PATH        → 覆蓋 DATASET_PATH（GUI 每隻貓有各自的資料集資料夾）
+#   CAT_IDENTITY_EPOCHS              → 覆蓋 EPOCHS（訓練強度快速/標準/完整）
+#   CAT_IDENTITY_TARGET_DISPLAY_NAME → 目標貓的英文顯示別名，寫進權重檔的 display_names，
+#                                      供推論疊框 / CSV 顯示（不影響內部類別名「目標貓/他貓」）
+import os as _os_env
+_env_dataset = _os_env.getenv("CAT_IDENTITY_DATASET_PATH", "").strip()
+if _env_dataset:
+    DATASET_PATH = _env_dataset
+_env_epochs = _os_env.getenv("CAT_IDENTITY_EPOCHS", "").strip()
+if _env_epochs.isdigit() and int(_env_epochs) > 0:
+    EPOCHS = int(_env_epochs)
+TARGET_DISPLAY_NAME = _os_env.getenv("CAT_IDENTITY_TARGET_DISPLAY_NAME", "").strip() or "target"
+
 # ═══════════════════════════════════════════════════════════════
 
 import sys
@@ -259,7 +273,24 @@ def split_dataset(samples):
     if not (0 < val_plus_test < 1):
         raise ValueError("VALIDATION_RATIO + TEST_RATIO 必須介於 0 和 1 之間")
 
-    if SPLIT_MODE == "group":
+    mode = SPLIT_MODE
+    if mode == "group":
+        groups = np.array([group_key_from_path(p) for p in paths])
+        per_class_groups = {
+            int(l): len(set(groups[labels == l].tolist())) for l in np.unique(labels)
+        }
+        # 影片層級切分要「同一支影片不同時進 train 和 test」，所以每一類至少要有 2 支
+        # 來源影片才切得動；只有 1 支時 GroupShuffleSplit 會直接報錯。
+        if min(per_class_groups.values(), default=0) < 2:
+            print(
+                f"⚠ 影片層級切分(group)需要每類至少 2 支來源影片，目前各類影片數 = {per_class_groups}。\n"
+                f"   → 自動改用影格層級切分(image)。注意：同一支影片的相鄰影格會同時落在\n"
+                f"     train / val / test，測試準確率會偏高、不代表真實泛化能力。\n"
+                f"     多拍幾支「不同時段 / 不同場景」的影片再重新訓練即可獲得可信的評估。"
+            )
+            mode = "image"
+
+    if mode == "group":
         groups = np.array([group_key_from_path(p) for p in paths])
         gss1 = GroupShuffleSplit(n_splits=1, test_size=val_plus_test, random_state=RANDOM_SEED)
         train_idx, hold_idx = next(gss1.split(idx, labels, groups))
@@ -267,7 +298,7 @@ def split_dataset(samples):
         gss2 = GroupShuffleSplit(n_splits=1, test_size=rel_test, random_state=RANDOM_SEED)
         val_rel, test_rel = next(gss2.split(hold_idx, labels[hold_idx], groups[hold_idx]))
         val_idx, test_idx = hold_idx[val_rel], hold_idx[test_rel]
-    elif SPLIT_MODE == "image":
+    elif mode == "image":
         train_idx, hold_idx = train_test_split(
             idx, test_size=val_plus_test, random_state=RANDOM_SEED, stratify=labels,
         )
@@ -475,6 +506,8 @@ def train_main():
             "norm_std": IMAGENET_STD,
             "epoch": epoch,
             "val_acc": va_acc,
+            # 顯示別名（僅供疊框 / CSV 顯示；內部類別名仍是「目標貓 / 他貓」）
+            "display_names": {"目標貓": TARGET_DISPLAY_NAME, "他貓": "other"},
         }
 
         if va_acc > best_val_acc:
@@ -516,6 +549,7 @@ def train_main():
     total_seconds = time.perf_counter() - t_start
     (run_dir / "run_meta.json").write_text(json.dumps({
         "run_id": run_id, "serial": serial,
+        "target_display_name": TARGET_DISPLAY_NAME,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "total_seconds": round(total_seconds, 1),
         "total_time": format_hms(total_seconds),

@@ -25,6 +25,16 @@ from pathlib import Path
 from tkinter import messagebox
 
 
+def any_running(*managers):
+    """回傳第一個 is_running 的 ProcessManager（沒有就回 None）。
+    設定視窗與身分訓練視窗各自有一顆 ProcessManager，啟動前用這個互相檢查，
+    避免 main.py 與 CNN 訓練同時搶 GPU/VRAM。傳入的 None 會被略過。"""
+    for m in managers:
+        if m is not None and m.is_running:
+            return m
+    return None
+
+
 class ProcessManager:
     def __init__(self, window, on_state_change):
         self.window = window
@@ -164,6 +174,50 @@ class ProcessManager:
         self.console.append(f"— {script_file.name} 已啟動（PID {self.process.pid}） —\n", tag="muted")
         self.console.start_log_reader(self.process, self.active_label)
         self._bring_child_window_to_front(self.process)
+
+    def start_tool_quiet(self, script_path, extra_env=None, label=None, clear_console=True):
+        """跟 start_tool 一樣啟動一支獨立腳本，但**不彈任何確認/完成對話框**——
+        給「多步驟串接」的呼叫端用（例如 identity_trainer_window.py 的
+        建立資料集→訓練 兩段式流程，確認訊息由呼叫端自己統一出一次就好）。
+        回傳 (ok: bool, error: str|None)；ok=False 且 error=None 代表「已有行程在跑」。
+        clear_console=False 時不清空終端機（串接的第二步想保留第一步的輸出）。
+        """
+        script_file = Path(script_path)
+        if self.is_running:
+            return (False, None)
+        if not script_file.exists():
+            return (False, f"找不到檔案：{script_path}")
+        try:
+            child_env = os.environ.copy()
+            child_env["PYTHONIOENCODING"] = "utf-8"
+            child_env["PYTHONUTF8"] = "1"
+            if extra_env:
+                child_env.update({k: str(v) for k, v in extra_env.items()})
+            popen_kwargs = {
+                "cwd": str(script_file.parent),
+                "env": child_env,
+                "stdin": subprocess.PIPE,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "text": True,
+                "encoding": "utf-8",
+                "errors": "replace",
+                "bufsize": 1,
+            }
+            if os.name == "nt":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            self.process = subprocess.Popen([sys.executable, str(script_file)], **popen_kwargs)
+        except OSError as e:
+            return (False, f"啟動失敗：{e}")
+        self.active_label = label or script_file.name
+        self.active_kind = "tool"
+        self.on_state_change()
+        if clear_console:
+            self.console.clear()
+        self.console.append(f"— {self.active_label} 已啟動（PID {self.process.pid}） —\n", tag="muted")
+        self.console.start_log_reader(self.process, self.active_label)
+        self._bring_child_window_to_front(self.process)
+        return (True, None)
 
     # ── 關閉 ─────────────────────────────────────────────────────────
 

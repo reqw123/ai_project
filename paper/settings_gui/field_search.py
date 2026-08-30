@@ -48,6 +48,8 @@ class FieldSearchBar:
 
         matches_by_tab: dict[str, list[str]] = {}
         for field in FIELD_SCHEMA:
+            if field.get("hidden"):
+                continue  # 隱藏欄位不在任何分頁顯示，搜尋也不該指到它
             haystack = f"{field['label']} {field['json_key']} {field.get('env_var') or ''}".lower()
             if query in haystack:
                 matches_by_tab.setdefault(field["tab"], []).append(field["json_key"])

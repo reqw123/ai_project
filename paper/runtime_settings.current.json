@@ -2,7 +2,7 @@
   "model_paths": {
     "yolo_model": "C:\\ai_project\\yolo_models\\v11s_147.pt",
     "stgcn_model": "C:\\ai_project\\stgcn_models\\run_122_xy_conf_v_bone_att_on\\122_best_model.pth",
-    "video_input": "D:/shake/shake/7月7日 (5)(5).mp4",
+    "video_input": "D:/多貓影片/貓咪顏色比對影片/2026-07-18 10_18_54_0(1).mp4",
     "log_dir": "./logs",
     "output_dir": "./output"
   },
@@ -70,7 +70,7 @@
   },
   "cat_identity": {
     "cat_id": "cat_001",
-    "enable_identity_verification": false,
+    "enable_identity_verification": true,
     "identity_model_path": "C:\\ai_project\\identity_models\\latest.pt",
     "target_cat_class": "目標貓"
   },

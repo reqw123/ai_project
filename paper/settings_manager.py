@@ -318,6 +318,7 @@ FIELD_SCHEMA = [
         "json_key": "cat_identity.cat_id", "env_var": "CAT_MONITORING_CAT_ID",
         "attr": ("CatIdentityConfig", "CAT_ID"), "tab": "貓咪身份驗證",
         "label": "貓咪 ID", "value_type": "str", "validate": "str",
+        "hint": "用來標記這隻貓的健康紀錄（CSV / 資料庫），與辨識模型無關。",
     },
     {
         "json_key": "cat_identity.enable_identity_verification", "env_var": "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION",
@@ -329,11 +330,16 @@ FIELD_SCHEMA = [
         "attr": ("CatIdentityConfig", "IDENTITY_MODEL_PATH"), "tab": "貓咪身份驗證",
         "label": "身分辨識 CNN 模型檔", "value_type": "file", "validate": "optional_file_warn",
         "browse_filter": ("身分辨識 CNN 模型", "*.pt"),
+        "readonly": True,
+        "hint": "唯讀。由下方「選擇 / 訓練身分認證模型」視窗按「設為監控系統使用的模型」時同步更新。",
     },
     {
+        # 目標類別名稱固定＝「目標貓」（資料集資料夾名寫死），填錯會讓身分驗證靜默停用，
+        # 所以不在分頁 UI 顯示、由訓練視窗自動寫入；值仍保留在 config / json 中。
         "json_key": "cat_identity.target_cat_class", "env_var": "CAT_MONITORING_TARGET_CAT_CLASS",
         "attr": ("CatIdentityConfig", "TARGET_CAT_CLASS"), "tab": "貓咪身份驗證",
         "label": "目標貓類別名稱（對應模型 class_names）", "value_type": "str", "validate": "str",
+        "hidden": True,
     },
     # ── 日誌、CSV、資料庫與輸出路徑 ────────────────────────────────────
     {

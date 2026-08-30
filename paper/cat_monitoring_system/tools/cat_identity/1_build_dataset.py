@@ -89,6 +89,10 @@ if _env_target:
     CLASS_VIDEO_DIRS["目標貓"] = [_env_target]
 if _env_other:
     CLASS_VIDEO_DIRS["他貓"] = [_env_other]
+# 有指定「單一類別」的來源（GUI 給每隻貓各自的資料夾就是走這條）→ 強制進階模式，
+# 不再用 INPUT_ROOT（否則寫死的 INPUT_ROOT 預設值會蓋掉 GUI 選的資料夾）。
+if _env_target or _env_other:
+    INPUT_ROOT = ""
 
 # 輸出根目錄。底下會是：
 #   <OUTPUT_ROOT>/crops/目標貓/*.jpg     bbox 裁切圖
@@ -120,6 +124,17 @@ MIN_SHARPNESS = 60.0         # 品質關卡 ④：裁切區域 Laplacian 變異�
 RESUME_SKIP_DONE_VIDEOS = True   # True：輸出目錄已有某支影片的裁切圖，就整支跳過
 
 SUPPORTED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".m4v", ".mpg", ".mpeg", ".webm"}
+
+# 環境變數覆蓋（給 identity_trainer_window.py 這類 GUI 用）：
+#   CAT_IDENTITY_OUTPUT_ROOT         → 覆蓋 OUTPUT_ROOT（GUI 讓每隻貓有各自的資料集資料夾，
+#                                      避免「換一隻貓重訓」時新舊裁切圖混在同一個 crops/ 裡）
+#   CAT_IDENTITY_MAX_CROPS_PER_CLASS → 覆蓋 MAX_CROPS_PER_CLASS（訓練強度＝快速時壓低取樣數）
+_env_output_root = os.getenv("CAT_IDENTITY_OUTPUT_ROOT", "").strip()
+if _env_output_root:
+    OUTPUT_ROOT = Path(_env_output_root)
+_env_maxcrop = os.getenv("CAT_IDENTITY_MAX_CROPS_PER_CLASS", "").strip()
+if _env_maxcrop.isdigit() and int(_env_maxcrop) > 0:
+    MAX_CROPS_PER_CLASS = int(_env_maxcrop)
 # ═══════════════════════════════════════════════════════
 
 
