@@ -64,13 +64,10 @@ DATASETS_DIR = _PAPER_DIR / "cat_monitoring_system" / "tools" / "train_data" / "
 
 _FONT_FAMILY = "Microsoft JhengHei"
 
-# 訓練強度 → 傳給子行程的環境變數（標準＝不覆蓋，用腳本自己的預設）
-INTENSITY_ENV = {
-    "快速": {"CAT_IDENTITY_EPOCHS": "20", "CAT_IDENTITY_MAX_CROPS_PER_CLASS": "800"},
-    "標準": {},
-    "完整": {"CAT_IDENTITY_EPOCHS": "80", "CAT_IDENTITY_MAX_CROPS_PER_CLASS": "5000"},
-}
-DEFAULT_EPOCHS = 60   # 對應 2_train.py 的 EPOCHS 預設值（「標準」強度沒覆蓋時用這個）
+# 訓練一律用 2_train.py / 1_build_dataset.py 自己的預設值（不再由 GUI 提供「訓練強度」
+# 選項）：epoch 上限交給 2_train.py 的 EARLY_STOPPING_PATIENCE 收斂就停，取樣張數用
+# 1_build_dataset.py 的 MAX_CROPS_PER_CLASS 預設。這裡只留一個常數給進度條估總 epoch 用。
+DEFAULT_EPOCHS = 60   # 對應 2_train.py 的 EPOCHS 預設值（進度估算用，非硬性上限）
 
 NAME_MAX_LEN = 10
 _NAME_OK_RE = re.compile(r"^[A-Za-z0-9 _-]{1,%d}$" % NAME_MAX_LEN)
@@ -290,7 +287,6 @@ class IdentityTrainerWindow(tk.Toplevel):
         self._other_dir_var = tk.StringVar()
         self._dir_status = {}         # var 物件 -> 該行的狀態 Label
         self._name_var = tk.StringVar(value="mimi")
-        self._intensity_var = tk.StringVar(value="標準")
         self._rebuild_var = tk.BooleanVar(value=False)
         self._model_var = tk.StringVar()
         self._model_map = {}          # 顯示字串 -> .pt Path
@@ -359,14 +355,11 @@ class IdentityTrainerWindow(tk.Toplevel):
         s2.pack(fill="x", pady=(0, SPACE_SM))
         irow = tk.Frame(s2, bg="#f4f6f8")
         irow.pack(fill="x", pady=3)
-        tk.Label(irow, text="訓練強度", bg="#f4f6f8", width=20, anchor="w",
+        tk.Label(irow, text="資料集", bg="#f4f6f8", width=20, anchor="w",
                  font=self._font_hint).pack(side="left")
-        for name in ("標準", "快速", "完整"):
-            tk.Radiobutton(irow, text=name, value=name, variable=self._intensity_var,
-                           bg="#f4f6f8", font=self._font_hint).pack(side="left", padx=4)
         tk.Checkbutton(irow, text="清掉這隻貓的舊裁切圖重建（不勾＝在既有資料上累積）",
                        variable=self._rebuild_var, bg="#f4f6f8",
-                       font=self._font_hint).pack(side="left", padx=(16, 0))
+                       font=self._font_hint).pack(side="left")
 
         brow = tk.Frame(s2, bg="#f4f6f8")
         brow.pack(fill="x", pady=(6, 3))
@@ -809,7 +802,6 @@ class IdentityTrainerWindow(tk.Toplevel):
         dataset_dir = self._dataset_dir()
         exists = (dataset_dir / "crops").is_dir() and any((dataset_dir / "crops").rglob("*.jpg"))
 
-        intensity = self._intensity_var.get()
         mode_line = (
             f"  0. 清掉「{dataset_dir.name}」既有裁切圖後重建\n" if (exists and self._rebuild_var.get())
             else (f"  0. 在「{dataset_dir.name}」既有裁切圖上累積\n" if exists
@@ -820,7 +812,7 @@ class IdentityTrainerWindow(tk.Toplevel):
             f"即將依序執行：\n"
             f"{mode_line}"
             f"  1. 建立資料集（YOLO 逐幀抽裁切圖）\n"
-            f"  2. 訓練身分 CNN（顯示名：{display_name}，訓練強度：{intensity}）\n\n"
+            f"  2. 訓練身分 CNN（顯示名：{display_name}）\n\n"
             f"整個過程可能數分鐘到數十分鐘，過程中請勿啟動 main.py。是否開始？",
             parent=self,
         ):
@@ -838,22 +830,17 @@ class IdentityTrainerWindow(tk.Toplevel):
             (dataset_dir / "_manifest.csv").unlink(missing_ok=True)
 
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        intensity_env = INTENSITY_ENV.get(intensity, {})
         build_env = {
             "TEST_VIDEO_PATH_TARGET": target_dir,
             "TEST_VIDEO_PATH_OTHER": other_dir,
             "CAT_IDENTITY_OUTPUT_ROOT": str(dataset_dir),
         }
-        if "CAT_IDENTITY_MAX_CROPS_PER_CLASS" in intensity_env:
-            build_env["CAT_IDENTITY_MAX_CROPS_PER_CLASS"] = intensity_env["CAT_IDENTITY_MAX_CROPS_PER_CLASS"]
         self._pending_train_env = {
             "CAT_IDENTITY_TARGET_DISPLAY_NAME": display_name,
             "CAT_IDENTITY_DATASET_PATH": str(dataset_dir / "crops"),
         }
-        if "CAT_IDENTITY_EPOCHS" in intensity_env:
-            self._pending_train_env["CAT_IDENTITY_EPOCHS"] = intensity_env["CAT_IDENTITY_EPOCHS"]
-        # 預估 epoch 上限：強度有覆蓋就用覆蓋值，否則用 2_train.py 的預設
-        self._pending_total_epochs = int(intensity_env.get("CAT_IDENTITY_EPOCHS", DEFAULT_EPOCHS))
+        # 進度條估總 epoch 用：2_train.py 的 EPOCHS 預設（實際多半會提早 early stop）
+        self._pending_total_epochs = DEFAULT_EPOCHS
 
         self._chain = ["build", "train"]
         self._chain_idx = 0
@@ -1130,6 +1117,22 @@ class IdentityTrainerWindow(tk.Toplevel):
     def _selected_model_path(self):
         return self._model_map.get(self._model_var.get())
 
+    def _selected_model_display_name(self, pt):
+        """所選模型的自訂顯示名稱（訓練時的 CAT_IDENTITY_TARGET_DISPLAY_NAME）：
+        優先用 _refresh_models() 已載入的 run_meta，缺了再直接讀 run_meta.json。
+        兩者都拿不到就回傳空字串。"""
+        meta = (getattr(self, "_model_meta", {}) or {}).get(self._model_var.get()) or {}
+        name = str(meta.get("target_display_name") or "").strip()
+        if not name:
+            mp = pt.parent / "run_meta.json"
+            if mp.exists():
+                try:
+                    name = str(json.loads(mp.read_text(encoding="utf-8"))
+                               .get("target_display_name") or "").strip()
+                except (OSError, ValueError):
+                    name = ""
+        return name
+
     def _on_test_model(self):
         if self._busy_guard():
             return
@@ -1180,6 +1183,10 @@ class IdentityTrainerWindow(tk.Toplevel):
         data.setdefault("cat_identity", {})
         data["cat_identity"]["identity_model_path"] = str(LATEST_MODEL_PATH)
         data["cat_identity"]["target_cat_class"] = "目標貓"
+        # 「貓咪 ID」（設定視窗那個唯讀欄位）跟著這個模型的自訂名稱走
+        disp_name = self._selected_model_display_name(pt)
+        if disp_name:
+            data["cat_identity"]["cat_id"] = disp_name
         ok, errors, warnings = settings_manager.save_runtime_settings(data)
         if not ok:
             messagebox.showerror("寫入設定失敗", "runtime_settings.current.json 驗證未通過：\n" + "\n".join(errors), parent=self)
@@ -1195,10 +1202,11 @@ class IdentityTrainerWindow(tk.Toplevel):
 
         enabled = bool(data.get("cat_identity", {}).get("enable_identity_verification"))
         extra = "" if enabled else "\n\n⚠ 目前「啟用身分驗證」是關閉的，記得到設定視窗打開才會生效。"
+        note = f"\n\n設定視窗的「貓咪 ID」已同步為「{disp_name}」。" if disp_name else ""
         messagebox.showinfo(
             "已套用",
             f"已把這個模型設為監控系統使用的模型：\n{self._model_var.get()}\n\n"
-            f"（已複製成 latest.pt，下次啟動 main.py 生效）{extra}",
+            f"（已複製成 latest.pt，下次啟動 main.py 生效）{note}{extra}",
             parent=self,
         )
 

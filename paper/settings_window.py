@@ -804,11 +804,16 @@ class SettingsWindow(tk.Tk):
         self._identity_trainer_win = IdentityTrainerWindow(self)
 
     def _sync_identity_model_field(self):
-        """身分訓練視窗按「設為監控系統使用的模型」後呼叫：把唯讀的「身分辨識 CNN
-        模型檔」欄位重新讀成剛寫進 runtime_settings.current.json 的值。"""
+        """身分訓練視窗按「設為監控系統使用的模型」後呼叫：把幾個唯讀欄位（身分辨識
+        CNN 模型檔、目標貓類別名稱、貓咪 ID）重新讀成剛寫進
+        runtime_settings.current.json 的值。"""
         settings_manager.reload_runtime_settings()
         for f in FIELD_SCHEMA:
-            if f["json_key"] in ("cat_identity.identity_model_path", "cat_identity.target_cat_class"):
+            if f["json_key"] in (
+                "cat_identity.identity_model_path",
+                "cat_identity.target_cat_class",
+                "cat_identity.cat_id",
+            ):
                 value, source = self._resolve_field_display(f)
                 self._set_field_value(f["json_key"], value)
                 self._apply_source(f["json_key"], source)
@@ -1469,7 +1474,15 @@ class SettingsWindow(tk.Tk):
             info["var"] = var
         elif vt in ("int", "float", "str"):
             var = tk.StringVar()
-            tk.Entry(control, textvariable=var, font=self._font_label).pack(side="left", fill="x", expand=True)
+            if field.get("readonly"):
+                # 唯讀顯示：值看得到、可反白複製，但不能手打（見 cat_identity.cat_id「貓咪 ID」：
+                # 跟著身分訓練視窗選定的模型自訂名稱自動寫入）。
+                tk.Entry(
+                    control, textvariable=var, font=self._font_label, state="readonly",
+                    readonlybackground="#eef1f4", fg=COLOR_HINT_FG,
+                ).pack(side="left", fill="x", expand=True)
+            else:
+                tk.Entry(control, textvariable=var, font=self._font_label).pack(side="left", fill="x", expand=True)
             info["var"] = var
         elif vt == "hhmm":
             # 遮罩式時間輸入：時、分各一個 width=2 的小輸入框，中間夾一個「:」Label。

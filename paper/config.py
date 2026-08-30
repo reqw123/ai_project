@@ -925,8 +925,7 @@ class BehaviorTrackingConfig:
 # ==================== 貓咪身分（單一貓咪，固定 ID） ====================
 class CatIdentityConfig:
     """
-    個體化基線的前提是「同一份紀錄都來自同一隻貓」；CAT_ID 把這個假設明確
-    標記在每一筆 log／基線資料上。
+    個體化基線的前提是「同一份紀錄都來自同一隻貓」。
 
     ENABLE_IDENTITY_VERIFICATION 是身分驗證（多貓辨識）的總開關，補上這個
     假設原本沒有強制檢查的部分——見 detectors/identity_verifier.py。跟
@@ -950,6 +949,11 @@ class CatIdentityConfig:
     路徑），不會產生任何行為紀錄，也不會計入 Node-RED 的 today_stats。
     """
 
+    # 貓咪 ID：只被 logutils/csv_logger.py 原樣寫進兩個 CSV 每一列的最後一欄，用來標記
+    # 「這些紀錄都來自同一隻貓」。不影響身分驗證判斷、統計、基線，多天歷史 DB 也不含此欄。
+    # 設定視窗「貓咪身份驗證」分頁、唯讀：identity_trainer_window.py 按「設為監控系統
+    # 使用的模型」時，連同 identity_model_path 一起把所選模型的自訂顯示名稱
+    # （run_meta.json 的 target_display_name）寫進 runtime_settings。
     CAT_ID = _env_str(
         "CAT_MONITORING_CAT_ID", _runtime_default("cat_identity.cat_id", "cat_001", value_type=str)
     )
@@ -1215,7 +1219,7 @@ def get_config_summary() -> str:
       - 低活動 walk 門檻      : {BehaviorTrackingConfig.LOW_ACTIVITY_TIME_THRESHOLD_SECONDS} s
 
     🐱 貓咪身分與身分驗證
-      - CAT_ID                    : {CatIdentityConfig.CAT_ID}
+      - 貓咪 ID                   : {CatIdentityConfig.CAT_ID}  （唯讀，跟隨採用的身分模型自訂名稱；只寫進 CSV 每列最後一欄當篩選標記）
       - 身分驗證總開關（多貓過濾）: {CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION}  （False=偵測到的貓一律視為目標貓，不做身分過濾）
       - 身分辨識 CNN 模型檔       : {CatIdentityConfig.IDENTITY_MODEL_PATH}
       - 目標貓類別名稱           : {CatIdentityConfig.TARGET_CAT_CLASS}  （對應模型 class_names；其餘類別/未知都視為非目標貓）

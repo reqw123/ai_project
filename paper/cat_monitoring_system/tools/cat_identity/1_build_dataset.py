@@ -128,7 +128,7 @@ SUPPORTED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".m4v", ".mpg", 
 # 環境變數覆蓋（給 identity_trainer_window.py 這類 GUI 用）：
 #   CAT_IDENTITY_OUTPUT_ROOT         → 覆蓋 OUTPUT_ROOT（GUI 讓每隻貓有各自的資料集資料夾，
 #                                      避免「換一隻貓重訓」時新舊裁切圖混在同一個 crops/ 裡）
-#   CAT_IDENTITY_MAX_CROPS_PER_CLASS → 覆蓋 MAX_CROPS_PER_CLASS（訓練強度＝快速時壓低取樣數）
+#   CAT_IDENTITY_MAX_CROPS_PER_CLASS → 覆蓋 MAX_CROPS_PER_CLASS（進階手動調；GUI 不再設，用預設）
 _env_output_root = os.getenv("CAT_IDENTITY_OUTPUT_ROOT", "").strip()
 if _env_output_root:
     OUTPUT_ROOT = Path(_env_output_root)

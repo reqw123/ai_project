@@ -315,10 +315,17 @@ FIELD_SCHEMA = [
     },
     # ── 貓咪身份驗證 ─────────────────────────────────────────────────
     {
+        # 唯讀：值跟著身分訓練視窗「設為監控系統使用的模型」時所選模型的自訂顯示名稱
+        # （run_meta.json 的 target_display_name）自動寫入，不在這裡手打。只被
+        # logutils/csv_logger.py 原樣寫進兩個 CSV 每一列的最後一欄，用來標記
+        # 「這些紀錄都來自同一隻貓」；不是身分驗證的判斷輸入。
         "json_key": "cat_identity.cat_id", "env_var": "CAT_MONITORING_CAT_ID",
         "attr": ("CatIdentityConfig", "CAT_ID"), "tab": "貓咪身份驗證",
         "label": "貓咪 ID", "value_type": "str", "validate": "str",
-        "hint": "用來標記這隻貓的健康紀錄（CSV / 資料庫），與辨識模型無關。",
+        "readonly": True,
+        "hint": "唯讀。跟著下方「選擇 / 訓練身分認證模型」視窗按「設為監控系統使用的模型」時所選"
+                "模型的自訂名稱自動更新。只寫進行為 / 健康紀錄 CSV 每一列的最後一欄當篩選標記，"
+                "不是身分驗證的判斷輸入（那由下面的模型檔決定）。",
     },
     {
         "json_key": "cat_identity.enable_identity_verification", "env_var": "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION",

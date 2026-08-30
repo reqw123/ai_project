@@ -100,7 +100,7 @@ PREDICT_MODEL_PATH = r""
 
 # ── 環境變數覆蓋（給 identity_trainer_window.py 這類 GUI 用；命令列直接跑就不會設）──
 #   CAT_IDENTITY_DATASET_PATH        → 覆蓋 DATASET_PATH（GUI 每隻貓有各自的資料集資料夾）
-#   CAT_IDENTITY_EPOCHS              → 覆蓋 EPOCHS（訓練強度快速/標準/完整）
+#   CAT_IDENTITY_EPOCHS              → 覆蓋 EPOCHS 上限（進階手動調；GUI 不再設，交給 early stop）
 #   CAT_IDENTITY_TARGET_DISPLAY_NAME → 目標貓的英文顯示別名，寫進權重檔的 display_names，
 #                                      供推論疊框 / CSV 顯示（不影響內部類別名「目標貓/他貓」）
 import os as _os_env
