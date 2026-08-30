@@ -982,6 +982,17 @@ class CatIdentityConfig:
         _runtime_default("cat_identity.target_cat_class", "目標貓", value_type=str),
     )
 
+    # 進入「過濾非目標貓」狀態的遲滯幀數：CNN 平滑後必須連續這麼多幀都明確判定為
+    # 「某個非目標類別」（不含「未知」），才真的開始把該貓從統計中過濾，避免單次
+    # 誤判就切斷行為追蹤。判為「未知」（低信心）時維持現狀、不累計也不切斷。
+    # 目標貓重新出現（平滑後判定為 TARGET_CAT_CLASS）時立即恢復計入。
+    IDENTITY_FILTER_HYSTERESIS_FRAMES = _env_int(
+        "CAT_MONITORING_IDENTITY_FILTER_HYSTERESIS_FRAMES",
+        _runtime_default(
+            "cat_identity.identity_filter_hysteresis_frames", 4, value_type=int
+        ),
+    )
+
 
 # ==================== CSV 日誌參數 ====================
 class LoggingConfig:

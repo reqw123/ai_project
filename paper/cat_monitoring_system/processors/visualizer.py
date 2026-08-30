@@ -489,8 +489,12 @@ class Visualizer:
         show_info=True,
         show_skeleton=True,
         show_bbox=True,
+        bbox_color=COLOR_HEAD,
     ):
-        """繪製骨架、bbox、行為標籤與機率條等完整疊圖，回傳處理後的畫面。"""
+        """繪製骨架、bbox、行為標籤與機率條等完整疊圖，回傳處理後的畫面。
+
+        bbox_color：bbox 內框顏色（外框固定黑色）。預設 COLOR_HEAD（青色，目標貓）；
+        身分驗證判為非目標貓時由呼叫端傳 COLOR_BBOX_NONTARGET（灰色）以資區分。"""
         if show_skeleton:
             for edge_idx, (i, j) in enumerate(EAR_DISTANCE_SKELETON_EDGES):
                 if i >= len(kpts) or j >= len(kpts):
@@ -548,7 +552,7 @@ class Visualizer:
             outer_w = 4
             inner_w = 2
             cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, outer_w, cv2.LINE_AA)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, inner_w, cv2.LINE_AA)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), bbox_color, inner_w, cv2.LINE_AA)
             label = f"{conf:.2f}"
             cv2.putText(
                 frame,

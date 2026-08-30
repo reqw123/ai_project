@@ -71,6 +71,7 @@
   "cat_identity": {
     "cat_id": "cat_001",
     "enable_identity_verification": false,
+    "identity_filter_hysteresis_frames": 4,
     "identity_model_path": "C:\\ai_project\\identity_models\\latest.pt",
     "target_cat_class": "目標貓"
   },

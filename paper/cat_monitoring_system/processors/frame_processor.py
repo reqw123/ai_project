@@ -232,9 +232,13 @@ class FrameProcessor:
         # FrameProcessor 其餘功能——跟 SQA 同一套 fail-safe 慣例。
         self.identity_verifier = None
         # 只在「開始過濾非目標貓」／「目標貓恢復」這兩個狀態轉換的瞬間印
-        # console 訊息，不逐幀印——身分驗證是純統計過濾閘門，不會在 Node-RED
-        # 串流畫面上多畫框，這是唯一能即時確認它有沒有在運作的方式。
+        # console 訊息，不逐幀印。被過濾的那幀畫面上仍會畫出偵測到的骨架 + bbox
+        # + 一個灰色「NOT COUNTED」小標（見 process() / _draw_not_counted_tag），
+        # 讓使用者能區分「有貓但不是目標貓」與「真的沒偵測到貓」。
         self._identity_filtering_active = False
+        # 平滑後連續判為「非目標類別」（不含「未知」）的幀數，達到
+        # CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES 才真的開始過濾。
+        self._identity_nontarget_streak = 0
         if CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION and _IdentityVerifier is not None:
             try:
                 self.identity_verifier = _IdentityVerifier(
@@ -338,13 +342,20 @@ class FrameProcessor:
 
         kpts, kpt_conf, bbox, conf = self.keypoint_detector.detect(frame)
 
-        # 身分驗證（多貓辨識）：只驗證這一幀 YOLO 剛偵測到的貓，不驗證下面
-        # 消失容忍期間沿用的舊姿態（那是同一隻已經驗證過的貓在之前幀留下的
-        # 姿態，沒有新 bbox 可以重新驗證，也不需要）。判定不是目標貓時，把
-        # kpts 視為 None——後續完全比照「這一幀 YOLO 沒偵測到貓」處理，會
-        # 走既有的貓咪消失容忍/NOT_VISIBLE 路徑，不產生行為紀錄、不計入
-        # Node-RED 統計，等同把目標貓以外的貓完全忽略。fail-safe：驗證本身
-        # 出錯不擋掉這一幀，回退成原本「偵測到的貓一律視為目標貓」的行為。
+        # 身分驗證（多貓辨識）：只驗證這一幀 YOLO 剛偵測到的貓，不驗證下面消失
+        # 容忍期間沿用的舊姿態（同一隻已驗證過的貓留下的姿態，沒有新 bbox 可重驗）。
+        #
+        # 「畫」與「計入統計」拆開處理：
+        #   - 計入統計：只有 CNN 平滑後連續 IDENTITY_FILTER_HYSTERESIS_FRAMES 幀
+        #     明確判為某個非目標類別，才把 kpts 視為 None——之後完全比照「這一幀
+        #     沒偵測到貓」，走既有的 NOT_VISIBLE 路徑，不產生行為紀錄、不推
+        #     Node-RED。判為「未知」（低信心）維持現狀，不累計遲滯也不切斷。
+        #     目標貓平滑後重新出現則立即恢復計入。
+        #   - 畫：被過濾的那幀仍把偵測到的骨架 + bbox 畫出來（見 process() 尾端），
+        #     只在 bbox 旁加灰色「NOT COUNTED」標記，避免畫面整個空掉。
+        # fail-safe：驗證本身出錯不擋掉這一幀，回退成「偵測到的貓一律視為目標貓」。
+        identity_filtered_now = False
+        det_kpts, det_kpt_conf, det_bbox, det_conf = kpts, kpt_conf, bbox, conf
         if kpts is not None and self.identity_verifier is not None:
             try:
                 is_target_cat, match_key, match_score = self.identity_verifier.verify(
@@ -353,28 +364,48 @@ class FrameProcessor:
             except Exception:
                 is_target_cat, match_key, match_score = True, None, None
 
-            # 純視覺提示，跟下面的統計判斷（kpts=None）互相獨立：非目標貓的
-            # 情況下 Visualizer.draw() 完全不會被呼叫（kpts=None 會跳過整個
-            # 疊圖區塊），沒有這個小徽章的話畫面上什麼都不會畫，看起來就像
-            # 「什麼都沒偵測到」，沒辦法跟真的沒貓做視覺區分。
-            if self.overlay:
-                self._draw_identity_badge(frame, bbox, is_target_cat, match_key, match_score)
-
-            if not is_target_cat:
-                if not self._identity_filtering_active:
+            _hyst = max(1, CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES)
+            if is_target_cat:
+                # 目標貓平滑後重新出現：立即恢復計入
+                self._identity_nontarget_streak = 0
+                if self._identity_filtering_active:
+                    self._identity_filtering_active = False
+                    print("✓ 身分驗證：目標貓重新出現，恢復計入統計")
+            elif match_key is not None:  # 平滑後明確判為某個非目標類別（非「未知」）
+                self._identity_nontarget_streak = min(
+                    self._identity_nontarget_streak + 1, _hyst
+                )
+                if (
+                    not self._identity_filtering_active
+                    and self._identity_nontarget_streak >= _hyst
+                ):
                     self._identity_filtering_active = True
-                    _score_str = f"{match_score:.3f}" if match_score is not None else "N/A"
+                    _score_str = (
+                        f"{match_score:.3f}" if match_score is not None else "N/A"
+                    )
                     print(
-                        f"🚫 身分驗證：畫面中的貓判定為「{match_key or '未知'}」"
+                        f"🚫 身分驗證：畫面中的貓連續 {_hyst} 幀判定為「{match_key}」"
                         f"（信心={_score_str}），非目標貓，本幀起已從統計中過濾"
                     )
+            else:  # match_key is None：未知 / 低信心
+                # 「未知不切斷」：沒在過濾時，未知不累計遲滯、不啟動過濾（維持計入）。
+                # 已在過濾時，未知讓遲滯計數往回退，連續退到 0 就恢復計入——只有 CNN
+                # 「持續明確」看到另一隻貓才維持過濾，一旦轉為不確定就把好處讓給目標貓。
+                if self._identity_filtering_active:
+                    self._identity_nontarget_streak -= 1
+                    if self._identity_nontarget_streak <= 0:
+                        self._identity_nontarget_streak = 0
+                        self._identity_filtering_active = False
+                        print("✓ 身分驗證：已無明確的非目標貓判定，恢復計入統計")
+
+            if self._identity_filtering_active:
                 kpts = None
-            elif self._identity_filtering_active:
-                self._identity_filtering_active = False
-                print("✓ 身分驗證：目標貓重新出現，恢復計入統計")
+                identity_filtered_now = True
 
         # 貓咪偵測消失容忍：連續漏偵測沒超過門檻前，沿用最後一次偵測到的姿態，
-        # 避免單幀 YOLO 漏偵測就整個中斷分類/顯示（見 config.py 說明）
+        # 避免單幀 YOLO 漏偵測就整個中斷分類/顯示（見 config.py 說明）。
+        # identity_filtered_now 時不沿用：畫面裡確定是另一隻貓，不該拿目標貓的
+        # 舊姿態來橋接。
         if kpts is not None:
             self._cat_missing_streak = 0
             self._last_known_kpts = kpts.copy()
@@ -382,7 +413,8 @@ class FrameProcessor:
             self._last_known_bbox = bbox
             self._last_known_bbox_conf = conf
         elif (
-            self._cat_missing_streak
+            not identity_filtered_now
+            and self._cat_missing_streak
             < BehaviorTrackingConfig.CAT_MISSING_TOLERANCE_FRAMES
             and self._last_known_kpts is not None
         ):
@@ -615,6 +647,26 @@ class FrameProcessor:
                 self.nodered.send_data(self._build_nodered_payload(NOT_VISIBLE_ID, 0.0))
                 self.last_send_time = now
 
+        # 身分驗證過濾掉的非目標貓：統計已比照「無目標貓」跑完（上面 else 分支），
+        # 這裡把該幀偵測到的骨架 + bbox 補畫回去 + 一個灰色「NOT COUNTED」標記，
+        # 讓使用者知道「有偵測到貓，只是不是目標貓、沒計入」，而不是畫面空白。
+        if self.overlay and identity_filtered_now and det_kpts is not None:
+            frame = self.visualizer.draw(
+                frame,
+                det_kpts,
+                det_kpt_conf,
+                det_bbox,
+                det_conf,
+                NOT_VISIBLE_ID,
+                0.0,
+                [0.0] * STGCNConfig.NUM_CLASSES,
+                show_skeleton=self.show_skeleton,
+                show_info=False,
+                show_bbox=self.show_bbox,
+                bbox_color=COLOR_BBOX_NONTARGET,
+            )
+            self._draw_not_counted_tag(frame, det_bbox)
+
         return (
             frame,
             self._display_behavior_id,
@@ -655,39 +707,22 @@ class FrameProcessor:
                     except Exception:
                         pass
 
-    def _draw_identity_badge(self, frame, bbox, is_target, match_key, match_score):
-        """身分驗證結果的獨立視覺提示，跟 Visualizer.draw() 完全分開畫。
-
-        非目標貓的情況下 kpts 會被設成 None，process() 後段整個疊圖區塊
-        （包含 Visualizer.draw()）都不會執行，畫面上等於「什麼都沒畫」，
-        跟真的沒偵測到貓沒有視覺差異。這裡固定在 bbox 位置畫一個小徽章
-        （目標貓=綠色/其他=橘色），兩種狀態都畫，只讀不改 kpts/bbox，
-        不影響任何統計或分類邏輯。標籤用 ASCII（OpenCV putText 不支援中文，
-        中文類別名寫死顯示成方框），中文全名走 console 訊息。"""
+    def _draw_not_counted_tag(self, frame, bbox):
+        """身分驗證判定為非目標貓、已從統計過濾的那幀：骨架與 bbox 由
+        Visualizer.draw() 照常畫（見 process() 尾端），這裡只在 bbox 左上角補一個
+        灰色「NOT COUNTED」小標，跟 Visualizer 的行為標籤區分開，讓使用者知道
+        「有貓但不是目標貓、沒計入統計」。putText 不支援中文，用 ASCII；中文說明
+        走 console 訊息。只讀不改 kpts/bbox，不影響任何統計或分類邏輯。"""
         if bbox is None:
             return
         h, w = frame.shape[:2]
-        x1, y1, x2, y2 = (int(v) for v in bbox)
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(w - 1, x2), min(h - 1, y2)
-        if x2 <= x1 or y2 <= y1:
-            return
-
-        if is_target:
-            color = (0, 200, 0)
-            label = "ID: target"
-        else:
-            color = (0, 128, 255)
-            who = "unknown" if match_key is None else "other-cat"
-            label = f"ID: {who} (filtered)"
-        if match_score is not None:
-            label += f" conf={match_score:.2f}"
-
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        text_y = y1 - 10 if y1 - 10 > 10 else y2 + 20
+        x1, y1 = int(bbox[0]), int(bbox[1])
+        x1 = max(0, min(x1, w - 1))
+        y1 = max(0, min(y1, h - 1))
+        text_y = y1 - 8 if y1 - 8 > 14 else y1 + 20
         cv2.putText(
-            frame, label, (x1, text_y),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA,
+            frame, "NOT COUNTED (non-target cat)", (x1, text_y),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_BBOX_NONTARGET, 2, cv2.LINE_AA,
         )
 
     def _update_display_hysteresis(

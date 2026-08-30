@@ -333,6 +333,13 @@ FIELD_SCHEMA = [
         "label": "啟用身份驗證", "value_type": "bool", "validate": "bool",
     },
     {
+        "json_key": "cat_identity.identity_filter_hysteresis_frames", "env_var": "CAT_MONITORING_IDENTITY_FILTER_HYSTERESIS_FRAMES",
+        "attr": ("CatIdentityConfig", "IDENTITY_FILTER_HYSTERESIS_FRAMES"), "tab": "貓咪身份驗證",
+        "label": "開始過濾非目標貓的遲滯幀數", "value_type": "int", "validate": "positive_int",
+        "hint": "CNN 平滑後需連續這麼多幀明確判定為非目標貓，才真的開始過濾統計；判為「未知」時維持"
+                "現狀。設太小容易因單次誤判切斷行為追蹤，設太大則非目標貓剛入鏡時會多算幾幀。",
+    },
+    {
         "json_key": "cat_identity.identity_model_path", "env_var": "CAT_MONITORING_IDENTITY_MODEL_PATH",
         "attr": ("CatIdentityConfig", "IDENTITY_MODEL_PATH"), "tab": "貓咪身份驗證",
         "label": "身分辨識 CNN 模型檔", "value_type": "file", "validate": "optional_file_warn",
