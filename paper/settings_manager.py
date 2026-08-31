@@ -323,9 +323,7 @@ FIELD_SCHEMA = [
         "attr": ("CatIdentityConfig", "CAT_ID"), "tab": "貓咪身份驗證",
         "label": "貓咪 ID", "value_type": "str", "validate": "str",
         "readonly": True,
-        "hint": "唯讀。跟著下方「選擇 / 訓練身分認證模型」視窗按「設為監控系統使用的模型」時所選"
-                "模型的自訂名稱自動更新。只寫進行為 / 健康紀錄 CSV 每一列的最後一欄當篩選標記，"
-                "不是身分驗證的判斷輸入（那由下面的模型檔決定）。",
+        "hint": "唯讀，跟隨採用的身分模型自訂名稱；僅作 CSV 紀錄標記，不影響辨識。",
     },
     {
         "json_key": "cat_identity.enable_identity_verification", "env_var": "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION",
@@ -335,9 +333,14 @@ FIELD_SCHEMA = [
     {
         "json_key": "cat_identity.identity_filter_hysteresis_frames", "env_var": "CAT_MONITORING_IDENTITY_FILTER_HYSTERESIS_FRAMES",
         "attr": ("CatIdentityConfig", "IDENTITY_FILTER_HYSTERESIS_FRAMES"), "tab": "貓咪身份驗證",
-        "label": "開始過濾非目標貓的遲滯幀數", "value_type": "int", "validate": "positive_int",
-        "hint": "CNN 平滑後需連續這麼多幀明確判定為非目標貓，才真的開始過濾統計；判為「未知」時維持"
-                "現狀。設太小容易因單次誤判切斷行為追蹤，設太大則非目標貓剛入鏡時會多算幾幀。",
+        "label": "目標貓遲滯幀數", "value_type": "int", "validate": "positive_int",
+        "hint": "追蹤中的貓連續這麼多幀被明確判為他貓才停止計入；未知不算，貓離開畫面則立即停。",
+    },
+    {
+        "json_key": "cat_identity.identity_conf_threshold", "env_var": "CAT_MONITORING_IDENTITY_CONF_THRESHOLD",
+        "attr": ("CatIdentityConfig", "IDENTITY_CONF_THRESHOLD"), "tab": "貓咪身份驗證",
+        "label": "單幀信心門檻", "value_type": "float", "validate": "unit_interval",
+        "hint": "0–1。單幀 CNN 最高信心低於此即判「未知」不投票。高＝保守，低＝易誤判。預設 0.80。",
     },
     {
         "json_key": "cat_identity.identity_model_path", "env_var": "CAT_MONITORING_IDENTITY_MODEL_PATH",
@@ -345,7 +348,7 @@ FIELD_SCHEMA = [
         "label": "身分辨識 CNN 模型檔", "value_type": "file", "validate": "optional_file_warn",
         "browse_filter": ("身分辨識 CNN 模型", "*.pt"),
         "readonly": True,
-        "hint": "唯讀。由下方「選擇 / 訓練身分認證模型」視窗按「設為監控系統使用的模型」時同步更新。",
+        "hint": "唯讀。由下方訓練視窗「設為監控系統使用的模型」時更新。",
     },
     {
         # 目標類別名稱固定＝「目標貓」（資料集資料夾名寫死），填錯會讓身分驗證靜默停用，
@@ -406,6 +409,14 @@ FIELD_SCHEMA = [
         "json_key": "visualization.show_gcn_result", "env_var": "CAT_MONITORING_SHOW_GCN_RESULT",
         "attr": ("VisualizationConfig", "SHOW_GCN_RESULT"), "tab": "視覺化與串流顯示",
         "label": "顯示 GCN 分類結果（啟動預設）", "value_type": "bool", "validate": "bool",
+    },
+    {
+        "json_key": "visualization.show_non_target_cats", "env_var": "CAT_MONITORING_SHOW_NON_TARGET_CATS",
+        "attr": ("VisualizationConfig", "SHOW_NON_TARGET_CATS"), "tab": "視覺化與串流顯示",
+        "label": "多貓時畫出非目標貓", "value_type": "bool", "validate": "bool",
+        "hint": "畫面同時有多隻貓時，非目標貓也用灰框 + 灰骨架畫出來（只畫、不進行為分類 / "
+                "統計 / 個體化基線）。關閉＝只畫被選中的那一隻。身分驗證關閉時「目標貓」＝"
+                "信心最高 / IoU 追蹤延續的那隻。",
     },
     # ── 進階設定：Node-RED 端點覆寫（預設由 HOST/PORT 推導） ──────────────
     {

@@ -231,13 +231,14 @@ class FrameProcessor:
         # 失敗（模組被刪除/基準檔不存在或損毀）只會停用這一層、不影響
         # FrameProcessor 其餘功能——跟 SQA 同一套 fail-safe 慣例。
         self.identity_verifier = None
-        # 只在「開始過濾非目標貓」／「目標貓恢復」這兩個狀態轉換的瞬間印
-        # console 訊息，不逐幀印。被過濾的那幀畫面上仍會畫出偵測到的骨架 + bbox
-        # + 一個灰色「NOT COUNTED」小標（見 process() / _draw_not_counted_tag），
-        # 讓使用者能區分「有貓但不是目標貓」與「真的沒偵測到貓」。
+        # 多貓同框時只有「目標貓」進入行為分類 / tracker / CSV / Node-RED / 基線，
+        # 非目標貓由 process() 用灰框灰骨架畫出來（VisualizationConfig.
+        # SHOW_NON_TARGET_CATS）。_identity_filtering_active＝這一幀畫面裡找不到
+        # 目標貓（都判為他貓 / 都低於信心門檻），只在此狀態轉換的瞬間印 console。
         self._identity_filtering_active = False
-        # 平滑後連續判為「非目標類別」（不含「未知」）的幀數，達到
-        # CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES 才真的開始過濾。
+        # 追蹤中的貓被 CNN「明確」判為非目標類別的連續幀數；達到
+        # CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES 才真的放掉目標貓。
+        # 目標貓 / 分不清（未知）都會把它歸零。
         self._identity_nontarget_streak = 0
         if CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION and _IdentityVerifier is not None:
             try:
@@ -245,6 +246,7 @@ class FrameProcessor:
                     model_path=CatIdentityConfig.IDENTITY_MODEL_PATH,
                     target_class=CatIdentityConfig.TARGET_CAT_CLASS,
                     device=device,
+                    conf_threshold=CatIdentityConfig.IDENTITY_CONF_THRESHOLD,
                 )
                 print(
                     f"✓ 身分驗證已啟用（CNN）：只有判定為「{CatIdentityConfig.TARGET_CAT_CLASS}」"
@@ -292,6 +294,10 @@ class FrameProcessor:
         self._last_known_kpt_conf = None
         self._last_known_bbox = None
         self._last_known_bbox_conf = None
+        # 多貓同框 + 身分驗證時，上一幀鎖定的「目標貓」bbox；用來在多個實例都
+        # 像目標貓時挑最接近的那個，避免在長相相近的貓之間跳（見
+        # _select_target_instance()）。
+        self._last_target_bbox = None
 
         # 顯示層 hysteresis：overlay/Node-RED「目前行為」需連續多個分類視窗判
         # 同一類才切換，過濾單一視窗瞬間誤判造成的畫面閃爍；tracker/CSV/
@@ -340,67 +346,63 @@ class FrameProcessor:
         current_time = time.time()
         self.prev_time = current_time
 
-        kpts, kpt_conf, bbox, conf = self.keypoint_detector.detect(frame)
+        kpts, kpt_conf, bbox, conf, all_instances = self.keypoint_detector.detect(
+            frame, return_all_instances=True
+        )
 
-        # 身分驗證（多貓辨識）：只驗證這一幀 YOLO 剛偵測到的貓，不驗證下面消失
-        # 容忍期間沿用的舊姿態（同一隻已驗證過的貓留下的姿態，沒有新 bbox 可重驗）。
-        #
-        # 「畫」與「計入統計」拆開處理：
-        #   - 計入統計：只有 CNN 平滑後連續 IDENTITY_FILTER_HYSTERESIS_FRAMES 幀
-        #     明確判為某個非目標類別，才把 kpts 視為 None——之後完全比照「這一幀
-        #     沒偵測到貓」，走既有的 NOT_VISIBLE 路徑，不產生行為紀錄、不推
-        #     Node-RED。判為「未知」（低信心）維持現狀，不累計遲滯也不切斷。
-        #     目標貓平滑後重新出現則立即恢復計入。
-        #   - 畫：被過濾的那幀仍把偵測到的骨架 + bbox 畫出來（見 process() 尾端），
-        #     只在 bbox 旁加灰色「NOT COUNTED」標記，避免畫面整個空掉。
-        # fail-safe：驗證本身出錯不擋掉這一幀，回退成「偵測到的貓一律視為目標貓」。
+        # ── 多貓同框：決定「目標貓」是哪個實例，其餘放 other_instances 畫灰框 ──
+        # 目標貓＝唯一進入行為分類 / tracker / CSV / Node-RED / 個體化基線的那隻。
+        #   - 身分驗證開啟：見 _select_target_instance()——追蹤中用 bbox IoU 延續
+        #     同一隻貓（不管 CNN 這一幀信心），只有「該位置附近沒有貓」或「CNN
+        #     連續 hyst 幀明確判為他貓」才放掉；分不清一律當目標貓。
+        #   - 身分驗證關閉：沿用 detect() 用信心 / IoU 追蹤選出的 primary。
+        # identity_filtered_now：身分驗證開啟、但這一幀找不到目標貓 → 走
+        #   NOT_VISIBLE 統計路徑，且下面的消失容忍不沿用舊姿態。
+        other_instances = []
         identity_filtered_now = False
-        det_kpts, det_kpt_conf, det_bbox, det_conf = kpts, kpt_conf, bbox, conf
-        if kpts is not None and self.identity_verifier is not None:
+        if all_instances and self.identity_verifier is not None:
             try:
-                is_target_cat, match_key, match_score = self.identity_verifier.verify(
-                    frame, bbox
-                )
+                (
+                    kpts,
+                    kpt_conf,
+                    bbox,
+                    conf,
+                    other_instances,
+                ) = self._select_target_instance(frame, all_instances)
+                identity_filtered_now = kpts is None
             except Exception:
-                is_target_cat, match_key, match_score = True, None, None
+                # fail-safe：挑選出錯不擋掉這一幀，回退成 detect() 的 primary
+                other_instances = []
+        elif all_instances:
+            # 身分驗證關閉：primary（detect 已用信心/IoU 選好）進統計，其餘畫灰框
+            other_instances = [
+                inst
+                for inst in all_instances
+                if inst[2] is None
+                or bbox is None
+                or not np.array_equal(inst[2], bbox)
+            ]
 
-            _hyst = max(1, CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES)
-            if is_target_cat:
-                # 目標貓平滑後重新出現：立即恢復計入
-                self._identity_nontarget_streak = 0
-                if self._identity_filtering_active:
-                    self._identity_filtering_active = False
-                    print("✓ 身分驗證：目標貓重新出現，恢復計入統計")
-            elif match_key is not None:  # 平滑後明確判為某個非目標類別（非「未知」）
-                self._identity_nontarget_streak = min(
-                    self._identity_nontarget_streak + 1, _hyst
+        # 非目標貓：灰框 + 灰骨架畫出來（只畫、不進任何統計）。畫在目標貓 overlay
+        # 之前，讓目標貓的青框骨架蓋在最上層。
+        if (
+            self.overlay
+            and VisualizationConfig.SHOW_NON_TARGET_CATS
+            and other_instances
+        ):
+            for _oki, _okci, _obi, _obci in other_instances:
+                if _oki is None:
+                    continue
+                frame = self.visualizer.draw(
+                    frame, _oki, _okci, _obi, _obci,
+                    NOT_VISIBLE_ID, 0.0, [0.0] * STGCNConfig.NUM_CLASSES,
+                    show_skeleton=self.show_skeleton,
+                    show_info=False,
+                    show_bbox=self.show_bbox,
+                    bbox_color=COLOR_BBOX_NONTARGET,
+                    skeleton_color=COLOR_BBOX_NONTARGET,
+                    draw_face_overlay=False,
                 )
-                if (
-                    not self._identity_filtering_active
-                    and self._identity_nontarget_streak >= _hyst
-                ):
-                    self._identity_filtering_active = True
-                    _score_str = (
-                        f"{match_score:.3f}" if match_score is not None else "N/A"
-                    )
-                    print(
-                        f"🚫 身分驗證：畫面中的貓連續 {_hyst} 幀判定為「{match_key}」"
-                        f"（信心={_score_str}），非目標貓，本幀起已從統計中過濾"
-                    )
-            else:  # match_key is None：未知 / 低信心
-                # 「未知不切斷」：沒在過濾時，未知不累計遲滯、不啟動過濾（維持計入）。
-                # 已在過濾時，未知讓遲滯計數往回退，連續退到 0 就恢復計入——只有 CNN
-                # 「持續明確」看到另一隻貓才維持過濾，一旦轉為不確定就把好處讓給目標貓。
-                if self._identity_filtering_active:
-                    self._identity_nontarget_streak -= 1
-                    if self._identity_nontarget_streak <= 0:
-                        self._identity_nontarget_streak = 0
-                        self._identity_filtering_active = False
-                        print("✓ 身分驗證：已無明確的非目標貓判定，恢復計入統計")
-
-            if self._identity_filtering_active:
-                kpts = None
-                identity_filtered_now = True
 
         # 貓咪偵測消失容忍：連續漏偵測沒超過門檻前，沿用最後一次偵測到的姿態，
         # 避免單幀 YOLO 漏偵測就整個中斷分類/顯示（見 config.py 說明）。
@@ -647,26 +649,6 @@ class FrameProcessor:
                 self.nodered.send_data(self._build_nodered_payload(NOT_VISIBLE_ID, 0.0))
                 self.last_send_time = now
 
-        # 身分驗證過濾掉的非目標貓：統計已比照「無目標貓」跑完（上面 else 分支），
-        # 這裡把該幀偵測到的骨架 + bbox 補畫回去 + 一個灰色「NOT COUNTED」標記，
-        # 讓使用者知道「有偵測到貓，只是不是目標貓、沒計入」，而不是畫面空白。
-        if self.overlay and identity_filtered_now and det_kpts is not None:
-            frame = self.visualizer.draw(
-                frame,
-                det_kpts,
-                det_kpt_conf,
-                det_bbox,
-                det_conf,
-                NOT_VISIBLE_ID,
-                0.0,
-                [0.0] * STGCNConfig.NUM_CLASSES,
-                show_skeleton=self.show_skeleton,
-                show_info=False,
-                show_bbox=self.show_bbox,
-                bbox_color=COLOR_BBOX_NONTARGET,
-            )
-            self._draw_not_counted_tag(frame, det_bbox)
-
         return (
             frame,
             self._display_behavior_id,
@@ -707,23 +689,117 @@ class FrameProcessor:
                     except Exception:
                         pass
 
-    def _draw_not_counted_tag(self, frame, bbox):
-        """身分驗證判定為非目標貓、已從統計過濾的那幀：骨架與 bbox 由
-        Visualizer.draw() 照常畫（見 process() 尾端），這裡只在 bbox 左上角補一個
-        灰色「NOT COUNTED」小標，跟 Visualizer 的行為標籤區分開，讓使用者知道
-        「有貓但不是目標貓、沒計入統計」。putText 不支援中文，用 ASCII；中文說明
-        走 console 訊息。只讀不改 kpts/bbox，不影響任何統計或分類邏輯。"""
-        if bbox is None:
-            return
-        h, w = frame.shape[:2]
-        x1, y1 = int(bbox[0]), int(bbox[1])
-        x1 = max(0, min(x1, w - 1))
-        y1 = max(0, min(y1, h - 1))
-        text_y = y1 - 8 if y1 - 8 > 14 else y1 + 20
-        cv2.putText(
-            frame, "NOT COUNTED (non-target cat)", (x1, text_y),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_BBOX_NONTARGET, 2, cv2.LINE_AA,
-        )
+    # 追蹤中：這一幀某個實例的 bbox 與「上一幀鎖定的目標貓 bbox」IoU 需 ≥ 此值，
+    # 才算是同一隻貓的空間延續。低於此＝目標貓已離開原本位置（見 _select_target_instance
+    # 的「案 A」）。
+    _TARGET_TRACK_IOU_MIN = 0.1
+
+    def _select_target_instance(self, frame, all_instances):
+        """身分驗證開啟時，從這一幀所有偵測到的貓裡挑出「目標貓」的實例。
+
+        回傳 (kpts, kpt_conf, bbox, conf, other_instances)：
+          - 確立目標貓：前 4 個是該實例，other_instances 是其餘所有實例
+          - 沒有目標貓：前 4 個為 None，other_instances 是全部實例——呼叫端走
+            NOT_VISIBLE 統計路徑，但仍把每隻畫成灰框。
+
+        政策（依使用者定義）：
+          * 追蹤中（_last_target_bbox 有值）：優先用 bbox IoU 延續同一隻貓，
+            **不管 CNN 這一幀信心如何**。
+              - 案 A：這一幀該位置附近已經沒有貓 → 立即判定目標貓離開、停止計入
+                （不等遲滯）。
+              - CNN 平滑後「明確」判定追蹤中的貓是某個非目標類別 → 連續
+                IDENTITY_FILTER_HYSTERESIS_FRAMES 幀才真的放掉。
+              - 目標貓 / 「分不清」（未知）→ 一律視為目標貓，繼續計入。
+          * 冷啟動（沒有在追蹤）：1 隻貓 → 當目標貓（除非 CNN 明確判為他貓）；
+            ≥2 隻貓 → 只有某隻明確過信心門檻才採用，都分不清就不計入。
+        """
+        verifier = self.identity_verifier
+        conf_thres = verifier.conf_threshold
+        hyst = max(1, CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES)
+        none_target = (None, None, None, None, list(all_instances))
+
+        scores = [
+            (
+                verifier.target_probability(frame, inst[2])
+                if inst[2] is not None
+                else -1.0
+            )
+            for inst in all_instances
+        ]
+        scores = [s if s is not None else -1.0 for s in scores]
+
+        cold_start = self._last_target_bbox is None
+        if not cold_start:
+            ious = [
+                KeypointDetector._iou(self._last_target_bbox, inst[2])
+                if inst[2] is not None
+                else 0.0
+                for inst in all_instances
+            ]
+            if ious and max(ious) >= self._TARGET_TRACK_IOU_MIN:
+                guess_i = int(np.argmax(ious))
+            else:
+                # 案 A：上一幀目標貓位置附近已經沒有貓 → 目標貓離開畫面，立即
+                # 停止計入（不等遲滯）。舊 bbox 作廢，之後要重新確立。
+                self._identity_nontarget_streak = 0
+                self._last_target_bbox = None
+                if not self._identity_filtering_active:
+                    self._identity_filtering_active = True
+                    print("🚫 身分驗證：目標貓已離開畫面，本幀起從統計中過濾")
+                return none_target
+        elif len(all_instances) == 1:
+            guess_i = 0
+        else:
+            bi = int(np.argmax(scores))
+            guess_i = bi if scores[bi] >= conf_thres else None
+
+        if guess_i is None:
+            # 冷啟動、多隻貓都分不清 → 這一幀不計入（都畫灰框）
+            return none_target
+
+        # 挑到的實例做跨幀平滑（維持 verify() 一幀一次呼叫的契約）
+        try:
+            is_target_cat, match_key, _s = verifier.verify(
+                frame, all_instances[guess_i][2]
+            )
+        except Exception:
+            is_target_cat, match_key = True, None
+        confident_other = (match_key is not None) and (not is_target_cat)
+
+        if confident_other and cold_start:
+            # 冷啟動、CNN 明確說這隻是他貓 → 不採用（保持不計入）
+            self._identity_nontarget_streak = 0
+            return none_target
+
+        if confident_other:
+            # 追蹤中的貓被 CNN 明確判為他貓 → 連續 hyst 幀才真的放掉
+            self._identity_nontarget_streak = min(
+                self._identity_nontarget_streak + 1, hyst
+            )
+            if (
+                not self._identity_filtering_active
+                and self._identity_nontarget_streak >= hyst
+            ):
+                self._identity_filtering_active = True
+                self._last_target_bbox = None
+                print(
+                    f"🚫 身分驗證：追蹤中的貓連續 {hyst} 幀被明確判定為"
+                    f"「{match_key}」，本幀起從統計中過濾"
+                )
+        else:
+            # 目標貓，或「分不清」（未知）→ 一律視為目標貓
+            self._identity_nontarget_streak = 0
+            if self._identity_filtering_active:
+                self._identity_filtering_active = False
+                print("✓ 身分驗證：目標貓（或無法區分）出現，恢復計入統計")
+
+        if self._identity_filtering_active:
+            return none_target
+
+        tgt = all_instances[guess_i]
+        self._last_target_bbox = tgt[2]
+        others = [inst for j, inst in enumerate(all_instances) if j != guess_i]
+        return tgt[0], tgt[1], tgt[2], tgt[3], others
 
     def _update_display_hysteresis(
         self, candidate_id, candidate_confidence, candidate_probs

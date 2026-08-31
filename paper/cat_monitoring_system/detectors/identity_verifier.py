@@ -48,11 +48,14 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 class IdentityVerifier:
     # 這幾個門檻沿用訓練/驗證時的設定；改之前先看 cat_identity/2_train.py 產出的
     # confusion_matrix.png / test_metrics.json 確認效果，不要憑感覺調。
-    CONF_THRESHOLD = 0.80          # 單幀 softmax 最高值低於此 → 該幀判「未知」
+    CONF_THRESHOLD = 0.80          # 單幀 softmax 最高值低於此 → 該幀判「未知」（預設；可由建構子覆蓋）
     CROP_PADDING_RATIO = 0.04      # bbox 往外擴的比例，須與 cat_identity/1_build_dataset.py 訓練時一致
     DEFAULT_SMOOTH_WINDOW = 5      # 取最近幾幀的原始判定做多數決
 
-    def __init__(self, model_path, target_class, device="cuda", smooth_window=None):
+    def __init__(
+        self, model_path, target_class, device="cuda", smooth_window=None,
+        conf_threshold=None,
+    ):
         """model_path 必須是 cat_identity/2_train.py 產出的有效權重檔（.pt），
         載入失敗會直接拋例外（FileNotFoundError / KeyError / RuntimeError 等），
         由呼叫端決定要不要整個停用這個模組。
@@ -60,6 +63,10 @@ class IdentityVerifier:
         target_class 是「目標貓」在權重檔 class_names 裡的名稱；不在裡面會
         拋 ValueError。其餘所有類別（含信心不足判為「未知」）都會被視為
         「不是目標貓」。
+
+        conf_threshold：單幀 softmax 信心門檻，None＝用 CONF_THRESHOLD 預設。
+        由 FrameProcessor 傳入 CatIdentityConfig.IDENTITY_CONF_THRESHOLD（可在
+        設定視窗調整）。
         """
         ckpt = torch.load(model_path, map_location="cpu", weights_only=False)
         self.class_names = list(ckpt["class_names"])
@@ -93,6 +100,12 @@ class IdentityVerifier:
         win = int(smooth_window) if smooth_window else self.DEFAULT_SMOOTH_WINDOW
         self._recent = deque(maxlen=max(1, win))
 
+        self.conf_threshold = (
+            float(conf_threshold)
+            if conf_threshold is not None
+            else self.CONF_THRESHOLD
+        )
+
     def _crop_bbox(self, frame, bbox):
         """依 bbox 裁切、往外擴 CROP_PADDING_RATIO 後夾在畫面內。回傳 BGR ndarray 或 None。
         與 tools/cat_identity/1_build_dataset.py 的 crop_bbox 邏輯一致（訓練資料同一套裁法）。"""
@@ -121,8 +134,26 @@ class IdentityVerifier:
         probs = torch.softmax(self.model(x), dim=1)[0].cpu().numpy()
         top_i = int(probs.argmax())
         top_p = float(probs[top_i])
-        pred = self.class_names[top_i] if top_p >= self.CONF_THRESHOLD else None
+        pred = self.class_names[top_i] if top_p >= self.conf_threshold else None
         return pred, top_p
+
+    @torch.no_grad()
+    def target_probability(self, frame, bbox):
+        """單一 bbox 是「目標貓」的 softmax 機率（0.0–1.0），裁切失敗回傳 None。
+
+        跟 verify() 不同：**不動平滑佇列**、不套用信心門檻，只回傳這一個 crop
+        當下的機率。多隻貓同框時 FrameProcessor 用它逐一評分、挑出最像目標貓的
+        那隻，再對挑到的那隻呼叫一次 verify() 做跨幀平滑（維持 verify() 一幀一次
+        呼叫的既有契約）。"""
+        crop = self._crop_bbox(frame, bbox)
+        if crop is None:
+            return None
+        rgb = crop[:, :, ::-1]  # BGR → RGB
+        x = self._transform(
+            Image.fromarray(np.ascontiguousarray(rgb))
+        ).unsqueeze(0).to(self.device)
+        probs = torch.softmax(self.model(x), dim=1)[0].cpu().numpy()
+        return float(probs[self.class_names.index(self.target_class)])
 
     def verify(self, frame, bbox):
         """判定這個 bbox 是不是目標貓。

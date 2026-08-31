@@ -733,6 +733,15 @@ class VisualizationConfig:
         _runtime_default("visualization.show_gcn_result", True, value_type=bool),
     )  # 是否顯示 ST-GCN 行為分類結果與機率條
 
+    # SHOW_NON_TARGET_CATS: True = 畫面中同時出現多隻貓時，非目標貓也用灰色
+    # bbox + 灰色骨架畫出來（只畫、不進行為分類 / tracker / CSV / Node-RED /
+    # 個體化基線）。身分驗證關閉時「目標貓」＝信心最高 / IoU 追蹤延續的那隻。
+    # 設為 False 則完全維持單貓行為（只畫被選中的那一隻）。
+    SHOW_NON_TARGET_CATS = _env_bool(
+        "CAT_MONITORING_SHOW_NON_TARGET_CATS",
+        _runtime_default("visualization.show_non_target_cats", True, value_type=bool),
+    )
+
 
 # ==================== 異常檢測參數 ====================
 class AnomalyDetectionConfig:
@@ -982,14 +991,27 @@ class CatIdentityConfig:
         _runtime_default("cat_identity.target_cat_class", "目標貓", value_type=str),
     )
 
-    # 進入「過濾非目標貓」狀態的遲滯幀數：CNN 平滑後必須連續這麼多幀都明確判定為
-    # 「某個非目標類別」（不含「未知」），才真的開始把該貓從統計中過濾，避免單次
-    # 誤判就切斷行為追蹤。判為「未知」（低信心）時維持現狀、不累計也不切斷。
-    # 目標貓重新出現（平滑後判定為 TARGET_CAT_CLASS）時立即恢復計入。
+    # 放掉「追蹤中的目標貓」的遲滯幀數：多貓場景下 FrameProcessor 用 bbox IoU
+    # 延續鎖定同一隻貓；當 CNN 平滑後「明確」判定這隻是某個非目標類別時，要連續
+    # 這麼多幀才真的把牠放掉、停止計入（期間仍畫青框、計入）。「分不清 / 未知」
+    # 一律視為目標貓、把遲滯計數歸零。目標貓移出畫面（原位置附近沒有貓）則不等
+    # 遲滯、立即停止。見 processors/frame_processor.py::_select_target_instance。
     IDENTITY_FILTER_HYSTERESIS_FRAMES = _env_int(
         "CAT_MONITORING_IDENTITY_FILTER_HYSTERESIS_FRAMES",
         _runtime_default(
             "cat_identity.identity_filter_hysteresis_frames", 4, value_type=int
+        ),
+    )
+
+    # 單幀身分分類的信心門檻（0–1）：CNN softmax 最高值低於此，該幀判「未知」、
+    # 不投票（見 detectors/identity_verifier.py::_classify）。多貓冷啟動挑目標貓時
+    # 也用它當「明確過門檻」的界線。調高＝更保守（更容易判未知、更依賴遲滯與
+    # 空間追蹤）；調低＝更敢下判斷、也更容易誤判。改之前先看 2_train.py 產出的
+    # confusion_matrix.png / test_metrics.json。預設 0.80。
+    IDENTITY_CONF_THRESHOLD = _env_float(
+        "CAT_MONITORING_IDENTITY_CONF_THRESHOLD",
+        _runtime_default(
+            "cat_identity.identity_conf_threshold", 0.80, value_type=float
         ),
     )
 
@@ -1200,6 +1222,7 @@ def get_config_summary() -> str:
       - 偵測框 bbox (啟動預設): {VisualizationConfig.SHOW_BBOX}  （執行期間可用鍵盤 b 切換(僅限 gui 模式)）
       - 骨架關鍵點 (啟動預設): {VisualizationConfig.SHOW_SKELETON}  （執行期間可用鍵盤 s 切換(僅限 gui 模式)）
       - GCN 分類結果+機率條 (啟動預設): {VisualizationConfig.SHOW_GCN_RESULT}  （執行期間可用鍵盤 l 切換(僅限 gui 模式)）
+      - 多貓時畫出非目標貓     : {VisualizationConfig.SHOW_NON_TARGET_CATS}  （灰框灰骨架，只畫不計入統計）
 
     🛑 靜止偵測（滾動均值閾值，純 CSV 記錄；單位 body_fraction×100）
       - 最大動作值        : {AnomalyDetectionConfig.MAX_MOTION}  （body_fraction×100；走路約 10-20）

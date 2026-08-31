@@ -72,6 +72,7 @@
     "cat_id": "cat_001",
     "enable_identity_verification": false,
     "identity_filter_hysteresis_frames": 4,
+    "identity_conf_threshold": 0.8,
     "identity_model_path": "C:\\ai_project\\identity_models\\latest.pt",
     "target_cat_class": "目標貓"
   },
@@ -87,7 +88,8 @@
     "show_nose_trapezoid": true,
     "show_bbox": true,
     "show_skeleton": true,
-    "show_gcn_result": true
+    "show_gcn_result": true,
+    "show_non_target_cats": true
   },
   "advanced": {
     "nodered_endpoint_notify": "http://127.0.0.1:1880/python_online",
