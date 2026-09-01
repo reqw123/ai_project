@@ -117,7 +117,7 @@ DISPLAY_SIZE = _DISPLAY_RESOLUTION_PRESETS[DISPLAY_RESOLUTION]  # 視窗顯示�
 LOOP_PLAYBACK = True  # 是否循環播放
 
 # ===== 關鍵點顯示門檻 =====
-DRAW_KP_CONF_THRESHOLD = 0.25  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
+DRAW_KPT_CONF_THRESHOLD = YOLO_CONF_THRESHOLD  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）；跟隨 YOLO_CONF_THRESHOLD
 SHOW_PROBABILITY_BARS = False  # 關閉機率條可減少每幀繪圖負載
 
 # ===== 按鍵狀態提示文字（畫面正上方短暫顯示後淡出）=====
@@ -493,7 +493,7 @@ def draw_test2_style_overlay(
     probs,
     visualizer,
     show_info=True,
-    conf_thresh=DRAW_KP_CONF_THRESHOLD,
+    kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD,
 ):
     """使用 test2.py 的骨架外觀，並沿用既有行為資訊 HUD。"""
     h, w = frame.shape[:2]
@@ -515,7 +515,7 @@ def draw_test2_style_overlay(
         if a >= _n_kp or b >= _n_kp:
             continue
         # 骨架線段：兩端關鍵點都要高於顯示門檻才畫
-        if float(kpt_conf[a]) > conf_thresh and float(kpt_conf[b]) > conf_thresh:
+        if float(kpt_conf[a]) > kpt_conf_thresh and float(kpt_conf[b]) > kpt_conf_thresh:
             pa = (int(kpts[a][0]), int(kpts[a][1]))
             pb = (int(kpts[b][0]), int(kpts[b][1]))
             col = _EDGE_COLORS[ei] if ei < len(_EDGE_COLORS) else (180, 180, 180)
@@ -523,7 +523,7 @@ def draw_test2_style_overlay(
 
     for i in range(min(17, len(kpts))):
         # 關鍵點圓點：該點信心高於顯示門檻才畫
-        if float(kpt_conf[i]) > conf_thresh:
+        if float(kpt_conf[i]) > kpt_conf_thresh:
             cx, cy = int(kpts[i][0]), int(kpts[i][1])
             col = _KP_COLORS[i] if i < len(_KP_COLORS) else (200, 200, 200)
             cv2.circle(frame, (cx, cy), kp_outer_radius, (0, 0, 0), -1)
@@ -587,12 +587,12 @@ DIMMED_TEXT_COLOR    = (130, 130, 130)   # 使用者手動隱藏的列，維持�
 PANEL_SCALE = 1.5  # 面板文字/圖示/關節環整體放大倍率
 
 
-def _compute_per_joint_motion(seq_xy, conf_seq, conf_threshold=0.3):
+def _compute_per_joint_motion(seq_xy, conf_seq, kpt_conf_threshold=0.5):
     """算這個 window 裡每個關節各自的平均逐幀位移量（跟 0_train_gcn.py 同一套定義），
     用來驅動標記顏色與面板數值——哪個關節動得多，數值就越大。"""
     diffs = seq_xy[1:] - seq_xy[:-1]
     dist = np.linalg.norm(diffs, axis=-1)
-    valid = (conf_seq[1:] > conf_threshold) & (conf_seq[:-1] > conf_threshold)
+    valid = (conf_seq[1:] > kpt_conf_threshold) & (conf_seq[:-1] > kpt_conf_threshold)
     out = np.full(dist.shape[1], np.nan, dtype=np.float64)
     for j in range(dist.shape[1]):
         if valid[:, j].any():
@@ -601,7 +601,7 @@ def _compute_per_joint_motion(seq_xy, conf_seq, conf_threshold=0.3):
 
 
 def draw_joint_highlight(frame, kpts, kpt_conf, joint_motion, behavior_id, row_visible, ui_scale,
-                          conf_thresh=DRAW_KP_CONF_THRESHOLD):
+                          kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD):
     """在鼻子＋左右耳＋四個腳掌畫小而清楚的細環標記（固定小半徑，不做大面積發光疊加），
     跟目前行為相關的關節用強調色、粗一點；其餘用高對比中性色、細一點。使用者在
     左上角面板把某個關節隱藏時，這裡也不畫，維持「隱藏」的一致性。"""
@@ -613,7 +613,7 @@ def draw_joint_highlight(frame, kpts, kpt_conf, joint_motion, behavior_id, row_v
     for j in ALWAYS_TRACKED_JOINTS:
         if not row_visible.get(j, True):
             continue
-        if j >= len(kpts) or j >= len(kpt_conf) or float(kpt_conf[j]) <= conf_thresh:
+        if j >= len(kpts) or j >= len(kpt_conf) or float(kpt_conf[j]) <= kpt_conf_thresh:
             continue
         cx, cy = int(kpts[j][0]), int(kpts[j][1])
         is_active = j in active
@@ -868,7 +868,7 @@ GRAPH_HIT_RADIUS_PX  = 14               # 點擊命中既有節點的判定半�
 
 
 def draw_graph_lab(frame, nodes, edges, selected, show_real_graph, kpts, kpt_conf, ui_scale,
-                    conf_thresh=DRAW_KP_CONF_THRESHOLD):
+                    kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD):
     """互動式圖形教學疊層。使用者點出來的節點/邊用綠色畫；開啟 [s] 後額外疊一份
     模型實際使用的骨架圖（洋紅色，17 個關鍵點固定連線）——兩者放在一起對照，
     直接示範「圖＝節點＋邊」，以及「你剛剛隨手畫的是任意圖，模型用的是固定
@@ -881,12 +881,12 @@ def draw_graph_lab(frame, nodes, edges, selected, show_real_graph, kpts, kpt_con
         for a, b in _SKELETON_EDGES:
             if a >= n_kp or b >= n_kp:
                 continue
-            if float(kpt_conf[a]) > conf_thresh and float(kpt_conf[b]) > conf_thresh:
+            if float(kpt_conf[a]) > kpt_conf_thresh and float(kpt_conf[b]) > kpt_conf_thresh:
                 pa = (int(kpts[a][0]), int(kpts[a][1]))
                 pb = (int(kpts[b][0]), int(kpts[b][1]))
                 cv2.line(frame, pa, pb, REAL_GRAPH_COLOR, edge_th, cv2.LINE_AA)
         for i in range(min(17, len(kpts))):
-            if float(kpt_conf[i]) > conf_thresh:
+            if float(kpt_conf[i]) > kpt_conf_thresh:
                 cx, cy = int(kpts[i][0]), int(kpts[i][1])
                 cv2.circle(frame, (cx, cy), node_r, REAL_GRAPH_COLOR, -1, cv2.LINE_AA)
                 cv2.circle(frame, (cx, cy), node_r, (0, 0, 0), 1, cv2.LINE_AA)
@@ -1160,7 +1160,7 @@ def main():
             YOLO_MODEL_PATH,
             device=INFERENCE_DEVICE,
             imgsz=YOLO_IMGSZ,
-            conf_thres=YOLO_CONF_THRESHOLD,
+            bbox_conf_thres=YOLO_CONF_THRESHOLD,
         )
     except Exception as e:
         print(f"❌ 無法載入 YOLO 模型（{YOLO_MODEL_PATH}）：{e}")

@@ -11,6 +11,7 @@ import numpy as np
 from config import AnomalyDetectionConfig as _AnomalyDetectionConfig
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
+from processors.overlay_helpers import compute_overlay_scale, draw_bbox_conf_label  # re-export
 from utils.constants import *
 from utils.helpers import get_behavior_name
 
@@ -555,22 +556,14 @@ class Visualizer:
 
         # 畫YOLO bbox/conf
         if show_bbox and bbox is not None and conf is not None:
+            h_frame, w_frame = frame.shape[:2]
+            ui = compute_overlay_scale(w_frame, h_frame)
             x1, y1, x2, y2 = map(int, bbox)
-            outer_w = 4
-            inner_w = 2
+            outer_w = max(3, int(round(4 * ui)))
+            inner_w = max(1, int(round(2 * ui)))
             cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, outer_w, cv2.LINE_AA)
             cv2.rectangle(frame, (x1, y1), (x2, y2), bbox_color, inner_w, cv2.LINE_AA)
-            label = f"{conf:.2f}"
-            cv2.putText(
-                frame,
-                label,
-                (x1, y1 - 8),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 0, 0),
-                2,
-                cv2.LINE_AA,
-            )
+            draw_bbox_conf_label(frame, x1, y1, bbox_color, f"{conf:.2f}", ui)
         # 顯示行為預測與信心值、四行為機率條
         if not show_info:
             return frame

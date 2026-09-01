@@ -19,10 +19,10 @@ def compute_ear_distance(kpts, kpt_conf) -> Tuple[float, float, bool, float, flo
     body_ear_ratio — body_scale / dist_px  (used by front-view guard)
     All numeric outputs are NaN when the corresponding keypoints are missing.
     """
-    left_ok = float(kpt_conf[_C.KP_LEFT_EAR]) >= _C.EAR_CONF_THRESHOLD
-    right_ok = float(kpt_conf[_C.KP_RIGHT_EAR]) >= _C.EAR_CONF_THRESHOLD
-    chest_ok = float(kpt_conf[_C.KP_CHEST]) >= _C.BODY_KP_CONF
-    hip_ok = float(kpt_conf[_C.KP_HIP]) >= _C.BODY_KP_CONF
+    left_ok = float(kpt_conf[_C.KP_LEFT_EAR]) >= _C.EAR_KPT_CONF_THRESHOLD
+    right_ok = float(kpt_conf[_C.KP_RIGHT_EAR]) >= _C.EAR_KPT_CONF_THRESHOLD
+    chest_ok = float(kpt_conf[_C.KP_CHEST]) >= _C.BODY_KPT_CONF_THRESHOLD
+    hip_ok = float(kpt_conf[_C.KP_HIP]) >= _C.BODY_KPT_CONF_THRESHOLD
 
     if left_ok and right_ok:
         left_pt = np.asarray(kpts[_C.KP_LEFT_EAR], dtype=np.float64)

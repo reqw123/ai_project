@@ -81,7 +81,7 @@ class TestConfOk:
 
     def test_confidence_exactly_at_threshold_is_not_ok(self):
         """比較用嚴格大於（>），恰好等於門檻視為不合格。"""
-        conf = [0.0, _C.CONF_THRESHOLD]
+        conf = [0.0, _C.KPT_CONF_THRESHOLD]
         assert _conf_ok(conf, 1) is False
 
     def test_confidence_below_threshold_is_not_ok(self):

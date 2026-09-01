@@ -107,8 +107,7 @@ OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
 MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
 TARGET_FPS = 30
 IMGSZ = 640
-CONF_THRESHOLD = 0.5
-KP_CONF_THRESHOLD = 0.5
+BBOX_CONF_THRESHOLD = 0.5
 
 # 永久排除清單：列出不想再被模式 1 重新提取的影片檔名（不含副檔名）
 # 範例：EXCLUDED_STEMS = {"lick_bad_001", "walk_noise_003"}
@@ -218,7 +217,7 @@ def process_all_videos():
     pose_extractor = PoseExtractor(
         model_path=MODEL_PATH,
         imgsz=IMGSZ,
-        conf_threshold=CONF_THRESHOLD
+        bbox_conf_threshold=BBOX_CONF_THRESHOLD
     )
 
     results_summary = []
@@ -248,8 +247,7 @@ def process_all_videos():
             "fps_compensated": True,    # frames 已經 resample_to_target_fps 補償到等距 target_fps 網格
             "model_used": MODEL_PATH,
             "imgsz": IMGSZ,
-            "conf_threshold": CONF_THRESHOLD,
-            "kp_conf_threshold": KP_CONF_THRESHOLD
+            "bbox_conf_threshold": BBOX_CONF_THRESHOLD,
         }
         save_skeleton_data(skeleton_data, output_path, video_metadata)
         detected_frames = sum(1 for f in skeleton_data if f['detected'])
@@ -322,7 +320,7 @@ def extract_test_set_skeletons():
     pose_extractor = PoseExtractor(
         model_path=MODEL_PATH,
         imgsz=IMGSZ,
-        conf_threshold=CONF_THRESHOLD
+        bbox_conf_threshold=BBOX_CONF_THRESHOLD
     )
 
     for idx, video_path in enumerate(todo_list, 1):
@@ -346,8 +344,7 @@ def extract_test_set_skeletons():
             "fps_compensated": True,
             "model_used": MODEL_PATH,
             "imgsz": IMGSZ,
-            "conf_threshold": CONF_THRESHOLD,
-            "kp_conf_threshold": KP_CONF_THRESHOLD,
+            "bbox_conf_threshold": BBOX_CONF_THRESHOLD,
         }
         save_skeleton_data(skeleton_data, output_path, video_metadata)
         print()
@@ -520,19 +517,19 @@ def resample_to_target_fps(skeleton_data, source_fps, target_fps, max_gap_frames
 class PoseExtractor:
     """Wrapper class for YOLO-Pose inference"""
     
-    def __init__(self, model_path, imgsz=640, conf_threshold=0.5):
+    def __init__(self, model_path, imgsz=640, bbox_conf_threshold=0.5):
         """
         Initialize the pose extractor
         
         Args:
             model_path: Path to YOLO-Pose model
             imgsz: Input image size
-            conf_threshold: Confidence threshold for detection
+            bbox_conf_threshold: Confidence threshold for detection
         """
         print(f"Loading YOLO-Pose model from {model_path}...")
         self.model = YOLO(model_path)
         self.imgsz = imgsz
-        self.conf_threshold = conf_threshold
+        self.bbox_conf_threshold = bbox_conf_threshold
         
         # Try to use GPU if available
         self.use_half = False
@@ -558,7 +555,7 @@ class PoseExtractor:
         results = self.model.predict(
             frame,
             imgsz=self.imgsz,
-            conf=self.conf_threshold,
+            conf=self.bbox_conf_threshold,
             quantize=16 if self.use_half else None,
             verbose=False
         )[0]
@@ -733,7 +730,7 @@ def process_single_video():
     pose_extractor = PoseExtractor(
         model_path=MODEL_PATH,
         imgsz=IMGSZ,
-        conf_threshold=CONF_THRESHOLD
+        bbox_conf_threshold=BBOX_CONF_THRESHOLD
     )
     video_id = Path(video_path).stem
     # 從資料夾名稱自動推斷標籤；若資料夾名非行為類別可事後手動修改 JSON
@@ -757,8 +754,7 @@ def process_single_video():
         "fps_compensated": True,
         "model_used": MODEL_PATH,
         "imgsz": IMGSZ,
-        "conf_threshold": CONF_THRESHOLD,
-        "kp_conf_threshold": KP_CONF_THRESHOLD
+        "bbox_conf_threshold": BBOX_CONF_THRESHOLD,
     }
     output_path = Path(OUTPUT_FOLDER) / f"{video_id}.json"
     save_skeleton_data(skeleton_data, output_path, video_metadata)
@@ -1745,7 +1741,7 @@ def reextract_preserve_labels(target_stems: set = None):
     pose_extractor = PoseExtractor(
         model_path=MODEL_PATH,
         imgsz=IMGSZ,
-        conf_threshold=CONF_THRESHOLD
+        bbox_conf_threshold=BBOX_CONF_THRESHOLD
     )
 
     for idx, video_path in enumerate(video_files, 1):
@@ -1814,8 +1810,7 @@ def reextract_preserve_labels(target_stems: set = None):
             "fps_compensated": True,
             "model_used": MODEL_PATH,
             "imgsz": IMGSZ,
-            "conf_threshold": CONF_THRESHOLD,
-            "kp_conf_threshold": KP_CONF_THRESHOLD
+            "bbox_conf_threshold": BBOX_CONF_THRESHOLD,
         }
         out_data = {
             "video_metadata": video_metadata,

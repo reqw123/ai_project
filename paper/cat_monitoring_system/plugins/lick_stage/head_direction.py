@@ -11,9 +11,9 @@ from plugins.lick_stage.config import LickConfig as _C
 
 def compute_head_ear_angle(kpts, kpt_conf) -> float:
     """Angle in degrees at nose between left-ear and right-ear vectors. NaN if unavailable."""
-    nose_ok = float(kpt_conf[_C.KP_NOSE]) >= _C.NOSE_CONF_THRESHOLD
-    left_ok = float(kpt_conf[_C.KP_LEFT_EAR]) >= _C.EAR_CONF_THRESHOLD
-    right_ok = float(kpt_conf[_C.KP_RIGHT_EAR]) >= _C.EAR_CONF_THRESHOLD
+    nose_ok = float(kpt_conf[_C.KP_NOSE]) >= _C.NOSE_KPT_CONF_THRESHOLD
+    left_ok = float(kpt_conf[_C.KP_LEFT_EAR]) >= _C.EAR_KPT_CONF_THRESHOLD
+    right_ok = float(kpt_conf[_C.KP_RIGHT_EAR]) >= _C.EAR_KPT_CONF_THRESHOLD
     if not (nose_ok and left_ok and right_ok):
         return float("nan")
     nose_pt = np.asarray(kpts[_C.KP_NOSE], dtype=np.float64)
@@ -160,8 +160,8 @@ def check_front_view_guard(kpt_conf, dist_px: float, body_ear_ratio: float) -> b
     """
     if not _C.FRONT_VIEW_GUARD_ENABLED:
         return False
-    left_ok = float(kpt_conf[_C.KP_LEFT_EAR]) >= _C.EAR_CONF_THRESHOLD
-    right_ok = float(kpt_conf[_C.KP_RIGHT_EAR]) >= _C.EAR_CONF_THRESHOLD
+    left_ok = float(kpt_conf[_C.KP_LEFT_EAR]) >= _C.EAR_KPT_CONF_THRESHOLD
+    right_ok = float(kpt_conf[_C.KP_RIGHT_EAR]) >= _C.EAR_KPT_CONF_THRESHOLD
     if not (left_ok and right_ok):
         return False
     if not math.isfinite(body_ear_ratio):

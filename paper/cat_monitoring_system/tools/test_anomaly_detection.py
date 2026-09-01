@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from detectors.keypoint_detector import KeypointDetector
 from processors.anomaly_detector import AnomalyDetector
+from processors.overlay_helpers import compute_overlay_scale, draw_bbox_conf_label
 from utils.constants import (
     EAR_DISTANCE_SKELETON_EDGES,
     EAR_DISTANCE_EDGE_COLORS,
@@ -195,11 +196,9 @@ def _draw_bbox(frame, bbox, conf):
     cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, 5, cv2.LINE_AA)
     cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, 3, cv2.LINE_AA)
     if conf is not None:
-        lbl = f"cat {conf:.2f}"
-        cv2.putText(frame, lbl, (x1, max(y1 - 10, BANNER_H + 18)),
-                    FONT_S, 0.60, BLACK, 3, cv2.LINE_AA)
-        cv2.putText(frame, lbl, (x1, max(y1 - 10, BANNER_H + 18)),
-                    FONT_S, 0.60, (255, 255, 255), 1, cv2.LINE_AA)
+        # 跟即時系統同一套 conf 標籤外觀（填色底 + 深色字，隨解析度縮放）
+        _ui = compute_overlay_scale(frame.shape[1], frame.shape[0])
+        draw_bbox_conf_label(frame, x1, max(y1, BANNER_H), COLOR_HEAD, f"cat {conf:.2f}", _ui)
 
 
 def _draw_top_banner(frame, is_still, motion, rolling_mean, frame_idx,
@@ -491,7 +490,7 @@ def main():
         return
 
     detector = KeypointDetector(YOLO_MODEL_PATH, device=DEVICE,
-                                imgsz=YOLO_IMGSZ, conf_thres=YOLO_CONF)
+                                imgsz=YOLO_IMGSZ, bbox_conf_thres=YOLO_CONF)
 
     if mode == "1":
         run_background(videos, detector)

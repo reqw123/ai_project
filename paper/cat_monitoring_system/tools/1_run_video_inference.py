@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from detectors.keypoint_detector import KeypointDetector
 from detectors.behavior_classifier import BehaviorClassifier
 from processors.visualizer import Visualizer
+from processors.overlay_helpers import draw_bbox_conf_label
 from models.stgcn_model import (
     interpolate_missing,
     flip_normalize,
@@ -138,8 +139,8 @@ RUN_MODE = 0  # 0: 啟動時選擇, 1: 只生成統計, 2: 只做視窗測試
 
 # ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
 YOLO_CONF_THRESHOLD = 0.5       # YOLO bbox 偵測信心門檻（KeypointDetector 內部過濾用）
-JITTER_CONF_THRESHOLD = 0.3     # 抖動統計只使用高於此信心值的關鍵點
-DRAW_KP_CONF_THRESHOLD = 0.5    # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
+JITTER_KPT_CONF_THRESHOLD = 0.5     # 抖動統計只使用高於此信心值的關鍵點
+DRAW_KPT_CONF_THRESHOLD = YOLO_CONF_THRESHOLD  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）；跟隨 YOLO_CONF_THRESHOLD
 SHOW_PROBABILITY_BARS = False  # 關閉率條可減少每幀繪圖負載
 
 # ===== 骨架可信度檢查（Skeleton Quality Assessment，幾何判斷為輔）=====
@@ -161,7 +162,7 @@ SQA_ENABLED_CHECKS: set = {
     "torso_ratio_jitter",
     "bone_length_oscillation",
 }
-SQA_BONE_CONF_THRESHOLD = 0.3               # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
+SQA_BONE_KPT_CONF_THRESHOLD = 0.5               # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
 SQA_MIN_VALID_FRAMES_MIDBACK_OFFSET = 3     # midback_offset_ratio 至少要有幾幀有效才採信
 SQA_MIN_VALID_FRAME_PAIRS_JITTER = 3        # 各 jitter/oscillation 指標至少要有幾組相鄰有效幀對才採信
 SQA_CANDIDATE_TORSO_RATIO_THRESHOLD = 0.15           # torso_ratio：低於此值視為可疑（軀幹相對 bbox 塌陷）
@@ -291,8 +292,6 @@ def draw_extra_cat_instance_boxes(frame, instances, ui_scale=1.0, scale=1.0, cro
     換算成顯示座標，跟 scale_kpts_and_bbox_for_letterbox() 用的是同一套換算公式。"""
     thickness = scale_px(2, ui_scale, min_px=1)
     color = (60, 220, 220)
-    label_fs = 0.5 * ui_scale
-    label_th = max(1, int(round(ui_scale)))
     for _kpts_i, _kconf_i, bbox_i, bconf_i in instances:
         if bbox_i is None:
             continue
@@ -302,10 +301,8 @@ def draw_extra_cat_instance_boxes(frame, instances, ui_scale=1.0, scale=1.0, cro
         y2 = int(bbox_i[3] * scale - crop_y)
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
         if bconf_i is not None:
-            label = f"{bconf_i:.2f}"
-            (tw, th), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, label_fs, label_th)
-            ty = (y1 - 6) if (y1 - 6 - th) > 0 else (y2 + th + 6)
-            cv2.putText(frame, label, (x1, ty), cv2.FONT_HERSHEY_SIMPLEX, label_fs, color, label_th, cv2.LINE_AA)
+            # 跟即時系統 visualizer.draw() 的目標貓 conf 標籤同一套外觀（填色底 + 深色字）
+            draw_bbox_conf_label(frame, x1, y1, color, f"{bconf_i:.2f}", ui_scale)
     return frame
 
 
@@ -540,7 +537,7 @@ def draw_test2_style_overlay(
     probs,
     visualizer,
     show_info=True,
-    conf_thresh=DRAW_KP_CONF_THRESHOLD,
+    kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD,
     bbox_conf=None,
 ):
     """使用 test2.py 的骨架外觀，並沿用既有行為資訊 HUD。"""
@@ -552,35 +549,15 @@ def draw_test2_style_overlay(
 
     if bbox is not None:
         x1, y1, x2, y2 = map(int, bbox)
-        outer_w = 4
-        inner_w = 2
-        cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, outer_w, cv2.LINE_AA)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, inner_w, cv2.LINE_AA)
-
+        cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, max(3, int(round(4 * ui_scale))), cv2.LINE_AA)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, max(1, int(round(2 * ui_scale))), cv2.LINE_AA)
         if bbox_conf is not None:
-            # 仿照 Ultralytics 官方 Annotator.box_label 的作法：
-            # 在框的左上角畫一個填色標籤底，文字置於其中；
-            # 若框頂部太靠近畫面上緣（放不下標籤）則翻到框內側，避免被裁掉。
-            label = f"{float(bbox_conf):.2f}"
-            label_fs = 0.5 * ui_scale
-            label_th = scale_px(1, ui_scale, min_px=1)
-            (tw, th), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, label_fs, label_th)
-            pad = scale_px(3, ui_scale, min_px=2)
-            label_h = th + baseline + pad * 2
-            label_w = tw + pad * 2
-            fits_above = (y1 - label_h) >= 0
-            rect_y1 = (y1 - label_h) if fits_above else y1
-            rect_y2 = y1 if fits_above else (y1 + label_h)
-            rect_x1 = x1
-            rect_x2 = x1 + label_w
-            text_x = rect_x1 + pad
-            text_y = rect_y2 - pad - baseline
-            cv2.rectangle(frame, (rect_x1, rect_y1), (rect_x2, rect_y2), COLOR_HEAD, -1, cv2.LINE_AA)
-            cv2.putText(frame, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, label_fs, BLACK, label_th, cv2.LINE_AA)
+            # 跟即時系統 visualizer.draw() 同一套 conf 標籤外觀（共用 helper）
+            draw_bbox_conf_label(frame, x1, y1, COLOR_HEAD, f"{float(bbox_conf):.2f}", ui_scale)
 
     for ei, (a, b) in enumerate(_SKELETON_EDGES):
         # 骨架線段：兩端關鍵點都要高於顯示門檻才畫
-        if float(kpt_conf[a]) > conf_thresh and float(kpt_conf[b]) > conf_thresh:
+        if float(kpt_conf[a]) > kpt_conf_thresh and float(kpt_conf[b]) > kpt_conf_thresh:
             pa = (int(kpts[a][0]), int(kpts[a][1]))
             pb = (int(kpts[b][0]), int(kpts[b][1]))
             col = _EDGE_COLORS[ei] if ei < len(_EDGE_COLORS) else (180, 180, 180)
@@ -588,7 +565,7 @@ def draw_test2_style_overlay(
 
     for i in range(min(17, len(kpts))):
         # 關鍵點圓點：該點信心高於顯示門檻才畫
-        if float(kpt_conf[i]) > conf_thresh:
+        if float(kpt_conf[i]) > kpt_conf_thresh:
             cx, cy = int(kpts[i][0]), int(kpts[i][1])
             col = _KP_COLORS[i] if i < len(_KP_COLORS) else (200, 200, 200)
             cv2.circle(frame, (cx, cy), kp_outer_radius, (0, 0, 0), -1)
@@ -794,7 +771,7 @@ def compute_skeleton_quality(seq_raw, conf_window, bbox_window, seq_normalized):
     }
     failed_checks = []
 
-    chest_hip_valid = (conf_window[:, 3] >= SQA_BONE_CONF_THRESHOLD) & (conf_window[:, 5] >= SQA_BONE_CONF_THRESHOLD)
+    chest_hip_valid = (conf_window[:, 3] >= SQA_BONE_KPT_CONF_THRESHOLD) & (conf_window[:, 5] >= SQA_BONE_KPT_CONF_THRESHOLD)
 
     if bbox_window is not None:
         bbox_valid = ~np.isnan(bbox_window).any(axis=1)
@@ -818,7 +795,7 @@ def compute_skeleton_quality(seq_raw, conf_window, bbox_window, seq_normalized):
                 ratio_diffs = np.abs(torso_ratio_per_frame[1:][pair_ok] - torso_ratio_per_frame[:-1][pair_ok])
                 metrics["torso_ratio_jitter"] = float(np.mean(ratio_diffs))
 
-    midback_valid = chest_hip_valid & (conf_window[:, 4] >= SQA_BONE_CONF_THRESHOLD)
+    midback_valid = chest_hip_valid & (conf_window[:, 4] >= SQA_BONE_KPT_CONF_THRESHOLD)
     if np.any(midback_valid):
         virtual_pt = (seq_raw[:, 3, :2] + seq_raw[:, 5, :2]) / 2.0
         raw_offset = np.linalg.norm(seq_raw[:, 4, :2] - virtual_pt, axis=1)
@@ -854,7 +831,7 @@ def compute_skeleton_quality(seq_raw, conf_window, bbox_window, seq_normalized):
         if j >= bone_len.shape[1]:
             continue
         parent = int(SQA_PARENTS_17[j])
-        bone_valid = (conf_window[:, j] >= SQA_BONE_CONF_THRESHOLD) & (conf_window[:, parent] >= SQA_BONE_CONF_THRESHOLD)
+        bone_valid = (conf_window[:, j] >= SQA_BONE_KPT_CONF_THRESHOLD) & (conf_window[:, parent] >= SQA_BONE_KPT_CONF_THRESHOLD)
         bone_pair_ok = bone_valid[1:] & bone_valid[:-1]
         if int(np.sum(bone_pair_ok)) < SQA_MIN_VALID_FRAME_PAIRS_JITTER:
             continue
@@ -1027,7 +1004,7 @@ def main():
             YOLO_MODEL_PATH,
             device=INFERENCE_DEVICE,
             imgsz=YOLO_IMGSZ,
-            conf_thres=YOLO_CONF_THRESHOLD,
+            bbox_conf_thres=YOLO_CONF_THRESHOLD,
         )
     except Exception as e:
         print(f"❌ 無法載入 YOLO 模型（{YOLO_MODEL_PATH}）：{e}")
@@ -1526,7 +1503,7 @@ def main():
 
                 # 統計有效關鍵點幀數與抖動（僅統計模式需要，視覺模式跳過）
                 if is_stats_mode:
-                    valid_mask = (kpt_conf > JITTER_CONF_THRESHOLD)
+                    valid_mask = (kpt_conf > JITTER_KPT_CONF_THRESHOLD)
                     if is_first_pass:
                         local_valid_counts += valid_mask.astype(np.int64)
 
@@ -1537,7 +1514,7 @@ def main():
                             w_box = max(1.0, float(x2 - x1))
                             h_box = max(1.0, float(y2 - y1))
                             bbox_diag = float(np.sqrt(w_box * w_box + h_box * h_box))
-                        pair_mask = (kpt_conf > JITTER_CONF_THRESHOLD) & (prev_kpt_conf > JITTER_CONF_THRESHOLD)
+                        pair_mask = (kpt_conf > JITTER_KPT_CONF_THRESHOLD) & (prev_kpt_conf > JITTER_KPT_CONF_THRESHOLD)
                         for kp_idx in range(17):
                             if not pair_mask[kp_idx]:
                                 continue
@@ -2102,7 +2079,7 @@ def main():
 
     # 抖動統計（全域）
     print_jitter_report(
-        title=f"17關鍵點抖動統計（全域，EMA={EMA_ALPHA}，conf>{JITTER_CONF_THRESHOLD}）",
+        title=f"17關鍵點抖動統計（全域，EMA={EMA_ALPHA}，conf>{JITTER_KPT_CONF_THRESHOLD}）",
         jitter_px=global_jitter_px,
         jitter_norm=global_jitter_norm,
         valid_counts=global_valid_counts,
@@ -2112,7 +2089,7 @@ def main():
     # 抖動統計（每影片）
     for vid_idx, stats in sorted(per_video_stats.items(), key=lambda x: x[0]):
         print_jitter_report(
-            title=f"17關鍵點抖動統計（影片[{vid_idx}]，EMA={EMA_ALPHA}，conf>{JITTER_CONF_THRESHOLD}）",
+            title=f"17關鍵點抖動統計（影片[{vid_idx}]，EMA={EMA_ALPHA}，conf>{JITTER_KPT_CONF_THRESHOLD}）",
             jitter_px=stats["jitter_px"],
             jitter_norm=stats["jitter_norm"],
             valid_counts=stats["valid_counts"],

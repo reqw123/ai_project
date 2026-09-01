@@ -45,6 +45,7 @@ from settings_gui.process_manager import ProcessManager, any_running  # noqa: E4
 from identity_trainer_window import IdentityTrainerWindow  # noqa: E402
 from settings_gui.field_search import FieldSearchBar  # noqa: E402
 from settings_gui import tab_docs_panel  # noqa: E402
+from settings_gui import ui_state  # noqa: E402
 from settings_gui.style import (  # noqa: E402
     BTN_PRIMARY_BG,
     BTN_PRIMARY_ACTIVE,
@@ -53,6 +54,12 @@ from settings_gui.style import (  # noqa: E402
     BTN_INFO_BG,
     BTN_INFO_ACTIVE,
     BTN_INFO_FG,
+    BTN_MANAGE_BG,
+    BTN_MANAGE_ACTIVE,
+    BTN_DANGER_BG,
+    BTN_DANGER_ACTIVE,
+    BTN_WARN_BG,
+    BTN_WARN_ACTIVE,
     BTN_WARN_FG,
     COLOR_CONSOLE_BG,
     COLOR_HEADER_BG,
@@ -89,12 +96,9 @@ COLOR_ERROR_FG = "#c0392b"
 COLOR_WARNING_FG = "#b36b00"
 COLOR_SUCCESS_FG = "#1a7a1a"
 
-BTN_WARN_BG = "#e67e22"
-BTN_WARN_ACTIVE = "#cf711d"
-# 原本這裡還有一組 BTN_NEUTRAL_*（純灰）給「取消」「關閉」這類收尾動作用，跟
-# BTN_SECONDARY_*（藍灰）語意上重疊，2026-08 版面美化時合併掉了——那兩個按鈕
-# 現在改用 BTN_SECONDARY_BG 但加 `outline=True`（見 settings_gui/style.py 的
-# _styled_button），用「有沒有實心填色」而不是另開一個新色相來分辨重要性。
+# 按鈕配色全部集中在 settings_gui/style.py（含 BTN_WARN_* / BTN_MANAGE_* /
+# BTN_DANGER_* / BTN_QUIET_*），這裡不再各自定義。`outline=True` 的按鈕會走
+# BTN_QUIET_*（扁平淺灰的「安靜」層級），不是真的畫外框。
 
 BADGE_ENV_BG = "#f5b7b1"
 BADGE_ENV_FG = "#78281f"
@@ -242,6 +246,13 @@ class SettingsWindow(tk.Tk):
 
         # 每個 json_key -> {"var":..., "widget":..., "badge_var":..., "field":..., ...}
         self._field_widgets = {}
+        # 「系統模式＝single」時整個「貓咪身份驗證」分頁灰掉：分頁按鈕、欄位、
+        # 訓練按鈕都停用。這幾個屬性在 _build_tabs() 填好，_apply_system_mode_gating() 用。
+        self._active_tab = None
+        self._identity_tab_enabled = True
+        self._identity_left_col = None
+        self._identity_extra_controls = []
+        self._identity_disabled_banner = None
         # 每個 json_key -> app 啟動當下的「生效值」（getattr config.<class>.<attr> 現讀一次快照），
         # 供「載入目前設定」在 env/json 都沒設定時當作預設值錨點，不在別處重複硬編碼字面值。
         self._baseline_effective = {
@@ -273,6 +284,9 @@ class SettingsWindow(tk.Tk):
         # 裝在初次載入「之後」——避免初次載入時逐欄位 set() 觸發下面這個同步邏輯，
         # 誤判成「使用者剛剛改了 Host/Port」而動到端點欄位（見方法內註解）。
         self._wire_nodered_endpoint_autosync()
+        # 系統模式（單貓 / 多貓）連動：single 時整個「貓咪身份驗證」分頁灰掉。
+        # 同樣裝在初次填表單之後，並在方法內先套用一次目前狀態。
+        self._wire_system_mode_gating()
         self._process_manager.poll()
 
         # 到這裡整個視窗的固定佔用區塊（標題/流程列/獨立腳本工具列/資訊列/分頁按鈕列/
@@ -425,11 +439,8 @@ class SettingsWindow(tk.Tk):
         ).pack(side="right", padx=(SPACE_SM, 0))
         self._stop_main_btn = _styled_button(
             inner, "⏹ 關閉 main.py", self._on_stop_main, BTN_INFO_BG, BTN_INFO_ACTIVE,
-            # 這顆跟下面「停止腳本」原本共用橘色警告色，改成淡藍色後跟「還原 GUI
-            # 預設值」那顆分開，不再是同一組配色。BTN_INFO_BG 是刻意偏亮的淡藍，
-            # 白字對比不夠（第一版用過，使用者回報字會糊），改配深藏青字
-            # （BTN_INFO_FG），沿用粗體字型（筆畫較寬，蓋色面積更多，字比較扎實，
-            # 維持跟其他按鈕一致的粗體視覺語言）。
+            # 「中斷正在跑的行程」語意用 INFO（深青），跟「停止腳本」同一組、
+            # 跟「還原 GUI 預設值」（WARN 琥珀）分開。深青底配白字（BTN_INFO_FG）。
             fg=BTN_INFO_FG, font=(_FONT_FAMILY, 11, "bold"),
         )
         self._stop_main_btn.pack(side="right", padx=(SPACE_SM, 0))
@@ -480,6 +491,10 @@ class SettingsWindow(tk.Tk):
         self.option_add("*TCombobox*Listbox.selectBackground", TAB_COLORS["模型與輸入來源"][1])
         self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
         self._tool_combo = combo
+        _styled_button(
+            tool_row2, "⚙ 管理", self._open_tool_script_manager, BTN_MANAGE_BG, BTN_MANAGE_ACTIVE,
+            font=self._font_label, compact=True,
+        ).pack(side="left", padx=(0, SPACE_SM))
 
         # 即時篩選：邊打字邊把清單縮小到「顯示名稱含有目前輸入內容」的腳本（不分大小
         # 寫）。Ctrl+F 是進入點——把焦點切到這顆下拉選單、清空目前內容準備輸入；
@@ -495,7 +510,8 @@ class SettingsWindow(tk.Tk):
         # 全部進不了輸入框。改成單純更新 combo["values"]（不主動彈出），篩選結果會
         # 先安靜地縮小，游標／焦點全程留在輸入框，可以正常一路打完整個查詢字串；
         # 想看篩選後的清單，打完字自己按一次下拉箭頭或 ↓ 鍵展開即可。
-        all_display_names = list(self._tool_script_map.keys())
+        # 顯示名稱清單每次即時取（「⚙ 管理」重排後 self._tool_script_map 會換一份，
+        # 不能在這裡抓成固定 local，否則篩選/Ctrl+F 還在用舊清單）。
         # 導覽鍵不觸發重新篩選，否則按 ↓ 選清單裡的項目會把該項目文字填回輸入框、
         # 又被當成新的篩選字串重新篩一次，跟使用者原本想「往下移動選取」的意圖對不上。
         _nav_keysyms = {"Up", "Down", "Return", "KP_Enter", "Escape", "Tab"}
@@ -509,11 +525,11 @@ class SettingsWindow(tk.Tk):
                 # 文字——記不住確切檔名、只記得「大概是做什麼的」時一樣找得到（例如
                 # 打「比較」能找到 eval_pose_compare.py，即使檔名本身沒有這兩個字）。
                 combo["values"] = [
-                    n for n in all_display_names
+                    n for n in self._tool_all_display_names()
                     if typed in n.lower() or typed in self._tool_script_desc_map.get(n, "").lower()
                 ]
             else:
-                combo["values"] = all_display_names
+                combo["values"] = self._tool_all_display_names()
 
         combo.bind("<KeyRelease>", _refresh_tool_combo_filter)
 
@@ -534,14 +550,29 @@ class SettingsWindow(tk.Tk):
             font=self._font_hint,
         ).pack(side="left")
         self._tool_video_path_var = tk.StringVar(value="")
-        tk.Entry(
-            tool_row_video, textvariable=self._tool_video_path_var, font=self._font_hint,
-        ).pack(side="left", fill="x", expand=True, padx=(6, 8))
+        # 可編輯下拉：既能手打/貼路徑（跟原本的 Entry 一樣），也能從「最近用過的
+        # 前 10 筆影片路徑」直接挑——單一影片檔和資料夾都會記、混在同一份清單裡
+        # （settings_gui/ui_state.py 持久化，跟系統設定分開）。
+        self._tool_video_combo = ttk.Combobox(
+            tool_row_video, textvariable=self._tool_video_path_var,
+            font=self._font_hint, height=12, state="normal",
+        )
+        self._tool_video_combo.pack(side="left", fill="x", expand=True, padx=(6, 8), ipady=1)
+        self._refresh_recent_video_paths()
+        # 從下拉挑到一個 → 直接把它推到清單最前面（等於「又用了一次」）
+        self._tool_video_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _e: self._remember_tool_video_path(self._tool_video_path_var.get()),
+        )
         # 原本是單一「瀏覽...」按鈕彈出選單選「檔案」或「資料夾」——彈出選單本身
         # 是原生元件，不管怎麼配色都不會有實心按鈕那種立體感/一致外觀（見
         # _on_browse_tool_video 原本的說明）。改成直接放兩顆並排的小按鈕，兩個
         # 選項都看得到、不用多一次點擊才知道有哪些選項，也才能套用跟其他按鈕
         # 一致的樣式系統。
+        _styled_button(
+            tool_row_video, "⚙ 管理", self._open_recent_video_manager, BTN_MANAGE_BG, BTN_MANAGE_ACTIVE,
+            font=self._font_hint, compact=True,
+        ).pack(side="left", padx=(0, SPACE_XS))
         _styled_button(
             tool_row_video, "🎬 選擇影片", self._pick_tool_video_file, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
             font=self._font_hint, compact=True,
@@ -604,7 +635,7 @@ class SettingsWindow(tk.Tk):
                 return
             typed = stripped.lower()
             matches = [
-                n for n in all_display_names
+                n for n in self._tool_all_display_names()
                 if typed in n.lower() or typed in self._tool_script_desc_map.get(n, "").lower()
             ]
             if matches:
@@ -625,7 +656,7 @@ class SettingsWindow(tk.Tk):
         _on_tool_script_var_change()
 
         def _focus_tool_combo_search(_event=None):
-            combo["values"] = all_display_names
+            combo["values"] = self._tool_all_display_names()
             combo.focus_set()
             combo.delete(0, "end")
             return "break"
@@ -684,6 +715,8 @@ class SettingsWindow(tk.Tk):
         len() 對這種檔名補的空白數會不夠、流水號對不齊。流水號同時也是 Ctrl+F
         打字篩選時，使用者一眼確認「這是清單第幾支」的依據。"""
         self._tool_script_desc_map = {}  # 顯示名稱（含流水號）→ 功能說明，給常駐說明列／Ctrl+F 用
+        self._tool_script_name_map = {}  # 顯示名稱（含流水號）→ 相對 tools/ 的路徑（穩定 key）
+        self._tool_script_locked = set()  # 被「⚙ 管理」鎖定的腳本 key
         # 一定要在下面 tools_dir 不存在時的早退之前設好：_on_tool_script_var_change()
         # 在 _build_process_bar() 尾端會無條件呼叫一次，若 tools_dir 剛好讀不到（例如
         # 資料夾正在被同步/搬移）就會早退不往下跑，這個屬性沒設到就直接 AttributeError。
@@ -700,14 +733,24 @@ class SettingsWindow(tk.Tk):
             if "__pycache__" not in p.parts and not p.name.startswith("_")
         )
         names = [str(p.relative_to(tools_dir)).replace("\\", "/") for p in paths]
-        widths = [_display_width(n) for n in names]
-        pad_width = max(widths, default=0) + 4
+        width_by_name = {n: _display_width(n) for n in names}
+        pad_width = max(width_by_name.values(), default=0) + 4
+        path_by_name = {n: str(p) for n, p in zip(names, paths)}
         plain_descriptions = self._load_tool_script_descriptions()  # {相對路徑: 功能說明}
+
+        # 疊上「⚙ 管理」視窗排定的手動順序 + 鎖定旗標（settings_gui/ui_state.py）。
+        # 流水號 #NN 依「套用順序後的最終位置」重編，所以 #NN 永遠等於下拉裡的位次。
+        self._tool_script_locked = {
+            e["key"] for e in ui_state.get_script_order() if e["locked"] and e["key"] in path_by_name
+        }
+        ordered_names = ui_state.apply_script_order(names)
+
         mapping = {}
-        for idx, (name, width, p) in enumerate(zip(names, widths, paths), start=1):
-            display = f"{name}{' ' * (pad_width - width)}#{idx:02d}"
-            mapping[display] = str(p)
+        for idx, name in enumerate(ordered_names, start=1):
+            display = f"{name}{' ' * (pad_width - width_by_name[name])}#{idx:02d}"
+            mapping[display] = path_by_name[name]
             self._tool_script_desc_map[display] = plain_descriptions.get(name, "")
+            self._tool_script_name_map[display] = name
         return mapping
 
     def _load_tool_script_descriptions(self):
@@ -832,6 +875,21 @@ class SettingsWindow(tk.Tk):
         if path:
             self._tool_script_var.set(path)
 
+    def _refresh_recent_video_paths(self):
+        """把「🎬 影片路徑（選填）」下拉的候選值刷新成最近用過的前 10 筆
+        影片路徑（單一影片檔和資料夾都收，混在同一份清單裡）。"""
+        combo = getattr(self, "_tool_video_combo", None)
+        if combo is not None:
+            try:
+                combo["values"] = ui_state.get_recent_video_paths()
+            except tk.TclError:
+                pass
+
+    def _remember_tool_video_path(self, path):
+        """記住一個影片檔或資料夾路徑到最近清單，並刷新下拉。"""
+        ui_state.add_recent_video_path(path or "")
+        self._refresh_recent_video_paths()
+
     def _pick_tool_video_file(self):
         """跟 _pick_tool_video_folder 並排成兩顆按鈕（見 _build_process_bar 的
         tool_row_video）——原本是單一按鈕彈出 tk.Menu 選單問要選檔案還是資料夾，
@@ -847,11 +905,315 @@ class SettingsWindow(tk.Tk):
         )
         if path:
             self._tool_video_path_var.set(path)
+            self._remember_tool_video_path(path)  # 影片檔本身記一筆
 
     def _pick_tool_video_folder(self):
         path = filedialog.askdirectory(title="選擇影片資料夾")
         if path:
             self._tool_video_path_var.set(path)
+            self._remember_tool_video_path(path)
+
+    # ── 「⚙ 管理」：通用清單管理小視窗（放大字級、上移/下移/🔒鎖定/可選刪除）─────
+    #
+    # 兩個下拉共用這一套：①「🎬 影片路徑（選填）」的最近清單（可刪），②「🧩 獨立
+    # 腳本工具」的顯示順序（不可刪，腳本是掃描出來的）。🔒 鎖定的項目位置完全固定
+    # ——不被新項目擠掉、不能上移下移、也不能刪（要先解鎖）。每次操作立刻寫回
+    # local_state/gui_state.json 並同步刷新對應下拉，關掉視窗不用另外存。
+    #
+    # cfg（dict）欄位：
+    #   title / help          視窗標題與頂端說明文字
+    #   allow_delete          有沒有「🗑 刪除」按鈕
+    #   muted_suffix          「灰掉」項目名稱後接的字（影片＝"   （找不到）"；腳本＝""）
+    #   load()  -> [ {"key","display","locked","muted"}, ... ]
+    #   save(entries)         把整理好的清單寫回 + 刷新對應下拉
+    #   delete_prompt(entry) -> (askyesno 標題, 內文)   僅 allow_delete 時需要
+
+    def _ensure_mgr_fonts(self):
+        # 這些管理視窗專用的放大字級（比主視窗 _font_hint 大約一倍），視窗本身也開大。
+        if not hasattr(self, "_font_mgr_body"):
+            self._font_mgr_body = tkfont.Font(family=_FONT_FAMILY, size=16)
+            self._font_mgr_hint = tkfont.Font(family=_FONT_FAMILY, size=13)
+            self._font_mgr_btn = tkfont.Font(family=_FONT_FAMILY, size=14, weight="bold")
+
+    def _open_list_manager(self, cfg):
+        lm = getattr(self, "_lm", None)
+        if lm is not None and lm["win"].winfo_exists():
+            lm["win"].lift()
+            lm["win"].focus_set()
+            return
+
+        self._ensure_mgr_fonts()
+        win = tk.Toplevel(self)
+        win.title(cfg["title"])
+        win.configure(bg=COLOR_HEADER_BG)
+        win.transient(self)
+        win.resizable(True, True)
+        win.minsize(880, 560)
+        win.geometry("1040x680")
+
+        def _close():
+            self._lm = None
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", _close)
+
+        pad = SPACE_LG
+        tk.Label(
+            win, text=cfg["help"], bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
+            font=self._font_mgr_hint, wraplength=980, justify="left", anchor="w",
+        ).pack(fill="x", padx=pad, pady=(pad, SPACE_MD))
+
+        body = tk.Frame(win, bg=COLOR_HEADER_BG)
+        body.pack(fill="both", expand=True, padx=pad, pady=(0, SPACE_MD))
+        scroll = tk.Scrollbar(body, orient="vertical")
+        listbox = tk.Listbox(
+            body, activestyle="none", font=self._font_mgr_body, height=14,
+            yscrollcommand=scroll.set, exportselection=False,
+            selectmode="browse", bg="#ffffff", fg="#1b2733",
+            highlightthickness=1, highlightbackground="#4a5d6e",
+        )
+        scroll.config(command=listbox.yview)
+        scroll.pack(side="right", fill="y")
+        listbox.pack(side="left", fill="both", expand=True)
+        listbox.bind("<<ListboxSelect>>", lambda _e: self._lm_update_buttons())
+
+        btns = tk.Frame(win, bg=COLOR_HEADER_BG)
+        btns.pack(fill="x", padx=pad, pady=(0, SPACE_MD))
+        b = {}
+        b["up"] = _styled_button(
+            btns, "↑ 上移", lambda: self._lm_move(-1),
+            BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE, font=self._font_mgr_btn,
+        )
+        b["up"].pack(side="left", padx=(0, SPACE_SM))
+        b["down"] = _styled_button(
+            btns, "↓ 下移", lambda: self._lm_move(1),
+            BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE, font=self._font_mgr_btn,
+        )
+        b["down"].pack(side="left", padx=(0, SPACE_SM))
+        b["lock"] = _styled_button(
+            btns, "🔒 鎖定／解鎖", self._lm_toggle_lock,
+            BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE, font=self._font_mgr_btn,
+        )
+        b["lock"].pack(side="left", padx=(0, SPACE_SM))
+        if cfg["allow_delete"]:
+            b["delete"] = _styled_button(
+                btns, "🗑 刪除", self._lm_delete,
+                BTN_DANGER_BG, BTN_DANGER_ACTIVE, font=self._font_mgr_btn,
+            )
+            b["delete"].pack(side="left")
+
+        foot = tk.Frame(win, bg=COLOR_HEADER_BG)
+        foot.pack(fill="x", padx=pad, pady=(0, pad))
+        _styled_button(
+            foot, "完成", _close, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE,
+            font=self._font_mgr_btn,
+        ).pack(side="right")
+
+        self._lm = {"win": win, "listbox": listbox, "btns": b, "cfg": cfg, "entries": []}
+        self._lm_reload()
+        win.grab_set()
+        win.focus_set()
+
+    def _lm_reload(self, select_index=None):
+        lm = getattr(self, "_lm", None)
+        if lm is None:
+            return
+        lm["entries"] = [dict(e) for e in lm["cfg"]["load"]()]
+        self._lm_render(select_index)
+
+    def _lm_render(self, select_index=None):
+        lm = getattr(self, "_lm", None)
+        if lm is None or not lm["listbox"].winfo_exists():
+            return
+        lb = lm["listbox"]
+        entries = lm["entries"]
+        muted_suffix = lm["cfg"].get("muted_suffix", "")
+        lb.delete(0, "end")
+        num_w = max(2, len(str(len(entries))))  # 流水號欄寬，右對齊
+        for i, e in enumerate(entries):
+            num = f"{i + 1:>{num_w}}. "
+            locked = e["locked"]
+            muted = e.get("muted")
+            lock = "🔒 " if locked else "    "
+            suf = muted_suffix if muted else ""
+            tag = "  【鎖定】" if locked else ""
+            lb.insert("end", num + lock + e["display"] + suf + tag)
+            if locked:
+                # 鎖定項：整列琥珀底 + 深色粗體感文字，選取時也保留琥珀色調，
+                # 一眼就跟一般項分得出來（tk.Listbox 不能逐列換字型，靠底色+顏色拉開）
+                lb.itemconfig(
+                    i,
+                    background="#ffe8a3",
+                    foreground="#8a4b00" if not muted else "#a01b1b",
+                    selectbackground="#f0b429",
+                    selectforeground="#3d2200",
+                )
+            elif muted:
+                lb.itemconfig(i, foreground="#b23b3b")
+        if entries:
+            idx = 0 if select_index is None else max(0, min(select_index, len(entries) - 1))
+            lb.selection_set(idx)
+            lb.see(idx)
+        self._lm_update_buttons()
+
+    def _lm_selected(self):
+        lm = getattr(self, "_lm", None)
+        if lm is None:
+            return None
+        sel = lm["listbox"].curselection()
+        return sel[0] if sel else None
+
+    def _lm_update_buttons(self):
+        """鎖定＝不可換位、不可刪：直接反映在按鈕灰不灰上，不用等按下去才擋。"""
+        lm = getattr(self, "_lm", None)
+        if lm is None:
+            return
+        b, entries = lm["btns"], lm["entries"]
+        i = self._lm_selected()
+
+        def _set(key, enabled):
+            if key in b:
+                b[key].config(state="normal" if enabled else "disabled")
+
+        if i is None:
+            for k in ("up", "down", "lock", "delete"):
+                _set(k, False)
+            return
+        locked = entries[i]["locked"]
+        _set("up", i > 0 and not locked and not entries[i - 1]["locked"])
+        _set("down", i < len(entries) - 1 and not locked and not entries[i + 1]["locked"])
+        _set("lock", True)               # 一律可按（鎖定項用來解鎖）
+        _set("delete", not locked)
+
+    def _lm_commit(self, select_index=None):
+        lm = getattr(self, "_lm", None)
+        if lm is None:
+            return
+        lm["cfg"]["save"](lm["entries"])
+        self._lm_reload(select_index)
+
+    def _lm_move(self, delta):
+        lm = getattr(self, "_lm", None)
+        if lm is None:
+            return
+        i = self._lm_selected()
+        if i is None:
+            return
+        j = i + delta
+        ent = lm["entries"]
+        if not (0 <= j < len(ent)):
+            return
+        if ent[i]["locked"] or ent[j]["locked"]:   # 鎖定項位置固定
+            return
+        ent[i], ent[j] = ent[j], ent[i]
+        self._lm_commit(select_index=j)
+
+    def _lm_toggle_lock(self):
+        lm = getattr(self, "_lm", None)
+        if lm is None:
+            return
+        i = self._lm_selected()
+        if i is None:
+            return
+        lm["entries"][i]["locked"] = not lm["entries"][i]["locked"]
+        self._lm_commit(select_index=i)
+
+    def _lm_delete(self):
+        lm = getattr(self, "_lm", None)
+        if lm is None or not lm["cfg"]["allow_delete"]:
+            return
+        i = self._lm_selected()
+        if i is None:
+            return
+        entry = lm["entries"][i]
+        if entry["locked"]:
+            messagebox.showinfo(
+                "已鎖定", "這一項已鎖定，請先按「🔒 鎖定／解鎖」解鎖後再刪除。",
+                parent=lm["win"],
+            )
+            return
+        title, msg = lm["cfg"]["delete_prompt"](entry)
+        if not messagebox.askyesno(title, msg, parent=lm["win"]):
+            return
+        del lm["entries"][i]
+        self._lm_commit(select_index=i)
+
+    # ── 兩個具體的「⚙ 管理」入口 ─────────────────────────────────────────────
+
+    def _open_recent_video_manager(self):
+        def _load():
+            return [
+                {"key": e["path"], "display": e["path"],
+                 "locked": e["locked"], "muted": not e["exists"]}
+                for e in ui_state.get_recent_video_entries()
+            ]
+
+        def _save(entries):
+            ui_state.set_recent_video_entries(
+                [{"path": e["key"], "locked": e["locked"]} for e in entries]
+            )
+            self._refresh_recent_video_paths()
+
+        def _delete_prompt(entry):
+            return (
+                "從清單移除",
+                f"從「最近影片路徑」清單移除這一項？\n\n{entry['key']}\n\n"
+                "（只是設定視窗不再記住它，不會刪掉磁碟上的檔案／資料夾。）",
+            )
+
+        self._open_list_manager({
+            "title": "管理最近影片路徑",
+            "help": "上移／下移調整下拉的顯示順序；🔒 鎖定的項目位置完全固定——不會被新"
+                    "路徑擠掉、不能上移下移、也不能刪除（要先解鎖），而且路徑暫時找不到時"
+                    "仍會留在下拉裡。刪除只是不再記住，不會動到磁碟上的檔案。",
+            "allow_delete": True,
+            "muted_suffix": "   （找不到）",
+            "load": _load, "save": _save, "delete_prompt": _delete_prompt,
+        })
+
+    def _open_tool_script_manager(self):
+        def _load():
+            locked = getattr(self, "_tool_script_locked", set())
+            return [
+                {"key": name, "display": name,
+                 "locked": name in locked, "muted": False}
+                for name in self._tool_script_name_map.values()
+            ]
+
+        def _save(entries):
+            ui_state.set_script_order(
+                [{"key": e["key"], "locked": e["locked"]} for e in entries]
+            )
+            self._rebuild_tool_script_combo()
+
+        self._open_list_manager({
+            "title": "管理腳本顯示順序",
+            "help": "上移／下移調整「🧩 獨立腳本工具」下拉的排列，流水號 #NN 會跟著位次重編；"
+                    "🔒 鎖定的腳本位置固定、不能上移下移。腳本清單是掃描 tools/ 得到的，"
+                    "不能在這裡刪除；新加入的腳本會自動排在最後。",
+            "allow_delete": False,
+            "load": _load, "save": _save,
+        })
+
+    def _tool_all_display_names(self):
+        return list(self._tool_script_map.keys())
+
+    def _rebuild_tool_script_combo(self):
+        """「⚙ 管理」改過順序後重掃腳本（會套用新順序 + 重編 #NN），刷新下拉候選值，
+        並把目前選定的腳本（用穩定的相對路徑比對，不是會變的顯示字串）還原成新的
+        顯示名稱。"""
+        prev_display = self._tool_script_var.get()
+        prev_name = self._tool_script_name_map.get(prev_display)
+        self._tool_script_map = self._discover_tool_scripts()
+        names_to_display = {name: disp for disp, name in self._tool_script_name_map.items()}
+        combo = getattr(self, "_tool_combo", None)
+        if combo is not None:
+            try:
+                combo["values"] = self._tool_all_display_names()
+            except tk.TclError:
+                pass
+        if prev_name and prev_name in names_to_display:
+            self._tool_script_var.set(names_to_display[prev_name])
 
     def _on_open_tool_script_file(self):
         """用文字編輯器開啟目前選定的腳本原始碼——這些獨立工具大多是「先打開改
@@ -899,6 +1261,9 @@ class SettingsWindow(tk.Tk):
             return
         video_path = self._tool_video_path_var.get().strip()
         extra_env = {"TEST_VIDEO_PATH": video_path} if video_path else None
+        if video_path:
+            # 真的拿去跑了才算「用過」——手打/貼路徑的情況也會在這裡被記住
+            self._remember_tool_video_path(video_path)
         self._process_manager.start_tool(script_file, extra_env=extra_env)
 
     def _on_stop_tool(self):
@@ -1227,6 +1592,24 @@ class SettingsWindow(tk.Tk):
                 font=self._font_banner, anchor="w",
             ).pack(fill="x", padx=14, pady=8)
 
+            if tab_name == "貓咪身份驗證":
+                self._identity_left_col = left_col
+                self._identity_accent_banner = banner
+                # 「系統模式＝single」時顯示的整區停用提示橫幅——建立後先 pack 在
+                # accent banner 正下方（正確位置），再由 _apply_system_mode_gating()
+                # 依模式 pack_forget / 重新 pack。
+                self._identity_disabled_banner = tk.Label(
+                    left_col,
+                    text="🔒 目前為「單貓」系統模式，身分驗證整套功能已停用（不載入 CNN、不做多貓過濾）。\n"
+                         "要設定或使用身分驗證，請先到「執行模式與排程」分頁把「系統模式」改成 multi。",
+                    bg="#f6e0c0", fg="#7a4a12", font=self._font_hint,
+                    anchor="w", justify="left", wraplength=750, padx=12, pady=8,
+                )
+                self._identity_disabled_banner.pack(
+                    fill="x", padx=14, pady=(8, 4), after=banner
+                )
+                self._identity_disabled_banner.pack_forget()
+
             for field in fields_by_tab.get(tab_name, []):
                 if field.get("hidden"):
                     self._build_field_row(self._hidden_field_holder, field, accent)
@@ -1235,10 +1618,12 @@ class SettingsWindow(tk.Tk):
             if tab_name == "貓咪身份驗證":
                 trainer_box = tk.Frame(left_col, bg=COLOR_TAB_BG)
                 trainer_box.pack(fill="x", padx=14, pady=(10, 4))
-                _styled_button(
+                _trainer_btn = _styled_button(
                     trainer_box, "🐱 選擇 / 訓練身分認證模型", self._on_open_identity_trainer,
                     BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE, font=self._font_label,
-                ).pack(side="left")
+                )
+                _trainer_btn.pack(side="left")
+                self._identity_extra_controls.append((_trainer_btn, "normal"))
                 tk.Label(
                     left_col,
                     text="開啟專屬視窗：選「我的貓 / 其他貓」影片資料夾 → 自動建立資料集 → 訓練 CNN → "
@@ -1263,6 +1648,7 @@ class SettingsWindow(tk.Tk):
         self._select_tab(TAB_ORDER[0])
 
     def _select_tab(self, tab_name):
+        self._active_tab = tab_name
         for name, frame in self._tab_frames.items():
             if name == tab_name:
                 frame.pack(fill="both", expand=True)
@@ -1270,7 +1656,10 @@ class SettingsWindow(tk.Tk):
                 frame.pack_forget()
         for name, btn in self._tab_buttons.items():
             accent = self._tab_accents[name]
-            if name == tab_name:
+            # 「貓咪身份驗證」分頁在單貓模式下整個灰掉：按鈕用中性灰、不管有沒有被選中
+            if name == "貓咪身份驗證" and not self._identity_tab_enabled:
+                btn.config(bg="#e6e6e6", fg="#9a9a9a", activebackground="#e6e6e6", activeforeground="#9a9a9a")
+            elif name == tab_name:
                 btn.config(bg=accent, fg="#ffffff", activebackground=accent, activeforeground="#ffffff")
             else:
                 light = _lighten(accent, 0.72)
@@ -1357,7 +1746,91 @@ class SettingsWindow(tk.Tk):
             emoji, _ = TAB_COLORS.get(tab_name, ("⬜", COLOR_HEADER_BG))
             count = matches_by_tab.get(tab_name, 0)
             suffix = f" ({count})" if count else ""
-            btn.config(text=f"{emoji} {tab_name}{suffix}")
+            disabled_tag = (
+                "（單貓模式停用）"
+                if tab_name == "貓咪身份驗證" and not self._identity_tab_enabled
+                else ""
+            )
+            btn.config(text=f"{emoji} {tab_name}{disabled_tag}{suffix}")
+
+    # ── 系統模式（單貓 / 多貓）連動：single 時整個「貓咪身份驗證」分頁灰掉 ──
+    @staticmethod
+    def _iter_descendants(widget):
+        """深度優先走訪 widget 底下所有子孫（含自己）。"""
+        if widget is None:
+            return
+        yield widget
+        for child in widget.winfo_children():
+            yield from SettingsWindow._iter_descendants(child)
+
+    def _wire_system_mode_gating(self):
+        """把 run_mode.system_mode 下拉的變動接到 _apply_system_mode_gating()，
+        並在視窗建好、表單填好之後先套用一次目前的狀態。"""
+        info = self._field_widgets.get("run_mode.system_mode")
+        if info is not None:
+            info["var"].trace_add("write", lambda *_a: self._apply_system_mode_gating())
+        self._apply_system_mode_gating()
+
+    def _apply_system_mode_gating(self):
+        """依目前「系統模式」欄位的值，啟用 / 停用整個「貓咪身份驗證」分頁：
+        - single：分頁按鈕灰掉、所有 cat_identity.* 欄位與「訓練身分模型」按鈕停用、
+          最上方顯示停用提示橫幅，並強制把「啟用身份驗證」勾選取消（存檔會寫 false）。
+        - multi ：全部還原成可編輯。
+        呼叫時機：視窗初始化、下拉被改、每次重新填表單（load / save / 還原預設）。"""
+        info = self._field_widgets.get("run_mode.system_mode")
+        if info is None or self._identity_left_col is None:
+            return
+        enabled = info["var"].get() == "multi"
+        self._identity_tab_enabled = enabled
+
+        # 1) 所有 cat_identity.* 欄位列的互動 widget
+        for key, finfo in self._field_widgets.items():
+            if not key.startswith("cat_identity."):
+                continue
+            for w, restore_state in finfo.get("_controls", []):
+                try:
+                    w.config(state=(restore_state if enabled else "disabled"))
+                except tk.TclError:
+                    pass
+
+        # 2) 「訓練身分模型」按鈕等分頁專屬控制項
+        for w, restore_state in self._identity_extra_controls:
+            try:
+                w.config(state=(restore_state if enabled else "disabled"))
+            except tk.TclError:
+                pass
+
+        # 3) single 模式強制把「啟用身份驗證」關掉（存檔就會寫 false）
+        if not enabled:
+            ev = self._field_widgets.get("cat_identity.enable_identity_verification")
+            if ev is not None:
+                ev["var"].set(False)
+
+        # 4) 停用提示橫幅（pack 在 accent banner 正下方）
+        banner = self._identity_disabled_banner
+        if banner is not None:
+            if enabled:
+                banner.pack_forget()
+            else:
+                pack_kw = dict(fill="x", padx=14, pady=(8, 4))
+                acc = getattr(self, "_identity_accent_banner", None)
+                if acc is not None:
+                    pack_kw["after"] = acc
+                banner.pack(**pack_kw)
+
+        # 5) 分頁按鈕文字後綴 +（單貓模式停用），配色由 _select_tab 依
+        #    _identity_tab_enabled 決定（灰掉 / 還原）——重跑一次按鈕重繪。
+        btn = self._tab_buttons.get("貓咪身份驗證")
+        if btn is not None:
+            emoji, _ = TAB_COLORS.get("貓咪身份驗證", ("⬜", COLOR_HEADER_BG))
+            cur = btn.cget("text")
+            search_suffix = ""
+            if "(" in cur and cur.rstrip().endswith(")"):
+                search_suffix = " " + cur[cur.rfind("(") :]
+            disabled_tag = "" if enabled else "（單貓模式停用）"
+            btn.config(text=f"{emoji} 貓咪身份驗證{disabled_tag}{search_suffix}")
+        if self._active_tab is not None:
+            self._select_tab(self._active_tab)
 
     def _highlight_fields(self, json_keys):
         """幫指定欄位的外層 container 加高亮外框，並先清掉上一次的高亮——
@@ -1740,6 +2213,19 @@ class SettingsWindow(tk.Tk):
                 font=self._font_hint, anchor="w", justify="left", wraplength=750,
             ).pack(fill="x", padx=14, pady=(0, 6))
 
+        # 記下這一列裡所有「可互動」的 widget 以及它們建立當下的正確 state
+        # （唯讀 Entry＝"readonly"、下拉＝"readonly"、一般＝"normal"…），供
+        # _apply_system_mode_gating() 之後整區停用／還原時逐一切換用。
+        info["_controls"] = []
+        for w in self._iter_descendants(info["container"]):
+            if w.winfo_class() in (
+                "Entry", "TEntry", "Button", "Checkbutton", "Spinbox", "TCombobox"
+            ):
+                try:
+                    info["_controls"].append((w, str(w.cget("state"))))
+                except tk.TclError:
+                    pass
+
         self._field_widgets[key] = info
 
     # ── 讀取／寫入表單值 ─────────────────────────────────────────────
@@ -1903,6 +2389,11 @@ class SettingsWindow(tk.Tk):
             value, source = self._resolve_field_display(field)
             self._set_field_value(key, value)
             self._apply_source(key, source)
+        # 填完整份表單後重套一次系統模式連動：single 時把「啟用身份驗證」壓回
+        # False（存檔就寫 false）、整個分頁灰掉。放在迴圈之後才不會被迴圈後段
+        # 設定 enable_identity_verification 的那一步蓋回去。
+        if getattr(self, "_identity_left_col", None) is not None:
+            self._apply_system_mode_gating()
 
     def _wire_nodered_endpoint_autosync(self):
         """Host/Port 改變時，「進階設定」的 3 個 Node-RED 端點欄位如果目前的值
@@ -1965,6 +2456,8 @@ class SettingsWindow(tk.Tk):
                 continue
             self._set_field_value(key, value)
             self._apply_source(key, source_label)
+        if getattr(self, "_identity_left_col", None) is not None:
+            self._apply_system_mode_gating()
 
     # ── 按鈕事件 ─────────────────────────────────────────────────────
 

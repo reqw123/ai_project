@@ -136,6 +136,15 @@ FIELD_SCHEMA = [
     },
     # ── 執行模式與排程 ────────────────────────────────────────────────
     {
+        "json_key": "run_mode.system_mode", "env_var": "CAT_MONITORING_SYSTEM_MODE",
+        "attr": ("RunModeConfig", "SYSTEM_MODE"), "tab": "執行模式與排程",
+        "label": "系統模式（單貓 / 多貓）", "value_type": "enum", "validate": "enum",
+        "choices": ["single", "multi"],
+        "hint": "single＝假設畫面全程只有一隻貓：只取信心最高的偵測，跳過多貓挑選、不畫其他貓、"
+                "不載入身分驗證 CNN。multi＝多貓場景：依「貓咪身份驗證」與「視覺化」分頁的設定"
+                "挑目標貓 / 畫其他貓——那兩處的開關只在 multi 模式生效。",
+    },
+    {
         "json_key": "run_mode.mode", "env_var": "CAT_MONITORING_RUN_MODE",
         "attr": ("RunModeConfig", "MODE"), "tab": "執行模式與排程",
         "label": "執行模式", "value_type": "enum", "validate": "enum",

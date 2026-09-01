@@ -13,6 +13,7 @@ from config import (
     BehaviorTrackingConfig,
     CatIdentityConfig,
     NodeRedConfig,
+    RunModeConfig,
     SQAConfig,
     STGCNConfig,
     SystemInfo,
@@ -149,7 +150,7 @@ class FrameProcessor:
         nodered_url=None,
         device="cuda",
         imgsz=640,
-        conf_thres=0.5,
+        bbox_conf_thres=0.5,
         sequence_length=STGCNConfig.SEQUENCE_LENGTH,
         overlay=True,
         width=None,
@@ -213,7 +214,7 @@ class FrameProcessor:
         )
         try:
             self.keypoint_detector = KeypointDetector(
-                yolo_model_path, device=device, imgsz=imgsz, conf_thres=conf_thres
+                yolo_model_path, device=device, imgsz=imgsz, bbox_conf_thres=bbox_conf_thres
             )
             self.behavior_classifier = BehaviorClassifier(
                 stgcn_model_path,
@@ -240,13 +241,23 @@ class FrameProcessor:
         # CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES 才真的放掉目標貓。
         # 目標貓 / 分不清（未知）都會把它歸零。
         self._identity_nontarget_streak = 0
-        if CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION and _IdentityVerifier is not None:
+        # 單貓 / 多貓系統模式（config.py RunModeConfig.SYSTEM_MODE）。single 模式下
+        # 完全跳過多貓相關邏輯：只取信心最高的偵測、不畫非目標貓、不載入身分驗證 CNN。
+        self._system_mode = RunModeConfig.SYSTEM_MODE if RunModeConfig.SYSTEM_MODE in ("single", "multi") else "single"
+        self._multi_cat = self._system_mode == "multi"
+        print(
+            f"● 系統模式：{self._system_mode}"
+            + ("（多貓：挑目標貓 / 畫其他貓）" if self._multi_cat else "（單貓：只取信心最高的偵測）")
+        )
+        # CatIdentityConfig.is_active()＝ENABLE_IDENTITY_VERIFICATION 且 SYSTEM_MODE=="multi"。
+        # single 模式下一律 False，這一段整個跳過、不載入 CNN。
+        if CatIdentityConfig.is_active() and _IdentityVerifier is not None:
             try:
                 self.identity_verifier = _IdentityVerifier(
                     model_path=CatIdentityConfig.IDENTITY_MODEL_PATH,
                     target_class=CatIdentityConfig.TARGET_CAT_CLASS,
                     device=device,
-                    conf_threshold=CatIdentityConfig.IDENTITY_CONF_THRESHOLD,
+                    identity_conf_threshold=CatIdentityConfig.IDENTITY_CONF_THRESHOLD,
                 )
                 print(
                     f"✓ 身分驗證已啟用（CNN）：只有判定為「{CatIdentityConfig.TARGET_CAT_CLASS}」"
@@ -255,6 +266,8 @@ class FrameProcessor:
             except Exception as e:
                 print(f"⚠ 身分驗證初始化失敗，已停用（偵測到的貓將一律視為目標貓）：{e}")
                 self.identity_verifier = None
+        elif not self._multi_cat and CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION:
+            print("ℹ 系統模式為 single，已忽略「啟用身份驗證」設定（身分驗證只在 multi 模式生效）")
 
         self.tracker = ImprovedBehaviorTracker()
         self.anomaly_detector = AnomalyDetector()
@@ -346,9 +359,17 @@ class FrameProcessor:
         current_time = time.time()
         self.prev_time = current_time
 
-        kpts, kpt_conf, bbox, conf, all_instances = self.keypoint_detector.detect(
-            frame, return_all_instances=True
-        )
+        if self._multi_cat:
+            kpts, kpt_conf, bbox, bbox_conf, all_instances = self.keypoint_detector.detect(
+                frame, return_all_instances=True
+            )
+        else:
+            # 單貓模式：YOLO 直接只回傳「信心值最高」的那一隻（max_det=1），
+            # 不做跨幀 IoU 追蹤延續、不碰多貓挑選 / 畫非目標貓 / 身分驗證。
+            kpts, kpt_conf, bbox, bbox_conf = self.keypoint_detector.detect(
+                frame, single_cat=True
+            )
+            all_instances = None
 
         # ── 多貓同框：決定「目標貓」是哪個實例，其餘放 other_instances 畫灰框 ──
         # 目標貓＝唯一進入行為分類 / tracker / CSV / Node-RED / 個體化基線的那隻。
@@ -366,7 +387,7 @@ class FrameProcessor:
                     kpts,
                     kpt_conf,
                     bbox,
-                    conf,
+                    bbox_conf,
                     other_instances,
                 ) = self._select_target_instance(frame, all_instances)
                 identity_filtered_now = kpts is None
@@ -413,7 +434,7 @@ class FrameProcessor:
             self._last_known_kpts = kpts.copy()
             self._last_known_kpt_conf = kpt_conf.copy()
             self._last_known_bbox = bbox
-            self._last_known_bbox_conf = conf
+            self._last_known_bbox_conf = bbox_conf
         elif (
             not identity_filtered_now
             and self._cat_missing_streak
@@ -422,7 +443,7 @@ class FrameProcessor:
         ):
             self._cat_missing_streak += 1
             kpts, kpt_conf = self._last_known_kpts, self._last_known_kpt_conf
-            bbox, conf = self._last_known_bbox, self._last_known_bbox_conf
+            bbox, bbox_conf = self._last_known_bbox, self._last_known_bbox_conf
 
         # 沿用上次推論結果；僅在本幀推論成功時更新
         behavior_id = self._last_behavior_id
@@ -595,7 +616,7 @@ class FrameProcessor:
                     kpts,
                     kpt_conf,
                     bbox,
-                    conf,
+                    bbox_conf,
                     self._display_behavior_id,
                     self._display_confidence,
                     self._display_class_probs,
@@ -697,7 +718,7 @@ class FrameProcessor:
     def _select_target_instance(self, frame, all_instances):
         """身分驗證開啟時，從這一幀所有偵測到的貓裡挑出「目標貓」的實例。
 
-        回傳 (kpts, kpt_conf, bbox, conf, other_instances)：
+        回傳 (kpts, kpt_conf, bbox, bbox_conf, other_instances)：
           - 確立目標貓：前 4 個是該實例，other_instances 是其餘所有實例
           - 沒有目標貓：前 4 個為 None，other_instances 是全部實例——呼叫端走
             NOT_VISIBLE 統計路徑，但仍把每隻畫成灰框。
@@ -714,7 +735,6 @@ class FrameProcessor:
             ≥2 隻貓 → 只有某隻明確過信心門檻才採用，都分不清就不計入。
         """
         verifier = self.identity_verifier
-        conf_thres = verifier.conf_threshold
         hyst = max(1, CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES)
         none_target = (None, None, None, None, list(all_instances))
 
@@ -751,7 +771,8 @@ class FrameProcessor:
             guess_i = 0
         else:
             bi = int(np.argmax(scores))
-            guess_i = bi if scores[bi] >= conf_thres else None
+            # verifier.identity_conf_threshold＝CNN 身分辨識 softmax 門檻（非 YOLO bbox / kpt 信心）
+            guess_i = bi if scores[bi] >= verifier.identity_conf_threshold else None
 
         if guess_i is None:
             # 冷啟動、多隻貓都分不清 → 這一幀不計入（都畫灰框）

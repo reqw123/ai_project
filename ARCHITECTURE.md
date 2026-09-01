@@ -43,7 +43,7 @@
 
 | 層 | 輸入 → 輸出 | 模組 |
 |---|---|---|
-| **感知 Perception** | frame → `kpts(17,2)`, `kpt_conf(17,)`, `bbox`, `det_conf` → `(T=16, V, C=7)` 特徵張量 | `detectors/keypoint_detector.py`、`models/stgcn_model.py`（`interpolate_missing` → `flip_normalize` → `orientation_normalize` → `normalize_skeleton_coords` → `build_feature_tensor`） |
+| **感知 Perception** | frame → `kpts(17,2)`, `kpt_conf(17,)`, `bbox`, `bbox_conf` → `(T=16, V, C=7)` 特徵張量 | `detectors/keypoint_detector.py`、`models/stgcn_model.py`（`interpolate_missing` → `flip_normalize` → `orientation_normalize` → `normalize_skeleton_coords` → `build_feature_tensor`） |
 | **分析 Analysis** | `(1, C, 16, V)` → `behavior_id ∈ {0..4, -1 LOW_CONF, -2 NO_CAT}`, `confidence`, `probs[5]` | `detectors/behavior_classifier.py`、`models/stgcn_model.py`（STGCN）、`processors/skeleton_quality_assessment.py`（幾何否決 → LOW_CONF） |
 | **監測 Monitoring** | 上述 + `activity_value` → 每日統計、CSV、Node-RED payload、疊圖畫面、警報 | `processors/anomaly_detector.py`、`trackers/behavior_tracker.py`、`processors/visualizer.py`、`logutils/csv_logger.py`、`communication/nodered_client.py`、`plugins/*` |
 | **個體化分析 Analytics** | 多天 `DailyRecord` + 今日統計 → `Baseline`、`DeviationResult`、`FusionResult`（風險等級） | `analytics/{daily_store,baseline,deviation,fusion,config}.py`、`dashboard/*` |
@@ -56,7 +56,7 @@
 frame
  │
  ├─▶ KeypointDetector.detect()                     # YOLO-Pose，多貓時以 IoU 延續鎖定同一隻
- │     └─ kpts / kpt_conf / bbox / det_conf  (或全 None)
+ │     └─ kpts / kpt_conf / bbox / bbox_conf  (或全 None)
  │
  ├─▶ IdentityVerifier.verify()  [預設關閉]          # 非目標貓 → kpts = None
  │

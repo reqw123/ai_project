@@ -96,10 +96,10 @@ class TestComputeEarDistance:
         assert math.isnan(body_ear_ratio)
 
     def test_ear_confidence_exactly_at_threshold_is_invalid(self):
-        """門檻比較用 >=（EAR_CONF_THRESHOLD=0.3），恰好等於門檻應視為有效。"""
+        """門檻比較用 >=（EAR_KPT_CONF_THRESHOLD），恰好等於門檻應視為有效。"""
         conf = _full_conf()
-        conf[_C.KP_LEFT_EAR] = _C.EAR_CONF_THRESHOLD
-        conf[_C.KP_RIGHT_EAR] = _C.EAR_CONF_THRESHOLD
+        conf[_C.KP_LEFT_EAR] = _C.EAR_KPT_CONF_THRESHOLD
+        conf[_C.KP_RIGHT_EAR] = _C.EAR_KPT_CONF_THRESHOLD
         _, _, valid, _, _ = compute_ear_distance(_kpts(), conf)
         assert valid is True
 

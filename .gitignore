@@ -43,6 +43,13 @@ Thumbs.db
 # （已知的測試污染真實檔案問題，見 TODO M-10）——不進版控。
 paper/runtime_settings.previous.json
 
+# paper/local_state/：每台機器 / 使用者各自的本機狀態（換電腦就該重來），
+# 跟進版控的系統設定分開——整個資料夾不進版控，只留 README.md 讓慣例被看到。
+# 目前內容：gui_state.json（設定視窗 GUI 偏好，見 settings_gui/ui_state.py）。
+paper/local_state/*
+!paper/local_state/README.md
+paper/.gui_state.json  # 舊位置（2026-08-31 前），殘留檔一併忽略
+
 # 注意：以下刻意「不」忽略——它們已在版控中且含使用者資料/設定：
 #   paper/cat_monitoring_log.csv, paper/behavior_segments_log.csv
 #   paper/output/*.csv, paper/runtime_settings.current.json

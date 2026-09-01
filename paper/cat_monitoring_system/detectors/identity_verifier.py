@@ -10,7 +10,7 @@
 
 方法：ImageNet 預訓練的 MobileNetV3-Small 微調成 N 類貓咪身分分類器，
 從 bbox 裁切區域（往外擴 CROP_PADDING_RATIO，與訓練資料一致）跑一次
-前向 → softmax。最高信心 < CONF_THRESHOLD 視為「未知」。用最近
+前向 → softmax。最高信心 < IDENTITY_CONF_THRESHOLD 視為「未知」。用最近
 smooth_window 幀的多數決平滑，稀釋單幀雜訊/瞬間角度造成的偶發誤判。
 （第一版的 HSV 顏色直方圖已完全汰換——顏色特徵丟掉紋理/斑紋，貓數變多
 或兩隻毛色相近時分不開。）
@@ -48,13 +48,13 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 class IdentityVerifier:
     # 這幾個門檻沿用訓練/驗證時的設定；改之前先看 cat_identity/2_train.py 產出的
     # confusion_matrix.png / test_metrics.json 確認效果，不要憑感覺調。
-    CONF_THRESHOLD = 0.80          # 單幀 softmax 最高值低於此 → 該幀判「未知」（預設；可由建構子覆蓋）
+    IDENTITY_CONF_THRESHOLD = 0.80          # 單幀 softmax 最高值低於此 → 該幀判「未知」（預設；可由建構子覆蓋）
     CROP_PADDING_RATIO = 0.04      # bbox 往外擴的比例，須與 cat_identity/1_build_dataset.py 訓練時一致
     DEFAULT_SMOOTH_WINDOW = 5      # 取最近幾幀的原始判定做多數決
 
     def __init__(
         self, model_path, target_class, device="cuda", smooth_window=None,
-        conf_threshold=None,
+        identity_conf_threshold=None,
     ):
         """model_path 必須是 cat_identity/2_train.py 產出的有效權重檔（.pt），
         載入失敗會直接拋例外（FileNotFoundError / KeyError / RuntimeError 等），
@@ -64,7 +64,7 @@ class IdentityVerifier:
         拋 ValueError。其餘所有類別（含信心不足判為「未知」）都會被視為
         「不是目標貓」。
 
-        conf_threshold：單幀 softmax 信心門檻，None＝用 CONF_THRESHOLD 預設。
+        identity_conf_threshold：單幀 softmax 信心門檻，None＝用 IDENTITY_CONF_THRESHOLD 預設。
         由 FrameProcessor 傳入 CatIdentityConfig.IDENTITY_CONF_THRESHOLD（可在
         設定視窗調整）。
         """
@@ -100,10 +100,10 @@ class IdentityVerifier:
         win = int(smooth_window) if smooth_window else self.DEFAULT_SMOOTH_WINDOW
         self._recent = deque(maxlen=max(1, win))
 
-        self.conf_threshold = (
-            float(conf_threshold)
-            if conf_threshold is not None
-            else self.CONF_THRESHOLD
+        self.identity_conf_threshold = (
+            float(identity_conf_threshold)
+            if identity_conf_threshold is not None
+            else self.IDENTITY_CONF_THRESHOLD
         )
 
     def _crop_bbox(self, frame, bbox):
@@ -128,13 +128,13 @@ class IdentityVerifier:
     @torch.no_grad()
     def _classify(self, crop_bgr):
         """一張 BGR 裁切圖 → (pred_class_name_or_None, top_conf)。
-        信心低於 CONF_THRESHOLD 時 pred 回 None（未知），top_conf 仍照實回傳。"""
+        信心低於 IDENTITY_CONF_THRESHOLD 時 pred 回 None（未知），top_conf 仍照實回傳。"""
         rgb = crop_bgr[:, :, ::-1]  # BGR → RGB
         x = self._transform(Image.fromarray(np.ascontiguousarray(rgb))).unsqueeze(0).to(self.device)
         probs = torch.softmax(self.model(x), dim=1)[0].cpu().numpy()
         top_i = int(probs.argmax())
         top_p = float(probs[top_i])
-        pred = self.class_names[top_i] if top_p >= self.conf_threshold else None
+        pred = self.class_names[top_i] if top_p >= self.identity_conf_threshold else None
         return pred, top_p
 
     @torch.no_grad()

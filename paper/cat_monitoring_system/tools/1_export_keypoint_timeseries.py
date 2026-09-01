@@ -43,8 +43,8 @@ INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 YOLO_CONF_THRESHOLD = 0.5
 MAX_VIDEOS_TO_PROCESS = 1  # None 或 <= 0 表示處理全部影片
-INTERPOLATE_CONF_THRESHOLD = 0.1
-MOTION_METRICS_CONF_THRESHOLD = 0.3
+INTERPOLATE_KPT_CONF_THRESHOLD = 0.5
+MOTION_METRICS_KPT_CONF_THRESHOLD = 0.5
 MOTION_METRICS_TOP_K = 5
 ROBUST_AMP_LOWER_PCT = 5
 ROBUST_AMP_UPPER_PCT = 95
@@ -108,7 +108,7 @@ def build_normalized_timeseries(ema_keypoints, keypoint_conf):
     if ema_arr.size == 0:
         return ema_arr.copy(), ema_arr.copy()
 
-    interpolated = interpolate_missing(ema_arr, conf_arr, threshold=INTERPOLATE_CONF_THRESHOLD).astype(np.float32)
+    interpolated = interpolate_missing(ema_arr, conf_arr, threshold=INTERPOLATE_KPT_CONF_THRESHOLD).astype(np.float32)
     normalized = flip_normalize(interpolated)
     normalized = orientation_normalize(normalized)
     normalized = normalize_skeleton_coords(normalized).astype(np.float32)
@@ -121,7 +121,7 @@ def _safe_float(value):
     return f"{float(value):.4f}"
 
 
-def _compute_body_scale(keypoint_arr, conf_arr, conf_threshold):
+def _compute_body_scale(keypoint_arr, conf_arr, kpt_conf_threshold):
     if keypoint_arr.size == 0 or conf_arr.size == 0:
         return 1.0
 
@@ -129,7 +129,7 @@ def _compute_body_scale(keypoint_arr, conf_arr, conf_threshold):
     hip_xy = keypoint_arr[:, 5, :]
     mid_back_conf = conf_arr[:, 4]
     hip_conf = conf_arr[:, 5]
-    trunk_valid = (mid_back_conf > conf_threshold) & (hip_conf > conf_threshold)
+    trunk_valid = (mid_back_conf > kpt_conf_threshold) & (hip_conf > kpt_conf_threshold)
 
     if np.any(trunk_valid):
         trunk_dist = np.linalg.norm(mid_back_xy[trunk_valid] - hip_xy[trunk_valid], axis=1)
@@ -138,18 +138,18 @@ def _compute_body_scale(keypoint_arr, conf_arr, conf_threshold):
     return 1.0
 
 
-def compute_motion_metrics(keypoints, keypoint_conf, conf_threshold):
+def compute_motion_metrics(keypoints, keypoint_conf, kpt_conf_threshold):
     keypoint_arr = np.asarray(keypoints, dtype=np.float32)
     conf_arr = np.asarray(keypoint_conf, dtype=np.float32)
 
     if keypoint_arr.size == 0 or conf_arr.size == 0:
         return []
 
-    body_scale = _compute_body_scale(keypoint_arr, conf_arr, conf_threshold)
+    body_scale = _compute_body_scale(keypoint_arr, conf_arr, kpt_conf_threshold)
 
     metrics = []
     for kp_idx, kp_name in enumerate(KEYPOINT_NAMES):
-        valid = conf_arr[:, kp_idx] > conf_threshold
+        valid = conf_arr[:, kp_idx] > kpt_conf_threshold
         valid_count = int(np.sum(valid))
 
         if valid_count < 2:
@@ -237,12 +237,12 @@ def compute_motion_metrics(keypoints, keypoint_conf, conf_threshold):
     return metrics
 
 
-def _compute_relative_xy_for_plot(keypoint_arr, conf_arr, conf_threshold):
+def _compute_relative_xy_for_plot(keypoint_arr, conf_arr, kpt_conf_threshold):
     rel_arr = np.full_like(keypoint_arr, np.nan, dtype=np.float32)
-    body_scale = _compute_body_scale(keypoint_arr, conf_arr, conf_threshold)
+    body_scale = _compute_body_scale(keypoint_arr, conf_arr, kpt_conf_threshold)
 
     for kp_idx in range(keypoint_arr.shape[1]):
-        valid = conf_arr[:, kp_idx] > conf_threshold
+        valid = conf_arr[:, kp_idx] > kpt_conf_threshold
         if not np.any(valid):
             continue
         x = keypoint_arr[:, kp_idx, 0].copy()
@@ -390,7 +390,7 @@ def plot_keypoint_timeseries(plot_dir, video_stem, video_label, plot_mode, time_
     conf_arr = np.asarray(keypoint_conf, dtype=np.float32)
     velocity_arr = np.zeros_like(keypoint_arr)
     velocity_arr[1:] = keypoint_arr[1:] - keypoint_arr[:-1]
-    rel_arr = _compute_relative_xy_for_plot(keypoint_arr, conf_arr, MOTION_METRICS_CONF_THRESHOLD)
+    rel_arr = _compute_relative_xy_for_plot(keypoint_arr, conf_arr, MOTION_METRICS_KPT_CONF_THRESHOLD)
     rel_x_lim, rel_y_lim = _get_shared_axis_limits(rel_arr)
 
     for kp_idx, kp_name in enumerate(KEYPOINT_NAMES):
@@ -452,8 +452,8 @@ def write_summary(summary_path, video_summaries):
         f"YOLO imgsz: {YOLO_IMGSZ}",
         f"YOLO conf threshold: {YOLO_CONF_THRESHOLD}",
         f"Max videos to process: {MAX_VIDEOS_TO_PROCESS if MAX_VIDEOS_TO_PROCESS is not None else 'all'}",
-        f"Interpolation conf threshold: {INTERPOLATE_CONF_THRESHOLD}",
-        f"Motion metrics conf threshold: {MOTION_METRICS_CONF_THRESHOLD}",
+        f"Interpolation conf threshold: {INTERPOLATE_KPT_CONF_THRESHOLD}",
+        f"Motion metrics conf threshold: {MOTION_METRICS_KPT_CONF_THRESHOLD}",
         f"Robust amplitude percentiles: P{ROBUST_AMP_LOWER_PCT} - P{ROBUST_AMP_UPPER_PCT}",
         f"Plot fixed relative axis: {PLOT_USE_FIXED_REL_AXIS} (P{PLOT_REL_AXIS_LOWER_PCT} - P{PLOT_REL_AXIS_UPPER_PCT})",
         f"EMA alpha: {EMA_ALPHA}",
@@ -528,8 +528,8 @@ def main():
     print(f"YOLO imgsz: {YOLO_IMGSZ}")
     print(f"YOLO conf threshold: {YOLO_CONF_THRESHOLD}")
     print(f"處理影片數量: {MAX_VIDEOS_TO_PROCESS if MAX_VIDEOS_TO_PROCESS is not None else 'all'}")
-    print(f"插值信心閾值: {INTERPOLATE_CONF_THRESHOLD}")
-    print(f"運動指標信心閾值: {MOTION_METRICS_CONF_THRESHOLD}")
+    print(f"插值信心閾值: {INTERPOLATE_KPT_CONF_THRESHOLD}")
+    print(f"運動指標信心閾值: {MOTION_METRICS_KPT_CONF_THRESHOLD}")
     print(f"Robust 幅度分位數: P{ROBUST_AMP_LOWER_PCT} ~ P{ROBUST_AMP_UPPER_PCT}")
     print(f"統一相對座標圖軸: {PLOT_USE_FIXED_REL_AXIS}")
     print(f"EMA alpha: {EMA_ALPHA}")
@@ -540,7 +540,7 @@ def main():
         YOLO_MODEL_PATH,
         device=INFERENCE_DEVICE,
         imgsz=YOLO_IMGSZ,
-        conf_thres=YOLO_CONF_THRESHOLD,
+        bbox_conf_thres=YOLO_CONF_THRESHOLD,
     )
 
     video_summaries = []
@@ -660,12 +660,12 @@ def main():
         raw_motion_metrics = compute_motion_metrics(
             interpolated_keypoints,
             keypoint_conf_list,
-            conf_threshold=MOTION_METRICS_CONF_THRESHOLD,
+            kpt_conf_threshold=MOTION_METRICS_KPT_CONF_THRESHOLD,
         )
         normalized_motion_metrics = compute_motion_metrics(
             normalized_keypoints,
             keypoint_conf_list,
-            conf_threshold=MOTION_METRICS_CONF_THRESHOLD,
+            kpt_conf_threshold=MOTION_METRICS_KPT_CONF_THRESHOLD,
         )
 
         if csv_path is not None:

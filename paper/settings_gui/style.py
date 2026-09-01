@@ -5,13 +5,13 @@
 `_styled_button()`——其餘只有 `settings_window.py` 自己用到的樣式常數（分頁代表色、
 徽章配色、布林旗標配色等）仍留在 `settings_window.py` 裡，沒有必要搬。
 
-**2026-08 版面美化**：按鈕顏色從原本 4 組（主要綠／次要藍灰／警告橘／中性灰）簡化
-成 3 組——原本的「次要」跟「中性」語意上都是「不是主要也不是警告」，合併成一組
-`BTN_SECONDARY_*`（沿用原本次要色的藍灰色調，比純灰更有辨識度、也更貼近整體深藍
-色系的標題列）；`settings_window.py` 原本各自獨立定義的 `BTN_NEUTRAL_*` 已移除，
-所有原本用中性灰的按鈕改用這裡的 `BTN_SECONDARY_*`。同時新增間距比例常數
-（4 的倍數）跟 `_styled_button()` 的 `outline`/`compact` 兩個選項，取代原本「有的
-按鈕用預設 padding、有的手動 `.config(pady=4)` 覆寫」這種各自為政的做法。
+**2026-08 版面美化（第二版）**：使用者回饋「很多重複顏色且黯淡無味」。改動：
+① `_styled_button()` 從 `relief="raised"` 立體邊框改**扁平**（`relief="flat"`），
+互動回饋改用滑鼠進出時切換底色；② 按鈕色相從「幾乎全擠在藍灰」拆成按語意分開
+的 7 組（見下方 `BTN_*` 區塊：PRIMARY／SECONDARY／MANAGE／INFO／DANGER／WARN／
+QUIET），飽和度整體拉高；③ `outline=True` 不再是幽靈按鈕，改指向 `BTN_QUIET_*`
+（扁平淺灰的「安靜」層級）。第一版（4 組→3 組、raised 立體按鈕、幽靈 outline）
+的作法已整個被取代。
 """
 
 import tkinter as tk
@@ -29,35 +29,37 @@ SPACE_SM = 8
 SPACE_MD = 12
 SPACE_LG = 16
 
-# ── 按鈕配色：主要（綠，儲存/啟動/執行這類正面且唯一的主要動作）／次要（藍灰，
-# 其餘功能性動作跟中性/取消動作共用同一色相，用 outline 選項而非另開新顏色區分
-# 「次要」跟「更不重要」）／警告（橘，還原預設值/關閉正在跑的行程這類要留意的
-# 中斷性動作）——三組，不是四組。
-BTN_PRIMARY_BG = "#27ae60"
-BTN_PRIMARY_ACTIVE = "#219150"
-BTN_SECONDARY_BG = "#5d7285"
-BTN_SECONDARY_ACTIVE = "#4a5d6e"
-# 橘色（BTN_WARN_BG，settings_window.py 裡定義）配白字對比不夠，字看起來會糊/淡
-# （#e67e22 對純白文字的對比度偏低，接近但不到 WCAG AA 門檻）。這幾個警告色按鈕
-# 改用深棕色文字，跟橘色底的對比明顯提升，其餘（綠/藍灰）底色夠深，白字對比
-# 已經足夠，不用跟著改。
-BTN_WARN_FG = "#3a1f00"
-_GHOST_HOVER_BG = "#eef1f5"  # outline 按鈕 hover 時的淡灰底，不管邊框用哪個顏色都套同一個 hover 底色
-
-# 淡藍色：目前只有「關閉 main.py」「停止腳本」這兩顆中斷性動作按鈕在用——原本
-# 跟「還原 GUI 預設值」共用橘色警告色，使用者指定要跟那顆分開、改成淡藍色。跟
-# BTN_SECONDARY 的藍灰色刻意拉開一點飽和度差異，不會被誤認成同一組次要按鈕。
+# ── 按鈕配色（2026-08 第二版：扁平、全部填色）─────────────────────────────
+# 使用者回饋「很多重複顏色且黯淡無味」——改掉：① 拿掉 relief=raised 的立體邊框
+# 改扁平；② 原本幾乎所有非主要按鈕都擠在同一個藍灰色，現在按語意拆成幾個彼此
+# 分得開的色相；③ 飽和度整體拉高。每組都給 BG（常態）+ ACTIVE（hover／按下，
+# 比常態深一階，扁平按鈕沒有立體感，就靠這個切換做互動回饋）。
 #
-# 第一版（#3b82c4 配白字）使用者回報字會糊——算過對比度才知道原因：這個亮度的
-# 藍不上不下，中等亮度的底色配黑字或白字對比都不夠好（不是隨便挑深/淺文字色
-# 就能解決，底色本身要挑到明顯偏亮或偏暗的一端）。改成真正的淡（偏亮）藍當底色，
-# 配深藍字（跟橘色底配深棕字是同一個邏輯，但這次底色改亮，字就要改深，方向
-# 相反）——量過對比度：白底 #eef2f6 至 BTN_INFO_BG 的相對亮度落在偏亮那一端，
-# BTN_INFO_FG 這個深藏青跟它的對比度約 6.3，比第一版的白字（約 4.1，未達 WCAG
-# AA 的 4.5 門檻）明顯好上不少。
-BTN_INFO_BG = "#8ec4e8"
-BTN_INFO_ACTIVE = "#6badd9"
-BTN_INFO_FG = "#0d3a5c"
+#   PRIMARY   綠   正面且唯一的主要動作（儲存／啟動／執行／套用）
+#   SECONDARY 鋼藍 一般功能性動作（瀏覽／開啟檔案／匯出入／上移下移…）
+#   MANAGE    靛藍 管理／設定類（各處的「⚙ 管理」），跟一般次要動作再拉開一個色相
+#   INFO      青   中斷正在跑的行程（關閉 main.py／停止腳本／停止）
+#   DANGER    紅   破壞性動作（刪除）
+#   WARN      琥珀 要留意的中斷性動作（還原 GUI 預設值／全部排除）
+#   QUIET     淺灰 收尾／取消／關閉視窗／縮小視窗——`outline=True` 走這組，仍是
+#                  明確的實心按鈕，只是刻意不搶眼（取代舊版看起來像 disabled 的幽靈按鈕）
+BTN_PRIMARY_BG = "#16a34a"
+BTN_PRIMARY_ACTIVE = "#15803d"
+BTN_SECONDARY_BG = "#3b6fb5"
+BTN_SECONDARY_ACTIVE = "#335f9c"
+BTN_MANAGE_BG = "#5b6bd6"
+BTN_MANAGE_ACTIVE = "#4c5cc4"
+BTN_INFO_BG = "#0891b2"
+BTN_INFO_ACTIVE = "#0e7490"
+BTN_INFO_FG = "#ffffff"
+BTN_DANGER_BG = "#dc2626"
+BTN_DANGER_ACTIVE = "#b91c1c"
+BTN_WARN_BG = "#d97706"
+BTN_WARN_ACTIVE = "#b45309"
+BTN_WARN_FG = "#3a1f00"  # 琥珀底配白字對比不足（未達 WCAG AA），改深棕字
+BTN_QUIET_BG = "#e2e8f0"
+BTN_QUIET_ACTIVE = "#cbd5e1"
+BTN_QUIET_FG = "#334155"
 
 # 底部「main.py 終端機輸出」面板：刻意用深色終端機配色跟上方淡色表單拉開視覺區隔，
 # 一眼就能認出這塊是「輸出訊息」而不是可編輯欄位。
@@ -95,33 +97,43 @@ def _display_width(text: str) -> int:
 
 def _styled_button(parent, text, command, bg, active_bg, fg="#ffffff", font=None,
                     outline=False, compact=False):
-    """通用按鈕產生器。
+    """通用按鈕產生器——扁平（`relief="flat"`、無立體邊框），互動回饋靠滑鼠
+    進出時把底色從 `bg` 切到 `active_bg`（比常態深一階），按下時 Tk 也會用
+    `activebackground` 再壓一次。
 
-    - `outline=True`：畫成「幽靈按鈕」——底色跟 `parent` 背景融為一體、只有邊框跟
-      文字用 `bg` 這個顏色（`active_bg` 這時候不會用到）。給整排按鈕裡「最不重要」
-      的收尾動作用（取消、關閉），不用為了再降一級重要性又發明一個新色相，靠
-      「有沒有實心填色」這個更輕的視覺差異就夠分辨了。
+    - `outline=True`：不是真的畫外框，而是「安靜」層級——一律走 `BTN_QUIET_*`
+      這組扁平淺灰（忽略傳進來的 `bg`/`active_bg`）。給收尾動作用（取消、關閉、
+      縮小視窗），仍是看得出來、點得下去的實心按鈕，只是刻意不搶眼。
     - `compact=True`：內距改用較小的間距（`SPACE_SM`/`SPACE_XS`），給空間較擠的
-      地方用（例如緊貼在輸入框旁邊的「瀏覽...」按鈕），跟一般按鈕
-      （`SPACE_MD`/`SPACE_SM`）拉開一個明確的兩級尺寸系統，不再各自寫死數字。
+      地方用（例如緊貼在輸入框旁邊的「瀏覽...」按鈕）。
 
-    實心按鈕（`outline=False`，多數情況）用 `relief="raised"` + `bd=2` 做出立體感
-    （亮邊在左上、暗邊在右下，按下去時 Tk 會自動反過來變凹陷，有按壓回饋）——
-    Tkinter 沒有真的陰影可以畫，這是這個工具箱能做到「有立體感」最直接的方式。
-    outline 按鈕維持純邊框、不加浮凸，因為它本來就是刻意做得比較「輕」的次要
-    按鈕，浮凸感會跟它「不重要」的視覺定位互相矛盾。
+    邊框用 1px `highlightthickness` 畫（顏色＝`active_bg`，比底色深一階），讓按鈕
+    在跟自己顏色接近的背景上仍有清楚的邊界；`relief` 全程 flat，沒有 raised
+    那種 Win95 浮凸感。
     """
     padx = SPACE_SM if compact else SPACE_MD
     pady = SPACE_XS if compact else SPACE_SM
     if outline:
-        return tk.Button(
-            parent, text=text, command=command, bg=parent.cget("bg"), fg=bg,
-            activebackground=_GHOST_HOVER_BG, activeforeground=bg,
-            relief="solid", bd=1, highlightthickness=0,
-            font=font or ("Microsoft JhengHei", 12, "bold"), padx=padx, pady=pady, cursor="hand2",
-        )
-    return tk.Button(
+        bg, active_bg, fg = BTN_QUIET_BG, BTN_QUIET_ACTIVE, BTN_QUIET_FG
+    border = active_bg
+
+    btn = tk.Button(
         parent, text=text, command=command, bg=bg, fg=fg,
-        activebackground=active_bg, activeforeground=fg, relief="raised", bd=2,
-        font=font or ("Microsoft JhengHei", 12, "bold"), padx=padx, pady=pady, cursor="hand2",
+        activebackground=active_bg, activeforeground=fg,
+        disabledforeground="#ccd3dc",
+        relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=border, highlightcolor=border,
+        font=font or ("Microsoft JhengHei", 12, "bold"),
+        padx=padx, pady=pady, cursor="hand2",
     )
+
+    def _hover(enter):
+        # 進入時只在「可按」狀態才變深；離開時一律還原成常態底色——即使中途被
+        # 設成 disabled，滑鼠移開後也不會卡在 hover 的深色上。
+        if enter and str(btn["state"]) == "disabled":
+            return
+        btn.configure(bg=active_bg if enter else bg)
+
+    btn.bind("<Enter>", lambda _e: _hover(True))
+    btn.bind("<Leave>", lambda _e: _hover(False))
+    return btn

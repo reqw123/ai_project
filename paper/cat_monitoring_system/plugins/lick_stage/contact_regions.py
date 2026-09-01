@@ -313,7 +313,7 @@ def _build_limb_joint_targets(kpts, kpt_conf, body_len: float) -> list:
     paw_radius = max(1e-6, eff_len * _C.LIMB_PAW_CIRCLE_R_RATIO * _C.LIMB_CONTACT_SCALE)
     targets = []
     for group, _knee_idx, paw_idx in _C.LIMB_SEGMENTS:
-        if float(kpt_conf[paw_idx]) > _C.LIMB_CONF_THRESHOLD:
+        if float(kpt_conf[paw_idx]) > _C.LIMB_KPT_CONF_THRESHOLD:
             targets.append(
                 {
                     "group": group,
@@ -333,8 +333,8 @@ def _build_limb_strip_targets(kpts, kpt_conf, body_len: float) -> list:
     strips = []
     for group, knee_idx, paw_idx in _C.LIMB_SEGMENTS:
         if not (
-            float(kpt_conf[knee_idx]) > _C.LIMB_CONF_THRESHOLD
-            and float(kpt_conf[paw_idx]) > _C.LIMB_CONF_THRESHOLD
+            float(kpt_conf[knee_idx]) > _C.LIMB_KPT_CONF_THRESHOLD
+            and float(kpt_conf[paw_idx]) > _C.LIMB_KPT_CONF_THRESHOLD
         ):
             continue
         knee = np.asarray(kpts[knee_idx], dtype=np.float64)
@@ -374,11 +374,11 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
     if kpts is None or kpt_conf is None:
         return None
 
-    left_ok = float(kpt_conf[_C.KP_LEFT_EAR]) > _C.EAR_CONF_THRESHOLD
-    right_ok = float(kpt_conf[_C.KP_RIGHT_EAR]) > _C.EAR_CONF_THRESHOLD
-    nose_ok = float(kpt_conf[_C.KP_NOSE]) >= _C.NOSE_CONF_THRESHOLD
-    chest_ok = float(kpt_conf[_C.KP_CHEST]) > _C.EAR_CONF_THRESHOLD
-    hip_ok = float(kpt_conf[_C.KP_HIP]) > _C.EAR_CONF_THRESHOLD
+    left_ok = float(kpt_conf[_C.KP_LEFT_EAR]) > _C.EAR_KPT_CONF_THRESHOLD
+    right_ok = float(kpt_conf[_C.KP_RIGHT_EAR]) > _C.EAR_KPT_CONF_THRESHOLD
+    nose_ok = float(kpt_conf[_C.KP_NOSE]) >= _C.NOSE_KPT_CONF_THRESHOLD
+    chest_ok = float(kpt_conf[_C.KP_CHEST]) > _C.EAR_KPT_CONF_THRESHOLD
+    hip_ok = float(kpt_conf[_C.KP_HIP]) > _C.EAR_KPT_CONF_THRESHOLD
 
     if not (nose_ok and chest_ok and hip_ok):
         return None
@@ -412,7 +412,7 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
     # 視為無法判斷彎曲程度，boost 退回 1.0（不縮放）。公式對齊 processors/
     # skeleton_quality_assessment.py 的 compute_midback_angle()（見
     # _compute_midback_angle_deg() 說明）。
-    mid_back_ok = float(kpt_conf[_C.KP_MID_BACK]) > _C.EAR_CONF_THRESHOLD
+    mid_back_ok = float(kpt_conf[_C.KP_MID_BACK]) > _C.EAR_KPT_CONF_THRESHOLD
     if mid_back_ok:
         mid_back = np.asarray(kpts[_C.KP_MID_BACK], dtype=np.float64)
         midback_angle_deg = _compute_midback_angle_deg(chest, mid_back, hip)

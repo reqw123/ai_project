@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from detectors.keypoint_detector import KeypointDetector
+from processors.overlay_helpers import compute_overlay_scale, draw_bbox_conf_label
 
 # ═══════════════════════════════════════════════════════
 #  使用者設定區
@@ -208,7 +209,7 @@ def run_mode1_video():
 
     print("初始化 YOLO-Pose...")
     keypoint_detector = KeypointDetector(
-        YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, conf_thres=YOLO_CONF_THRESHOLD,
+        YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, bbox_conf_thres=YOLO_CONF_THRESHOLD,
     )
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -248,6 +249,7 @@ def run_mode1_video():
 
         # ── YOLO bbox：多貓同框時，每一隻都個別算出佔「原始影格」面積的百分比並
         # 分別標示；目前追蹤鎖定的主要目標用橘色＋"tracked"，其餘用青色區分 ──
+        _ui = compute_overlay_scale(show_frame.shape[1], show_frame.shape[0])
         bbox_pct_lines = []
         for idx, (_kpts_i, _kconf_i, bbox_i, bconf_i) in enumerate(all_instances or [], start=1):
             if bbox_i is None:
@@ -263,8 +265,7 @@ def run_mode1_video():
             dy2 = int(by2 * scale) + pad_y
             cv2.rectangle(show_frame, (dx1, dy1), (dx2, dy2), color, 2, cv2.LINE_AA)
             conf_str = f" {float(bconf_i):.2f}" if bconf_i is not None else ""
-            cv2.putText(show_frame, f"#{idx}{conf_str}", (dx1, max(0, dy1 - 6)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+            draw_bbox_conf_label(show_frame, dx1, dy1, color, f"#{idx}{conf_str}", _ui)
 
             tag = " (tracked)" if is_tracked else ""
             bbox_pct_lines.append(f"Cat #{idx}{tag}: {pct_i:5.2f}% of frame")
@@ -397,7 +398,7 @@ def run_mode2_batch_folder():
 
     print("初始化 YOLO-Pose（模式 2 專用模型）...")
     detector = KeypointDetector(
-        MODE2_YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, conf_thres=YOLO_CONF_THRESHOLD,
+        MODE2_YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, bbox_conf_thres=YOLO_CONF_THRESHOLD,
     )
 
     files = [f for f in os.listdir(MODE2_FOLDER) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]

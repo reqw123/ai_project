@@ -94,7 +94,7 @@
   - 風險：低-中。需保留 outline 效果與背景框；加視覺回歸（characterization）比對。
 
 - [x] **H-4｜`config.py` 機器相依絕對路徑預設值**（PROJECT_ANALYSIS H1）
-  - 位置：`config.py` 的 `ModelPaths.VIDEO_INPUT`、`LoggingConfig.CSV_PATH` / `SEGMENTS_CSV_PATH`、`CatIdentityConfig.TARGET_CAT_PROFILE_PATH` / `OTHER_CAT_PROFILE_PATH`、`NodeRedConfig.GLOBAL_CONTEXT_PATH` fallback。
+  - 位置：`config.py` 的 `ModelPaths.VIDEO_INPUT`、`LoggingConfig.CSV_PATH` / `SEGMENTS_CSV_PATH`、`NodeRedConfig.GLOBAL_CONTEXT_PATH` fallback。（原列的 `CatIdentityConfig.TARGET_CAT_PROFILE_PATH` / `OTHER_CAT_PROFILE_PATH` 已於 2026-08 身分驗證改 CNN 時移除，換成走 `_resolve_project_path()` 的 `IDENTITY_MODEL_PATH`。）
   - 呼叫關係：這些是 `_runtime_default()` 的 fallback（env / JSON 未設時才用）。`settings_manager.FIELD_SCHEMA` 對應欄位、`default_runtime_settings.json`（由 `python config.py` 同步）。
   - 修法：`CSV_PATH` / `SEGMENTS_CSV_PATH` / cat profile 改用 `_resolve_project_path("paper/...")`（與 `TRACKER_STATE_PATH` 一致）。`VIDEO_INPUT` 預設改成 `0`（攝影機）或空字串 + 明確錯誤訊息。`GLOBAL_CONTEXT_PATH` fallback 與 Node-RED `settings.js` 兩邊必須一起改（見 config.py 該處長註解），暫緩或與使用者一起處理。
   - 風險：中。改預設值會連帶觸發 `regenerate_default_runtime_settings()`；需跑 `paper/tests/test_settings_manager.py` 的一致性測試。使用者現有 `runtime_settings.current.json` 若已設這些欄位則不受影響。

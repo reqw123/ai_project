@@ -408,7 +408,7 @@ def run_comparison(
     output_root,
     output_prefix,
     imgsz=640,
-    conf_thres=0.5,
+    bbox_conf_thres=0.5,
     sequence_length=16,
     classify_stride=2,
     device="cuda",
@@ -438,7 +438,7 @@ def run_comparison(
     print(f"  Output: {out_dir}\n{sep}")
 
     print("\n[Loading YOLO]")
-    kp_det = KeypointDetector(yolo_path, device=device, imgsz=imgsz, conf_thres=conf_thres)
+    kp_det = KeypointDetector(yolo_path, device=device, imgsz=imgsz, bbox_conf_thres=bbox_conf_thres)
 
     print("\n[Loading ST-GCN model]")
     bn_ch = infer_bn_input_channels(model_path)

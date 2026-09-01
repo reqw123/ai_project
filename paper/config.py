@@ -3,7 +3,6 @@
 方便管理所有設置，避免直接修改主程序
 """
 
-import builtins as _builtins
 import datetime as _datetime
 import os
 import re
@@ -36,7 +35,7 @@ def _env_float(name: str, default: float) -> float:
     if value is None:
         return default
     try:
-        return _builtins.float(value)
+        return float(value)
     except (TypeError, ValueError):
         return default
 
@@ -131,7 +130,7 @@ def _runtime_default(json_key: str, fallback, value_type=None):
 
     刻意用 try/except 包住整個查詢：settings_manager.py 缺失、import 失敗、
     JSON 格式錯誤等任何情況都不該讓 config.py 整個 import 失敗——config.py
-    被 39 個檔案 import，安全啟動比「JSON 一定要生效」更優先。
+    被系統內大量模組 import，安全啟動比「JSON 一定要生效」更優先。
     """
     try:
         from settings_manager import get_runtime_value
@@ -282,9 +281,9 @@ class ModelPaths:
 
     @classmethod
     def ensure_dirs(cls) -> None:
-        """確保日誌與輸出目錄存在，不存在則建立。"""
-        Path(cls.LOG_DIR).mkdir(exist_ok=True)
-        Path(cls.OUTPUT_DIR).mkdir(exist_ok=True)
+        """確保日誌與輸出目錄存在，不存在則建立（含多層父目錄）。"""
+        Path(cls.LOG_DIR).mkdir(parents=True, exist_ok=True)
+        Path(cls.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def validate(cls) -> bool:
@@ -459,6 +458,20 @@ class RunModeConfig:
 
     MODE = _env_str(
         "CAT_MONITORING_RUN_MODE", _runtime_default("run_mode.mode", "server", value_type=str)
+    )
+
+    # 單貓 / 多貓系統模式（跟 MODE 的 server/gui 無關，兩者可自由組合）：
+    #   "single"（預設）：假設畫面全程只有一隻貓。YOLO 直接只偵測「信心值最高」的
+    #     那一隻（model.predict(max_det=1)），每一幀都獨立鎖信心最高、**不做**跨幀
+    #     IoU 追蹤延續；FrameProcessor 完全跳過「多貓同框挑目標貓 / 把非目標貓畫成
+    #     灰框」這整套邏輯，也不會載入身分驗證 CNN（即使
+    #     cat_identity.enable_identity_verification=True 也忽略）。
+    #   "multi"：多貓場景。YOLO 回傳所有偵測（跨幀用 IoU 追蹤延續同一隻），
+    #     FrameProcessor 依 cat_identity / visualization 的設定挑出目標貓、畫其他貓。
+    #     ENABLE_IDENTITY_VERIFICATION 與 SHOW_NON_TARGET_CATS 這兩個開關只在此模式下才有意義。
+    SYSTEM_MODE = _env_str(
+        "CAT_MONITORING_SYSTEM_MODE",
+        _runtime_default("run_mode.system_mode", "single", value_type=str),
     )
 
     # server 模式下，處理管線（開影片、載入 YOLO/ST-GCN、tracker 統計、CSV、Node-RED 推送）
@@ -921,7 +934,7 @@ class BehaviorTrackingConfig:
         ),
     )  # 活動度過低的 walk 時長門檻
 
-    # 行為統計：四種行為完全獨立
+    # 行為統計：五種行為完全獨立
     BEHAVIOR_CATEGORIES = {
         0: "walk",
         1: "lick",
@@ -1014,6 +1027,19 @@ class CatIdentityConfig:
             "cat_identity.identity_conf_threshold", 0.80, value_type=float
         ),
     )
+
+    @classmethod
+    def is_active(cls) -> bool:
+        """身分驗證這一層實際上會不會運作。
+
+        兩個條件都要成立：ENABLE_IDENTITY_VERIFICATION=True **且**
+        RunModeConfig.SYSTEM_MODE=="multi"。單貓模式（single）下一律回 False——
+        單貓場景不需要「多貓過濾」，FrameProcessor 也因此完全不會載入身分驗證
+        CNN、設定視窗的「貓咪身份驗證」分頁也會整個灰掉（見 settings_window.py）。
+        所有想知道「身分驗證到底有沒有在跑」的地方都應該問這個，不要各自
+        重新拼 ENABLE_IDENTITY_VERIFICATION 的判斷。
+        """
+        return cls.ENABLE_IDENTITY_VERIFICATION and RunModeConfig.SYSTEM_MODE == "multi"
 
 
 # ==================== CSV 日誌參數 ====================
@@ -1151,7 +1177,7 @@ def get_config_summary() -> str:
 
     summary = f"""
     ╔════════════════════════════════════════════════════════╗
-    ║          貓咪監測系統配置摘要                         ║
+    ║                  貓咪監測系統配置摘要                  ║
     ╚════════════════════════════════════════════════════════╝
 
     📁 路徑配置
@@ -1165,7 +1191,7 @@ def get_config_summary() -> str:
       - 圖像尺寸          : {YOLOConfig.IMAGE_SIZE}
       - 偵測信心閾值      : {YOLOConfig.CONFIDENCE_THRESHOLD}
 
-    🧠 ST-GCN 參數  (硬編碼於 STGCNConfig.NUM_CLASSES；無 env 覆寫)
+    🧠 ST-GCN 推論參數  (僅 NUM_CLASSES 硬編碼無 env；其餘皆可用 CAT_MONITORING_STGCN_* / TARGET_MODEL_FPS 等 env 或 runtime_settings 覆寫)
       - 時間窗長度 (T)    : {STGCNConfig.SEQUENCE_LENGTH} 幀
       - 行為類別數        : {STGCNConfig.NUM_CLASSES}
       - 特徵模式          : {STGCNConfig.FEATURE_MODE}  (實際輸入通道數依 checkpoint 自動偵測，見 stgcn_model.py)
@@ -1189,6 +1215,7 @@ def get_config_summary() -> str:
       - 行為前綴對應      : {_train_behavior_prefixes}
 
     🕐 執行模式與排程
+      - 系統模式          : {RunModeConfig.SYSTEM_MODE}  （single=只偵測信心最高的一隻、不做 IoU 追蹤、跳過多貓挑選/畫非目標貓/身分驗證；multi=多貓場景）
       - 執行模式          : {RunModeConfig.MODE}  ("server" 或 "gui")
       - 啟動即自動處理    : {RunModeConfig.AUTO_START_PROCESSING}  （False=等第一個 /stream 等請求才啟動處理管線）
       - 排程開始時間      : {RunModeConfig.SCHEDULED_START_TIME or "(未設定)"}
@@ -1255,8 +1282,11 @@ def get_config_summary() -> str:
     🐱 貓咪身分與身分驗證
       - 貓咪 ID                   : {CatIdentityConfig.CAT_ID}  （唯讀，跟隨採用的身分模型自訂名稱；只寫進 CSV 每列最後一欄當篩選標記）
       - 身分驗證總開關（多貓過濾）: {CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION}  （False=偵測到的貓一律視為目標貓，不做身分過濾）
+      - 身分驗證實際生效         : {CatIdentityConfig.is_active()}  （需總開關=True 且系統模式=multi；single 模式下一律 False）
       - 身分辨識 CNN 模型檔       : {CatIdentityConfig.IDENTITY_MODEL_PATH}
       - 目標貓類別名稱           : {CatIdentityConfig.TARGET_CAT_CLASS}  （對應模型 class_names；其餘類別/未知都視為非目標貓）
+      - 單幀身分信心門檻         : {CatIdentityConfig.IDENTITY_CONF_THRESHOLD}  （CNN softmax 最高值低於此 → 該幀判「未知」不投票）
+      - 放掉目標貓的遲滯幀數     : {CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES} 幀  （CNN 連續這麼多幀明確判為他貓才停止計入；分不清一律當目標貓）
 
     📄 日誌設定
       - 主要 CSV          : {LoggingConfig.CSV_PATH}
@@ -1270,7 +1300,7 @@ def get_config_summary() -> str:
       - 模型    : {SystemInfo.MODEL_TYPE}
       - 輸出尺寸: {SystemInfo.OUTPUT_WIDTH} × {SystemInfo.OUTPUT_HEIGHT}  （會透過 cv2.VideoCapture.set() 要求攝影機來源改用此解析度擷取；對影片檔/串流無效）
 
-    ╔════════════════════════════════════════════════════════╗
+    ╚════════════════════════════════════════════════════════╝
     """
     return summary
 
@@ -1288,6 +1318,18 @@ def validate_all_config() -> bool:
         if not (0.0 <= YOLOConfig.CONFIDENCE_THRESHOLD <= 1.0):
             errors.append(
                 f"YOLO CONFIDENCE_THRESHOLD 應在 [0,1]: {YOLOConfig.CONFIDENCE_THRESHOLD}"
+            )
+        if not (0.0 <= AnomalyDetectionConfig.KP_CONF_THRES <= 1.0):
+            errors.append(
+                f"AnomalyDetectionConfig KP_CONF_THRES 應在 [0,1]: {AnomalyDetectionConfig.KP_CONF_THRES}"
+            )
+        if not (0.0 <= CatIdentityConfig.IDENTITY_CONF_THRESHOLD <= 1.0):
+            errors.append(
+                f"CatIdentityConfig IDENTITY_CONF_THRESHOLD 應在 [0,1]: {CatIdentityConfig.IDENTITY_CONF_THRESHOLD}"
+            )
+        if RunModeConfig.SYSTEM_MODE not in ("single", "multi"):
+            errors.append(
+                f"RunModeConfig SYSTEM_MODE 必須是 'single' 或 'multi': {RunModeConfig.SYSTEM_MODE!r}"
             )
         if STGCNConfig.SEQUENCE_LENGTH <= 0:
             errors.append(
@@ -1384,6 +1426,17 @@ def validate_all_config() -> bool:
 
 # ==================== 主測試 ====================
 if __name__ == "__main__":
+    # Windows 主控台預設編碼常是 cp950，get_config_summary() 內含 emoji（📁📷🧠…）
+    # 會讓 print() 直接 UnicodeEncodeError、整份摘要一個字都印不出來。跟
+    # tools/eval_class_source_distribution.py 等腳本用同一招先切成 UTF-8。
+    import sys as _sys
+
+    if _sys.stdout.encoding and _sys.stdout.encoding.lower() != "utf-8":
+        try:
+            _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     print(get_config_summary())
 
     if validate_all_config():

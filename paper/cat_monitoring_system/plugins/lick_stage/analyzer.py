@@ -219,7 +219,7 @@ class LickAnalyzer:
         )
         front_guard = check_front_view_guard(kpt_conf, dist_px, body_ear_ratio)
         nose_conf = float(kpt_conf[_C.KP_NOSE])
-        nose_ok = nose_conf >= _C.NOSE_CONF_THRESHOLD
+        nose_ok = nose_conf >= _C.NOSE_KPT_CONF_THRESHOLD
         angle_deg = compute_head_ear_angle(smooth_kpts, kpt_conf)
 
         gaze_fwd = gaze_lat = gaze_angle = _nan

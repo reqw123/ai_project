@@ -101,9 +101,9 @@ class TestComputeMidbackAngle:
         assert sqa.compute_midback_angle(kpts, conf) is None
 
     def test_confidence_exactly_at_threshold_is_accepted(self):
-        """信心值剛好等於門檻（非低於）應視為足夠：程式碼用 `< conf_thresh` 判斷。"""
+        """信心值剛好等於門檻（非低於）應視為足夠：程式碼用 `< kpt_conf_thresh` 判斷。"""
         kpts = _make_frame(chest=(0, 1), midback=(0, 0), hip=(1, 0))
-        conf = _make_conf(chest=sqa.BONE_CONF_THRESHOLD)
+        conf = _make_conf(chest=sqa.BONE_KPT_CONF_THRESHOLD)
         assert sqa.compute_midback_angle(kpts, conf) is not None
 
     def test_midback_coincident_with_chest_returns_none(self):

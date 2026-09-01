@@ -31,7 +31,7 @@ _STGCN_MODEL_PATH = _ModelPaths.STGCN_MODEL
 _VIDEO_PATH = _ModelPaths.VIDEO_INPUT
 _NODERED_RESULT_URL = _NodeRedConfig.ENDPOINT_RESULT
 _IMAGE_SIZE = _YOLOConfig.IMAGE_SIZE
-_CONF_THRES = _YOLOConfig.CONFIDENCE_THRESHOLD
+_BBOX_CONF_THRES = _YOLOConfig.CONFIDENCE_THRESHOLD
 _SEQUENCE_LENGTH = _STGCNConfig.SEQUENCE_LENGTH
 _PORT = _FlaskConfig.PORT
 from analytics import daily_store
@@ -153,7 +153,7 @@ def _build_frame_processor(enable_nodered=True):
         nodered_url=_NODERED_RESULT_URL if enable_nodered else None,
         device=runtime_device,
         imgsz=_IMAGE_SIZE,
-        conf_thres=_CONF_THRES,
+        bbox_conf_thres=_BBOX_CONF_THRES,
         sequence_length=_SEQUENCE_LENGTH,
         overlay=True,
         width=_SystemInfo.OUTPUT_WIDTH,

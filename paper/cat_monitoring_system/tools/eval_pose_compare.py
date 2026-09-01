@@ -32,7 +32,7 @@ KEYPOINT_NAMES = [
 BEHAVIOR_CLASSES = ["walk", "lick", "scratch", "shake", "stop"]
 SUPPORTED_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".m4v", ".mpg", ".mpeg", ".webm"}
 
-JITTER_CONF_THRESHOLD = 0.3
+JITTER_KPT_CONF_THRESHOLD = 0.5
 YOLO_CONF_THRESHOLD   = 0.5
 YOLO_IMGSZ            = 640
 
@@ -229,15 +229,15 @@ def process_video(model, video_path: Path, logger: logging.Logger,
             for i in range(17):
                 c = float(kpt_conf[i])
                 kpt_conf_lists[i].append(c)
-                if c >= JITTER_CONF_THRESHOLD:
+                if c >= JITTER_KPT_CONF_THRESHOLD:
                     kpt_present[i] += 1
 
-            valid = kpt_conf[kpt_conf >= JITTER_CONF_THRESHOLD]
+            valid = kpt_conf[kpt_conf >= JITTER_KPT_CONF_THRESHOLD]
             if len(valid) > 0:
                 frame_confidences.append(float(np.mean(valid)))
 
             if prev_kpts is not None:
-                mask = (kpt_conf >= JITTER_CONF_THRESHOLD) & (prev_kpt_conf >= JITTER_CONF_THRESHOLD)
+                mask = (kpt_conf >= JITTER_KPT_CONF_THRESHOLD) & (prev_kpt_conf >= JITTER_KPT_CONF_THRESHOLD)
                 for i in range(17):
                     if mask[i]:
                         jitter_lists[i].append(float(np.linalg.norm(kpts[i] - prev_kpts[i])))

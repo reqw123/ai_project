@@ -24,6 +24,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from detectors.keypoint_detector import KeypointDetector
+from processors.overlay_helpers import draw_bbox_conf_label
 from models.stgcn_model import (
     interpolate_missing,
     flip_normalize,
@@ -33,7 +34,7 @@ from models.stgcn_model import (
 
 # ===== Velocity (overlay) settings =====
 SEQUENCE_LENGTH = 16
-VELOCITY_CONF_THRESHOLD = 0.1
+VELOCITY_KPT_CONF_THRESHOLD = 0.5
 VELOCITY_PANEL_TOP_K = 3
 # Stride for velocity finite-difference: velocity[t] = (pos[t] - pos[t-stride]) / stride.
 # stride=1 is adjacent-frame diff (sensitive to YOLO jitter).
@@ -80,7 +81,7 @@ def _velocity_heat_color(speed, max_speed):
 
 
 
-def compute_velocity_overlay(seq_array, conf_arr, conf_threshold=VELOCITY_CONF_THRESHOLD):
+def compute_velocity_overlay(seq_array, conf_arr, kpt_conf_threshold=VELOCITY_KPT_CONF_THRESHOLD):
     """Compute velocity overlay summary from sequence arrays.
     seq_array: (T, J, 2)  conf_arr: (T, J)
     returns dict with 'joint_scores', 'overall_mean', 'recent_mean', 'peak_speed', 'top_entries'
@@ -88,7 +89,7 @@ def compute_velocity_overlay(seq_array, conf_arr, conf_threshold=VELOCITY_CONF_T
     if seq_array is None or conf_arr is None:
         return None
 
-    seq = interpolate_missing(seq_array, conf_arr, threshold=conf_threshold)
+    seq = interpolate_missing(seq_array, conf_arr, threshold=kpt_conf_threshold)
     seq = flip_normalize(seq)
     seq = orientation_normalize(seq)
     seq = normalize_skeleton_coords(seq)
@@ -100,7 +101,7 @@ def compute_velocity_overlay(seq_array, conf_arr, conf_threshold=VELOCITY_CONF_T
     speed_map = np.linalg.norm(velocity, axis=-1)  # T x J
     speed_map = np.where(speed_map < VELOCITY_DEAD_ZONE, 0.0, speed_map)
 
-    valid_mask = conf_arr > conf_threshold
+    valid_mask = conf_arr > kpt_conf_threshold
     joint_scores = np.zeros(speed_map.shape[1], dtype=np.float32)
     for j in range(speed_map.shape[1]):
         valid = valid_mask[:, j]
@@ -310,15 +311,15 @@ DISPLAY_SIZE = (1080, 720)
 LOOP_PLAYBACK = True
 
 # ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
-YOLO_CONF_THRESHOLD = 0.8      # YOLO bbox 偵測信心門檻
-DRAW_KP_CONF_THRESHOLD = 0.5   # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
+YOLO_CONF_THRESHOLD = 0.5      # YOLO bbox 偵測信心門檻
+DRAW_KPT_CONF_THRESHOLD = YOLO_CONF_THRESHOLD  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）；跟隨 YOLO_CONF_THRESHOLD
 
 SCRATCH_NOSE_IDX = 0
 SCRATCH_CHEST_IDX = 3
 SCRATCH_HIP_IDX = 5
 SCRATCH_HIND_PAW_IDXS = (11, 13)
 SCRATCH_DISTANCE_THRESHOLD_NORM = 0.5
-SCRATCH_DISTANCE_CONF_THRESHOLD = 0.5
+SCRATCH_DISTANCE_KPT_CONF_THRESHOLD = 0.5
 
 WINDOW_SCALE_STEP = 0.10
 WINDOW_SCALE_MIN = 0.50
@@ -412,7 +413,7 @@ def collect_video_paths_from_folder(folder_path, max_videos=MAX_VIDEOS, existing
     return videos
 
 
-def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, conf_thresh=DRAW_KP_CONF_THRESHOLD):
+def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD):
     """依目前視覺風格繪製 bbox、骨架與關鍵點。"""
     line_w = max(1, int(2 * ov))
     r_outer = max(3, int(4 * ov))
@@ -438,22 +439,13 @@ def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, con
                 conf_val = None
 
         if conf_val is not None and np.isfinite(conf_val):
-            label = f"conf:{conf_val:.2f}"
-            fs = 0.45 * ov
-            th = max(1, int(1 * ov))
-            text_shadow = max(2, th + 1)
-            tx = bx1
-            ty = by1 - max(6, int(8 * ov))
-            if ty < max(16, int(18 * ov)):
-                ty = by1 + max(18, int(20 * ov))
-
-            cv2.putText(frame, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, fs, BLACK, text_shadow, cv2.LINE_AA)
-            cv2.putText(frame, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, fs, COLOR_HEAD, th, cv2.LINE_AA)
+            # 跟即時系統 visualizer.draw() 同一套 conf 標籤外觀（共用 helper）
+            draw_bbox_conf_label(frame, bx1, by1, COLOR_HEAD, f"conf:{conf_val:.2f}", ov)
 
     for edge_idx, (a, b) in enumerate(SKELETON_EDGES):
         if a >= len(kpts) or b >= len(kpts):
             continue
-        if float(kpt_conf[a]) > conf_thresh and float(kpt_conf[b]) > conf_thresh:
+        if float(kpt_conf[a]) > kpt_conf_thresh and float(kpt_conf[b]) > kpt_conf_thresh:
             pa = (int(kpts[a][0] * sx), int(kpts[a][1] * sy))
             pb = (int(kpts[b][0] * sx), int(kpts[b][1] * sy))
             col = SKELETON_EDGE_COLORS[edge_idx] if edge_idx < len(SKELETON_EDGE_COLORS) else GREEN
@@ -461,7 +453,7 @@ def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, con
 
     for i in range(min(17, len(kpts))):
         conf_val = float(kpt_conf[i])
-        if conf_val <= conf_thresh:
+        if conf_val <= kpt_conf_thresh:
             continue
         cx, cy = int(kpts[i][0] * sx), int(kpts[i][1] * sy)
         col = SKELETON_KP_COLORS[i] if i < len(SKELETON_KP_COLORS) else COLOR_KPT
@@ -480,9 +472,9 @@ def compute_normalized_hind_paw_distances(kpts, kpt_conf):
     nose_conf = float(kpt_conf[SCRATCH_NOSE_IDX])
     chest_conf = float(kpt_conf[SCRATCH_CHEST_IDX])
     hip_conf = float(kpt_conf[SCRATCH_HIP_IDX])
-    if nose_conf < SCRATCH_DISTANCE_CONF_THRESHOLD:
+    if nose_conf < SCRATCH_DISTANCE_KPT_CONF_THRESHOLD:
         return float("nan"), float("nan"), -1, float("nan"), float("nan")
-    if chest_conf < SCRATCH_DISTANCE_CONF_THRESHOLD or hip_conf < SCRATCH_DISTANCE_CONF_THRESHOLD:
+    if chest_conf < SCRATCH_DISTANCE_KPT_CONF_THRESHOLD or hip_conf < SCRATCH_DISTANCE_KPT_CONF_THRESHOLD:
         return float("nan"), float("nan"), -1, float("nan"), float("nan")
 
     nose = np.asarray(kpts[SCRATCH_NOSE_IDX], dtype=np.float64)
@@ -503,7 +495,7 @@ def compute_normalized_hind_paw_distances(kpts, kpt_conf):
     for paw_idx in SCRATCH_HIND_PAW_IDXS:
         if paw_idx >= len(kpts):
             continue
-        if float(kpt_conf[paw_idx]) < SCRATCH_DISTANCE_CONF_THRESHOLD:
+        if float(kpt_conf[paw_idx]) < SCRATCH_DISTANCE_KPT_CONF_THRESHOLD:
             continue
         paw = np.asarray(kpts[paw_idx], dtype=np.float64)
         raw_dist = float(np.linalg.norm(paw - nose))
@@ -549,7 +541,7 @@ def main():
         YOLO_MODEL_PATH,
         device=INFERENCE_DEVICE,
         imgsz=YOLO_IMGSZ,
-        conf_thres=YOLO_CONF_THRESHOLD,
+        bbox_conf_thres=YOLO_CONF_THRESHOLD,
     )
 
     display_w, display_h = DISPLAY_SIZE if DISPLAY_SIZE is not None else (1080, 720)
@@ -755,7 +747,7 @@ def main():
                 if len(keypoints_buffer) >= SEQUENCE_LENGTH:
                     kpts_arr = np.array([item[0] for item in keypoints_buffer])  # T x J x 2
                     conf_arr = np.array([item[1] for item in keypoints_buffer])  # T x J
-                    velocity_ovl = compute_velocity_overlay(kpts_arr, conf_arr, conf_threshold=VELOCITY_CONF_THRESHOLD)
+                    velocity_ovl = compute_velocity_overlay(kpts_arr, conf_arr, kpt_conf_threshold=VELOCITY_KPT_CONF_THRESHOLD)
 
                     # smooth displayed bar values with EMA to prevent flickering
                     if velocity_ovl is not None:
@@ -779,7 +771,7 @@ def main():
                     for j in VELOCITY_HIGHLIGHT_JOINTS:
                         if j >= len(kpts):
                             continue
-                        if float(kpt_conf[j]) <= DRAW_KP_CONF_THRESHOLD:
+                        if float(kpt_conf[j]) <= DRAW_KPT_CONF_THRESHOLD:
                             continue
                         cx = int(kpts[j][0] * sx)
                         cy = int(kpts[j][1] * sy)

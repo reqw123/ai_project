@@ -81,7 +81,7 @@ ST-GCN **訓練**參數的唯一權威來源是 `cat_monitoring_system/stgcn_con
 VideoCapture ─(串流則經 _LatestFrameGrabber 抽乾緩衝)→ read_raw_frame()
   → SharedFrameStreamer._update_frame（FPS 降採樣 frame_step = src_fps / TARGET_MODEL_FPS）
     → FrameProcessor.process(frame):
-        1. KeypointDetector.detect() → kpts(17,2), kpt_conf(17,), bbox, det_conf
+        1. KeypointDetector.detect() → kpts(17,2), kpt_conf(17,), bbox, bbox_conf
         2. IdentityVerifier.verify()（預設關閉）→ 非目標貓則 kpts=None
         3. 貓消失容忍（CAT_MISSING_TOLERANCE_FRAMES=5）：沿用 _last_known_kpts
         4. Plugin.update(raw_kpts, kpt_conf)  ← 僅在已判定 lick 時餵真值，否則 (None,None)
@@ -225,7 +225,7 @@ dashboard/refresher.py（每 RECOMPUTE_INTERVAL≈2s，_cache_is_fresh 去重）
 
 | # | 位置 | 硬編碼內容 | 建議 |
 |---|---|---|---|
-| H1 🔴 | `config.py` | `VIDEO_INPUT = r"C:\Users\homec\OneDrive\圖片\..."`、`CSV_PATH` / `SEGMENTS_CSV_PATH = r"C:\ai_project\paper\..."`（絕對，未用 `_resolve_project_path`）、`TARGET_CAT_PROFILE_PATH` / `OTHER_CAT_PROFILE_PATH = r"C:\ai_project\paper\..."`、`GLOBAL_CONTEXT_PATH` fallback `r"C:\a\global.json"` | 不一致：YOLO/STGCN 路徑已改用 `_resolve_project_path()`，CSV/profile 卻沒。統一為相對專案根。 |
+| H1 🔴 | `config.py` | `VIDEO_INPUT = r"C:\Users\homec\OneDrive\圖片\..."`、`CSV_PATH` / `SEGMENTS_CSV_PATH = r"C:\ai_project\paper\..."`（絕對，未用 `_resolve_project_path`）、`GLOBAL_CONTEXT_PATH` fallback `r"C:\a\global.json"` | 不一致：YOLO/STGCN 路徑已改用 `_resolve_project_path()`，CSV 卻沒。統一為相對專案根。（原本列的 `TARGET_CAT_PROFILE_PATH` / `OTHER_CAT_PROFILE_PATH` 已於 2026-08 身分驗證改用 CNN 時整個移除，改為 `IDENTITY_MODEL_PATH`，已走 `_resolve_project_path()`。） |
 | H2 🟠 | `stgcn_config.yaml` | `SKELETON_DATA_FOLDER: "C:/ai_project/paper/skeletons"`、`RESULTS_FOLDER: "C:/ai_project/stgcn_models"` 絕對路徑；`NUM_JOINTS: 17` 與部署 checkpoint（14）不符（B8） | 相對路徑 + 修正 NUM_JOINTS 或加註。 |
 | H3 🟠 | `visualizer.py` | `HIP_IMAGE_PATH` 絕對硬編碼；`_FONT_CANDIDATES` 全為 `C:\Windows\Fonts\...`（Windows-only，有 `load_default()` 兜底） | 相對 assets/ + 跨平台字型搜尋。 |
 | H4 🟡 | 關節索引 | `_CHEST_IDX=3`、`_HIP_IDX=5`、`_TAIL_JOINTS=(14,15,16)`、`_BONE_PARENTS_17`、`KP_NOSE=0`… 散落 ~10 檔 | 集中成 `KeypointIndex` enum（見 §10）。 |

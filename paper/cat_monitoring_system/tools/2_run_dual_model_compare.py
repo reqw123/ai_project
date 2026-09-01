@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from detectors.keypoint_detector import KeypointDetector
 from detectors.behavior_classifier import BehaviorClassifier
 from processors.visualizer import Visualizer
+from processors.overlay_helpers import draw_bbox_conf_label
 from models.stgcn_model import (
     interpolate_missing,
     flip_normalize,
@@ -70,7 +71,7 @@ MODEL_B = dict(
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 YOLO_CONF_THRESHOLD = 0.5
-DRAW_KP_CONF_THRESHOLD = 0.5
+DRAW_KPT_CONF_THRESHOLD = YOLO_CONF_THRESHOLD  # 跟隨 YOLO_CONF_THRESHOLD
 SEQUENCE_LENGTH = 16
 CLASSIFY_STRIDE = 2
 STGCN_NORMALIZE = True
@@ -249,7 +250,7 @@ def draw_no_cat_overlay(frame, text="No cat detected"):
 
 
 def draw_test2_style_overlay(frame, kpts, kpt_conf, bbox, behavior_id, confidence, probs,
-                              visualizer, show_info=True, conf_thresh=DRAW_KP_CONF_THRESHOLD,
+                              visualizer, show_info=True, kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD,
                               bbox_conf=None):
     """畫骨架 + bbox + 行為預測標籤（與 1_run_video_inference.py 的同名函式相同）。"""
     h, w = frame.shape[:2]
@@ -260,33 +261,21 @@ def draw_test2_style_overlay(frame, kpts, kpt_conf, bbox, behavior_id, confidenc
 
     if bbox is not None:
         x1, y1, x2, y2 = map(int, bbox)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, 4, cv2.LINE_AA)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, 2, cv2.LINE_AA)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, max(3, int(round(4 * ui_scale))), cv2.LINE_AA)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, max(1, int(round(2 * ui_scale))), cv2.LINE_AA)
         if bbox_conf is not None:
-            label = f"{float(bbox_conf):.2f}"
-            label_fs = 0.5 * ui_scale
-            label_th = scale_px(1, ui_scale, min_px=1)
-            (tw, th), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, label_fs, label_th)
-            pad = scale_px(3, ui_scale, min_px=2)
-            label_h = th + baseline + pad * 2
-            label_w = tw + pad * 2
-            fits_above = (y1 - label_h) >= 0
-            rect_y1 = (y1 - label_h) if fits_above else y1
-            rect_y2 = y1 if fits_above else (y1 + label_h)
-            text_x = x1 + pad
-            text_y = rect_y2 - pad - baseline
-            cv2.rectangle(frame, (x1, rect_y1), (x1 + label_w, rect_y2), COLOR_HEAD, -1, cv2.LINE_AA)
-            cv2.putText(frame, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, label_fs, BLACK, label_th, cv2.LINE_AA)
+            # 跟即時系統 visualizer.draw() 同一套 conf 標籤外觀（共用 helper）
+            draw_bbox_conf_label(frame, x1, y1, COLOR_HEAD, f"{float(bbox_conf):.2f}", ui_scale)
 
     for ei, (a, b) in enumerate(_SKELETON_EDGES):
-        if float(kpt_conf[a]) > conf_thresh and float(kpt_conf[b]) > conf_thresh:
+        if float(kpt_conf[a]) > kpt_conf_thresh and float(kpt_conf[b]) > kpt_conf_thresh:
             pa = (int(kpts[a][0]), int(kpts[a][1]))
             pb = (int(kpts[b][0]), int(kpts[b][1]))
             col = _EDGE_COLORS[ei] if ei < len(_EDGE_COLORS) else (180, 180, 180)
             cv2.line(frame, pa, pb, col, edge_thickness, cv2.LINE_AA)
 
     for i in range(min(17, len(kpts))):
-        if float(kpt_conf[i]) > conf_thresh:
+        if float(kpt_conf[i]) > kpt_conf_thresh:
             cx, cy = int(kpts[i][0]), int(kpts[i][1])
             col = _KP_COLORS[i] if i < len(_KP_COLORS) else (200, 200, 200)
             cv2.circle(frame, (cx, cy), kp_outer_radius, (0, 0, 0), -1)
@@ -496,7 +485,7 @@ class ModelPipeline:
         self.feature_mode, in_channels = _resolve_feature_mode_and_channels(cfg["stgcn_path"], requested_mode)
 
         self.keypoint_detector = KeypointDetector(
-            cfg["yolo_path"], device=device, imgsz=YOLO_IMGSZ, conf_thres=YOLO_CONF_THRESHOLD,
+            cfg["yolo_path"], device=device, imgsz=YOLO_IMGSZ, bbox_conf_thres=YOLO_CONF_THRESHOLD,
         )
         self.behavior_classifier = BehaviorClassifier(
             cfg["stgcn_path"], device=device, sequence_length=SEQUENCE_LENGTH,

@@ -40,7 +40,7 @@ VIDEO_FOLDER = str(Path(DATASET_ROOT) / CLASS_TO_ANALYZE)
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
 TARGET_FPS = 30
 IMGSZ = 640
-CONF_THRESHOLD = 0.5
+BBOX_CONF_THRESHOLD = 0.5
 
 SUPPORTED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".flv"}
 _JSON_NUM_JOINTS = 17
@@ -631,7 +631,7 @@ def main():
     print(f"[YOLO 模型] {args.yolo_model_path}")
 
     pose_extractor = dc.PoseExtractor(
-        model_path=args.yolo_model_path, imgsz=IMGSZ, conf_threshold=CONF_THRESHOLD,
+        model_path=args.yolo_model_path, imgsz=IMGSZ, bbox_conf_threshold=BBOX_CONF_THRESHOLD,
     )
 
     n_joints = tg.NUM_JOINTS

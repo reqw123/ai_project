@@ -24,6 +24,7 @@
     "enable_sqa_dual_judgment": true
   },
   "run_mode": {
+    "system_mode": "single",
     "mode": "gui",
     "auto_start_processing": true,
     "scheduled_start_time": "",
@@ -70,9 +71,9 @@
   },
   "cat_identity": {
     "cat_id": "mimi",
-    "enable_identity_verification": true,
+    "enable_identity_verification": false,
     "identity_filter_hysteresis_frames": 4,
-    "identity_conf_threshold": 0.8,
+    "identity_conf_threshold": 0.5,
     "identity_model_path": "C:\\ai_project\\identity_models\\latest.pt",
     "target_cat_class": "目標貓"
   },

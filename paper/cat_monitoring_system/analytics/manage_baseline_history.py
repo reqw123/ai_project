@@ -74,18 +74,22 @@ COLOR_WARNING_FG = "#b36b00"
 COLOR_ERROR_FG = "#c0392b"
 COLOR_BORDER = "#c7d0da"
 
-BTN_PRIMARY_BG = "#27ae60"  # 套用變更（主要動作，綠色）
-BTN_PRIMARY_ACTIVE = "#219150"
-BTN_SECONDARY_BG = "#5d7285"  # 一般動作（全部採用/重新整理，灰藍）
-BTN_SECONDARY_ACTIVE = "#4a5d6e"
-BTN_WARN_BG = "#e67e22"  # 全部排除（橘色，提醒這是大範圍動作）
-BTN_WARN_ACTIVE = "#cf711d"
-BTN_NEUTRAL_BG = "#95a5a6"  # 關閉
-BTN_NEUTRAL_ACTIVE = "#7f8c8d"
+# 配色跟主設定視窗（settings_gui/style.py 的 2026-08 第二版）對齊：扁平、飽和、
+# 按語意分色。這支是獨立執行的工具（sys.path 上沒有 paper/），不方便直接 import
+# settings_gui.style，所以在這裡放一份對應的常數。
+BTN_PRIMARY_BG = "#16a34a"  # 套用變更（主要動作，綠）
+BTN_PRIMARY_ACTIVE = "#15803d"
+BTN_SECONDARY_BG = "#3b6fb5"  # 一般動作（全部採用／重新整理，鋼藍）
+BTN_SECONDARY_ACTIVE = "#335f9c"
+BTN_WARN_BG = "#d97706"  # 全部排除（琥珀，提醒這是大範圍動作）
+BTN_WARN_ACTIVE = "#b45309"
+BTN_NEUTRAL_BG = "#e2e8f0"  # 關閉（扁平淺灰的「安靜」層級）
+BTN_NEUTRAL_ACTIVE = "#cbd5e1"
+BTN_NEUTRAL_FG = "#334155"
 
 
 def _styled_button(parent, text, command, bg, active_bg, fg="#ffffff", font=None):
-    return tk.Button(
+    btn = tk.Button(
         parent,
         text=text,
         command=command,
@@ -93,12 +97,26 @@ def _styled_button(parent, text, command, bg, active_bg, fg="#ffffff", font=None
         fg=fg,
         activebackground=active_bg,
         activeforeground=fg,
+        disabledforeground="#9aa7b5",
         relief="flat",
+        bd=0,
+        highlightthickness=1,
+        highlightbackground=active_bg,
+        highlightcolor=active_bg,
         font=font or (_FONT_FAMILY, 10, "bold"),
         padx=14,
         pady=6,
         cursor="hand2",
     )
+
+    def _hover(enter):
+        if enter and str(btn["state"]) == "disabled":
+            return
+        btn.configure(bg=active_bg if enter else bg)
+
+    btn.bind("<Enter>", lambda _e: _hover(True))
+    btn.bind("<Leave>", lambda _e: _hover(False))
+    return btn
 
 
 class BaselineHistoryManager(tk.Tk):
@@ -251,7 +269,7 @@ class BaselineHistoryManager(tk.Tk):
             bottom, "重新整理", self.reload, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE
         ).pack(side="left", padx=(8, 0))
         _styled_button(
-            bottom, "關閉", self.destroy, BTN_NEUTRAL_BG, BTN_NEUTRAL_ACTIVE
+            bottom, "關閉", self.destroy, BTN_NEUTRAL_BG, BTN_NEUTRAL_ACTIVE, fg=BTN_NEUTRAL_FG
         ).pack(side="right")
         _styled_button(
             bottom,

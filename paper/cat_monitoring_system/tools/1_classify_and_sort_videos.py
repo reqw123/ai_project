@@ -102,7 +102,7 @@ def load_models():
         in_channels = get_in_channels_for_mode(feature_mode)
 
     keypoint_detector = KeypointDetector(
-        YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, conf_thres=YOLO_CONF_THRESHOLD
+        YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, bbox_conf_thres=YOLO_CONF_THRESHOLD
     )
     behavior_classifier = BehaviorClassifier(
         STGCN_MODEL_PATH, device=INFERENCE_DEVICE, sequence_length=SEQUENCE_LENGTH,

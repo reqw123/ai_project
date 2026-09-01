@@ -109,6 +109,7 @@ import matplotlib.pyplot as plt
 from detectors.keypoint_detector import KeypointDetector
 from detectors.behavior_classifier import BehaviorClassifier
 from models.stgcn_model import interpolate_missing
+from processors.overlay_helpers import compute_overlay_scale, draw_bbox_conf_label
 from utils.constants import BEHAVIOR_COLORS, LOW_CONF_ID
 from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig
@@ -186,7 +187,7 @@ BEHAVIOR_MIN_CONFIDENCE = BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE
 OUTPUT_DIR = Path(r"C:\ai_project\paper\output\bone_length_stability")
 
 SEQUENCE_LENGTH = 16          # 跟 ST-GCN 實際推論窗口一致（T=16）
-BONE_CONF_THRESHOLD = 0.3     # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
+BONE_KPT_CONF_THRESHOLD = 0.5     # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
 
 # midback_offset_ratio 用固定幀數門檻（不隨窗口長度 SEQUENCE_LENGTH
 # 縮放），只要窗口內有效幀數低於這裡設的數字，就標記為 NaN，不採信樣本
@@ -318,7 +319,7 @@ DISPLAY_SIZE = (1080, 720)
 
 # ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
 YOLO_CONF_THRESHOLD = 0.5      # YOLO bbox 偵測信心門檻
-DRAW_KP_CONF_THRESHOLD = 0.5  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
+DRAW_KPT_CONF_THRESHOLD = YOLO_CONF_THRESHOLD  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）；跟隨 YOLO_CONF_THRESHOLD
 
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                      以 下 無 需 修 改                           ║
@@ -405,7 +406,7 @@ def compute_bone_stability_overlay(seq_window, conf_window):
     """
     seq = interpolate_missing(seq_window, conf_window, threshold=0.1)
 
-    chest_hip_valid = (conf_window[:, 3] >= BONE_CONF_THRESHOLD) & (conf_window[:, 5] >= BONE_CONF_THRESHOLD)
+    chest_hip_valid = (conf_window[:, 3] >= BONE_KPT_CONF_THRESHOLD) & (conf_window[:, 5] >= BONE_KPT_CONF_THRESHOLD)
 
     # 虛擬點：胸(3)與髖(5)的中點。注意：這裡的標註慣例是把 mid_back 點在
     # 貓背部最頂端的毛（拱背最高點），所以 Chest-MidBack-Hip 三點正常情況
@@ -413,7 +414,7 @@ def compute_bone_stability_overlay(seq_window, conf_window):
     # 恆為正、且大小跟貓拱背弧度/姿勢有關，並非 0 才代表正確。沒有標註
     # 分布統計出來的精確基準值，門檻是粗略的解剖合理性上限（見
     # CANDIDATE_MIDBACK_OFFSET_THRESHOLD 註解），數值越大越可疑。
-    midback_valid = chest_hip_valid & (conf_window[:, 4] >= BONE_CONF_THRESHOLD)
+    midback_valid = chest_hip_valid & (conf_window[:, 4] >= BONE_KPT_CONF_THRESHOLD)
     midback_offset_ratio = float("nan")
     if np.any(midback_valid):
         virtual_pt = (seq[:, 3, :2] + seq[:, 5, :2]) / 2.0
@@ -431,7 +432,7 @@ def compute_bone_stability_overlay(seq_window, conf_window):
     # 接近 180 度（幾乎共線）或太小（夾角過尖）都視為可疑，見
     # CANDIDATE_MIDBACK_ANGLE_LOW_THRESHOLD/CANDIDATE_MIDBACK_ANGLE_HIGH_
     # THRESHOLD 註解。
-    midback_angle = compute_midback_angle(seq[-1], conf_window[-1], conf_thresh=BONE_CONF_THRESHOLD)
+    midback_angle = compute_midback_angle(seq[-1], conf_window[-1], kpt_conf_thresh=BONE_KPT_CONF_THRESHOLD)
     if midback_angle is None:
         midback_angle = float("nan")
 
@@ -823,15 +824,15 @@ def draw_body_axis_panel(frame, jitter_result):
     return frame
 
 
-def draw_skeleton(frame, kpts, kpt_conf, sx, sy, conf_thresh=DRAW_KP_CONF_THRESHOLD):
+def draw_skeleton(frame, kpts, kpt_conf, sx, sy, kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD):
     for (a, b) in SKELETON_EDGES:
-        if kpt_conf[a] < conf_thresh or kpt_conf[b] < conf_thresh:
+        if kpt_conf[a] < kpt_conf_thresh or kpt_conf[b] < kpt_conf_thresh:
             continue
         pa = (int(kpts[a, 0] * sx), int(kpts[a, 1] * sy))
         pb = (int(kpts[b, 0] * sx), int(kpts[b, 1] * sy))
         cv2.line(frame, pa, pb, (0, 200, 0), 2, cv2.LINE_AA)
     for i in range(kpts.shape[0]):
-        if kpt_conf[i] < conf_thresh:
+        if kpt_conf[i] < kpt_conf_thresh:
             continue
         p = (int(kpts[i, 0] * sx), int(kpts[i, 1] * sy))
         cv2.circle(frame, p, 4, (0, 0, 220), -1, cv2.LINE_AA)
@@ -854,26 +855,15 @@ def draw_bbox(frame, bbox, sx, sy, bbox_conf=None):
     cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 200, 0), 2, cv2.LINE_AA)
 
     if bbox_conf is not None:
-        label = f"{float(bbox_conf):.2f}"
-        label_fs = 0.5
-        label_th = 1
-        (tw, th), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, label_fs, label_th)
-        pad = 3
-        label_h = th + baseline + pad * 2
-        label_w = tw + pad * 2
-        # 框頂部太靠近畫面上緣（放不下標籤）時翻到框內側，避免被裁掉。
-        fits_above = (y1 - label_h) >= 0
-        rect_y1 = (y1 - label_h) if fits_above else y1
-        rect_y2 = y1 if fits_above else (y1 + label_h)
-        text_x = x1 + pad
-        text_y = rect_y2 - pad - baseline
-        cv2.rectangle(frame, (x1, rect_y1), (x1 + label_w, rect_y2), (255, 200, 0), -1, cv2.LINE_AA)
-        cv2.putText(frame, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, label_fs, (0, 0, 0), label_th, cv2.LINE_AA)
+        # 跟即時系統 / 1_run_video_inference.py 同一套 conf 標籤外觀（填色底 + 深色字，
+        # 隨解析度縮放），取代原本固定 0.5 字級的版本。
+        _ui = compute_overlay_scale(frame.shape[1], frame.shape[0])
+        draw_bbox_conf_label(frame, x1, y1, (255, 200, 0), f"{float(bbox_conf):.2f}", _ui)
 
     return frame
 
 
-def compute_midback_angle(kpts, kpt_conf, conf_thresh=DRAW_KP_CONF_THRESHOLD):
+def compute_midback_angle(kpts, kpt_conf, kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD):
     """算 Chest(3)-MidBack(4)-Hip(5) 這個夾角（以 MidBack 為頂點），單位度。
     注意：這裡的標註慣例是把 MidBack 點在貓背部拱起的最高點，所以這三點
     正常情況下就是一個三角形，不是一直線——夾角本來就會小於 180 度，實際
@@ -883,7 +873,7 @@ def compute_midback_angle(kpts, kpt_conf, conf_thresh=DRAW_KP_CONF_THRESHOLD):
     三點幾乎共線（MidBack 關鍵點可能消失/飄移到 Chest-Hip 連線上），太小
     視為夾角過尖，兩端都可能代表關鍵點錯位或偵測失效。
     任一點信心不足或兩個向量長度太短（幾乎重疊）時回傳 None。"""
-    if kpt_conf[3] < conf_thresh or kpt_conf[4] < conf_thresh or kpt_conf[5] < conf_thresh:
+    if kpt_conf[3] < kpt_conf_thresh or kpt_conf[4] < kpt_conf_thresh or kpt_conf[5] < kpt_conf_thresh:
         return None
     chest = kpts[3, :2]
     midback = kpts[4, :2]
@@ -898,13 +888,13 @@ def compute_midback_angle(kpts, kpt_conf, conf_thresh=DRAW_KP_CONF_THRESHOLD):
     return float(np.degrees(np.arccos(cos_angle)))
 
 
-def draw_midback_angle(frame, kpts, kpt_conf, sx, sy, conf_thresh=DRAW_KP_CONF_THRESHOLD):
+def draw_midback_angle(frame, kpts, kpt_conf, sx, sy, kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD):
     """把 Chest-MidBack-Hip 夾角畫在 MidBack 關鍵點的螢幕位置旁邊——跟骨架
     穩定度面板（左上角，窗口統計量）不同，這是直接疊在關鍵點上的單幀
     幾何量，方便對照畫面當下貓的姿勢跟角度數字是否合理。跟面板上
     midback_angle 一樣套用 SQA_ENABLED_THRESHOLDS 的雙邊門檻上色，兩處
     顯示的紅/綠判定會一致。"""
-    angle = compute_midback_angle(kpts, kpt_conf, conf_thresh)
+    angle = compute_midback_angle(kpts, kpt_conf, kpt_conf_thresh)
     if angle is None:
         return frame
     px = int(kpts[4, 0] * sx)
@@ -1894,7 +1884,7 @@ def main():
         print(f"❌ 需要 1~10 支影片，目前解析出 {n} 支（INPUT_MODE = {INPUT_MODE!r}）")
         return
 
-    detector = KeypointDetector(YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, conf_thres=YOLO_CONF_THRESHOLD)
+    detector = KeypointDetector(YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, bbox_conf_thres=YOLO_CONF_THRESHOLD)
 
     if run_mode == "gui":
         # ST-GCN 分類只有 GUI 模式的畫面標籤用得到，背景批次模式不需要載入

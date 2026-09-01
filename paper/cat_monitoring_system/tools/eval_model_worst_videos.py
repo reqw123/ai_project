@@ -593,7 +593,7 @@ def main():
     # ── Load detectors ────────────────────────────────────────────────────
     print('\n[Loading YOLO]')
     kp_det = KeypointDetector(args.yolo, device=args.device,
-                               imgsz=args.imgsz, conf_thres=args.conf)
+                               imgsz=args.imgsz, bbox_conf_thres=args.conf)
 
     print('\n[Loading ST-GCN model]')
     bn_ch = infer_bn_input_channels(args.model)

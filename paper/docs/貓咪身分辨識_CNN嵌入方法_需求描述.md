@@ -1,4 +1,7 @@
-# 🐈 貓咪身分辨識：CNN 方法 — 需求描述
+# 🐈 貓咪身分辨識（多貓過濾）— 需求描述
+
+> **主題**：多貓同框時判定「畫面裡哪隻是目標貓」，只讓目標貓進入行為統計。
+> **實作方法**：MobileNetV3-Small CNN 分類頭（2026-08 起；取代第一版 HSV 色彩直方圖）。細節見下方各節與最上方狀態框。
 
 > [!IMPORTANT]
 > **狀態（2026-08）：已實作並完全取代顏色比對，無 histogram fallback。**
@@ -20,27 +23,31 @@
 
 ## 🚀 30 秒 TL;DR
 
-- **要做什麼**：用 ImageNet 預訓練的小型 CNN backbone 微調，取代目前 `IdentityVerifier` 的 HSV 顏色直方圖特徵，做貓咪身分辨識。
+> ✅ **已完成（2026-08）**。以下為當初提案時的摘要，措辭保留為「要做什麼」的規劃視角；現況一律以本頁最上方狀態框為準。
+
+- **做了什麼**：用 ImageNet 預訓練的 MobileNetV3-Small 微調成 N 類分類器，**完全取代**原 `IdentityVerifier` 的 HSV 顏色直方圖特徵（無 fallback、無旗標切換）。
 - **為什麼**：顏色直方圖只有色相/飽和度資訊，丟掉紋理/斑紋，貓數增加或有兩隻顏色相近時區分度不夠；對光線/姿勢/動態模糊的容錯也薄弱。
 - **範圍**：目前 2 隻貓，未來最多 3 隻，**封閉集合**（固定住戶貓 + 訪客貓歸「unknown」）。**GPU 部署**。
-- **只換特徵這一層**：比對邏輯（最近鄰 + unknown 門檻 + 多幀多數決）、追蹤器、`FrameProcessor` 逐貓流程都不在這次範圍。
-- **延遲預算**：GPU 上每幀多 1–2 ms，實測要「感覺不到差異」。
+- **實際比原規劃多動的**：`identity_verifier.py` 整支改寫（不只換特徵層）——比對層從「gallery 最近鄰 + Bhattacharyya」換成「分類頭 softmax + 信心門檻」；多幀多數決平滑保留；`FrameProcessor` 側 `_select_target_instance` 多貓挑選邏輯配合調整。
+- **延遲**：GPU 上每幀多 1–2 ms，實測感覺不到差異。
 
 ---
 
 ## 1. 背景與問題
 
-### 1.1 目前的方法
+### 1.1 改動前的方法（HSV 色彩直方圖，已於 2026-08 汰換）
 
-| 元件 | 角色 |
+> 下表與「特徵」段落描述的是**改動前**的狀態，保留供理解動機。現況見本頁最上方狀態框。
+
+| 元件 | 改動前的角色 |
 |---|---|
-| `tools/3_cat_identity_verification_test.py` | 測試腳本：`enroll`（建基準，可讀 `crops/` 圖片資料夾或影片）/ `verify`（測試影片逐幀判定）/ `diagnose`（leave-one-out 分離度量化） |
+| `tools/3_cat_identity_verification_test.py`（已刪除） | 測試腳本：`enroll`（建基準，可讀 `crops/` 圖片資料夾或影片）/ `verify`（測試影片逐幀判定）/ `diagnose`（leave-one-out 分離度量化） |
 | `detectors/identity_verifier.py` → `IdentityVerifier` | 產線模組：載入 enroll 好的基準檔，對一個 bbox 回答「是不是目標貓」 |
 | `processors/frame_processor.py` | 呼叫端：非目標貓的幀當成「沒偵測到貓」處理，不計入統計 |
-| `config.py` → `CatIdentityConfig` | `TARGET_CAT_PROFILE_PATH` / `OTHER_CAT_PROFILE_PATH`、`ENABLE_IDENTITY_VERIFICATION` |
+| `config.py` → `CatIdentityConfig` | `TARGET_CAT_PROFILE_PATH` / `OTHER_CAT_PROFILE_PATH`（已移除）、`ENABLE_IDENTITY_VERIFICATION` |
 | `tools/cat_identity/1_build_dataset.py` | 從「目標貓 / 他貓」影片抽幀，輸出 `train_data/cat_identity/dataset/crops/<類別>/`（bbox 裁切圖）與 `frames/<類別>/`（整張原圖）。CNN 訓練資料來源（餵給 `cat_identity/2_train.py`） |
 
-**特徵**：bbox 裁切區的 HSV H-S 2D 直方圖（H_BINS=30, S_BINS=32），跟 enroll gallery 比最近鄰 Bhattacharyya 距離，取最近的類別；最近的也超過 `UNKNOWN_DISTANCE_CEILING` 就判 unknown。IoU 追蹤 + 多幀多數決平滑。
+**改動前的特徵**：bbox 裁切區的 HSV H-S 2D 直方圖（H_BINS=30, S_BINS=32），跟 enroll gallery 比最近鄰 Bhattacharyya 距離，取最近的類別；最近的也超過 `UNKNOWN_DISTANCE_CEILING` 就判 unknown。IoU 追蹤 + 多幀多數決平滑。
 
 ### 1.2 為什麼要換
 
@@ -199,7 +206,7 @@
 - [x] `config.py` `CatIdentityConfig` — `IDENTITY_MODEL_PATH` / `TARGET_CAT_CLASS`（移除 profile 路徑）
 - [x] `settings_manager.py` / `settings_window` / `runtime_settings*.json` — 分頁欄位同步
 - [x] `tools/3_cat_identity_verification_test.py` + HSV 基準檔 — 已刪除（diagnose 由 train 的混淆矩陣 + infer 覆蓋）
-- [x] 文件更新：本文件、`設定視窗欄位對照表.md`、`設定分頁模組與核心函式對照表.md`、`獨立運行腳本索引.md`
+- [x] 文件更新：本文件、`設定視窗欄位對照表.md`、`設定分頁模組與核心函式對照表.md`、`獨立運行腳本索引.md`、`0_AI_專案導覽地圖.md`、`文獻回顧補遺與最新進展_2026-08.md`（§四）、`YOLO-Pose應用文獻與專案優化建議.md`、`資料層架構現況與統一管理評估.md`
 
 ---
 
@@ -221,13 +228,16 @@ D1–D3 拍板 → 訓練腳本 → 微調 → held-out clip 驗證（達 §6 �
 實測延遲（§6.3）→ 切換旗標為 cnn → 回歸測試
 ```
 
+> [!NOTE]
+> 實際落地跳過了「旗標 / 向後相容 / 回歸切回 histogram」這幾步（決策 D8 = 完全取代）：`identity_verifier.py` 整支改寫成 CNN，HSV 程式與基準檔直接刪除，沒有 `histogram` / `cnn` 切換旗標。上圖最後兩步的「旗標」字樣只反映當初規劃。
+
 ---
 
 ## 📎 相關檔案
 
-- `paper/cat_monitoring_system/tools/3_cat_identity_verification_test.py` — enroll / verify / diagnose
-- `paper/cat_monitoring_system/tools/cat_identity/1_build_dataset.py` — 訓練資料來源
-- `paper/cat_monitoring_system/detectors/identity_verifier.py` — 產線模組（整合目標）
-- `paper/cat_monitoring_system/processors/frame_processor.py` — 呼叫端（不改）
-- `paper/config.py` — `CatIdentityConfig`
-- `paper/docs/模組責任畫分.md` / `paper/docs/獨立運行腳本索引.md` — 需同步更新
+- `paper/cat_monitoring_system/tools/cat_identity/1_build_dataset.py` — 訓練資料集（bbox 裁切圖）
+- `paper/cat_monitoring_system/tools/cat_identity/2_train.py` — MobileNetV3-Small 訓練（run 資料夾 + `latest.pt`）
+- `paper/cat_monitoring_system/tools/cat_identity/3_infer_video.py` — 影片端逐幀辨識 + 視覺化（取代舊 `3_cat_identity_verification_test.py` 的 verify/diagnose）
+- `paper/cat_monitoring_system/detectors/identity_verifier.py` — 產線模組（已整支改寫成 CNN）
+- `paper/cat_monitoring_system/processors/frame_processor.py` — 呼叫端（`_select_target_instance` 多貓挑選）
+- `paper/config.py` — `CatIdentityConfig`（`IDENTITY_MODEL_PATH` / `TARGET_CAT_CLASS` / `IDENTITY_CONF_THRESHOLD` / `IDENTITY_FILTER_HYSTERESIS_FRAMES`）

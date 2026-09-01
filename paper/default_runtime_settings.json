@@ -24,6 +24,7 @@
     "enable_sqa_dual_judgment": true
   },
   "run_mode": {
+    "system_mode": "single",
     "mode": "server",
     "auto_start_processing": true,
     "scheduled_start_time": "",

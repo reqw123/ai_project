@@ -109,7 +109,8 @@
 
 | 路徑 | 職責 |
 |---|---|
-| `cat_monitoring_system/detectors/keypoint_detector.py` | `KeypointDetector`：封裝 YOLO-Pose 推論，輸出 `kpts (17,2)` / `kpt_conf (17,)` / bbox / 偵測信心 |
+| `cat_monitoring_system/detectors/keypoint_detector.py` | `KeypointDetector`：封裝 YOLO-Pose 推論，輸出 `kpts (17,2)` / `kpt_conf (17,)` / `bbox` / `bbox_conf`。`multi` 系統模式下多貓同框時以 bbox IoU 追蹤延續鎖定同一隻；`single` 模式（`detect(single_cat=True)`）直接 `max_det=1` 只回傳信心最高的一隻、不做 IoU 追蹤 |
+| `cat_monitoring_system/detectors/identity_verifier.py` | `IdentityVerifier`：**身分驗證（多貓過濾）**——多貓同框時判定畫面裡哪隻是「目標貓」，只讓目標貓的偵測進入後續行為分類 / tracker / CSV / Node-RED / 個體化基線，其餘貓被過濾掉。**預設關閉**（`CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION=False`），fail-safe（模型載入失敗 / torch 缺失 → 整個模組停用、回退成「偵測到的貓一律當目標貓」）。<br>　*實作方法*：2026-08 起用 ImageNet 預訓練的 **MobileNetV3-Small CNN**（bbox 裁切區 → softmax → 最高信心 < `IDENTITY_CONF_THRESHOLD` 判「未知」→ 最近 N 幀多數決），模型由 `tools/cat_identity/` 工具鏈訓練（[3.6](#sec-3-6)）。第一版的 HSV 色彩直方圖 + Bhattacharyya 最近鄰已完全汰換、無 fallback（見 [`貓咪身分辨識_CNN嵌入方法_需求描述.md`](貓咪身分辨識_CNN嵌入方法_需求描述.md)） |
 
 <a id="sec-3-3"></a>
 ### 3.3 分析層（Analysis Layer）— ST-GCN 行為分類
@@ -322,6 +323,8 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 - `VisualizationConfig` → 影響 `Visualizer` 與 `LickStagePlugin.draw_overlay()` 的疊圖行為
 
 ⚠️ lick_stage / ext_body_zones 插件**不吃** `config.py`，而是各自有獨立的 `plugins/lick_stage/config.py`／`plugins/lick_stage/ext_body_zones/config.py`。
+
+> 📎 **信心值門檻**（bbox 偵測 / keypoint 過濾 / `interpolate_missing` 缺失判定三者語意不同，過去命名混用）詳見 [`信心值門檻總覽.md`](信心值門檻總覽.md)。2026-08-31 已把所有具名 bbox/kp 門檻統一為 `0.5` 並改用 `BBOX_` / `KPT_` 前綴；`interpolate_missing(threshold=)` 屬演算法內部參數（預設 0.1）未動，且即時推論/訓練（0.1）與部分離線工具（0.0）存在已知落差。
 
 ---
 

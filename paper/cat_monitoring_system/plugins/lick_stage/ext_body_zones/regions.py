@@ -19,7 +19,7 @@ def _norm(v) -> float:
     return math.hypot(float(v[0]), float(v[1]))
 
 
-def _conf_ok(kpt_conf, idx: int, threshold: float = _C.CONF_THRESHOLD) -> bool:
+def _conf_ok(kpt_conf, idx: int, threshold: float = _C.KPT_CONF_THRESHOLD) -> bool:
     return float(kpt_conf[idx]) > threshold
 
 
@@ -92,7 +92,7 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
     knee_pts = [
         np.asarray(kpts[i], dtype=np.float64)
         for i in knee_idxs
-        if _conf_ok(kpt_conf, i, _C.LIMB_CONF_THRESHOLD)
+        if _conf_ok(kpt_conf, i, _C.LIMB_KPT_CONF_THRESHOLD)
     ]
     if knee_pts:
         avg_knee = np.mean(knee_pts, axis=0)
@@ -117,8 +117,8 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
     for group, pairs in limb_groups.items():
         segments, paws = [], []
         for knee_idx, paw_idx in pairs:
-            if _conf_ok(kpt_conf, knee_idx, _C.LIMB_CONF_THRESHOLD) and _conf_ok(
-                kpt_conf, paw_idx, _C.LIMB_CONF_THRESHOLD
+            if _conf_ok(kpt_conf, knee_idx, _C.LIMB_KPT_CONF_THRESHOLD) and _conf_ok(
+                kpt_conf, paw_idx, _C.LIMB_KPT_CONF_THRESHOLD
             ):
                 knee = np.asarray(kpts[knee_idx], dtype=np.float64)
                 paw = np.asarray(kpts[paw_idx], dtype=np.float64)
@@ -129,7 +129,7 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
     # Tail: single shared strip through Root -> Mid -> Tip (no left/right split)
     tail_segs = []
     tail_idxs = (_C.KP_TAIL_ROOT, _C.KP_TAIL_MID, _C.KP_TAIL_TIP)
-    if all(_conf_ok(kpt_conf, i, _C.LIMB_CONF_THRESHOLD) for i in tail_idxs):
+    if all(_conf_ok(kpt_conf, i, _C.LIMB_KPT_CONF_THRESHOLD) for i in tail_idxs):
         root = np.asarray(kpts[_C.KP_TAIL_ROOT], dtype=np.float64)
         mid = np.asarray(kpts[_C.KP_TAIL_MID], dtype=np.float64)
         tip = np.asarray(kpts[_C.KP_TAIL_TIP], dtype=np.float64)

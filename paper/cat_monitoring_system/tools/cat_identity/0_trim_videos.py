@@ -34,7 +34,7 @@
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_149.pt"
 DEVICE = "cuda"                 # "cuda" 優先，抓不到自動 fallback "cpu"
 YOLO_IMGSZ = 640
-YOLO_CONF_THRESHOLD = 0.35      # 「這幀有沒有貓」用的偵測門檻（比身分辨識寬鬆些，寧可多留）
+YOLO_CONF_THRESHOLD = 0.5      # 「這幀有沒有貓」用的偵測門檻（比身分辨識寬鬆些，寧可多留）
 
 # 影片來源：檔案或資料夾（遞迴掃描），可放多個
 SOURCE = [

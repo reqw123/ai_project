@@ -74,18 +74,18 @@ YOLO_CONF_THRESHOLD = 0.5
 # 跟 production（config.py STGCNConfig）保持一致，才能反映真實的記憶邊界
 SEQUENCE_LENGTH = 16
 TARGET_MODEL_FPS = 30.0
-INTERP_THRESHOLD = 0.1  # 跟 stgcn_model.py interpolate_missing() 預設一致
+INTERP_KPT_CONF_THRESHOLD = 0.5  # 餵給 interpolate_missing() 判定「缺失」的門檻（stgcn_model.py 內建預設為 0.1，這裡刻意先統一為 0.5 待調整）
 
 # 左右影像同一個關節的原始像素距離超過這個門檻，就視為「偏移」，在右側面板
 # 用橘色標出來——這是直接拿左側（遮擋畫面偵測結果）跟右側（完全未遮擋的
 # ground truth）逐點比對位置算出來的，不看信心值，所以能抓到「YOLO 信心值
-# 沒掉到 INTERP_THRESHOLD 以下、但實際座標其實已經因為遮擋而偏掉」這種
+# 沒掉到 INTERP_KPT_CONF_THRESHOLD 以下、但實際座標其實已經因為遮擋而偏掉」這種
 # confidence 抓不到的情況。
 OFFSET_THRESHOLD_PX = 15
 
 DISPLAY_SIZE = (860, 620)  # 左右各半的顯示大小，兩半合併後視窗寬度是兩倍
 WINDOW_NAME = "Interpolation Before/After (space=pause  a/d=step  o=draw  s=save  x=clear  t=toggle-occl  r=restart  q=quit)"
-DRAW_KP_CONF_THRESHOLD = 0.25  # 高於此信心值才視為「有效」正常畫（僅影響左側原始畫面的顯示判斷）
+DRAW_KPT_CONF_THRESHOLD = YOLO_CONF_THRESHOLD  # 高於此信心值才視為「有效」正常畫（僅影響左側原始畫面的顯示判斷）；跟隨 YOLO_CONF_THRESHOLD
 
 FRAME_HISTORY_SIZE = 150  # a/d 逐幀瀏覽用的畫面快取上限（雙拼畫面較寬，數量抓 1_run_video_inference.py 的一半）
 
@@ -147,7 +147,7 @@ def draw_panel(frame, kpts, kpt_conf, title, hollow_joints=None, highlight_joint
             cv2.circle(frame, (cx, cy), 8, (0, 0, 0), -1)
             cv2.circle(frame, (cx, cy), 6, (0, 230, 255), -1)
             continue
-        if float(kpt_conf[i]) > DRAW_KP_CONF_THRESHOLD:
+        if float(kpt_conf[i]) > DRAW_KPT_CONF_THRESHOLD:
             cv2.circle(frame, (cx, cy), 5, (0, 0, 0), -1)
             cv2.circle(frame, (cx, cy), 4, (100, 255, 100), -1)
 
@@ -179,7 +179,7 @@ def main():
 
     try:
         keypoint_detector = KeypointDetector(
-            YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, conf_thres=YOLO_CONF_THRESHOLD,
+            YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, bbox_conf_thres=YOLO_CONF_THRESHOLD,
         )
     except Exception as e:
         print(f"❌ 無法載入 YOLO 模型（{YOLO_MODEL_PATH}）：{e}")
@@ -190,7 +190,7 @@ def main():
     # 兩次 detect() 呼叫會互相覆蓋掉彼此的 IoU 追蹤狀態（_prev_bbox），互相干擾。
     try:
         truth_detector = KeypointDetector(
-            YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, conf_thres=YOLO_CONF_THRESHOLD,
+            YOLO_MODEL_PATH, device=INFERENCE_DEVICE, imgsz=YOLO_IMGSZ, bbox_conf_thres=YOLO_CONF_THRESHOLD,
         )
     except Exception as e:
         print(f"⚠ 無法載入第二份 YOLO 模型做 ground truth 比對，遮蔽區塊的預測誤差顯示將停用：{e}")
@@ -327,26 +327,26 @@ def main():
 
                 kpts_arr = np.array(kpts_buffer)   # (t<=T, 17, 2)
                 conf_arr = np.array(conf_buffer)   # (t<=T, 17)
-                interpolated_arr = interpolate_missing(kpts_arr, conf_arr, threshold=INTERP_THRESHOLD)
+                interpolated_arr = interpolate_missing(kpts_arr, conf_arr, threshold=INTERP_KPT_CONF_THRESHOLD)
 
                 raw_last_conf = conf_arr[-1]
                 interp_last_kpts = interpolated_arr[-1]
 
-                hollow = {i for i in range(17) if raw_last_conf[i] <= INTERP_THRESHOLD}
+                hollow = {i for i in range(17) if raw_last_conf[i] <= INTERP_KPT_CONF_THRESHOLD}
                 # 這一幀原始信心不足、但插值後仍有非零座標的關節，才算「靠插值補回來」；
                 # 如果窗口內這個關節從頭到尾都無效，interpolate_missing 會整個歸零，
                 # 用 highlight 標黃只會誤導成「補成功」，改用另一種狀態呈現。
                 recovered = {
                     i for i in hollow
-                    if np.any(conf_arr[:, i] > INTERP_THRESHOLD)
+                    if np.any(conf_arr[:, i] > INTERP_KPT_CONF_THRESHOLD)
                 }
                 # exhausted（窗口內完全沒有有效幀 → 已歸零，插值救不回來）不用另外
                 # 存成變數，下面判斷式都用 "j in recovered" 的否定即可涵蓋。
                 # 只用來決定「左側原始畫面」要不要畫某條骨架線的門檻：比插值用的
-                # INTERP_THRESHOLD(0.1) 嚴格，避免信心低但非零的雜訊座標連出一堆
+                # INTERP_KPT_CONF_THRESHOLD(0.1) 嚴格，避免信心低但非零的雜訊座標連出一堆
                 # 亂飄的線段，畫面看起來像是壞掉（實際上只是 YOLO 本身信心低、
                 # 座標不準，不是這支腳本的 bug，用比較嚴格的門檻過濾掉方便肉眼看）。
-                weak_for_display = {i for i in range(17) if raw_last_conf[i] <= DRAW_KP_CONF_THRESHOLD}
+                weak_for_display = {i for i in range(17) if raw_last_conf[i] <= DRAW_KPT_CONF_THRESHOLD}
 
                 window_fill = len(kpts_buffer)
                 # 左側用 detect_frame（系統實際看到的畫面）當底圖：有存遮蔽區塊時

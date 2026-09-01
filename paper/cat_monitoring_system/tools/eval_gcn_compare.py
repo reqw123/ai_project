@@ -1484,7 +1484,7 @@ def main():
     # Load YOLO once, shared across all models
     print('\n[Loading YOLO]')
     kp_det = KeypointDetector(args.yolo, device=args.device,
-                               imgsz=args.imgsz, conf_thres=args.conf)
+                               imgsz=args.imgsz, bbox_conf_thres=args.conf)
 
     def _load_classifier(model_path, device, seq_len):
         bn_ch = infer_bn_input_channels(model_path)

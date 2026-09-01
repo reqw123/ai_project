@@ -43,6 +43,7 @@ from settings_gui.style import (  # noqa: E402
     BTN_INFO_BG, BTN_INFO_ACTIVE, BTN_INFO_FG,
     BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE,
     BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+    BTN_DANGER_BG, BTN_DANGER_ACTIVE,
     COLOR_CONSOLE_BG, COLOR_CONSOLE_FG, COLOR_CONSOLE_MUTED_FG,
     COLOR_HEADER_BG, COLOR_HEADER_FG,
     CONSOLE_FONT_FAMILY,
@@ -455,8 +456,8 @@ class IdentityTrainerWindow(tk.Toplevel):
                                          BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE, font=self._font_hint)
         self._apply_btn.pack(side="left", padx=SPACE_SM)
         self._del_btn = _styled_button(arow, "🗑 刪除所選模型", self._on_delete_model,
-                                       "#c0392b", "#a93226", font=self._font_hint,
-                                       outline=True, compact=True)
+                                       BTN_DANGER_BG, BTN_DANGER_ACTIVE, font=self._font_hint,
+                                       compact=True)
         self._del_btn.pack(side="right")
 
         # 終端機

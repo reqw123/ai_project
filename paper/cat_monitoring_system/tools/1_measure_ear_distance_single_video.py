@@ -40,6 +40,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from detectors.keypoint_detector import KeypointDetector
+from processors.overlay_helpers import draw_bbox_conf_label
 from utils.constants import (
     EAR_DISTANCE_EDGE_COLORS as _EDGE_COLORS,
     EAR_DISTANCE_KP_COLORS as _KP_COLORS,
@@ -96,16 +97,16 @@ NODERED_ONLINE_URL = "http://127.0.0.1:1880/lick_python_online"
 _NEED_FRAME = DISPLAY_WINDOW or (STREAM_MODE == 2)
 # ===== 信心值門檻設定（bbox conf / keypoint conf，建議集中看這區） =====
 YOLO_CONF_THRESHOLD = 0.5  # YOLO bbox 偵測信心門檻
-EAR_CONF_THRESHOLD = 0.5  # 耳朵關鍵點最低信心值，低於此值視為耳朵不可見（對齊 plugins/lick_stage/config.py 的 LickConfig.EAR_CONF_THRESHOLD，數值刻意不同）
+EAR_KPT_CONF_THRESHOLD = 0.5  # 耳朵關鍵點最低信心值，低於此值視為耳朵不可見（對齊 plugins/lick_stage/config.py 的 LickConfig.EAR_KPT_CONF_THRESHOLD）
 # 這也是「梯形橫軸 trap_perp 是否信任耳線方向」的其中一個門檻（絕對信心
 # 門檻）：左右耳信心皆 > 此值（left_ok and right_ok）只是必要條件之一，還要
 # 另外滿足耳距的幾何長度門檻（TRAP_PERP_MIN_EAR_LINE_NORM_RATIO，定義於
 # 梯形方向跨幀穩定化參數區塊）才會採用耳線方向；任一條件不滿足就 fallback
 # 到 chest-hip 方向向量。見 compute_head_body_target_geometry() 內的
 # trap_perp 判斷區塊。
-BODY_KP_CONF = 0.5  # 胸部/髖部/背部中點信心值門檻，用於計算身體尺度（對齊 LickConfig.BODY_KP_CONF；跟 EAR_CONF_THRESHOLD 分開命名，語意不同、目前數值相同）
-DRAW_KP_CONF_THRESHOLD = 0.5  # 骨架與關鍵點「顯示門檻」（>此值才畫；只影響畫面，不影響耳距有效性）
-LIMB_CONF_THRESHOLD = 0.10  # 四肢關鍵點最低信心值，低於此值跳過該肢體（對齊 LickConfig.LIMB_CONF_THRESHOLD）
+BODY_KPT_CONF_THRESHOLD = 0.5  # 胸部/髖部/背部中點信心值門檻，用於計算身體尺度（對齊 LickConfig.BODY_KPT_CONF_THRESHOLD；跟 EAR_KPT_CONF_THRESHOLD 分開命名，語意不同、目前數值相同）
+DRAW_KPT_CONF_THRESHOLD = YOLO_CONF_THRESHOLD  # 骨架與關鍵點「顯示門檻」（>此值才畫；只影響畫面，不影響耳距有效性）；跟隨 YOLO_CONF_THRESHOLD
+LIMB_KPT_CONF_THRESHOLD = 0.5  # 四肢關鍵點最低信心值，低於此值跳過該肢體（對齊 LickConfig.LIMB_KPT_CONF_THRESHOLD）
 LOOP_PLAYBACK = True
 WRITE_LOOPED_PASSES_TO_CSV = False  # LOOP_PLAYBACK=True 時，是否把第 2 輪以後的資料也寫入 CSV
 
@@ -129,7 +130,7 @@ KP_TAIL_MID = 15
 KP_TAIL_TIP = 16
 
 # ===== 面相偵測參數（可依資料再微調） =====
-NOSE_CONF_THRESHOLD = 0.3  # 鼻子關鍵點最低信心值，低於此值視為鼻子不可用（影響接觸判定與頭部朝向判斷，對齊 LickConfig.NOSE_CONF_THRESHOLD）
+NOSE_KPT_CONF_THRESHOLD = 0.5  # 鼻子關鍵點最低信心值，低於此值視為鼻子不可用（影響接觸判定與頭部朝向判斷，對齊 LickConfig.NOSE_KPT_CONF_THRESHOLD）
 STATE_SMOOTH_WINDOW = 30
 
 # ===== 舊版螢幕座標 fallback（通常不建議啟用） =====
@@ -282,12 +283,12 @@ TRAP_PERP_FLIP_MARGIN = 0.15  # 內積需低於 -此值才視為「真的反向�
 TRAP_PERP_FLIP_CONFIRM_FRAMES = 6  # 連續幾幀都判定為「反向」才接受為真正的方向改變（對齊 LickConfig.TRAP_PERP_FLIP_CONFIRM_FRAMES）
 # 耳線（right_ear - left_ear）長度相對身體尺度過短時（貓面對鏡頭、耳朵
 # 距離很近或部分重疊），正規化會把像素級關鍵點雜訊放大成大角度擺動——實測
-# 發現光靠 EAR_CONF_THRESHOLD 信心門檻不夠，就算信心值夠高，耳距太短時
+# 發現光靠 EAR_KPT_CONF_THRESHOLD 信心門檻不夠，就算信心值夠高，耳距太短時
 # 方向依然會不穩定，需要額外的幾何長度門檻才能真正擋掉這類低品質候選值。
 # 主系統 contact_regions.py 目前尚未移植這道長度門檻（只看信心門檻），
 # 以下兩個常數為獨立腳本自訂，命名不用對齊主系統。
 TRAP_PERP_MIN_EAR_LINE_NORM_RATIO = 0.12  # 耳距 / eff_len 需 >= 此值才信任耳線方向
-# 是否啟用上面這道耳距長度門檻；關閉時 trap_perp 只看 EAR_CONF_THRESHOLD
+# 是否啟用上面這道耳距長度門檻；關閉時 trap_perp 只看 EAR_KPT_CONF_THRESHOLD
 # 信心門檻（回到「兩耳信心都夠就直接信任耳線方向」的行為），方便對照測試
 # 兩種判定方式的效果差異。耳距百分比（ear_line_norm/eff_len）會顯示在畫面
 # 診斷面板上（info_lines 的 EAR_LINE 那一行），不管此開關是否啟用都會顯示。
@@ -496,7 +497,7 @@ SUMMARY_FIELDNAMES = [
 
 def infer_face_state(valid_norm, dist_norm, nose_conf, lxy, rxy, nose_xy, nose_ok):
     """依正規化耳距與 nose 信心值推論朝向狀態。"""
-    nose_low_conf = nose_conf < NOSE_CONF_THRESHOLD
+    nose_low_conf = nose_conf < NOSE_KPT_CONF_THRESHOLD
 
     ear_span_x = float("nan")
     dx = float("nan")
@@ -1054,7 +1055,7 @@ def compute_limb_joint_targets(kpts, kpt_conf, body_len):
     )
     limb_targets = []
     for short_label, _knee_idx, paw_idx in LIMB_SEGMENTS:
-        paw_ok = kpt_conf[paw_idx] > LIMB_CONF_THRESHOLD
+        paw_ok = kpt_conf[paw_idx] > LIMB_KPT_CONF_THRESHOLD
 
         if paw_ok:
             paw = np.asarray(kpts[paw_idx], dtype=np.float64)
@@ -1091,8 +1092,8 @@ def compute_limb_strip_targets(kpts, kpt_conf, body_len):
     )
     strip_targets = []
     for short_label, knee_idx, paw_idx in LIMB_SEGMENTS:
-        knee_ok = kpt_conf[knee_idx] > LIMB_CONF_THRESHOLD
-        paw_ok = kpt_conf[paw_idx] > LIMB_CONF_THRESHOLD
+        knee_ok = kpt_conf[knee_idx] > LIMB_KPT_CONF_THRESHOLD
+        paw_ok = kpt_conf[paw_idx] > LIMB_KPT_CONF_THRESHOLD
         if not (knee_ok and paw_ok):
             continue
 
@@ -1139,14 +1140,14 @@ def compute_limb_strip_targets(kpts, kpt_conf, body_len):
 def compute_tail_strip_targets(kpts, kpt_conf, body_len):
     """建立尾巴（Root→Mid→Tip）長條區域，純視覺參考用（見
     TAIL_STRIP_HW_RATIO 定義處說明：不參與鼻部命中仲裁/統計）。
-    三個尾巴關鍵點信心值皆需 > LIMB_CONF_THRESHOLD 才建立，否則回傳空列表。
+    三個尾巴關鍵點信心值皆需 > LIMB_KPT_CONF_THRESHOLD 才建立，否則回傳空列表。
     """
     if kpts is None or kpt_conf is None:
         return []
     tail_ok = (
-        kpt_conf[KP_TAIL_ROOT] > LIMB_CONF_THRESHOLD
-        and kpt_conf[KP_TAIL_MID] > LIMB_CONF_THRESHOLD
-        and kpt_conf[KP_TAIL_TIP] > LIMB_CONF_THRESHOLD
+        kpt_conf[KP_TAIL_ROOT] > LIMB_KPT_CONF_THRESHOLD
+        and kpt_conf[KP_TAIL_MID] > LIMB_KPT_CONF_THRESHOLD
+        and kpt_conf[KP_TAIL_TIP] > LIMB_KPT_CONF_THRESHOLD
     )
     if not tail_ok:
         return []
@@ -1308,11 +1309,11 @@ def compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=None):
     if kpts is None or kpt_conf is None:
         return None
 
-    left_ok = kpt_conf[KP_LEFT_EAR] > EAR_CONF_THRESHOLD
-    right_ok = kpt_conf[KP_RIGHT_EAR] > EAR_CONF_THRESHOLD
-    nose_ok = kpt_conf[KP_NOSE] >= NOSE_CONF_THRESHOLD
-    chest_ok = kpt_conf[KP_CHEST] > BODY_KP_CONF
-    hip_ok = kpt_conf[KP_HIP] > BODY_KP_CONF
+    left_ok = kpt_conf[KP_LEFT_EAR] > EAR_KPT_CONF_THRESHOLD
+    right_ok = kpt_conf[KP_RIGHT_EAR] > EAR_KPT_CONF_THRESHOLD
+    nose_ok = kpt_conf[KP_NOSE] >= NOSE_KPT_CONF_THRESHOLD
+    chest_ok = kpt_conf[KP_CHEST] > BODY_KPT_CONF_THRESHOLD
+    hip_ok = kpt_conf[KP_HIP] > BODY_KPT_CONF_THRESHOLD
     if not (nose_ok and chest_ok and hip_ok):
         return None
 
@@ -1351,7 +1352,7 @@ def compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=None):
     # Chest-MidBack-Hip 夾角（度，MidBack 為頂點），供畫面診斷面板顯示與梯形
     # 彎曲回補使用。公式對齊 processors/skeleton_quality_assessment.py 的
     # compute_midback_angle()，見 _compute_midback_angle_deg() 說明。
-    mid_back_ok = kpt_conf[KP_MID_BACK] > BODY_KP_CONF
+    mid_back_ok = kpt_conf[KP_MID_BACK] > BODY_KPT_CONF_THRESHOLD
     midback_angle_deg = float("nan")
     if mid_back_ok:
         mid_back = np.asarray(kpts[KP_MID_BACK], dtype=np.float64)
@@ -1398,7 +1399,7 @@ def compute_head_body_target_geometry(kpts, kpt_conf, stable_body_len=None):
     )
 
     # 梯形橫軸（trap_perp）方向是否信任耳線，需同時滿足兩個條件：
-    #   1) 左右耳關鍵點信心皆 > EAR_CONF_THRESHOLD（見該常數定義處註解）
+    #   1) 左右耳關鍵點信心皆 > EAR_KPT_CONF_THRESHOLD（見該常數定義處註解）
     #   2) ENABLE_TRAP_PERP_EAR_LINE_LENGTH_GATE 開啟時，耳距（像素）相對
     #      身體尺度 eff_len 也要 >= TRAP_PERP_MIN_EAR_LINE_NORM_RATIO——實測
     #      發現光靠信心門檻不夠：耳距過短時（貓面對鏡頭、耳朵距離很近或
@@ -1643,7 +1644,7 @@ def stabilize_nose_trapezoid_geometry(target_geom, prev_trap_perp, prev_trap_dir
     return trapezoid, stable_perp, stable_dir, new_flip_streak, new_wrong_streak
 
 
-def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, conf_thresh=DRAW_KP_CONF_THRESHOLD):
+def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD):
     """依 test2.py 風格繪製骨架、關鍵點與 bbox。"""
     line_w = max(1, int(2 * ov))
     r_outer = max(3, int(4 * ov))
@@ -1671,24 +1672,14 @@ def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, con
                 conf_val = None
 
         if conf_val is not None and np.isfinite(conf_val):
-            label = f"conf:{conf_val:.2f}"
-            fs = 0.45 * ov
-            th = max(1, int(1 * ov))
-            text_shadow = max(2, th + 1)
-            tx = bx1
-            ty = by1 - max(6, int(8 * ov))
-            if ty < max(16, int(18 * ov)):
-                ty = by1 + max(18, int(20 * ov))
-
-            # 舊式數值顯示：無背景框，僅文字與描邊
-            cv2.putText(frame, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 0, 0), text_shadow, cv2.LINE_AA)
-            cv2.putText(frame, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 255), th, cv2.LINE_AA)
+            # 跟即時系統 visualizer.draw() 同一套 conf 標籤外觀（共用 helper）
+            draw_bbox_conf_label(frame, bx1, by1, (0, 255, 255), f"conf:{conf_val:.2f}", ov)
 
     for ei, (a, b) in enumerate(_SKELETON_EDGES):
         if a >= len(kpts) or b >= len(kpts):
             continue
         # 線段繪製條件：兩端關鍵點都需高於顯示門檻
-        if float(kpt_conf[a]) > conf_thresh and float(kpt_conf[b]) > conf_thresh:
+        if float(kpt_conf[a]) > kpt_conf_thresh and float(kpt_conf[b]) > kpt_conf_thresh:
             pa = (int(kpts[a][0] * sx), int(kpts[a][1] * sy))
             pb = (int(kpts[b][0] * sx), int(kpts[b][1] * sy))
             col = _EDGE_COLORS[ei] if ei < len(_EDGE_COLORS) else (180, 180, 180)
@@ -1697,7 +1688,7 @@ def draw_styled_skeleton(frame, kpts, kpt_conf, bbox, bbox_conf, sx, sy, ov, con
     for i in range(min(17, len(kpts))):
         conf_val = float(kpt_conf[i])
         # 圓點繪製條件：該點信心值需高於顯示門檻
-        if conf_val <= conf_thresh:
+        if conf_val <= kpt_conf_thresh:
             continue
         cx, cy = int(kpts[i][0] * sx), int(kpts[i][1] * sy)
         col = _KP_COLORS[i] if i < len(_KP_COLORS) else (200, 200, 200)
@@ -1847,7 +1838,7 @@ def main():
             YOLO_MODEL_PATH,
             device=INFERENCE_DEVICE,
             imgsz=YOLO_IMGSZ,
-            conf_thres=YOLO_CONF_THRESHOLD,
+            bbox_conf_thres=YOLO_CONF_THRESHOLD,
         )
     except Exception as e:
         print(f"❌ 無法載入 YOLO 模型（路徑：{YOLO_MODEL_PATH}）：{e}")
@@ -2206,10 +2197,10 @@ def main():
                 if _NEED_FRAME:
                     draw_styled_skeleton(display, kpts, kpt_conf, bbox, bbox_conf, sx, sy, _ov)
 
-                left_ok = kpt_conf[KP_LEFT_EAR] > EAR_CONF_THRESHOLD
-                right_ok = kpt_conf[KP_RIGHT_EAR] > EAR_CONF_THRESHOLD
+                left_ok = kpt_conf[KP_LEFT_EAR] > EAR_KPT_CONF_THRESHOLD
+                right_ok = kpt_conf[KP_RIGHT_EAR] > EAR_KPT_CONF_THRESHOLD
                 nose_conf = float(kpt_conf[KP_NOSE])
-                nose_ok = nose_conf >= NOSE_CONF_THRESHOLD
+                nose_ok = nose_conf >= NOSE_KPT_CONF_THRESHOLD
 
                 if left_ok:
                     lxy = (float(kpts[KP_LEFT_EAR][0]), float(kpts[KP_LEFT_EAR][1]))
@@ -2227,7 +2218,7 @@ def main():
                     v_nose_right = right_pt_np - nose_pt_np
                     head_ear_angle_deg = _angle_between_vectors_deg(v_nose_left, v_nose_right)
 
-                # 耳距有效條件：左右耳都高於 EAR_CONF_THRESHOLD 才計算距離
+                # 耳距有效條件：左右耳都高於 EAR_KPT_CONF_THRESHOLD 才計算距離
                 if left_ok and right_ok:
                     dx = lxy[0] - rxy[0]
                     dy = lxy[1] - rxy[1]
@@ -2243,9 +2234,9 @@ def main():
                             cv2.LINE_AA,
                         )
 
-                # 正規化有效條件：胸與臀都高於 BODY_KP_CONF 才計算 body scale
-                chest_ok = kpt_conf[KP_CHEST] > BODY_KP_CONF
-                hip_ok = kpt_conf[KP_HIP] > BODY_KP_CONF
+                # 正規化有效條件：胸與臀都高於 BODY_KPT_CONF_THRESHOLD 才計算 body scale
+                chest_ok = kpt_conf[KP_CHEST] > BODY_KPT_CONF_THRESHOLD
+                hip_ok = kpt_conf[KP_HIP] > BODY_KPT_CONF_THRESHOLD
                 if chest_ok and hip_ok:
                     body_scale = math.hypot(
                         kpts[KP_CHEST][0] - kpts[KP_HIP][0],
@@ -2512,7 +2503,7 @@ def main():
 
                     # Chest-MidBack-Hip 夾角：直接標在該關鍵點旁邊（取代原本文字
                     # 面板的 MID_BACK 那一行），信心不足或算不出來時不畫。
-                    if kpt_conf[KP_MID_BACK] > BODY_KP_CONF and np.isfinite(_mb_angle):
+                    if kpt_conf[KP_MID_BACK] > BODY_KPT_CONF_THRESHOLD and np.isfinite(_mb_angle):
                         mb_kpt = kpts[KP_MID_BACK]
                         mb_x = int(mb_kpt[0] * sx + 10 * _ov)
                         mb_y = int(mb_kpt[1] * sy - 14 * _ov)

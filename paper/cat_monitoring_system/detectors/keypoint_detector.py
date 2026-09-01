@@ -16,11 +16,14 @@ class KeypointDetector:
         model_path,
         device="cuda",
         imgsz=640,
-        conf_thres=0.5,
+        bbox_conf_thres=0.5,
         track_iou_thres=0.3,
         track_max_missed=10,
     ):
         """
+        bbox_conf_thres:  YOLO **bbox 偵測**信心門檻（傳給 model.predict(conf=)）——低於此值的
+                          偵測框整個丟棄。跟「每個關鍵點的信心」(kpt_conf) 是兩回事：這裡管
+                          「這個框算不算一隻貓」，kpt_conf 管「這個關節座標可不可信」。
         track_iou_thres:  多隻貓同框時，與上一幀鎖定 bbox 的 IoU 需 ≥ 此值才視為同一隻貓延續追蹤；
                           否則放棄追蹤，改選信心最高的偵測（等同重新鎖定目標）。
         track_max_missed: 連續幾幀完全沒偵測到（貓消失/被遮擋）後，才放棄先前鎖定的目標。
@@ -37,7 +40,7 @@ class KeypointDetector:
         except Exception:
             pass
         self.imgsz = imgsz
-        self.conf_thres = conf_thres
+        self.bbox_conf_thres = bbox_conf_thres
         self.track_iou_thres = track_iou_thres
         self.track_max_missed = track_max_missed
         self._prev_bbox = None
@@ -61,7 +64,7 @@ class KeypointDetector:
         union = area_a + area_b - inter
         return inter / union if union > 1e-9 else 0.0
 
-    def detect(self, frame, return_all_instances=False):
+    def detect(self, frame, return_all_instances=False, single_cat=False):
         """對單一影格跑 YOLO-Pose 推論，回傳 (keypoints, keypoint_conf, bbox, bbox_conf)；
         沒有偵測到目標時回傳全 None。
 
@@ -72,11 +75,18 @@ class KeypointDetector:
         一併回傳，不會多跑一次推論，也完全不影響前 4 個值的追蹤/選取邏輯——
         單純給呼叫端（例如多貓同框時的畫面視覺化）用，預設 False 時行為與
         既有呼叫端完全一致。
+
+        single_cat=True 時：直接讓 YOLO 只回傳「信心值最高」的那一隻
+        （model.predict(max_det=1)），完全不套用跨幀 IoU 追蹤延續，也不會有
+        「上一幀鎖定的貓」這回事——RunModeConfig.SYSTEM_MODE=="single"（單貓
+        系統模式）專用：假設畫面全程只有一隻貓，每一幀都獨立鎖信心最高的偵測。
+        跟 return_all_instances 互斥沒有意義（只會有一筆），呼叫端不會同時給。
         """
         results = self.model.predict(
             frame,
             imgsz=self.imgsz,
-            conf=self.conf_thres,
+            conf=self.bbox_conf_thres,
+            max_det=1 if single_cat else 300,
             quantize=16 if self._use_half else None,
             verbose=False,
         )[0]
@@ -92,8 +102,13 @@ class KeypointDetector:
                 best = int(np.argmax(confs))
 
                 # 多隻貓同框時，優先延續「上一幀鎖定的同一隻貓」而非重新比信心值，
-                # 避免兩隻貓信心值來回互換時，骨架序列在不同貓之間跳動
-                if len(boxes_xyxy) > 1 and self._prev_bbox is not None:
+                # 避免兩隻貓信心值來回互換時，骨架序列在不同貓之間跳動。
+                # single_cat=True（單貓系統模式）時完全不做這件事——永遠鎖信心最高的。
+                if (
+                    not single_cat
+                    and len(boxes_xyxy) > 1
+                    and self._prev_bbox is not None
+                ):
                     ious = np.array([self._iou(self._prev_bbox, b) for b in boxes_xyxy])
                     track_idx = int(np.argmax(ious))
                     if ious[track_idx] >= self.track_iou_thres:
@@ -110,7 +125,7 @@ class KeypointDetector:
                 kpt_conf = np.ones(kpts.shape[0], dtype=np.float32)
             bbox = results.boxes.xyxy[best].cpu().numpy() if has_boxes else None
             # 明確轉為 Python float，避免 0-d ndarray 流入 JSON 序列化
-            conf = float(results.boxes.conf[best].cpu().numpy()) if has_boxes else None
+            bbox_conf = float(results.boxes.conf[best].cpu().numpy()) if has_boxes else None
 
             all_instances = None
             if return_all_instances:
@@ -130,8 +145,8 @@ class KeypointDetector:
                 self._missed_count = 0
 
             if return_all_instances:
-                return kpts, kpt_conf, bbox, conf, all_instances
-            return kpts, kpt_conf, bbox, conf
+                return kpts, kpt_conf, bbox, bbox_conf, all_instances
+            return kpts, kpt_conf, bbox, bbox_conf
 
         # 這幀沒偵測到任何目標：累積遺失幀數，超過門檻才放棄先前鎖定的目標
         # （容忍短暫遮擋，避免遮擋一結束就被當成新目標重新選）

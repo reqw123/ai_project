@@ -46,8 +46,8 @@ class ExtZoneConfig:
     KP_TAIL_MID = 15
     KP_TAIL_TIP = 16
 
-    CONF_THRESHOLD = 0.5  # nose / ear / chest / hip / mid-back
-    LIMB_CONF_THRESHOLD = 0.10  # knees / paws / tail points
+    KPT_CONF_THRESHOLD = 0.5  # nose / ear / chest / hip / mid-back
+    LIMB_KPT_CONF_THRESHOLD = 0.5  # knees / paws / tail points
 
     # ── Zone ids — must match the 7-zone body diagram (1=Head .. 7=Tail) ──
     ZONE_NO_TARGET = 0

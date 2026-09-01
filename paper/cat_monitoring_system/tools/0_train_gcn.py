@@ -1533,7 +1533,7 @@ def _vrj(s, w: int) -> str:
     return " " * max(0, w - _vlen(s)) + s
 
 
-def _compute_window_motion(seq_xy: np.ndarray, conf_seq: np.ndarray, conf_threshold: float = 0.3) -> float:
+def _compute_window_motion(seq_xy: np.ndarray, conf_seq: np.ndarray, kpt_conf_threshold: float = 0.5) -> float:
     """
     算一個 window 的平均逐幀關節位移量（只計入信心足夠的關節），數值代表模型
     實際看到的「動態程度」。seq_xy 須先經過跟 __getitem__ 相同的
@@ -1542,14 +1542,14 @@ def _compute_window_motion(seq_xy: np.ndarray, conf_seq: np.ndarray, conf_thresh
     """
     diffs = seq_xy[1:] - seq_xy[:-1]                 # (T-1, J, 2)
     dist  = np.linalg.norm(diffs, axis=-1)            # (T-1, J)
-    valid = (conf_seq[1:] > conf_threshold) & (conf_seq[:-1] > conf_threshold)
+    valid = (conf_seq[1:] > kpt_conf_threshold) & (conf_seq[:-1] > kpt_conf_threshold)
     if not valid.any():
         return 0.0
     return float(dist[valid].mean())
 
 
 def _compute_per_joint_motion(seq_xy: np.ndarray, conf_seq: np.ndarray,
-                              conf_threshold: float = 0.3) -> np.ndarray:
+                              kpt_conf_threshold: float = 0.5) -> np.ndarray:
     """
     跟 _compute_window_motion 邏輯相同，但回傳每個關節各自的平均逐幀位移量
     （shape=(J,)），用來檢驗「動態訊號是不是集中在頭部少數關節」這類假設。
@@ -1557,7 +1557,7 @@ def _compute_per_joint_motion(seq_xy: np.ndarray, conf_seq: np.ndarray,
     """
     diffs = seq_xy[1:] - seq_xy[:-1]                 # (T-1, J, 2)
     dist  = np.linalg.norm(diffs, axis=-1)            # (T-1, J)
-    valid = (conf_seq[1:] > conf_threshold) & (conf_seq[:-1] > conf_threshold)   # (T-1, J)
+    valid = (conf_seq[1:] > kpt_conf_threshold) & (conf_seq[:-1] > kpt_conf_threshold)   # (T-1, J)
     out = np.full(dist.shape[1], np.nan, dtype=np.float64)
     for j in range(dist.shape[1]):
         if valid[:, j].any():

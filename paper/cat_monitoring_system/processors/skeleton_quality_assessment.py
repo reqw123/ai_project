@@ -48,7 +48,7 @@ ENABLE_SCORE_JITTER_CHECK = True
 # ============================================================================
 # ===== 門檻/參考值常數（跟 test_bone_length_stability.py 目前使用的數值同步）=====
 # ============================================================================
-BONE_CONF_THRESHOLD = 0.3  # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
+BONE_KPT_CONF_THRESHOLD = 0.5  # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算
 MIN_VALID_FRAMES_MIDBACK_OFFSET = 1  # midback_offset_ratio 至少要有幾幀有效才採信
 
 CANDIDATE_MIDBACK_OFFSET_THRESHOLD = 1.0  # 方向：越大越可疑
@@ -71,7 +71,7 @@ BODY_AXIS_SCORE_JITTER_THRESHOLD = 20.0  # 方向：越大越可疑
 # 重新校準這幾個常數。
 
 
-def compute_midback_angle(kpts, kpt_conf, conf_thresh=BONE_CONF_THRESHOLD):
+def compute_midback_angle(kpts, kpt_conf, kpt_conf_thresh=BONE_KPT_CONF_THRESHOLD):
     """算 Chest(3)-MidBack(4)-Hip(5) 這個夾角（以 MidBack 為頂點），單位度。
     標註慣例是把 MidBack 點在貓背部拱起的最高點，所以這三點正常情況下是
     一個三角形、不是一直線——夾角本來就會小於 180 度，實際大小跟貓拱背
@@ -80,9 +80,9 @@ def compute_midback_angle(kpts, kpt_conf, conf_thresh=BONE_CONF_THRESHOLD):
     視為夾角過尖，兩端都可能代表關鍵點錯位或偵測失效。
     任一點信心不足或兩個向量長度太短（幾乎重疊）時回傳 None。"""
     if (
-        kpt_conf[3] < conf_thresh
-        or kpt_conf[4] < conf_thresh
-        or kpt_conf[5] < conf_thresh
+        kpt_conf[3] < kpt_conf_thresh
+        or kpt_conf[4] < kpt_conf_thresh
+        or kpt_conf[5] < kpt_conf_thresh
     ):
         return None
     chest = kpts[3, :2]
@@ -105,11 +105,11 @@ def compute_bone_stability_overlay(seq_window, conf_window):
     """
     seq = interpolate_missing(seq_window, conf_window, threshold=0.1)
 
-    chest_hip_valid = (conf_window[:, 3] >= BONE_CONF_THRESHOLD) & (
-        conf_window[:, 5] >= BONE_CONF_THRESHOLD
+    chest_hip_valid = (conf_window[:, 3] >= BONE_KPT_CONF_THRESHOLD) & (
+        conf_window[:, 5] >= BONE_KPT_CONF_THRESHOLD
     )
 
-    midback_valid = chest_hip_valid & (conf_window[:, 4] >= BONE_CONF_THRESHOLD)
+    midback_valid = chest_hip_valid & (conf_window[:, 4] >= BONE_KPT_CONF_THRESHOLD)
     midback_offset_ratio = float("nan")
     if np.any(midback_valid):
         virtual_pt = (seq[:, 3, :2] + seq[:, 5, :2]) / 2.0
@@ -121,7 +121,7 @@ def compute_bone_stability_overlay(seq_window, conf_window):
             midback_offset_ratio = float(np.mean(ratio_vals))
 
     midback_angle = compute_midback_angle(
-        seq[-1], conf_window[-1], conf_thresh=BONE_CONF_THRESHOLD
+        seq[-1], conf_window[-1], kpt_conf_thresh=BONE_KPT_CONF_THRESHOLD
     )
     if midback_angle is None:
         midback_angle = float("nan")

@@ -148,8 +148,8 @@ EMA_ALPHA = 1.0
 
 # ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
 YOLO_CONF_THRESHOLD = 0.5      # YOLO bbox 偵測信心門檻
-DRAW_KP_CONF_THRESHOLD = 0.25  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）
-JITTER_CONF_THRESHOLD = 0.3    # 抖動統計只使用高於此信心值的關鍵點
+DRAW_KPT_CONF_THRESHOLD = YOLO_CONF_THRESHOLD  # 畫骨架線段與關鍵點圓點用門檻（>此值才畫）；跟隨 YOLO_CONF_THRESHOLD
+JITTER_KPT_CONF_THRESHOLD = 0.5    # 抖動統計只使用高於此信心值的關鍵點
 
 # 17 關鍵點名稱
 KEYPOINT_NAMES = [
@@ -227,7 +227,7 @@ def scale_kpts_and_bbox_for_letterbox(kpts, bbox, scale, crop_x, crop_y):
     return scaled_kpts, scaled_bbox
 
 
-def draw_skeleton_overlay(frame, kpts, kpt_conf, bbox, conf_thresh=DRAW_KP_CONF_THRESHOLD):
+def draw_skeleton_overlay(frame, kpts, kpt_conf, bbox, kpt_conf_thresh=DRAW_KPT_CONF_THRESHOLD):
     """簡單骨架繪製（不含行為資訊 HUD）。"""
     ui_scale = compute_ui_scale(*frame.shape[:2][::-1])
     edge_thickness = scale_px(2, ui_scale, min_px=1)
@@ -239,14 +239,14 @@ def draw_skeleton_overlay(frame, kpts, kpt_conf, bbox, conf_thresh=DRAW_KP_CONF_
         cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, 2, cv2.LINE_AA)
 
     for ei, (a, b) in enumerate(_SKELETON_EDGES):
-        if float(kpt_conf[a]) > conf_thresh and float(kpt_conf[b]) > conf_thresh:
+        if float(kpt_conf[a]) > kpt_conf_thresh and float(kpt_conf[b]) > kpt_conf_thresh:
             pa = (int(kpts[a][0]), int(kpts[a][1]))
             pb = (int(kpts[b][0]), int(kpts[b][1]))
             col = _EDGE_COLORS[ei] if ei < len(_EDGE_COLORS) else (180, 180, 180)
             cv2.line(frame, pa, pb, col, edge_thickness, cv2.LINE_AA)
 
     for i in range(min(17, len(kpts))):
-        if float(kpt_conf[i]) > conf_thresh:
+        if float(kpt_conf[i]) > kpt_conf_thresh:
             cx, cy = int(kpts[i][0]), int(kpts[i][1])
             col = _KP_COLORS[i] if i < len(_KP_COLORS) else (200, 200, 200)
             cv2.circle(frame, (cx, cy), kp_r, (0, 0, 0), -1)
@@ -1278,7 +1278,7 @@ def _detect_on_crop(frame, bbox, pad_ratio, detector):
         return None, None
     crop = frame[y1i:y2i, x1i:x2i]
     results = detector.model.predict(
-        crop, imgsz=detector.imgsz, conf=detector.conf_thres,
+        crop, imgsz=detector.imgsz, conf=detector.bbox_conf_thres,
         quantize=16 if detector._use_half else None, verbose=False,
     )[0]
     if results.keypoints is None or len(results.keypoints.xy) == 0:
@@ -1526,7 +1526,7 @@ def main():
             YOLO_MODEL_PATH,
             device=INFERENCE_DEVICE,
             imgsz=YOLO_IMGSZ,
-            conf_thres=YOLO_CONF_THRESHOLD,
+            bbox_conf_thres=YOLO_CONF_THRESHOLD,
         )
     except Exception as e:
         print(f"❌ 無法載入 YOLO 模型（{YOLO_MODEL_PATH}）：{e}")
@@ -1609,7 +1609,7 @@ def main():
             kp_dy   = np.full(17, np.nan)
             kp_disp = np.full(17, np.nan)
             for i in range(17):
-                if kpt_conf[i].item() >= JITTER_CONF_THRESHOLD:
+                if kpt_conf[i].item() >= JITTER_KPT_CONF_THRESHOLD:
                     kp_x[i] = kpts[i][0].item()
                     kp_y[i] = kpts[i][1].item()
                     if np.isfinite(prev_kp_xy[i, 0]):
@@ -1668,7 +1668,7 @@ def main():
                 if _kp_p is not None and _kc_p is not None:
                     for _i in range(min(17, len(_kp_p))):
                         _cv = _kc_p[_i].item() if hasattr(_kc_p[_i], 'item') else _kc_p[_i]
-                        if _cv >= JITTER_CONF_THRESHOLD:
+                        if _cv >= JITTER_KPT_CONF_THRESHOLD:
                             _kx = _kp_p[_i, 0].item() if hasattr(_kp_p[_i, 0], 'item') else _kp_p[_i, 0]
                             _ky = _kp_p[_i, 1].item() if hasattr(_kp_p[_i, 1], 'item') else _kp_p[_i, 1]
                             _kp_x_p[_i] = _kx
