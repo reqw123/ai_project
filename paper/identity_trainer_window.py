@@ -33,6 +33,10 @@ except ImportError:
 
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
+# _TrainerConsole.log_queue 裡代表「這一代 log reader 讀到 EOF」的標記（配合代次序號，
+# 忽略前一支行程殘留、還沒讀掉的 EOF——見 console_panel._EOF 的同樣說明）。
+_TC_EOF = object()
+
 _PAPER_DIR = Path(__file__).resolve().parent
 if str(_PAPER_DIR) not in sys.path:
     sys.path.insert(0, str(_PAPER_DIR))
@@ -133,6 +137,8 @@ class _TrainerConsole:
         self.on_text = on_text          # 每段輸出文字的回呼（給進度解析用）
         self.log_queue = queue.Queue()
         self._reader_thread = None
+        self._reader_gen = 0            # log reader 代次：切行程 +1，忽略舊行程殘留的 EOF
+        self._drain_job = None          # _drain 的 after id，關窗前 stop() 取消
 
         wrap = tk.Frame(parent, bg=COLOR_CONSOLE_BG)
         wrap.pack(fill="both", expand=True)
@@ -149,7 +155,7 @@ class _TrainerConsole:
         self.text.tag_configure("progress", foreground="#7ee787")
         self.text.tag_configure("done", foreground="#58d0ff",
                                 font=(CONSOLE_FONT_FAMILY, 12, "bold"))
-        self.window.after(80, self._drain)
+        self._drain_job = self.window.after(80, self._drain)
 
     _MAX_LINES = 1500          # 終端機保留的最大行數，超過就從頭砍（避免文字爆量卡住 GUI）
 
@@ -183,6 +189,9 @@ class _TrainerConsole:
         self.text.configure(state="disabled")
 
     def start_log_reader(self, process, label):
+        self._reader_gen += 1
+        gen = self._reader_gen
+
         def _reader():
             try:
                 fd = process.stdout.fileno()
@@ -195,7 +204,7 @@ class _TrainerConsole:
                 except (OSError, ValueError):
                     pass
                 finally:
-                    self.log_queue.put(None)
+                    self.log_queue.put((_TC_EOF, gen))
                 return
             decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
             try:
@@ -212,20 +221,26 @@ class _TrainerConsole:
             except ValueError:
                 pass
             finally:
-                self.log_queue.put(None)
+                self.log_queue.put((_TC_EOF, gen))
 
         self._reader_thread = threading.Thread(target=_reader, daemon=True)
         self._reader_thread.start()
 
     def _drain(self):
+        self._drain_job = None
+        try:
+            if not self.window.winfo_exists():
+                return
+        except tk.TclError:
+            return
         # 一次 tick 把佇列裡的東西全部收成一段，合併寫入（避免每個 chunk 各自
         # insert + see + trim，高輸出量下那樣會把主執行緒卡到「沒有回應」）。
-        parts, ended, size = [], False, 0
+        parts, ended_gen, size = [], None, 0
         try:
             while size < 65536:                 # 每個 tick 最多收 ~64KB，其餘留到下一次
                 item = self.log_queue.get_nowait()
-                if item is None:
-                    ended = True
+                if isinstance(item, tuple) and item and item[0] is _TC_EOF:
+                    ended_gen = item[1]
                 else:
                     parts.append(item)
                     size += len(item)
@@ -239,9 +254,20 @@ class _TrainerConsole:
                     self.on_text(batch)
                 except Exception:
                     pass
-        if ended:
+        # 只認「目前這一代」reader 的 EOF；舊行程殘留的忽略，不然 build→train 串接
+        # 時會在 train 一開始就冒出一行「— 行程已結束 —」。
+        if ended_gen is not None and ended_gen == self._reader_gen:
             self.append("\n— 行程已結束 —\n", tag="muted")
-        self.window.after(80, self._drain)
+        self._drain_job = self.window.after(80, self._drain)
+
+    def stop(self):
+        """視窗關閉前呼叫：停掉汲取迴圈，避免關窗後對已銷毀的 Text 操作丟 TclError。"""
+        if self._drain_job is not None:
+            try:
+                self.window.after_cancel(self._drain_job)
+            except tk.TclError:
+                pass
+            self._drain_job = None
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -261,6 +287,8 @@ class IdentityTrainerWindow(tk.Toplevel):
         self._process_status_var = tk.StringVar(value="")
         self._font_label_bold = tkfont.Font(family=_FONT_FAMILY, size=12, weight="bold")
         self._font_hint = tkfont.Font(family=_FONT_FAMILY, size=10)
+        self._interp_ok = None   # None＝Python 環境檢查中；檢查完才會變 True / False
+        self._closing = False    # _on_close 進行中：擋掉背景執行緒回呼再碰已銷毀的 widget
 
         self._pm = ProcessManager(self, on_state_change=self._on_proc_state)
         self._prev_running = False
@@ -669,11 +697,18 @@ class IdentityTrainerWindow(tk.Toplevel):
             self.deiconify()
             self.lift()
             self.attributes("-topmost", True)
-            self.after(1200, lambda: self.attributes("-topmost", False))
+            self.after(1200, self._drop_topmost)  # 具名回呼，會先檢查視窗還在不在
             self.focus_force()
         except tk.TclError:
             pass
         (messagebox.showinfo if ok else messagebox.showwarning)(title, body, parent=self)
+
+    def _drop_topmost(self):
+        try:
+            if self.winfo_exists():
+                self.attributes("-topmost", False)
+        except tk.TclError:
+            pass
 
     def _reset_viz(self):
         self._stop_spinner()
@@ -692,23 +727,48 @@ class IdentityTrainerWindow(tk.Toplevel):
 
     # ── 直譯器檢查（背景執行緒，避免 import torch 卡住開窗）────────────
     def _check_interpreter(self):
-        self._interp_ok = True  # 先樂觀假設；檢查完才可能翻成 False + 停用按鈕
+        self._interp_ok = None  # 檢查未完成前一律當「還不能執行」：Start / Test 按鈕停用
+        self._interp_result = None  # 背景執行緒只寫這個純旗標（True/False），不碰任何 tk 物件
         self._process_status_var.set("正在檢查 Python 環境…")
+        self._update_buttons()
 
         def _worker():
             try:
                 r = subprocess.run(
                     [sys.executable, "-c", "import torch, torchvision, ultralytics"],
-                    capture_output=True, timeout=90,
+                    capture_output=True, timeout=180,
                 )
-                ok = (r.returncode == 0)
+                self._interp_result = (r.returncode == 0)
             except Exception:
-                ok = False
-            self.after(0, lambda: self._apply_interpreter_result(ok))
+                self._interp_result = False
 
         threading.Thread(target=_worker, daemon=True).start()
+        # 從「主執行緒」用 after 輪詢那個旗標——跨執行緒呼叫 self.after() 在部分
+        # Tcl 版本會丟 RuntimeError（"main thread is not in main loop"），旗標一律
+        # 拿不到、按鈕永遠卡在停用。改由主執行緒自己輪詢就完全沒有這個問題。
+        self._poll_interp_result()
+
+    def _poll_interp_result(self):
+        if self._closing:
+            return
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if self._interp_result is not None:
+            self._apply_interpreter_result(self._interp_result)
+            return
+        self.after(200, self._poll_interp_result)
 
     def _apply_interpreter_result(self, ok):
+        if self._closing:
+            return
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
         self._interp_ok = ok
         self._process_status_var.set("" if ok else "缺少 torch / ultralytics")
         if not ok:
@@ -723,6 +783,13 @@ class IdentityTrainerWindow(tk.Toplevel):
     # ── 開始 / 停止 ──────────────────────────────────────────────────
     def _busy_guard(self):
         """回傳 True 代表現在不能啟動新工作（並已彈訊息）。"""
+        if self._interp_ok is None:
+            messagebox.showinfo(
+                "請稍候",
+                "正在檢查這個 Python 環境是否有 torch / ultralytics，等幾秒檢查完再試。",
+                parent=self,
+            )
+            return True
         if not self._interp_ok:
             messagebox.showwarning("無法執行", "缺少 torch / ultralytics，請看視窗頂端的紅色提示。", parent=self)
             return True
@@ -1007,6 +1074,14 @@ class IdentityTrainerWindow(tk.Toplevel):
                     self._progress.configure(mode="determinate", maximum=max(self._build_total, 1), value=0)
                     self._process_status_var.set(f"抽圖中… 「{self._build_class}」0/{self._build_total} 支")
                     continue
+                if "已達每類上限" in line and self._build_total:
+                    # 這一類達到取樣張數上限、剩下的影片會被整批跳過（不再有逐支的
+                    # 處理行），進度條直接補到滿，不然會卡在中間到下一階段才跳掉。
+                    self._build_done = self._build_total
+                    self._progress.configure(value=self._build_total)
+                    self._process_status_var.set(
+                        f"抽圖中… 「{self._build_class}」已達張數上限，跳過其餘影片")
+                    continue
                 if _BUILD_VID_DONE_RE.search(line) and self._build_total:
                     self._build_done = min(self._build_done + 1, self._build_total)
                     self._progress.configure(value=self._build_done)
@@ -1274,9 +1349,10 @@ class IdentityTrainerWindow(tk.Toplevel):
     # ── 按鈕狀態 / 關閉 ──────────────────────────────────────────────
     def _update_buttons(self):
         running = self._pm.is_running
-        self._start_btn.configure(state="disabled" if running or not self._interp_ok else "normal")
+        interp_ready = self._interp_ok is True   # None（檢查中）也算還不能執行
+        self._start_btn.configure(state="disabled" if running or not interp_ready else "normal")
         self._stop_btn.configure(state="normal" if running else "disabled")
-        self._test_btn.configure(state="disabled" if running or not self._interp_ok else "normal")
+        self._test_btn.configure(state="disabled" if running or not interp_ready else "normal")
         self._apply_btn.configure(state="disabled" if running else "normal")
         self._del_btn.configure(state="disabled" if running else "normal")
 
@@ -1290,6 +1366,12 @@ class IdentityTrainerWindow(tk.Toplevel):
                 return
             self._chain = None
             self._pm.request_shutdown_and_wait()
+        # 先把背景迴圈全部停掉，再 destroy——否則 poll()／_drain／環境檢查執行緒的
+        # 回呼會在視窗銷毀後再觸發一次，對死掉的 widget 操作丟 TclError。
+        self._closing = True
+        self._chain = None
+        self._pm.stop_poll()
+        self._console.stop()
         self._stop_spinner()
         self._stop_elapsed_tick()
         if getattr(self.master_window, "_identity_trainer_win", None) is self:

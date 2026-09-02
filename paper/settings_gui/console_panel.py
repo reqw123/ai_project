@@ -54,6 +54,12 @@ from settings_gui.style import (
     _styled_button,
 )
 
+# log_queue 裡代表「某一條 log reader 讀到 EOF（行程結束、pipe 關閉）」的標記，
+# 跟著一個「代次序號」一起放進 queue。_drain_log_queue 只認「目前這一代」的 EOF，
+# 前一支行程殘留在 queue 裡、還沒被讀掉的 EOF 會被靜默丟棄（否則會在下一支行程剛
+# 啟動時憑空冒出一行「— … 行程已結束 —」）。
+_EOF = object()
+
 
 class ConsolePanel:
     def __init__(self, window, container):
@@ -72,6 +78,8 @@ class ConsolePanel:
         self._log_reader_thread = None
         self._log_line_count = 0
         self._reader_label = None  # 目前這條 log reader 對應哪個行程的顯示名稱
+        self._reader_gen = 0       # log reader 代次：切行程時 +1，用來忽略舊行程殘留的 EOF 標記
+        self._drain_job = None     # _drain_log_queue 的 after id，關窗前 stop() 取消
 
         # 供「疑似卡在 input() 等待輸入」判斷用（見 likely_waiting_for_input()）：
         # 記錄最後一次收到輸出的時間，以及那次輸出是否以換行結尾。
@@ -191,6 +199,9 @@ class ConsolePanel:
         )
         self.stdin_entry.pack(side="left", fill="x", expand=True, padx=(6, 6), ipady=3)
         self.stdin_entry.bind("<Return>", lambda _e: self.on_send_stdin())
+        # 全域 Ctrl+F（settings_window bind_all）會把焦點搶去「獨立腳本工具」下拉；
+        # 在這個輸入框裡打字時攔下來，不然打到 f 就跳走。
+        self.stdin_entry.bind("<Control-f>", lambda _e: "break")
         self.send_stdin_btn = _styled_button(
             input_row, "傳送", self.on_send_stdin, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE,
             font=self.window._font_hint, compact=True,
@@ -206,7 +217,7 @@ class ConsolePanel:
             "（尚未啟動任何程式；按上方「▶ 啟動 main.py」或選好腳本後按「▶ 執行所選腳本」，輸出會即時顯示在這裡）\n",
             tag="muted",
         )
-        self.window.after(80, self._drain_log_queue)
+        self._drain_job = self.window.after(80, self._drain_log_queue)
 
     # ── 位置／高度 ───────────────────────────────────────────────────
 
@@ -233,6 +244,16 @@ class ConsolePanel:
         """註冊一個「終端機面板位置/高度改變後」要執行的回呼，見 __init__ 裡
         `_on_resize` 的說明。"""
         self._on_resize = callback
+
+    def stop(self):
+        """視窗關閉前呼叫：停掉 log 汲取迴圈，避免關窗後 _drain_log_queue 再對
+        已銷毀的 Text widget 操作而丟 TclError。"""
+        if self._drain_job is not None:
+            try:
+                self.window.after_cancel(self._drain_job)
+            except tk.TclError:
+                pass
+            self._drain_job = None
 
     def lift(self):
         self.container.lift()
@@ -402,6 +423,8 @@ class ConsolePanel:
         字被切開後 decode 出亂碼。
         """
         self._reader_label = label
+        self._reader_gen += 1
+        gen = self._reader_gen  # 這條 reader 的代次；EOF 標記帶上它，_drain 只認最新一代
 
         def _reader():
             try:
@@ -417,7 +440,7 @@ class ConsolePanel:
                 except (OSError, ValueError):
                     pass
                 finally:
-                    self.log_queue.put(None)
+                    self.log_queue.put((_EOF, gen))
                 return
 
             decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -435,24 +458,33 @@ class ConsolePanel:
             except ValueError:
                 pass
             finally:
-                self.log_queue.put(None)
+                self.log_queue.put((_EOF, gen))
 
         self._log_reader_thread = threading.Thread(target=_reader, daemon=True)
         self._log_reader_thread.start()
 
     def _drain_log_queue(self):
+        self._drain_job = None
+        try:
+            if not self.window.winfo_exists():
+                return
+        except tk.TclError:
+            return
         drained = 0
         try:
             while drained < 500:  # 單次 tick 最多處理 500 個 chunk，避免瞬間大量輸出卡住 GUI 主執行緒
                 chunk = self.log_queue.get_nowait()
-                if chunk is None:
-                    self.append(f"\n— {self._reader_label} 行程已結束 —\n", tag="muted")
+                if isinstance(chunk, tuple) and chunk and chunk[0] is _EOF:
+                    # 只認「目前這一代」reader 的 EOF；舊行程殘留的直接丟棄，
+                    # 不然會在下一支行程剛啟動時憑空冒出一行「— … 行程已結束 —」。
+                    if chunk[1] == self._reader_gen:
+                        self.append(f"\n— {self._reader_label} 行程已結束 —\n", tag="muted")
                 else:
                     self.append(chunk)
                 drained += 1
         except queue.Empty:
             pass
-        self.window.after(80, self._drain_log_queue)
+        self._drain_job = self.window.after(80, self._drain_log_queue)
 
     # ── stdin 輸入 ───────────────────────────────────────────────────
 

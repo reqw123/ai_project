@@ -183,8 +183,35 @@ def _parse_env_value(env_var: str, value_type: str):
     return config._env_str(env_var, "")
 
 
+def _bind_wheel_to_canvas(root_widget, canvas, axis="y"):
+    """把 root_widget 底下每一個子孫元件的 <MouseWheel> 事件都導向捲動 canvas。
+
+    刻意「逐一綁在每個元件上 + 回傳 'break'」，而不是 canvas.bind_all()、也不是
+    綁在外層 Frame 的 <Enter>/<Leave>：Tk 的 <Enter>/<Leave> 在「父 widget → 子
+    widget」邊界也會觸發（detail=NotifyInferior），而 canvas 幾乎蓋滿它的外層
+    Frame，指標一移進 canvas，外層 Frame 就立刻收到 <Leave>、把滾輪解除綁定——
+    這正是「滾輪捲不動整頁欄位、只能拖右側捲軸」的根本原因。逐一綁定完全不碰
+    <Enter>/<Leave>；回傳 "break" 還能順便壓掉 ttk.Combobox／Spinbox「滑鼠移過去
+    滾一下就把值改掉」的預設行為。分頁內容在 _build_tabs() 一次建好、之後不再新增
+    欄位 widget，所以每個分頁建完呼叫一次就涵蓋整頁。
+    """
+    scroll = canvas.yview_scroll if axis == "y" else canvas.xview_scroll
+
+    def _on_wheel(event):
+        scroll(int(-1 * (event.delta / 120)), "units")
+        return "break"
+
+    stack = [root_widget]
+    while stack:
+        w = stack.pop()
+        w.bind("<MouseWheel>", _on_wheel)
+        stack.extend(w.winfo_children())
+
+
 class _ScrollableTab(tk.Frame):
-    """單一分頁的可捲動容器（欄位多，單頁會爆版），滑鼠滾輪僅在游標停在該分頁時作用。"""
+    """單一分頁的可捲動容器（欄位多，單頁會爆版）。滑鼠滾輪捲動由 _build_tabs()
+    在分頁內容建好後呼叫 _bind_wheel_to_canvas() 掛上（不能靠 <Enter>/<Leave>，
+    見該函式說明）。"""
 
     def __init__(self, parent):
         super().__init__(parent, bg=COLOR_TAB_BG)
@@ -212,17 +239,6 @@ class _ScrollableTab(tk.Frame):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-
-        def _on_enter(_e):
-            canvas.bind_all(
-                "<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-            )
-
-        def _on_leave(_e):
-            canvas.unbind_all("<MouseWheel>")
-
-        self.bind("<Enter>", _on_enter)
-        self.bind("<Leave>", _on_leave)
 
 
 class SettingsWindow(tk.Tk):
@@ -823,6 +839,8 @@ class SettingsWindow(tk.Tk):
                     "關閉設定視窗",
                     f"{pm.active_label} 似乎沒有在預期時間內結束，請自行檢查工作管理員確認狀態。",
                 )
+        self._process_manager.stop_poll()
+        self._console_panel.stop()
         self.destroy()
 
     def _on_start_main(self):
@@ -1495,11 +1513,9 @@ class SettingsWindow(tk.Tk):
         tab_canvas.pack(side="left", fill="x", expand=True)
         tab_hscroll.pack(side="top", fill="x")
 
-        def _on_tabbar_wheel(event):
-            tab_canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        tab_canvas.bind("<Enter>", lambda e: tab_canvas.bind_all("<MouseWheel>", _on_tabbar_wheel))
-        tab_canvas.bind("<Leave>", lambda e: tab_canvas.unbind_all("<MouseWheel>"))
+        # 分頁按鈕列的橫向滾輪捲動——按鈕都建好之後，在下面迴圈結束處用
+        # _bind_wheel_to_canvas(tab_bar, tab_canvas, "x") 掛上（不能靠 <Enter>/<Leave>，
+        # 見 _bind_wheel_to_canvas 說明）。
 
         content_area = tk.Frame(parent, bg=COLOR_TAB_BG)
         content_area.pack(fill="both", expand=True, padx=16, pady=(0, 8))
@@ -1639,6 +1655,12 @@ class SettingsWindow(tk.Tk):
                     bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
                     anchor="w", justify="left", wraplength=750,
                 ).pack(fill="x", padx=14, pady=(6, 10))
+
+            # 這個分頁的欄位（含右欄說明卡片）全部建好了，把整頁的滾輪垂直捲動掛上。
+            _bind_wheel_to_canvas(tab, tab.canvas, "y")
+
+        # 分頁按鈕都建好了，掛上按鈕列的橫向滾輪捲動。
+        _bind_wheel_to_canvas(tab_bar, tab_canvas, "x")
 
         # Canvas 不會像 Frame 一樣自動長到內容的高度，按鈕全部排好後量出實際需要的
         # 高度再回填，分頁按鈕列才會剛好一行高，不會被裁切也不會留多餘空白。

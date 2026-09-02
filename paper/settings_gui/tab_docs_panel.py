@@ -69,12 +69,17 @@ _BOTTOM_SPACER_HEIGHT = 48
 
 
 def _block_edit_keys(event):
-    """`_selectable_line` 的按鍵過濾器：放行方向鍵／Ctrl 組合鍵（Ctrl+C 複製、
-    Ctrl+A 全選...），其餘一律吃掉（回傳 "break" 讓 Tk 不執行預設行為），達到
-    「能選取/複製，但打字打不進去」的效果。滑鼠拖曳選取、雙擊選字是滑鼠事件，
-    不經過這個按鍵過濾器，完全不受影響。"""
+    """`_selectable_line` 的按鍵過濾器：放行方向鍵與「不會改內容」的 Ctrl 組合鍵
+    （Ctrl+C 複製、Ctrl+A 全選），其餘一律吃掉（回傳 "break" 讓 Tk 不執行預設
+    行為），達到「能選取/複製，但改不動」的效果。滑鼠拖曳選取、雙擊選字是滑鼠
+    事件，不經過這個按鍵過濾器，不受影響。
+
+    Ctrl+V／Ctrl+X／Ctrl+D 這類「會編輯內容」的組合鍵一定要一起擋掉——原本
+    「只要按著 Control 就整個放行」會讓這些唯讀說明行其實能被貼上／剪下改掉。"""
     if event.state & 0x0004:  # Control 鍵有按著
-        return None
+        if event.keysym.lower() in ("c", "a", "insert"):
+            return None
+        return "break"
     if event.keysym in ("Left", "Right", "Up", "Down", "Home", "End",
                          "Prior", "Next", "Shift_L", "Shift_R", "Tab"):
         return None
@@ -128,6 +133,8 @@ def _selectable_line(parent, text, bg, fg, font):
     widget.mark_set("insert", "1.0")
     widget.xview_moveto(0.0)
     widget.bind("<Key>", _block_edit_keys)
+    for _seq in ("<<Paste>>", "<<Cut>>", "<<Clear>>"):
+        widget.bind(_seq, lambda _e: "break")  # 選單/中鍵貼上、剪下也擋掉，維持唯讀
     widget.pack(anchor="w")
     return widget
 

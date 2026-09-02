@@ -31,6 +31,10 @@ class FieldSearchBar:
         entry = tk.Entry(parent, textvariable=self.var, font=self.window._font_label, width=22)
         entry.pack(side="right", padx=(6, 2), pady=4, ipady=2)
         entry.bind("<Escape>", lambda _e: self.var.set(""))
+        # settings_window 用 bind_all 把 Ctrl+F 綁成「聚焦獨立腳本工具下拉」；焦點
+        # 已經在這個看得到的搜尋框裡時，按 Ctrl+F 多半是想聚焦這裡，攔下來不讓
+        # bind_all 把焦點搶走。
+        entry.bind("<Control-f>", lambda _e: "break")
         self.var.trace_add("write", self._on_change)
 
     def _on_change(self, *_a):
