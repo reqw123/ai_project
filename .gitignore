@@ -50,7 +50,23 @@ paper/local_state/*
 !paper/local_state/README.md
 paper/.gui_state.json  # 舊位置（2026-08-31 前），殘留檔一併忽略
 
-# 注意：以下刻意「不」忽略——它們已在版控中且含使用者資料/設定：
-#   paper/cat_monitoring_log.csv, paper/behavior_segments_log.csv
-#   paper/output/*.csv, paper/runtime_settings.current.json
+# ─── 執行期資料：每台機器各自累積，不進版控 ─────────────────────────
+# 2026-09-03：改為不追蹤。原本刻意追蹤是為了「換機器路徑不用改」，但兩台裝置
+# 都跑監測時，這些檔會一直變動 + 二進位 SQLite 無法 merge → 每次 git pull 都
+# 衝突。改成各機器本機保有自己的一份（folder 由程式自動建立），git pull 只動
+# 程式碼。要合併兩台的多天歷史見 docs（daily_history 用 INSERT OR IGNORE 合
+# 不重疊的日期）。
+paper/baseline_data/daily_history.db
+paper/baseline_data/tracker_state.json
+paper/baseline_data/global.json          # Node-RED 每個 instance 各一份
+paper/cat_monitoring_log.csv
+paper/behavior_segments_log.csv
+/paper/output/
+
+# runtime_settings.current.json：機器專屬設定（影像來源、絕對路徑…）。刪掉或
+# 不存在時 config.py 會用「相對專案根目錄」的可攜預設；新機器用設定視窗重設。
+# 共用的設定「決策」放 default_runtime_settings.json（仍追蹤）當參考。
+paper/runtime_settings.current.json
+
+# 注意：以下刻意「不」忽略——模型權重跟著程式碼一起進版控：
 #   yolo_models/*.pt, stgcn_models/**, identity_models/**（移出需 history rewrite，見 TODO L-6）
