@@ -48,7 +48,8 @@ paper/runtime_settings.previous.json
 # 目前內容：gui_state.json（設定視窗 GUI 偏好，見 settings_gui/ui_state.py）。
 paper/local_state/*
 !paper/local_state/README.md
-paper/.gui_state.json  # 舊位置（2026-08-31 前），殘留檔一併忽略
+# 舊位置（2026-08-31 前），殘留檔一併忽略
+paper/.gui_state.json
 
 # ─── 執行期資料：每台機器各自累積，不進版控 ─────────────────────────
 # 2026-09-03：改為不追蹤。原本刻意追蹤是為了「換機器路徑不用改」，但兩台裝置
@@ -58,7 +59,8 @@ paper/.gui_state.json  # 舊位置（2026-08-31 前），殘留檔一併忽略
 # 不重疊的日期）。
 paper/baseline_data/daily_history.db
 paper/baseline_data/tracker_state.json
-paper/baseline_data/global.json          # Node-RED 每個 instance 各一份
+# global.json：Node-RED 每個 instance 各一份
+paper/baseline_data/global.json
 paper/cat_monitoring_log.csv
 paper/behavior_segments_log.csv
 /paper/output/
