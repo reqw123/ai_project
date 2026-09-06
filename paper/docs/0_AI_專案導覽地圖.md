@@ -5,7 +5,7 @@
 >
 > 讓任何 AI 助手（或新接手的人）在最短時間內建立「這個專案長什麼樣子、程式碼怎麼分工、Node-RED 那幾個 json 各自是做什麼的」的正確心智模型，並知道要去哪個檔案找答案。
 >
-> 內容以**實際原始碼現況**為準（校對日期：2026-07-15；2026-08-11 已核對並補上期間新增的模組/工具，見文中個別標註的日期，非全文重新校對），刻意不重複程式碼細節，只給「地圖」——路徑、職責、彼此的呼叫關係。
+> 內容以**實際原始碼現況**為準（校對日期：2026-07-15；2026-08-11 已核對並補上期間新增的模組/工具；2026-09-04 再次核對，補上先前完全遺漏的 `analytics/`＋`dashboard/`（個體化基線分析與展示頁，[3.7](#sec-3-7)）與執行期設定系統（`settings_manager.py`/`settings_window.py`/`settings_gui/`，[3.8](#sec-3-8)），並補上 §6 端點總表遺漏的 3 個 Python 端點；其餘章節未逐字重新校對，見文中個別標註的日期），刻意不重複程式碼細節，只給「地圖」——路徑、職責、彼此的呼叫關係。
 >
 > 🚨 **本文件之外的舊文件已有過時內容**，見文末「[九、舊文件可信度備註](#sec-9)」，請先看那一節再決定要不要參考它們。
 
@@ -19,7 +19,9 @@
 > - 🎯 **一句話**：YOLO-Pose 擷取骨架 → ST-GCN 分類行為 → Flask 產出串流/統計 → 多個 Node-RED flow 負責 Dashboard/健康評分/通知。
 > - 📂 **想快速上手**：照「[二、五分鐘搞懂](#sec-2)」表格的順序看 7 個檔案就夠。
 > - 🏗️ **Python 端三層**：感知層（YOLO）→ 分析層（ST-GCN）→ 監測層（統計/記錄/推送/視覺化），見「[三](#sec-3)」。
-> - 📡 **Node-RED 端 4 個 flow**：`貓咪主控.json`（主 Dashboard，運行中）、`cat_health_v3_flow.json`（個體化基線分析，運行中）、`GPT 健康報告.json`（**目前 disabled**）、`lick_stage2_nodered.json`（舔舐部位分析，運行中），見「[五](#sec-5)」。
+> - 📡 **Node-RED 端 5 個 flow**：`貓咪主控.json`（主 Dashboard，運行中）、`cat_health_v3_flow.json`（個體化基線分析，運行中）、`GPT 健康報告.json`（**目前 disabled**）、`lick_stage2_nodered.json`（舔舐部位分析，運行中）、`analytics_deviation_bridge.json`（新舊基線引擎比對橋接，運行中），見「[五](#sec-5)」。
+> - 📊 **Python 端也有自己一套個體化基線分析**：`analytics/` + `dashboard/`，與攝影機管線解耦、獨立於 Node-RED 觸發，見「[3.7](#sec-3-7)」。
+> - 🛠️ **獨立設定 GUI**：`settings_window.py`（+ `settings_manager.py`/`settings_gui/`）是另一支手動執行的程式，編輯 `runtime_settings.current.json`，見「[3.8](#sec-3-8)」。
 > - 🚨 **看其他舊文件前，先看「[九、舊文件可信度備註](#sec-9)」**——好幾份舊文件的參數表/檔名已經跟現況不符。
 
 ---
@@ -52,6 +54,8 @@
    - [3.4.1 🚨 Skeleton Quality Assessment](#341-skeleton-quality-assessment骨架品質雙重判定2026-07-新增2026-08-11-使用者確認改為預設開啟)
    - [3.5 外掛系統（Plugins）](#35-外掛系統plugins--舔舐部位精細化分析)
    - [3.6 訓練/評估/離線工具腳本](#36-訓練--評估--離線工具腳本非-runtime-必要)
+   - [3.7 🔄 個體化基線分析（analytics/ + dashboard/，與攝影機管線解耦）](#sec-3-7)
+   - [3.8 執行期設定系統（settings_manager.py / settings_window.py / settings_gui/）](#sec-3-8)
 4. [🔀 四、資料流總覽（一句話版）](#四資料流總覽一句話版)
 5. [📡 五、監控層 Node-RED 對應](#五監控層-node-red-對應)
 6. [🔌 六、Python ↔ Node-RED 端點總表](#六python--node-red-端點總表)
@@ -210,6 +214,43 @@
 > [!WARNING]
 > 🚨 `run_keypoint_verification.bat` 呼叫的 `1_check_keypoint_importance.py` 目前已不存在於專案中（僅剩 `__pycache__` 殘留的 `.pyc`），此 `.bat` 目前已失效、待清理或補回對應腳本。
 
+<a id="sec-3-7"></a>
+### 3.7 個體化基線分析（`analytics/` + `dashboard/`，與攝影機管線解耦；2026-09-04 補上，先前版本完全遺漏）
+
+> 📖 **一句話摘要**：`BehaviorTracker` 每天跨日時把當日統計寫進 `analytics/daily_store.py`（自己的 SQLite，不碰 Node-RED 的任何檔案），`dashboard/refresher.py` 背景執行緒每 ~2 秒讀出來算基線/偏差/融合分數並快取，`dashboard/views.py` 提供唯讀展示頁——這整條路徑不需要 Node-RED 開著也能跑。
+
+| 路徑 | 職責 |
+|---|---|
+| `cat_monitoring_system/analytics/daily_store.py` | SQLite 持久化多天歷史（`daily_history` 表）與排除天數（`excluded_dates` 表）；`save_day()`/`load_history()`/`set_excluded()`/`load_excluded_dates()` |
+| `cat_monitoring_system/analytics/baseline.py` | `compute_baseline()`：連續指標（walk/stop/lick/scratch 時長）算 mean/std/median/MAD/EWMA，稀疏計數保留每日原始序列 |
+| `cat_monitoring_system/analytics/deviation.py` | `compute_deviation()`：連續指標 robust z-score、計數 Poisson/Negative-Binomial 尾機率 → sigma-equivalent |
+| `cat_monitoring_system/analytics/fusion.py` | `compute_fusion()`：Class A（舔舐/搔抓，45%）/ Class B（甩頭/走動/靜止，25%）/ Class C（節律/轉移，30%，暫由 Node-RED 傳入）加權 → 0-100 風險分數與等級 |
+| `cat_monitoring_system/analytics/config.py` | `BaselineConfig`/`DeviationConfig`：上述模組的統計常數集中管理，逐項標註證據等級，可 env 覆寫 |
+| `cat_monitoring_system/analytics/live_adapter.py` | 中性轉接層：`today_from_tracker()` 把即時 `BehaviorTracker` 資料轉成 `analytics` 要的形狀，讓 `dashboard/refresher.py` 不需要 import `server/routes.py` 私有函式 |
+| `cat_monitoring_system/analytics/manage_baseline_history.py` | 獨立 tkinter 工具：檢視/排除歷史天數，套用後立即重算基線驗證生效 |
+| `cat_monitoring_system/dashboard/cache.py` | 記憶體快取最新一次基線/偏差/融合結果 |
+| `cat_monitoring_system/dashboard/refresher.py` | 背景 daemon thread（由 `main.py::run_server_mode()` 啟動），定期直接呼叫 `analytics/` 計算函式並寫入快取，不經 HTTP |
+| `cat_monitoring_system/dashboard/views.py` | Flask Blueprint：`GET /dashboard/baseline`（唯讀展示頁）、`GET /api/deviation/latest`（快取結果 JSON） |
+
+> [!NOTE]
+> 這整包由 `config.py::BaselineDashboardConfig.ENABLED` 總開關控制，關閉時 `server/routes.py`/`server/flask_app.py` 完全不會匯入 `dashboard/` 模組。`server/routes.py` 另外提供 `POST /api/deviation`（給 Node-RED `analytics_deviation_bridge.json` 做新舊引擎比對用，省略欄位時預設吃 `daily_store`/即時 tracker），跟 `dashboard/refresher.py` 是兩條互不依賴的觸發路徑，詳見 [`資料層架構現況與統一管理評估.md`](資料層架構現況與統一管理評估.md)。
+
+<a id="sec-3-8"></a>
+### 3.8 執行期設定系統（`settings_manager.py` / `settings_window.py` / `settings_gui/`；2026-09-04 補上，先前版本完全遺漏）
+
+> 📖 **一句話摘要**：獨立於 `main.py`/Flask 的第二支程式入口——操作者手動執行 `python settings_window.py` 開一個 tkinter 視窗，編輯的是 `paper/runtime_settings.current.json`（執行期 JSON 覆寫層），不是 `config.py` 原始碼或 `stgcn_config.yaml`；存檔不會熱重載，需重啟 `main.py` 才生效。
+
+| 路徑 | 職責 |
+|---|---|
+| `paper/settings_manager.py` | `FIELD_SCHEMA`：唯一欄位對照表（JSON key ↔ 環境變數 ↔ `(class, attribute)` ↔ 型別 ↔ 驗證規則）；`runtime_settings.current.json` 的載入/合併/驗證/原子寫入（含 `.previous.json` 備份）。`STGCNTrainingConfig` 與 `STGCNConfig.SEQUENCE_LENGTH`/`FEATURE_MODE`/`NUM_CLASSES` 不在此表，GUI 看不到也存不了 |
+| `paper/settings_window.py` | 主視窗，依 `FIELD_SCHEMA` 自動長出分頁/欄位列；另整合啟動/停止 `main.py` 子行程、內嵌主控台面板、欄位搜尋 |
+| `paper/settings_gui/console_panel.py` | 內嵌主控台輸出/log 顯示面板 |
+| `paper/settings_gui/process_manager.py` | 啟動/停止 `main.py` 子行程、`any_running()` 狀態查詢 |
+| `paper/settings_gui/field_search.py` | 欄位搜尋列 |
+| `paper/settings_gui/tab_docs_panel.py` | 即時解析並顯示 `docs/設定分頁模組與核心函式對照表.md` 對應分頁段落 |
+| `paper/settings_gui/style.py` / `ui_state.py` / `image_popup.py` | 共用樣式常數、UI 狀態管理、圖片彈窗 |
+| `paper/identity_trainer_window.py` | 被 `settings_window.py` import 的獨立子視窗：貓咪身分辨識 CNN 訓練工具，整合 [3.6](#sec-3-6) 的 `tools/cat_identity/` 工具鏈 |
+
 ---
 
 <a id="sec-4"></a>
@@ -231,9 +272,9 @@
 <a id="sec-5"></a>
 ## 五、監控層 Node-RED 對應
 
-> 📖 **一句話摘要**：4 個 flow 檔案都放在 `paper/`（不在 `cat_monitoring_system/`），其中 `GPT 健康報告.json` 目前 disabled，其餘 3 個都在運行中。
+> 📖 **一句話摘要**：5 個 flow 檔案都放在 `paper/`（不在 `cat_monitoring_system/`），其中 `GPT 健康報告.json` 目前 disabled，其餘 4 個都在運行中。
 
-Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 下）。目前共 4 個檔案：
+Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 下）。目前共 **5** 個檔案（2026-09-04 核對：先前版本漏列 `analytics_deviation_bridge.json`，見 [5.5](#sec-5-5)）：
 
 <a id="sec-5-1"></a>
 ### 5.1 `貓咪主控.json` —— 主控中心 / 核心健康監測 Dashboard
@@ -282,7 +323,17 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 - **對外呼叫**：無（純接收端，不主動呼叫外部服務）
 - 這支 flow 對應 `plugins/lick_stage/config.py` 的 `NODERED_URL`（預設 `http://127.0.0.1:1880/lick_zone_result`）
 
-> 📌 **本節結論**：4 個 flow 各司其職，`貓咪主控.json`／`cat_health_v3_flow.json` 並行運作互不依賴，`lick_stage2_nodered.json` 純接收插件資料，`GPT 健康報告.json` 目前停用。
+<a id="sec-5-5"></a>
+### 5.5 `analytics_deviation_bridge.json` —— 新舊基線引擎比對橋接（2026-09-04 補上，先前版本完全遺漏）
+
+單一 tab「🔬 基線引擎比對」：
+
+- **觸發**：分接自 `cat_health_v3_flow.json`「行為統計累積器」節點輸出（2026-08-09 自動接線），也有一個「手動測試觸發」`inject` 節點可獨立測試
+- **做的事**：把 Node-RED 自己算的 `v2_daily_history`/`v2_today` 等資料組成請求 body，`POST /api/deviation`（見 [3.7](#sec-3-7)、[六](#sec-6)）呼叫 Python 端 `analytics/` 套件重新計算一次基線/偏差/融合結果，回應寫回 `global` 的 `_py` 後綴變數（例如 `v2_baseline_py`），跟 Node-RED 自己算的 `v2_baseline` 等**並列比對**，不覆蓋、不影響 `cat_health_v3_flow.json` 正式使用的欄位
+- **對外呼叫**：`http://<python_ip>:5000/api/deviation`
+- **定位**：這是「[ADR 0001](adr/0001-統一健康風險評分引擎.md)」新舊健康評分引擎並存期間的比對工具，目的是驗證 Python `analytics/` 套件算出的結果跟 Node-RED 舊引擎是否一致；尚未正式扶正（`cat_health_v3_flow.json` 仍是實際生效的評分邏輯），詳見 [`資料層架構現況與統一管理評估.md`](資料層架構現況與統一管理評估.md)
+
+> 📌 **本節結論**：5 個 flow 各司其職，`貓咪主控.json`／`cat_health_v3_flow.json` 並行運作互不依賴，`lick_stage2_nodered.json` 純接收插件資料，`analytics_deviation_bridge.json` 是新舊基線引擎的比對橋接（不影響正式判斷），`GPT 健康報告.json` 目前停用。
 
 ---
 
@@ -303,9 +354,14 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 | `GET /video_clip` | `GPT 健康報告.json` 的 `/camera` 指令 | `GPT 健康報告.json` |
 | `GET/POST /api/overlay` | 目前無 flow 使用 | — |
 | `GET /api/behavior_history` | 目前無 flow 使用 | — |
+| `POST /api/deviation`（2026-09-04 補上） | `analytics_deviation_bridge.json`（新舊引擎比對，見 [5.5](#sec-5-5)） | `analytics_deviation_bridge.json` |
+| `GET /api/deviation/latest`（2026-09-04 補上） | 目前無 flow 使用；供瀏覽器/前端輪詢 `dashboard/refresher.py` 算好的快取結果 | — |
+| `GET /dashboard/baseline`（2026-09-04 補上） | 目前無 flow 使用；Python 端唯讀基線展示頁，直接瀏覽器開啟 | — |
 
 > [!WARNING]
-> ⚠️ 前三列的「提供方」寫反了方向：`/python_online`、`/yolo_result`、`/yolo_result_v2`、`/lick_zone_result`、`/ext_zone_result` 都是 **Node-RED 提供、Python 呼叫**的端點；其餘（`/stream`、`/snapshot`、`/video_clip`、`/api/*`）才是 **Python(Flask) 提供、Node-RED 呼叫**的端點。
+> ⚠️ 前三列的「提供方」寫反了方向：`/python_online`、`/yolo_result`、`/yolo_result_v2`、`/lick_zone_result`、`/ext_zone_result` 都是 **Node-RED 提供、Python 呼叫**的端點；其餘（`/stream`、`/snapshot`、`/video_clip`、`/api/*`、`/dashboard/*`）才是 **Python(Flask) 提供、Node-RED 呼叫**的端點。
+>
+> 📎 `/api/deviation`、`/api/deviation/latest`、`/dashboard/baseline` 三者屬於 [3.7 個體化基線分析](#sec-3-7)（`analytics/` + `dashboard/`），與本節其餘端點（攝影機管線/插件）是不同的資料流，詳見該節。
 
 ---
 
@@ -319,10 +375,12 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 - `SQAConfig`（僅 `ENABLE_SQA_DUAL_JUDGMENT` 一個總開關）→ 影響 `processors/skeleton_quality_assessment.py` 是否被 `FrameProcessor` 呼叫（3.4.1）；3 項個別指標開關不在 `config.py`，在模組自己的檔案裡
 - `FlaskConfig` → 影響 `server/flask_app.py`、`server/routes.py`
 - `NodeRedConfig` → 影響 `NodeRedClient` 推送的目標端點（對應「[五](#sec-5)、[六](#sec-6)」的 `/python_online`、`/yolo_result`、`/yolo_result_v2`）
-- `LoggingConfig` → 影響 `CSVLogger`/`BehaviorSegmentLogger` 的輸出路徑
+- `LoggingConfig` → 影響 `CSVLogger`/`BehaviorSegmentLogger` 的輸出路徑，以及 `analytics/daily_store.py` 的 SQLite 路徑（`DAILY_HISTORY_DB_PATH`）與 `trackers/behavior_tracker.py` 的狀態檔（`TRACKER_STATE_PATH`）
 - `VisualizationConfig` → 影響 `Visualizer` 與 `LickStagePlugin.draw_overlay()` 的疊圖行為
+- `CatIdentityConfig` → 影響 `detectors/identity_verifier.py`（3.2）是否啟用、信心門檻
+- `BaselineDashboardConfig` → 影響 [3.7](#sec-3-7) `dashboard/` 整包是否被匯入（`ENABLED`）與背景重算間隔（`RECOMPUTE_INTERVAL_SEC`）
 
-⚠️ lick_stage / ext_body_zones 插件**不吃** `config.py`，而是各自有獨立的 `plugins/lick_stage/config.py`／`plugins/lick_stage/ext_body_zones/config.py`。
+⚠️ lick_stage / ext_body_zones 插件**不吃** `config.py`，而是各自有獨立的 `plugins/lick_stage/config.py`／`plugins/lick_stage/ext_body_zones/config.py`；[3.7](#sec-3-7) 的 `analytics/` 套件也不吃主 `config.py`（延遲 import，避免反向依賴），而是有自己獨立的 `analytics/config.py`（`BaselineConfig`/`DeviationConfig`）。[3.8](#sec-3-8) 的 `settings_manager.py` 也刻意不 import `config.py`（避免循環依賴）。
 
 > 📎 **信心值門檻**（bbox 偵測 / keypoint 過濾 / `interpolate_missing` 缺失判定三者語意不同，過去命名混用）詳見 [`信心值門檻總覽.md`](信心值門檻總覽.md)。2026-08-31 已把所有具名 bbox/kp 門檻統一為 `0.5` 並改用 `BBOX_` / `KPT_` 前綴；`interpolate_missing(threshold=)` 屬演算法內部參數（預設 0.1）未動，且即時推論/訓練（0.1）與部分離線工具（0.0）存在已知落差。
 
@@ -348,7 +406,7 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 > 🚨 以下既有文件內容**已與現況不符**，閱讀時請以本文件與各模組內的最新說明（如 `plugins/lick_stage/舔舐行為二階段分析模組說明.md`、`0_進度彙整.md`）為準。
 
 - ❌ `0_AI_HANDOFF_FOR_ASSISTANT.md`：多處引用不存在的檔案（`cat_monitoring_system/mermaid.md`、`THREE_LAYER_FLOW.md`、`NODERED_UPDATE_GUIDE.md`、`MAIN_CONFIG_SCRIPT_CLASSIFICATION.md`、`SCRIPT_SYNC_SUMMARY.md`、`flows (7).json`、`ip取得.json`），且參數表寫 `NUM_JOINTS=17`／`WINDOW_STRIDE(推論)=16`，與現行 `config.py`（`NUM_JOINTS=14`、`WINDOW_STRIDE` 預設 2）不符。
-- ❌ `0_ARCHITECTURE_DESIGN.md`：架構圖與參數表同樣寫 `V=17`／`WINDOW_STRIDE(推論)=16`，與現況不符；其餘前處理管線順序描述仍正確可用。
+- ⚠️ `0_ARCHITECTURE_DESIGN.md`：2026-06-01 初版設計文件，2026-09-04 已加上文件狀態說明並訂正已知落差（`FC 輸出`／`WINDOW_STRIDE`／`FEATURE_MODE` 預設值），但仍保留原文的敘事結構與 `V=17` 資料流程圖（僅加註說明現行部署為 14），本質上是「歷史設計文件」而非現況權威來源——現況請以 `/ARCHITECTURE.md`（專案根目錄）與 `docs/模組責任畫分.md` 為準，前處理管線順序描述本身仍正確可用。
 - ❌ `貓咪個體化基線.md`：文件頭標註「對應檔案：`cat_health_v2_flow.json`」，但該檔案已不存在——現行對應檔案是 `cat_health_v3_flow.json`（v3）。內文的基線計算邏輯描述仍大致可參考，但檔名與部分流程細節建議以本文件「[5.2](#sec-5-2)」與實際 json 為準。
 
 ✅ `NODE_RED_FUNCTIONS.md` 已於 2026-07 依現行 `貓咪主控.json`／`GPT 健康報告.json` 逐節點重新校對（檔名、`/camera` 已改用 `/video_clip`、新增的健康風險評分引擎／CSV 寫入／行為時間軸引擎等皆已補上），可信任其內容；但它仍只涵蓋這 2 個 flow，另外 2 個 flow（`cat_health_v3_flow.json`／`lick_stage2_nodered.json`）請看本文件「[五](#sec-5)」。

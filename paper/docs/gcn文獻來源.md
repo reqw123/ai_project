@@ -1,7 +1,7 @@
 # ST-GCN 技術文獻對照報告
 ## 貓咪行為辨識系統 — 採用 / 未採用技術 × 文獻溯源
 
-更新日期：2026-06-30  
+更新日期：2026-06-30（2026-09-04：核對現行 `models/stgcn_model.py` 後確認本文件「已採用」章節內容與程式碼完全一致，未變更；僅於第四節新增與 [`文獻回顧補遺與最新進展_2026-08.md`](文獻回顧補遺與最新進展_2026-08.md#sec-2) 的交叉參照，見下方標註）  
 對應實作：`cat_monitoring_system/models/stgcn_model.py`、`cat_monitoring_system/stgcn_config.yaml`、`cat_monitoring_system/tools/0_train_gcn.py`
 
 ---
@@ -236,6 +236,8 @@ input_dropout → 進入 STGCNBlock 堆疊
 
 <a id="sec-4"></a>
 ## 四、尚未採用的主要技術（優化方向）
+
+> **2026-09-04 新增交叉參照**：本節列出的技術選型仍是現行版本的正確狀態（均未採用，逐項核對過 `models/stgcn_model.py` 無誤）。[`文獻回顧補遺與最新進展_2026-08.md`](文獻回顧補遺與最新進展_2026-08.md#sec-2-2) 補充了本節之後（2025 年）出現的更新 SOTA 技術——超圖卷積（Hyper-GCN, ICCV 2025）、LLM 引導超圖（ACM MM 2025）、自監督少樣本骨架表徵（STARS, WACV 2026）——三者同樣屬於「未採用」，且同樣因小資料集過擬合風險與系統複雜度而未納入現行設計，論文「未來工作」章節可一併引用該文件對應章節，不在此重複列出細節。
 
 <a id="sec-4-1"></a>
 ### 4.1 動態鄰接矩陣（Dynamic / Channel-wise Topology）

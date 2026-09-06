@@ -1,7 +1,7 @@
 # ST-GCN 模型設計全技術分析
 
-更新日期：2026-06-03
-來源檔案：`cat_monitoring_system/models/stgcn_model.py`、`cat_monitoring_system/tools/0_train_gcn.py`
+更新日期：2026-09-04（依實際程式碼核對修正：分區鄰接矩陣改為向心/離心 BFS 分區、JointAttention 補上 Joint Prior Weights 機制，其餘章節已核對與程式碼一致）
+來源檔案：`cat_monitoring_system/models/stgcn_model.py`、`cat_monitoring_system/tools/0_train_gcn.py`、`cat_monitoring_system/stgcn_config.yaml`
 
 本文件完整列出本專案 ST-GCN 採用的所有技術設計，依模型架構、特徵工程、前處理管線、訓練策略、資料增強、推論策略六大類整理，並說明每項設計的實作位置與設計動機。
 
@@ -28,24 +28,31 @@ edges = [
 - **自連結**：對角線全為 1（A[i,i]=1），確保每個關節保留自身資訊
 - **對稱性**：雙向邊，A[i,j] = A[j,i] = 1
 - **貓體特化**：17 個關節點完全重映射自 COCO 17 點，對應鼻尖、雙耳、前胸、背中、髖部、四肢、尾巴，與人體 ST-GCN 的骨架定義不同
+- **關節數可消融**：`0_train_gcn.py` 的 `NUM_JOINTS` 僅接受 `17`（完整骨架）或 `14`（排除 `Tail_Root`/`Tail_Mid`/`Tail_Tip` 尾巴三點）兩種設定；`CatBehaviorSTGCN` 推論時會依 checkpoint 內鄰接矩陣的實際維度自動偵測 `num_joints`，不需要手動指定
 
 <a id="sec-1-2"></a>
 ### 1.2 三分組分區鄰接矩陣（K=3 Partition Adjacency）
 
+> ⚠️ **2026-09-04 核對修正**：此節原描述的「自身／1-hop 近鄰／2-hop 遠鄰」分區公式與目前 `stgcn_model.py: get_stgcn_partition_adjacency()` 的實作不符，程式碼實際採用的是 **以 `mid_back`（索引 4）為中心的 BFS 向心／離心（centripetal/centrifugal）分區**（PYSKL 風格），而非單純依 hop 數分組。以下已改為程式碼實際邏輯。
+
 ```python
 # stgcn_model.py: get_stgcn_partition_adjacency()
-A_root    = np.eye(17)                            # 自連結（I）
-A_close   = (A > 0) - A_root                      # 1-hop 直接鄰居
-A_further = clip((A² > 0) - (A > 0), 0, 1)        # 2-hop 兩步鄰居
+# 1. 以 mid_back（node 4）為中心點，對骨架邊做 BFS，得到每個關節到中心的 hop 距離 dist[]
+# 2. 對每條邊 (i, j)：
+#    - 若 dist[j] < dist[i]（j 比 i 更靠近中心）→ 該邊歸入「向心」分區 A_centripetal
+#    - 否則（含 dist[j] == dist[i]，依 PYSKL 慣例）→ 歸入「離心」分區 A_centrifugal
+A_self         = np.eye(num_joints)          # 自連結（I）
+A_centripetal  = ...   # 向心：鄰居比自己更靠近 mid_back
+A_centrifugal  = ...   # 離心：鄰居與自己等距或更遠離 mid_back
 ```
 
 | 分區 | 物理意義 | 數學定義 |
 |---|---|---|
-| A_root（自連結） | 保留關節自身特徵 | 單位矩陣 I |
-| A_close（近鄰） | 直接相連的關節 | A - I |
-| A_further（遠鄰） | 兩步可達但非直接相連 | clip(A² - A, 0, 1) |
+| A_self（自連結） | 保留關節自身特徵 | 單位矩陣 I |
+| A_centripetal（向心） | 指向軀幹中心（`mid_back`）方向的邊 | BFS 距離 dist[j] < dist[i] 的邊 (j→i) |
+| A_centrifugal（離心） | 指向四肢/末端方向（含等距）的邊 | BFS 距離 dist[j] ≥ dist[i] 的邊 (j→i) |
 
-**設計動機**：不同距離的關節對行為辨識貢獻不同（如 walk 的前後肢同步需要遠鄰傳遞），分區讓模型能對不同鄰域賦予不同權重。
+**設計動機**：不同距離的關節對行為辨識貢獻不同（如 walk 的前後肢同步需要遠鄰傳遞），分區讓模型能對不同鄰域賦予不同權重；以 `mid_back` 為中心的向心/離心分區進一步區分「往軀幹核心」與「往四肢末端」兩種傳遞方向，是 PYSKL（ST-GCN 系列常見實作）採用的分區慣例。
 
 <a id="sec-1-3"></a>
 ### 1.3 對稱正規化（Symmetric Normalization）
@@ -89,12 +96,16 @@ normalized = D_inv_sqrt @ adj_matrix @ D_inv_sqrt
 ```python
 # stgcn_model.py: class JointAttention
 class JointAttention(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, num_joints=17, prior_weights=None):
         self.conv = nn.Conv2d(in_channels, 1, kernel_size=1)
         self.sigmoid = nn.Sigmoid()
+        # prior_weights：長度 num_joints 的固定（非學習）先驗權重，以 buffer
+        # （非 nn.Parameter）註冊，不參與梯度更新，但會隨 state_dict 存讀
+        self.register_buffer("prior_weights", prior_weights_tensor)  # 預設全 1.0
     def forward(self, x):
-        w = self.conv(x)        # (N,1,T,V) — per-frame per-joint scalar
-        return self.sigmoid(w)  # attention weight ∈ (0,1)
+        w = self.conv(x)                    # (N,1,T,V) — per-frame per-joint scalar
+        attn = self.sigmoid(w)               # 學出來的 attention gate ∈ (0,1)
+        return attn * self.prior_weights     # 疊加固定先驗權重（非取代）
 
 # 使用方式
 bn_x = self.bn_input(x)
@@ -106,6 +117,7 @@ x    = bn_x * attn              # 逐元素縮放
 - **作用粒度**：per-sample × per-frame × per-joint（最細粒度）
 - **設計動機**：貓咪不同行為的關鍵關節不同（lick 著重頭部、walk 著重四肢、shake 著重頭頸），Attention 讓模型自動學習哪些關節更重要
 - **可開關**：`USE_ATTENTION=0` 時替換為 `nn.Identity()`，用於消融對照
+- **⭐ Joint Prior Weights（固定先驗權重，2026-09-04 補充）**：`stgcn_config.yaml` 的 `USE_JOINT_PRIOR_WEIGHTS`（預設 `true`）可對指定關節疊加固定倍數，依 `diagnose_keypoint_motion` 實測「Nose 是 lick/stop 判別力最高的關節（領先第二名耳朵 2.5 倍以上）」設定，目前設定為 `Nose: 2.0`、`Left_Ear`/`Right_Ear`/`LF_Paw`/`RF_Paw`: `1.5`，其餘關節維持 1.0（不影響）。此權重是**額外疊加**在學出來的 attention gate 之上，不是取代學習到的權重；只有 `USE_ATTENTION=true` 時生效，且需 `USE_ATTENTION=false` 或未列出的關節維持原行為。
 
 <a id="sec-2-3"></a>
 ### 2.3 可學習的分區重要性（Learnable Partition Importance）
@@ -351,13 +363,19 @@ interpolate_missing  →  flip_normalize  →  orientation_normalize  →  norma
 ### 5.1 類別加權損失函數（Class-Weighted Loss）
 
 ```python
-# 0_train_gcn.py
+# 0_train_gcn.py（預設：反頻率權重 inverse frequency）
 class_weights = tensor([total / (NUM_CLASSES * count_c) for c in range(5)])
 criterion = CrossEntropyLoss(weight=class_weights, label_smoothing=...)
 ```
 
 - 自動計算各類別權重：稀少類別（如 shake）獲得更高損失權重
 - 防止模型偏向訓練樣本多的類別
+- **⭐ 可選替代方案（2026-09-04 補充）：Class-Balanced Loss**——`stgcn_config.yaml` 的 `USE_CB_LOSS`（預設 `false`）可切換為 Cui et al. 的 effective-number-of-samples 權重：
+  ```python
+  effective_num = 1 - CB_BETA ** count_c        # CB_BETA 預設 0.999
+  cb_weight_c = (1 - CB_BETA) / effective_num    # 再除以平均值正規化到均值 1
+  ```
+  概念是「同類別的樣本間有資訊重疊，第 n 個樣本的邊際貢獻隨 n 遞減」，跟單純反頻率相比在極端類別不平衡時通常更保守；目前實際訓練用的是預設的反頻率權重，CB Loss 是可切換但未預設啟用的選項。
 
 <a id="sec-5-2"></a>
 ### 5.2 Label Smoothing
@@ -445,9 +463,11 @@ train_vids, val_vids = train_test_split(video_ids, ...)
 
 | 優化器 | 特性 |
 |---|---|
-| Adam（預設） | 自適應學習率，收斂快 |
-| AdamW | Adam + 解耦 weight decay，正則化更純粹 |
+| AdamW（**目前 `stgcn_config.yaml` 實際設定值**） | Adam + 解耦 weight decay，正則化更純粹 |
+| Adam（程式碼層級 fallback，`OPTIMIZER` 未設定或不是 `adamw`/`sgd` 時使用） | 自適應學習率，收斂快 |
 | SGD + momentum=0.9 | 收斂慢但泛化通常更好 |
+
+> 2026-09-04 核對：`OPTIMIZER` 由 `stgcn_config.yaml` 的 `OPTIMIZER: "adamw"` 控制，目前實際訓練用的是 **AdamW**；`0_train_gcn.py` 程式碼註解稱 Adam 為「backward compatibility」用的預設 fallback，並非目前配置檔的實際選擇。
 
 ---
 
@@ -492,9 +512,11 @@ train_vids, val_vids = train_test_split(video_ids, ...)
 <a id="sec-7-1"></a>
 ### 7.1 滑動窗（Sliding Window）
 
+> ⚠️ **2026-09-04 核對修正**：此節原描述「stride=16（不重疊）」與目前 `config.py: STGCNConfig.WINDOW_STRIDE` 的實際預設值（`2`）不符，已修正為程式碼實際行為。訓練與推論用的是不同的步長設定：訓練步長由 `stgcn_config.yaml` 的 `WINDOW_STRIDE`（=8，見§5.8/§8 表）管理；**推論**步長則是 `config.py` 的 `STGCNConfig.WINDOW_STRIDE`（預設 `2`，可用環境變數 `CAT_MONITORING_STGCN_WINDOW_STRIDE` 覆寫），兩者互不影響。
+
 ```python
-# T=16 幀，stride=16 幀（不重疊推論）
-# 16 幀 × (1/30s) ≈ 0.53 秒一次推論
+# T=16 幀（SEQUENCE_LENGTH），推論滑動步長 stride=2 幀（大量重疊，非不重疊推論）
+# 每 2 幀（≈ 1/15s @ 30fps）緩衝區滿 16 幀時執行一次 ST-GCN 推論
 ```
 
 <a id="sec-7-2"></a>
@@ -508,6 +530,18 @@ if confidence < 0.80:
 
 - 防止模型在姿態模糊時給出錯誤標籤
 - 0.80 的高門檻確保只有高信心的預測才輸出
+
+**⭐ 補充（2026-09-04）：SQA 幾何否決（雙重判定機制）**——除了 ST-GCN 自身的信心門檻，`processors/skeleton_quality_assessment.py` 的 `evaluate_window()` 會對同一個滑動窗口（未插值的原始像素座標）額外做**純幾何**的可信度判斷，兩者是「分類為主、幾何為輔」的獨立雙重判定，任一判定不可信都會覆蓋為 `LOW_CONF_ID`（`confidence=0`）：
+
+| 指標 | 判斷邏輯 | 可疑方向 |
+|---|---|---|
+| `midback_offset_ratio` | MidBack 偏離 Chest-Hip 虛擬中點的距離 ÷ Chest-Hip 距離 | 超過門檻（預設 1.0）視為可疑 |
+| `midback_angle` | Chest–MidBack–Hip 夾角（窗口最後一幀） | 低於 20° 或高於 160°（過尖或近乎共線）皆可疑 |
+| `body_axis_score_jitter` | 單幀「身體主軸比例分析分數」在窗口內的振幅（max−min） | 超過門檻（預設 20.0）視為可疑，代表骨架偵測反覆跳動 |
+
+- **Fail-safe 設計**：`evaluate_window()` 承諾不拋出例外，任何內部錯誤或資料不足一律回傳「可信」，最壞情況只是雙重判定不生效，不會讓推論管線中斷。
+- **總開關**由呼叫端 `config.py: SQAConfig.ENABLE_SQA_DUAL_JUDGMENT` 控制；三項指標各自的啟用開關在模組內（`ENABLE_MIDBACK_OFFSET_CHECK`／`ENABLE_MIDBACK_ANGLE_CHECK`／`ENABLE_SCORE_JITTER_CHECK`），與是否要整套機制開啟是分開管理的兩層開關。
+- 門檻值目前依 `test_bone_length_stability.py` 少量影片（個位數支）校準，非資料驅動基準，`skeleton_quality_assessment.py` 原始碼註解已誠實標註這點，日後應以更多影片重新校準。
 
 <a id="sec-7-3"></a>
 ### 7.3 自動 Checkpoint 通道數推斷
@@ -533,10 +567,11 @@ use_attention = any(k.startswith('joint_attention.') for k in state_dict.keys())
 | 技術類別 | 設計名稱 | 實作位置 | 對應論文術語 |
 |---|---|---|---|
 | 圖拓撲 | 貓體特化靜態鄰接矩陣 | `get_adjacency_matrix()` | Domain-specific graph topology |
-| 圖拓撲 | K=3 分區鄰接（自/近/遠鄰） | `get_stgcn_partition_adjacency()` | Spatial partition strategy |
+| 圖拓撲 | K=3 分區鄰接（自連結/向心/離心，以 mid_back 為中心 BFS） | `get_stgcn_partition_adjacency()` | Directional spatial partition strategy (PYSKL-style) |
 | 圖拓撲 | 對稱度正規化 D⁻¹/²AD⁻¹/² | `normalize_adjacency_matrix()` | Symmetric normalization |
 | 空間建模 | 可學習分區重要性 | `SpatialGraphConv.partition_importance` | Learnable partition importance |
 | 注意力 | 關節注意力 JointAttention | `JointAttention` | Per-joint spatial attention |
+| 注意力 | 固定先驗權重（Joint Prior Weights，疊加於 attention gate） | `JointAttention.prior_weights`（`stgcn_config.yaml: JOINT_PRIOR_WEIGHTS`，Nose=2.0 等） | Fixed joint-importance prior |
 | 時間建模 | 多尺度時間卷積（k=3,5,9） | `MultiScaleTemporalConv` | Multi-scale temporal convolution |
 | 時間建模 | 可學習分支權重（softmax） | `branch_logits` | Adaptive temporal scale weighting |
 | 特徵工程 | 位置特徵 | x, y | Spatial coordinates |
@@ -562,5 +597,6 @@ use_attention = any(k.startswith('joint_attention.') for k in state_dict.keys())
 | 增強 | 時間偏移 / 幀丟棄 / 抖動 | `temporal_augment()` | Temporal augmentation |
 | 增強 | 旋轉 / 縮放 / 平移 / 遮蔽 | `spatial_augment()` | Spatial augmentation |
 | 推論 | 信心門檻回退（0.80） | `LOW_CONF_ID` | Confidence threshold fallback |
+| 推論 | SQA 幾何否決（雙重判定，分類為主/幾何為輔） | `skeleton_quality_assessment.py: evaluate_window()` | Geometric plausibility veto (dual-judgment) |
 | 實驗 | 五特徵模式消融 | `ABLATION_MODES` | Feature ablation study |
 | 實驗 | Attention on/off 對照 | `USE_ATTENTION` | Attention ablation |

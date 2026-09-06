@@ -3,20 +3,35 @@
 ## 系統架構設計文檔
 
 更新日期：2026-06-01
+> 更新：2026-09-04（依 2026-09-04 程式碼核對，修正下方與現況不符的數值；文件定位改寫，見下方說明）
+
+> [!IMPORTANT]
+> **本文件與 `/ARCHITECTURE.md`（專案根目錄）的關係**
+>
+> 這是 2026-06-01 撰寫的**初版系統架構設計文件**，記錄當時的設計決策與研究方法規劃（含論文章節流程圖）。
+> **目前的架構現況說明請一律以 `/ARCHITECTURE.md`（專案根目錄）與 `docs/模組責任畫分.md` 為準**——
+> 兩者已於 2026-08-29 依實際程式碼重新核對，取代本文件中已過時的部分。
+>
+> 本文件保留下來的價值是「設計時的原始推理與研究流程規劃」（尤其是最下方的論文研究方法論
+> mermaid 圖），**不是**現況架構的權威來源。下方本文（除本段與下面的落差清單外）維持
+> 2026-06-01 原文，僅就下列已確認的落差直接訂正數值，不重寫敘事順序或段落結構。
 
 > [!WARNING]
-> **本文件部分內容已過時**（2026-08-29 核對）。已知落差：
-> - 行為類別為 **5 類**（walk/lick/scratch/shake/stop），下方「張量形狀流動總覽」
->   仍寫 `FC 輸出 (N=1, 4)`。
+> **已訂正的落差**（原文寫法 → 現況；2026-08-29 核對、2026-09-04 直接改寫下方本文對應數值）：
+> - 行為類別為 **5 類**（walk/lick/scratch/shake/stop）：原文「張量形狀流動總覽」寫
+>   `FC 輸出 (N=1, 4)`，已改為 `(N=1, 5)`。
 > - 目前部署的 ST-GCN checkpoint（`run_122`）以 **NUM_JOINTS=14**（排除尾巴三點）
 >   訓練——`stgcn_config.yaml` 的 `NUM_JOINTS: 17` 是骨架完整定義／未來目標，
->   兩者暫時不一致（推論端由 checkpoint 自動偵測，實際跑 14）。
-> - 推論預設 `WINDOW_STRIDE = 2`（本文件下方寫 16）。
->
-> 現況以程式碼核對過的版本請見 **`/ARCHITECTURE.md`**（專案根目錄）與
-> `docs/模組責任畫分.md`。
+>   兩者仍不一致（推論端由 checkpoint 自動偵測，實際跑 14）。下方「關鍵設定一覽」與
+>   「張量形狀流動總覽」的 `V=17` 已加註說明，資料流程圖本身維持原文（原文以 17 點
+>   COCO 骨架定義為敘事基礎，不逐一改動圖中每個 `V=17` 標記）。
+> - 推論預設 `WINDOW_STRIDE = 2`（原文寫 16），已改為 2。
+> - `FEATURE_MODE` 現行預設是 `xy_conf_v_bone`（7ch），已在下方「關鍵設定一覽」註明；
+>   下方仍保留原文對 5 種模式的完整說明（各模式本身的定義沒有過時，只有「哪個是預設值」過時）。
 
-三層架構詳細說明請參考：[先不管.md](先不管.md)
+三層架構詳細說明另可參考：[先不管.md](先不管.md)（同樣是較早期的分層說明草稿，
+內容跟本文件一樣屬於歷史設計文件，未逐一核對現況；SQA 描述「預設關閉」已與現況
+`SQAConfig.ENABLE_SQA_DUAL_JUDGMENT` 預設 `True` 不符，閱讀時請留意）。
 
 ---
 
@@ -118,7 +133,8 @@
 │           │           ┌──────────────┐  ┌─────────────────┐        │
 │           └──────────►│  CSVLogger   │  │ NodeRedClient   │        │
 │                       │ (abnormal    │  │ POST /yolo_result│        │
-│                       │  events)     │  │ 每 0.5s 推送     │        │
+│                       │  events)     │  │ 每 PUSH_INTERVAL │        │
+│                       │              │  │ (預設2s)推送     │        │
 │                       └──────────────┘  └─────────────────┘        │
 │                                                                     │
 │  ┌─────────────────────────────────────────────────────────────┐   │
@@ -157,14 +173,19 @@ MultiScaleTemporalConv (k=3,5,9):
 
 ```
 YOLO 輸出       (T=16, 17, 2)  x,y per frame per joint
-前處理後        (T=16, 17, C)  C=4~9 依 FEATURE_MODE
+前處理後        (T=16, 17, C)  C=2~9 依 FEATURE_MODE
 送入模型前      (N=1, C, T=16, V=17)
 Block 1 後      (N=1, 64, 16, 17)
 Block 2 後      (N=1, 128, 8, 17)   ← T 降採樣 stride=2
 Block 3 後      (N=1, 128, 8, 17)
 GlobalAvgPool   (N=1, 128)
-FC 輸出         (N=1, 4)            walk / lick / scratch / shake
+FC 輸出         (N=1, 5)            walk / lick / scratch / shake / stop
 ```
+
+> ⚠ 上表 `V=17` 是骨架完整定義（COCO 17 點）。目前實際部署的 checkpoint
+> （`run_122`）訓練時排除尾巴 3 點，`V` 實際是 **14**；`CatBehaviorSTGCN`
+> 載入權重時由 checkpoint 自動偵測 `num_joints`，此表僅呈現骨架定義本身的
+> 流動邏輯，不代表目前線上推論的實際維度。
 
 ---
 
@@ -173,13 +194,13 @@ FC 輸出         (N=1, 4)            walk / lick / scratch / shake
 | 項目 | 值 | 說明 |
 |---|---|---|
 | `SEQUENCE_LENGTH` | 16 | 時間窗幀數；16幀 × 30fps ≈ 0.53s |
-| `WINDOW_STRIDE`（推論） | 16 | 每隔 16 幀觸發一次 ST-GCN 推論（`config.py / frame_processor.py`） |
+| `WINDOW_STRIDE`（推論） | **2** | 每隔 2 幀觸發一次 ST-GCN 推論（`config.py::STGCNConfig.WINDOW_STRIDE / frame_processor.py`）。原文寫 16，已訂正 |
 | `WINDOW_STRIDE`（訓練） | 8 | 訓練資料滑動視窗步長，50% 重疊（`stgcn_config.yaml`） |
 | `MAX_NO_DETECT_FRAMES` | 2 | 訓練時視窗內允許 YOLO bbox 缺失的最大幀數；超過則丟棄（`stgcn_config.yaml`） |
 | `STRICT_WINDOW_FILTER` | false | 訓練時是否丟棄含 unannotated 幀的視窗（`stgcn_config.yaml`） |
 | `TARGET_MODEL_FPS` | 30 | 來源 FPS > 30 時做降採樣 |
-| `NUM_JOINTS` | 17 | COCO 17 關鍵點（重映射至貓體） |
-| `FEATURE_MODE` | xy | 預設 2 通道；可改為 xy_conf / xy_conf_v / xy_conf_v_bone / xy_conf_v_bone_bmotion |
+| `NUM_JOINTS` | 17（骨架定義）／**14**（現行部署 checkpoint 實際使用，排除尾巴 3 點） | COCO 17 關鍵點重映射至貓體；`stgcn_config.yaml` 寫 17，實際訓練/部署的 `run_122` 是 14，推論端由 checkpoint 自動偵測 |
+| `FEATURE_MODE` | **xy_conf_v_bone**（現行 `config.py` 預設，7 通道） | 可選 xy(2) / xy_conf(3) / xy_conf_v(5) / xy_conf_v_bone(7) / xy_conf_v_bone_bmotion(9)；原文寫預設為 xy(2ch)，已訂正為現行預設值 |
 | `STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD` | 0.80 | 低於此值輸出 LOW_CONF（不顯示行為標籤）|
 | `KP_EMA_ALPHA` | 1.0 | 關鍵點 EMA（1.0 = 無平滑，直接使用原始值）|
 | `KP_CONF_THRES` | 0.5 | 低於此信心的關鍵點視為遮蔽，進入插值補點 |

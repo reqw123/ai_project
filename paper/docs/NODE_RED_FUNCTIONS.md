@@ -1,10 +1,10 @@
 # Node-RED 功能說明
 
-更新日期：2026-07-20
+更新日期：2026-09-04（複核端點與 CSV 欄位仍與 `貓咪主控.json`／`GPT 健康報告.json`／`nodered_client.py` 一致，無需修正；補充舔舐部位 flow 的實際端點名稱）
 
 這份文件整理 `paper/貓咪主控.json` 與 `paper/GPT 健康報告.json` 內的 Node-RED 功能，重點說明 Node-RED 在整個貓咪監測系統中的角色、資料流向、主要節點責任，以及和 GPT 分析 API 的串接方式。
 
-> ⚠️ **範圍說明**：本文件只涵蓋這 2 個 flow。專案目前實際共有 4 個 Node-RED flow 檔案（皆位於 `paper/` 根目錄，**不在** `cat_monitoring_system/` 下），另外 2 個 `cat_health_v3_flow.json`（個體化基線分析引擎）與 `lick_stage2_nodered.json`（舔舐部位分析 Dashboard）請見 [`0_AI_專案導覽地圖.md`](0_AI_專案導覽地圖.md#sec-5) 的「五、監控層 Node-RED 對應」一節。
+> ⚠️ **範圍說明**：本文件只涵蓋這 2 個 flow。專案目前實際共有 4 個 Node-RED flow 檔案（皆位於 `paper/` 根目錄，**不在** `cat_monitoring_system/` 下），另外 2 個 `cat_health_v3_flow.json`（個體化基線分析引擎，現況已改以 Python 端 `analytics/` 為權威實作，見 [`貓咪個體化基線.md`](貓咪個體化基線.md) 「〇、現況」一節）與 `lick_stage2_nodered.json`（舔舐部位分析 Dashboard；接收端點實際為 `POST /lick_zone_result`，由 `plugins/lick_stage/publisher.py` → `plugins/lick_stage/config.py` 的 `NODERED_URL` 推送，逾時 0.3 秒、不阻塞主流程）不在本文件範圍，請見 [`0_AI_專案導覽地圖.md`](0_AI_專案導覽地圖.md#sec-5) 的「五、監控層 Node-RED 對應」一節。
 
 ---
     

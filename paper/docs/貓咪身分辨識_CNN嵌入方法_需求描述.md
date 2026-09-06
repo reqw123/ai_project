@@ -4,9 +4,10 @@
 > **實作方法**：MobileNetV3-Small CNN 分類頭（2026-08 起；取代第一版 HSV 色彩直方圖）。細節見下方各節與最上方狀態框。
 
 > [!IMPORTANT]
-> **狀態（2026-08）：已實作並完全取代顏色比對，無 histogram fallback。**
+> **狀態（2026-09-04 複核）：已實作並完全取代顏色比對，無 histogram fallback。**
 >
-> - 工具鏈：`tools/cat_identity/1_build_dataset.py` → `tools/cat_identity/2_train.py`
+> - 工具鏈：`tools/cat_identity/0_trim_videos.py`（YOLO 掃描剪出「有貓」片段，前處理，非必要但建議先跑）→
+>   `tools/cat_identity/1_build_dataset.py` → `tools/cat_identity/2_train.py`
 >   （MobileNetV3-Small ImageNet 微調 → `C:\ai_project\identity_models\`）→
 >   `tools/cat_identity/3_infer_video.py`（影片端逐幀辨識 + 視覺化）。
 > - 產線：`detectors/identity_verifier.py` 整支改寫成 CNN + N 幀多數決平滑；
@@ -15,6 +16,15 @@
 >   新增 `IDENTITY_MODEL_PATH` / `TARGET_CAT_CLASS`（settings GUI「貓咪身份驗證」分頁同步）。
 > - 顏色版腳本 `tools/3_cat_identity_verification_test.py` 與 HSV 基準檔已刪除。
 > - 決策 D8（histogram/CNN 混合或旗標切換）→ **不做**，完全取代。
+> - **啟用開關（對應根目錄 `ARCHITECTURE.md` 所述「預設關閉」）**：`CatIdentityConfig.
+>   ENABLE_IDENTITY_VERIFICATION` 預設 `False`；即使模型檔已存在也不會生效。
+>   實際是否運作要看 `CatIdentityConfig.is_active()`（`config.py` 逐字核對），**兩個條件都要成立**：
+>   `ENABLE_IDENTITY_VERIFICATION=True` **且** `RunModeConfig.SYSTEM_MODE == "multi"`——
+>   單貓模式（`single`）下無論旗標開關為何一律不啟用，設定視窗「貓咪身份驗證」分頁也會整個灰掉。
+>   這一層 `SYSTEM_MODE` 閘控是本文件先前版本未記載的細節。
+> - **2_train.py 目前寫死剛好 2 類**：`scan_dataset()` 找到的 class 子資料夾數量不是 2 就直接
+>   報錯中止，`build_model(num_classes=2)`／`evaluate()` 的 `labels=[0,1]` 也都寫死 2 類。
+>   2_train.py 檔頭自述「不做：第三類」——見下方 §4.2 與 §7 D5 的修正說明。
 >
 > 以下保留為當初的需求脈絡與驗收標準，其中「方法旗標 / 向後相容 / 無回歸（切回 histogram）」
 > 相關敘述已被上述決策取代。
@@ -105,13 +115,24 @@
 - **數量目標**：每隻貓 **150–300 張有效裁切圖**（微調預訓練 backbone 的 few-shot 區間）。
 - **多樣性硬性要求**：每隻貓的樣本要**跨 8 支以上不同時段 / 光線 / 角度的影片**。200 張全來自同一支連續影片 ≈ 只有 5–10 個獨立樣本，不算數。
 - **切分**：訓練 / 驗證要**以整支影片為單位切**（held-out clip），不是同片抽幀。驗證集至少涵蓋每隻貓 2 支未進訓練的影片。
+  已實作：`2_train.py` 的 `SPLIT_MODE` 預設 `"group"`（依 `group_key_from_path()` 從檔名 `{影片檔名}__f000123.jpg`
+  還原出來源影片切 train/val/test）；若某一類來源影片數 < 2 支，`GroupShuffleSplit` 無法切，程式會自動退回
+  `"image"`（影格層級切分）並印警告——此時同一支影片的相鄰影格可能同時落在 train 和 test，測試準確率會偏高、
+  不代表真實泛化能力，log 會明確提示「多拍幾支不同時段/場景的影片再重新訓練」。
 - **標註**：資料夾名稱即類別標籤，不需逐幀標註。
 
 ### 4.2 模型
 
 - ✅ **架構**：ImageNet 預訓練的小型 backbone。預設候選 **MobileNetV3-Small**（~2.5M 參數）；備案 MobileNetV2 width=0.5、EfficientNet-Lite0。最終選型見 §7。
 - ✅ **微調策略**：凍結 backbone 前段，只訓分類頭 + 最後 1 個 block。
-- **輸出頭**：3-class（目前 2 類，預留擴充）+ 信心門檻判 unknown。是否改成「嵌入向量 + gallery 最近鄰」見 §7。
+- **輸出頭**：2-class（`softmax` 最高值）+ 信心門檻判 unknown。
+  > [!NOTE]
+  > 當初規劃寫的是「3-class（目前 2 類，預留擴充）」，但實際 `tools/cat_identity/2_train.py`
+  > 目前**寫死剛好 2 類**：`scan_dataset()` 找到的 class 子資料夾數不是 2 就直接 `raise`，
+  > `build_model(num_classes=2)`、`evaluate()` 的 `precision_recall_fscore_support(labels=[0,1], ...)`
+  > 也都寫死 2 類；`identity_verifier.py`／`3_infer_video.py` 本身是讀權重檔的 `class_names`
+  > 長度動態建立分類頭，理論上支援 N 類，但**訓練腳本目前不支援**。新增第 3 隻貓不是單純
+  > 「重跑訓練腳本」，需要先改 `2_train.py` 這幾處寫死的 2（見 §7 D5）。
 - **輸入解析度**：112×112 或 128×128（letterbox 裁切圖），見 §7。
 - **精度**：推論用 fp16。
 
@@ -190,7 +211,7 @@
 | D2 | **backbone 選型** | ✅ 已定：**MobileNetV3-Small（ImageNet 預訓練，凍結 backbone + 解凍最後 1 block）**。group-split 驗證 test 100%（2 貓、5 支 held-out 影片），暫不需要比其他 backbone。 |
 | D3 | **輸入解析度** | ✅ 已定：**128**（`image_size` 存進權重檔，推論端讀出來用）。 |
 | D4 | **權重檔存放** | ✅ 已定：**`C:\ai_project\identity_models\`**（與 `yolo_models\` / `stgcn_models\` 同層，flat 放 `best/last_cat_identity.pt` + `class_names.json`）。訓練過程產物（曲線 / 混淆矩陣 / csv / logs）另存 `tools/train_data/（已併入 identity_models/run_*）`。 |
-| D5 | **加入第 3 隻貓的流程** | 重訓整個頭（封閉集合乾淨）vs 增量。傾向重訓，並在文件寫清楚「新增貓 = 重跑訓練腳本」。 |
+| D5 | **加入第 3 隻貓的流程** | 重訓整個頭（封閉集合乾淨）vs 增量。傾向重訓。**修正（2026-09-04 核對 `2_train.py` 原始碼）**：目前不是單純「重跑訓練腳本」——`scan_dataset()`／`build_model(num_classes=2)`／`evaluate()` 都寫死剛好 2 類，需要先把這幾處改成讀 `len(class_dirs)` 動態決定類別數，才能重跑。`identity_verifier.py`／`3_infer_video.py` 推論端已經是動態讀權重檔 `class_names` 長度，不需要改。 |
 | D6 | **enroll gallery 是否保留** | 若走 D1(a) 分類頭，gallery 不再需要；但 `diagnose` 的 LOO 仍需要每類樣本。需定義新的「每類代表樣本」來源。 |
 | D7 | **訓練資料標註量** | 150–300/貓是否足夠由 D2 選型與初次驗證結果回饋；不足時的補救是「多拍片」而非「多抽幀」。 |
 | D8 | **是否做 histogram → CNN 的混合** | 例如只有直方圖判定曖昧時才跑 CNN。對 ≤ 3 隻貓可能過度設計，傾向不做。 |
@@ -199,6 +220,7 @@
 
 ## 8. 交付物
 
+- [x] `tools/cat_identity/0_trim_videos.py` — 前處理：YOLO 掃描找出「有貓」時間區間、ffmpeg 剪出只剩貓片段的影片（獨立腳本，不 import 本專案模組；原始需求規劃未列出此步驟，屬實作後補上的前處理工具）
 - [x] `tools/cat_identity/1_build_dataset.py` — 裁切圖資料集
 - [x] `tools/cat_identity/2_train.py` — 訓練腳本（config 驅動、run 資料夾 + latest.pt）
 - [x] `tools/cat_identity/3_infer_video.py` — 影片端逐幀辨識 + 視覺化（取代顏色版 verify）
@@ -235,6 +257,7 @@ D1–D3 拍板 → 訓練腳本 → 微調 → held-out clip 驗證（達 §6 �
 
 ## 📎 相關檔案
 
+- `paper/cat_monitoring_system/tools/cat_identity/0_trim_videos.py` — 前處理：剪出影片中「有貓」的片段
 - `paper/cat_monitoring_system/tools/cat_identity/1_build_dataset.py` — 訓練資料集（bbox 裁切圖）
 - `paper/cat_monitoring_system/tools/cat_identity/2_train.py` — MobileNetV3-Small 訓練（run 資料夾 + `latest.pt`）
 - `paper/cat_monitoring_system/tools/cat_identity/3_infer_video.py` — 影片端逐幀辨識 + 視覺化（取代舊 `3_cat_identity_verification_test.py` 的 verify/diagnose）
