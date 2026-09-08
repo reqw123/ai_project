@@ -350,4 +350,4 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 
 ✅ `NODE_RED_FUNCTIONS.md` 已於 2026-07 依現行 `貓咪主控.json`／`GPT 健康報告.json` 逐節點重新校對（檔名、`/camera` 已改用 `/video_clip`、新增的健康風險評分引擎／CSV 寫入／行為時間軸引擎等皆已補上），可信任其內容；但它仍只涵蓋這 2 個 flow，另外 2 個 flow（`cat_health_v3_flow.json`／`lick_stage2_nodered.json`）請看本文件「[五](#sec-5)」。
 
-💡 若要修正上述舊文件，建議另外開任務處理，避免與本次導覽文件的建立混在一起。
+💡 若要修正上述舊文件，建議另外開任務處理，避免與本次導覽文件的建立混在一起。 ?

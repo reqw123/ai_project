@@ -12,6 +12,7 @@ import numpy as np
 from config import (
     BehaviorTrackingConfig,
     CatIdentityConfig,
+    ESP32CamConfig,
     NodeRedConfig,
     SQAConfig,
     STGCNConfig,
@@ -28,6 +29,7 @@ from processors.anomaly_detector import AnomalyDetector
 from processors.visualizer import Visualizer
 from trackers.behavior_tracker import ImprovedBehaviorTracker
 from utils.constants import *
+from utils.esp32cam import configure_stream as _configure_esp32cam_stream
 from utils.helpers import get_behavior_name, get_ip, is_stream_url, resolve_video_source
 
 # Skeleton Quality Assessment（GCN 分類為主、幾何判斷為輔雙重判定）：獨立
@@ -174,6 +176,36 @@ class FrameProcessor:
                 "OPENCV_FFMPEG_CAPTURE_OPTIONS",
                 "reconnect;1|reconnect_streamed;1|reconnect_delay_max;5",
             )
+            # ESP32-CAM：MJPEG HTTP 串流的畫面尺寸由韌體端 framesize 決定，
+            # 下面 cap.set(CAP_PROP_FRAME_WIDTH/HEIGHT) 對它完全無效。framesize
+            # 設太大時 ESP32-CAM 透過 WiFi 只能推個位數 fps、每張 JPEG 又大，
+            # 會嚴重卡頓且畫面過大。開串流「之前」先送一次 framesize 控制請求
+            # 把來源壓到目標解析度（預設 640x480），同時解掉「解析度過大」與
+            # 「卡頓」。來源不是 ESP32-CAM（控制端點連不上）時請求失敗會被安靜
+            # 略過，不影響後續開串流。
+            if (
+                ESP32CamConfig.AUTO_FRAMESIZE
+                and isinstance(resolved_video_path, str)
+                and resolved_video_path.lower().startswith(("http://", "https://"))
+            ):
+                _ok, _detail = _configure_esp32cam_stream(
+                    resolved_video_path,
+                    ESP32CamConfig.TARGET_WIDTH,
+                    ESP32CamConfig.TARGET_HEIGHT,
+                    control_port=ESP32CamConfig.CONTROL_PORT,
+                    quality=ESP32CamConfig.QUALITY,
+                    timeout=ESP32CamConfig.CONTROL_TIMEOUT,
+                )
+                if _ok:
+                    print(f"✓ 已請求 ESP32-CAM 調整串流輸出：{_detail}")
+                    # 感光元件切換 framesize 後需要一小段時間重新初始化，
+                    # 太快開串流會先讀到幾張舊尺寸/破損的幀。
+                    time.sleep(0.6)
+                else:
+                    print(
+                        f"⚠ 未套用 ESP32-CAM 串流設定（來源可能不是 ESP32-CAM，"
+                        f"不影響後續運作）：{_detail}"
+                    )
         self.cap = cv2.VideoCapture(resolved_video_path)
         # 攝影機（尤其 USB webcam）驅動列舉/協商常比檔案或串流來源慢，
         # 短暫重試幾次再放棄，避免第一個 /stream 請求就直接 500。
@@ -186,7 +218,11 @@ class FrameProcessor:
             self.cap = cv2.VideoCapture(resolved_video_path)
         if not self.cap.isOpened():
             raise RuntimeError(f"Cannot open video source: {video_path}")
-        if width and height:
+        if width and height and not is_stream_url(resolved_video_path):
+            # 串流來源（含 ESP32-CAM）的畫面尺寸不是這裡能控制的：MJPEG/RTSP 的
+            # cap.set(CAP_PROP_FRAME_WIDTH/HEIGHT) 是無效操作，讀回的值恆等於來源
+            # 原始尺寸，比對必然「不同」，只會印出誤導的警告。ESP32-CAM 的解析度
+            # 已在上面開串流前透過韌體控制端點調整，這裡直接跳過。
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
             # cv2.VideoCapture.set() 對攝影機來源是「請求」不是「保證」——驅動收到

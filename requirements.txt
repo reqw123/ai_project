@@ -45,8 +45,9 @@ pywin32==312
 # 缺裝時 process_manager.py 只會在終端機印警告，不影響腳本本身執行。
 
 paho-mqtt
-# plugins/lick_stage/ext_body_zones/output.py 的 ZoneMqttPublisher；
-# 缺裝時該 MQTT 發布功能靜默停用（見該檔案 docstring）。
+# plugins/lick_stage/ext_body_zones/output.py 的 ZoneMqttPublisher（缺裝時該
+# MQTT 發布功能靜默停用）；以及 cat_monitoring_system/iot/（物聯網感測子系統，
+# 獨立行程，缺裝時無法啟動但不影響主系統，見 iot/README.md）。
 
 # ==================== 僅 tools/ 底下少數獨立研究腳本用到 ====================
 # 不是核心 pipeline 必要依賴，只有要跑對應那支腳本時才需要裝。

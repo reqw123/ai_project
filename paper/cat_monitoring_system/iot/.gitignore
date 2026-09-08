@@ -1,0 +1,9 @@
+# 執行期產生的 SQLite（IoT 讀數 / 事件 / 告警），不進版控
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# 這個子套件是新的，直接不追 bytecode（跟主專案舊有的 .pyc 追蹤慣例脫鉤）
+__pycache__/
+*.pyc

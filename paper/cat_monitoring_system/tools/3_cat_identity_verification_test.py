@@ -26,10 +26,12 @@
     2) verify —— 在測試影片上，對每個偵測到的個體，同時算出跟每一隻已知貓
                 基準的最小 Bhattacharyya 距離，取最近的當判定結果；兩邊都
                 太遠則判定為「未知」。用簡易 IoU 追蹤 + 多幀多數決平滑，
-                避免單幀雜訊造成偶發誤判。逐幀結果輸出成 CSV，並可用
-                SHOW_PREVIEW 開即時預覽視窗肉眼核對判定對不對。
+                避免單幀雜訊造成偶發誤判。
+                · SHOW_PREVIEW=True  →  即時預覽視窗，肉眼核對判定對不對（不輸出 CSV）
+                · SHOW_PREVIEW=False →  純背景分析，逐幀結果輸出成 *_identity_verify.csv
 
-控制鍵（SHOW_PREVIEW=True 時）：q=退出　space=暫停/繼續　1=上一部影片　2=下一部影片
+控制鍵（SHOW_PREVIEW=True 時）：q=退出　space=暫停/繼續
+                a/d=逐幀後退/前進(暫停時)　1=上一部影片　2=下一部影片
 
 用法：不用下指令列參數，直接改下面「使用者設定區」的路徑跟 RUN_MODE，
       然後 python 3_cat_identity_verification_test.py 執行即可。
@@ -39,8 +41,18 @@
 import os
 import csv
 import json
+import sys
 from collections import Counter, defaultdict, deque
 from pathlib import Path
+
+# 讓 print 一律逐行 flush：從 settings_window 啟動時 stdout 是 pipe（非 TTY），
+# Python 預設會區塊緩衝，訊息會卡到緩衝滿或程式結束才一次噴出。逐行緩衝後
+# 不論在真終端機或被 pipe 都即時顯示。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(line_buffering=True)
+    except Exception:
+        pass
 
 import cv2
 import numpy as np
@@ -108,8 +120,11 @@ _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video:
     VERIFY_SOURCE = [_env_test_video]
 
-SHOW_PREVIEW = True   # verify 時是否開即時預覽視窗
+SHOW_PREVIEW = True   # True=即時預覽（肉眼核對，不輸出 CSV）；False=純背景分析（逐幀輸出 CSV）
 PREVIEW_DISPLAY_SIZE = (1280, 720)   # 預覽視窗顯示大小（寬, 高），等比縮放＋黑邊，不裁切畫面
+# 暫停時可用 a/d 逐幀檢視：往回是在這個「已處理過的畫面」快取裡瀏覽（不重跑推論、
+# 不影響追蹤狀態）。每張約 2.7MB，120 幀 ≈ 330MB；記憶體吃緊可調小。
+PREVIEW_HISTORY_FRAMES = 120
 PREVIEW_WINDOW_NAME = "Cat Identity Verification Test (q=quit  space=pause  1/2=prev/next video)"
 UNKNOWN_COLOR = (120, 120, 120)   # 兩份基準都比不上（判定為未知）時的框線顏色
 
@@ -665,10 +680,15 @@ def cmd_verify(sources, show):
 
     model = load_model()
 
+    # 即時 GUI 推論（show=True）＝肉眼核對用，不走 CSV 那條路；
+    # 純背景分析（show=False）才逐幀累積並輸出 *_identity_verify.csv。
+    write_csv = not show
+
     if show:
         cv2.namedWindow(PREVIEW_WINDOW_NAME, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(PREVIEW_WINDOW_NAME, *PREVIEW_DISPLAY_SIZE)
-        print("控制鍵: q=退出　space=暫停/繼續　1=上一部影片　2=下一部影片")
+        print("控制鍵: q=退出　space=暫停/繼續　a/d=逐幀後退/前進(暫停時)　1=上一部影片　2=下一部影片")
+        print("即時預覽模式：不輸出逐幀 CSV（背景分析請設 SHOW_PREVIEW=False）")
 
     current_video_idx = 0
     stop_requested = False
@@ -688,68 +708,137 @@ def cmd_verify(sources, show):
         paused = False
         switch_delta = 0
         last_disp = None
+        # 已處理畫面的快取，供暫停時 a 鍵往回逐幀檢視（不重跑推論／不動 CSV 與追蹤）
+        disp_history = deque(maxlen=max(1, PREVIEW_HISTORY_FRAMES))
+        hist_pos = 0        # 0 = 最新一幀；>0 = 往回檢視第幾幀（僅暫停時 > 0）
+        step_forward = 0    # 暫停時 d 鍵要求「往前處理」的新幀數
 
         while True:
-            if not paused:
+            do_advance = (not paused) or step_forward > 0
+
+            if do_advance:
                 ret, frame = cap.read()
                 if not ret:
-                    switch_delta = 1  # 自然播完，自動前進下一部
-                    break
-                frame_idx += 1
-                decisions, ambiguous = _process_frame(frame, model, profiles, tracker)
-                if ambiguous:
-                    ambiguous_frames += 1
-                if len(decisions) >= 2:
-                    multi_cat_frames += 1
-                for d in decisions:
-                    if d["label"] is not None:
-                        identified_frames[d["label"]] += 1
+                    if step_forward > 0:
+                        step_forward = 0
+                        print("  ⏭ 已到影片結尾，停在最後一幀")
+                    else:
+                        switch_delta = 1  # 自然播完，自動前進下一部
+                        break
+                else:
+                    frame_idx += 1
+                    if step_forward > 0:
+                        step_forward -= 1
+                    decisions, ambiguous = _process_frame(frame, model, profiles, tracker)
+                    if ambiguous:
+                        ambiguous_frames += 1
+                    if len(decisions) >= 2:
+                        multi_cat_frames += 1
+                    for d in decisions:
+                        if d["label"] is not None:
+                            identified_frames[d["label"]] += 1
 
-                for d in decisions:
-                    row = {
-                        "frame": frame_idx, "inst_idx": d["inst_idx"], "track_id": d["track_id"],
-                        "bbox_conf": f"{d['bconf']:.3f}" if d["bconf"] is not None else "",
-                        "label": profiles[d["label"]]["label"] if d["label"] is not None else "unknown",
-                        "reason": d["reason"],
-                        "bbox": ",".join(f"{v:.0f}" for v in d["bbox"]) if d["bbox"] is not None else "",
-                    }
-                    for key in profiles:
-                        row[f"dist_{key}"] = f"{d['dists'][key]:.3f}" if key in d["dists"] else ""
-                    csv_rows.append(row)
+                    if write_csv:
+                        for d in decisions:
+                            row = {
+                                "frame": frame_idx, "inst_idx": d["inst_idx"], "track_id": d["track_id"],
+                                "bbox_conf": f"{d['bconf']:.3f}" if d["bconf"] is not None else "",
+                                "label": profiles[d["label"]]["label"] if d["label"] is not None else "unknown",
+                                "reason": d["reason"],
+                                "bbox": ",".join(f"{v:.0f}" for v in d["bbox"]) if d["bbox"] is not None else "",
+                            }
+                            for key in profiles:
+                                row[f"dist_{key}"] = f"{d['dists'][key]:.3f}" if key in d["dists"] else ""
+                            csv_rows.append(row)
 
-                if show:
-                    last_disp = _render_preview(frame, decisions, profiles, frame_idx, video_path.name, paused)
+                    if show:
+                        last_disp = _render_preview(frame, decisions, profiles, frame_idx, video_path.name, paused)
+                        disp_history.append((last_disp, frame_idx))
+                    hist_pos = 0
 
             if show:
-                if last_disp is not None:
+                if hist_pos > 0 and disp_history:
+                    cache_img, cache_fidx = disp_history[len(disp_history) - 1 - hist_pos]
+                    view = cache_img.copy()
+                    cv2.putText(view, f"REVIEW  frame {cache_fidx}  (cache -{hist_pos}/{len(disp_history) - 1})",
+                                (10, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 215, 255), 2, cv2.LINE_AA)
+                    cv2.imshow(PREVIEW_WINDOW_NAME, view)
+                elif last_disp is not None:
                     cv2.imshow(PREVIEW_WINDOW_NAME, last_disp)
                 key = cv2.waitKey(30) & 0xFF
-                if key == ord('q'):
-                    stop_requested = True
-                    break
-                elif key == ord(' '):
-                    paused = not paused
-                elif key == ord('2'):
-                    switch_delta = 1
-                    break
-                elif key == ord('1'):
-                    switch_delta = -1
-                    break
+            else:
+                key = 255
+
+            # ---- 按鍵分派 ----
+            if key in (ord('a'), ord('A'), ord('d'), ord('D')):
+                # 一律先暫停，並合併 event queue 裡排隊的 a/d（長按時避免放開後還在跑）
+                paused = True
+                nav = 0
+                k = key
+                while k in (ord('a'), ord('A'), ord('d'), ord('D')):
+                    nav += 1 if k in (ord('d'), ord('D')) else -1
+                    k = cv2.waitKey(1) & 0xFF
+                max_back = len(disp_history) - 1
+                if max_back < 0:                  # 還沒有任何已處理畫面
+                    print("  (尚無畫面可逐幀檢視)")
+                elif nav < 0:                     # 往回：只在畫面快取裡瀏覽
+                    new_pos = min(max_back, hist_pos - nav)
+                    if new_pos == hist_pos:
+                        print(f"  ⏮ 已是快取最早的一幀（往回上限 {max_back} 幀）")
+                    else:
+                        hist_pos = new_pos
+                        _, fidx = disp_history[len(disp_history) - 1 - hist_pos]
+                        print(f"  ⏮ 後退 {-nav} → frame {fidx}（快取檢視 -{hist_pos}/{max_back}）")
+                elif nav > 0:                     # 往前：先收回快取，剩餘的才處理新幀
+                    back_in_hist = min(hist_pos, nav)
+                    hist_pos -= back_in_hist
+                    remain = nav - back_in_hist
+                    if remain > 0:
+                        step_forward += remain
+                        print(f"  ⏭ 前進 {nav} 幀（其中 {remain} 幀處理新影格）")
+                    else:
+                        _, fidx = disp_history[len(disp_history) - 1 - hist_pos]
+                        print(f"  ⏭ 前進 {nav} → frame {fidx}（快取檢視 -{hist_pos}/{max_back}）")
+                key = k  # 尾端非 a/d 鍵，繼續往下判斷（可能為 255）
+
+            if key == ord('q'):
+                stop_requested = True
+                print("  ⏹ 結束")
+                break
+            elif key == ord(' '):
+                paused = not paused
+                if not paused and hist_pos > 0:
+                    print(f"  ▶ 繼續播放（從最新處理的 frame {frame_idx} 接續，快取檢視位置捨棄）")
+                    hist_pos = 0
+                else:
+                    print(f"  {'⏸ 暫停' if paused else '▶ 繼續'} @ frame {frame_idx}")
+            elif key == ord('2'):
+                switch_delta = 1
+                print("  ⏭ 切換：下一部影片")
+                break
+            elif key == ord('1'):
+                switch_delta = -1
+                print("  ⏮ 切換：上一部影片")
+                break
+            elif key != 255:
+                print(f"  [Key] 未綁定按鍵: {chr(key) if 32 <= key < 127 else key}")
 
         cap.release()
 
-        out_path = Path(__file__).parent / f"{video_path.stem}_identity_verify.csv"
-        with out_path.open("w", newline="", encoding="utf-8-sig") as f:
-            w = csv.DictWriter(f, fieldnames=["frame", "inst_idx", "track_id", "bbox_conf", "label", *dist_cols, "reason", "bbox"])
-            w.writeheader()
-            w.writerows(csv_rows)
+        if write_csv:
+            out_path = Path(__file__).parent / f"{video_path.stem}_identity_verify.csv"
+            with out_path.open("w", newline="", encoding="utf-8-sig") as f:
+                w = csv.DictWriter(f, fieldnames=["frame", "inst_idx", "track_id", "bbox_conf", "label", *dist_cols, "reason", "bbox"])
+                w.writeheader()
+                w.writerows(csv_rows)
 
         print(f"  總幀數: {frame_idx}")
         print(f"  雙貓（含以上）同框幀數: {multi_cat_frames} ({multi_cat_frames / max(frame_idx, 1) * 100:.1f}%)")
         for key, cnt in identified_frames.items():
             print(f"  判定為「{profiles[key]['label']}」的幀數: {cnt} ({cnt / max(frame_idx, 1) * 100:.1f}%)")
         print(f"  同幀重複判定、需裁決的幀數: {ambiguous_frames}")
-        print(f"  ✓ 逐幀驗證結果已輸出: {out_path}")
+        if write_csv:
+            print(f"  ✓ 逐幀驗證結果已輸出: {out_path}")
 
         if stop_requested:
             break

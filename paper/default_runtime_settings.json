@@ -6,6 +6,14 @@
     "log_dir": "./logs",
     "output_dir": "./output"
   },
+  "esp32cam": {
+    "auto_framesize": true,
+    "target_width": 640,
+    "target_height": 480,
+    "control_port": 80,
+    "quality": -1,
+    "control_timeout": 3.0
+  },
   "yolo": {
     "image_size": 640,
     "confidence_threshold": 0.5

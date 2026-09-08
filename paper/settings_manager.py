@@ -67,6 +67,42 @@ FIELD_SCHEMA = [
         "value_type": "video_input", "validate": "optional_file_warn",
     },
     {
+        "json_key": "esp32cam.auto_framesize", "env_var": "CAT_MONITORING_ESP32CAM_AUTO_FRAMESIZE",
+        "attr": ("ESP32CamConfig", "AUTO_FRAMESIZE"), "tab": "模型與輸入來源",
+        "label": "ESP32-CAM 自動調整輸出解析度（開串流前送 framesize 控制請求）",
+        "value_type": "bool", "validate": "bool",
+    },
+    {
+        "json_key": "esp32cam.target_width", "env_var": "CAT_MONITORING_ESP32CAM_WIDTH",
+        "attr": ("ESP32CamConfig", "TARGET_WIDTH"), "tab": "模型與輸入來源",
+        "label": "ESP32-CAM 目標寬度（換算成最接近的 framesize，640=VGA）",
+        "value_type": "int", "validate": "positive_int",
+    },
+    {
+        "json_key": "esp32cam.target_height", "env_var": "CAT_MONITORING_ESP32CAM_HEIGHT",
+        "attr": ("ESP32CamConfig", "TARGET_HEIGHT"), "tab": "模型與輸入來源",
+        "label": "ESP32-CAM 目標高度（480 搭配寬 640 = VGA）",
+        "value_type": "int", "validate": "positive_int",
+    },
+    {
+        "json_key": "esp32cam.control_port", "env_var": "CAT_MONITORING_ESP32CAM_CONTROL_PORT",
+        "attr": ("ESP32CamConfig", "CONTROL_PORT"), "tab": "模型與輸入來源",
+        "label": "ESP32-CAM 控制端口（CameraWebServer 預設 80，串流在 81）",
+        "value_type": "int", "validate": "port",
+    },
+    {
+        "json_key": "esp32cam.quality", "env_var": "CAT_MONITORING_ESP32CAM_QUALITY",
+        "attr": ("ESP32CamConfig", "QUALITY"), "tab": "模型與輸入來源",
+        "label": "ESP32-CAM JPEG 品質（10–63，越大越省頻寬；-1=不調整）",
+        "value_type": "int", "validate": "int_any",
+    },
+    {
+        "json_key": "esp32cam.control_timeout", "env_var": "CAT_MONITORING_ESP32CAM_CONTROL_TIMEOUT",
+        "attr": ("ESP32CamConfig", "CONTROL_TIMEOUT"), "tab": "模型與輸入來源",
+        "label": "ESP32-CAM 控制請求逾時（秒）",
+        "value_type": "float", "validate": "positive_float",
+    },
+    {
         "json_key": "model_paths.log_dir", "env_var": "CAT_MONITORING_LOG_DIR",
         "attr": ("ModelPaths", "LOG_DIR"), "tab": "模型與輸入來源",
         "label": "日誌目錄", "value_type": "folder", "validate": "output_path",

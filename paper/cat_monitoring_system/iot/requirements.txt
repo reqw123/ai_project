@@ -1,0 +1,14 @@
+# cat_monitoring_system/iot/ —— 物聯網感測子系統的完整依賴清單。
+#
+# 這個子系統刻意做成「可完全獨立部署」：整個 iot/ 資料夾複製到另一台機器
+# （例如一台專門收感測資料的小主機 / 樹莓派），只要有 Python 3.10+ 和下面
+# 這一個套件就能跑 `python -m iot`，不需要裝主專案的 torch / opencv / ultralytics。
+#
+#   python -m venv .venv && .venv/Scripts/activate   (Windows)
+#   pip install -r requirements.txt
+#   python -m iot        # 從 cat_monitoring_system/ 目錄執行
+
+paho-mqtt>=1.6
+
+# 其餘全部用 Python 標準函式庫（sqlite3 / json / logging / threading / signal）。
+# 測試（pytest）沿用主專案的 pytest 版本，不在這裡重複列。

@@ -320,6 +320,61 @@ class ModelPaths:
         return True
 
 
+# ==================== ESP32-CAM 串流來源 ====================
+class ESP32CamConfig:
+    """ESP32-CAM（CameraWebServer 韌體）串流來源專用設定。
+
+    ESP32-CAM 的畫面尺寸由韌體端的 framesize 決定，cv2.VideoCapture.set(
+    CAP_PROP_FRAME_WIDTH/HEIGHT) 對它的 MJPEG HTTP 串流「完全無效」。要真的
+    改變輸出解析度，只能對韌體的 HTTP 控制端點（預設 :80/control）送
+    ?var=framesize&val=N 請求。framesize 太大時 ESP32-CAM 透過 WiFi 只能推
+    個位數 fps、每張 JPEG 又大，畫面會嚴重卡頓——調小 framesize 同時解掉
+    「解析度過大」與「卡頓」兩個問題。
+
+    AUTO_FRAMESIZE 開啟時，FrameProcessor 在開啟 http(s):// 串流前會先送一次
+    framesize 請求把來源壓到 TARGET_WIDTH×TARGET_HEIGHT 對應的標準尺寸。
+    來源若不是 ESP32-CAM（控制端點連不上/回非預期），請求失敗會被安靜吞掉、
+    不影響後續讀取。
+    """
+
+    # 是否在開啟 http(s) 串流前自動送 framesize 控制請求（僅對 ESP32-CAM 有意義）
+    AUTO_FRAMESIZE = _env_bool(
+        "CAT_MONITORING_ESP32CAM_AUTO_FRAMESIZE",
+        _runtime_default("esp32cam.auto_framesize", True, value_type=bool),
+    )
+
+    # 目標輸出解析度：會換算成最接近的 ESP32-CAM framesize 列舉值
+    # （640×480 -> VGA；800×600 -> SVGA；320×240 -> QVGA…）
+    TARGET_WIDTH = _env_int(
+        "CAT_MONITORING_ESP32CAM_WIDTH",
+        _runtime_default("esp32cam.target_width", 640, value_type=int),
+    )
+    TARGET_HEIGHT = _env_int(
+        "CAT_MONITORING_ESP32CAM_HEIGHT",
+        _runtime_default("esp32cam.target_height", 480, value_type=int),
+    )
+
+    # 韌體 HTTP 控制伺服器的埠（CameraWebServer 預設把 /control 放在 80，
+    # /stream 放在 81）。設為 0 代表沿用串流網址本身的埠。
+    CONTROL_PORT = _env_int(
+        "CAT_MONITORING_ESP32CAM_CONTROL_PORT",
+        _runtime_default("esp32cam.control_port", 80, value_type=int),
+    )
+
+    # JPEG 壓縮品質（10–63，數字越大檔越小、越省頻寬、畫質越差）。
+    # 設為負值代表不調整、沿用韌體現值。
+    QUALITY = _env_int(
+        "CAT_MONITORING_ESP32CAM_QUALITY",
+        _runtime_default("esp32cam.quality", -1, value_type=int),
+    )
+
+    # 控制請求逾時秒數
+    CONTROL_TIMEOUT = _env_float(
+        "CAT_MONITORING_ESP32CAM_CONTROL_TIMEOUT",
+        _runtime_default("esp32cam.control_timeout", 3.0, value_type=float),
+    )
+
+
 # ==================== YOLO 參數 ====================
 class YOLOConfig:
     """YOLO 檢測參數

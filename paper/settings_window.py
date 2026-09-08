@@ -44,6 +44,7 @@ from settings_gui.console_panel import ConsolePanel  # noqa: E402
 from settings_gui.process_manager import ProcessManager  # noqa: E402
 from settings_gui.field_search import FieldSearchBar  # noqa: E402
 from settings_gui import tab_docs_panel  # noqa: E402
+from settings_gui import tool_order as _tool_order  # noqa: E402
 from settings_gui.style import (  # noqa: E402
     BTN_PRIMARY_BG,
     BTN_PRIMARY_ACTIVE,
@@ -66,7 +67,6 @@ from settings_gui.style import (  # noqa: E402
     SPACE_SM,
     SPACE_MD,
     SPACE_LG,
-    _display_width,
     _styled_button,
 )
 
@@ -454,29 +454,47 @@ class SettingsWindow(tk.Tk):
 
         tool_row2 = tk.Frame(tool_outer, bg=COLOR_HEADER_BG)
         tool_row2.pack(fill="x", padx=10, pady=(0, 6))
-        self._tool_script_map = self._discover_tool_scripts()  # 顯示名稱（含流水號）→ 完整路徑
         # 下拉選單本身字級加大到跟表單欄位同級（原本用 _font_hint 太小，字擠在一起
         # 分不清楚選的是哪支）；展開後的清單（popdown listbox）字級另外設、還要放大
         # 到 Combobox 本身字級的 1.5 倍——這是使用者明確要的：清單一次列出一堆腳本
         # 名稱，字大一號＋淡藍底色掃視起來更輕鬆，不用瞇眼睛找。popdown listbox 是
         # ttk 內部另外生的元件，不會自動跟著 Combobox 本身的 font/顏色走，只能用
-        # option_add() 這種全域樣式規則設，沒有直接的 widget 參數可以配置。字型改用
-        # 跟終端機面板同一款等寬字（CONSOLE_FONT_FAMILY），因為 _discover_tool_scripts()
-        # 用補空白對齊流水號，非等寬字型（例如中文字型）每個字元寬度不一，補再多空白
-        # 也對不齊；等寬字下用字元數計算才是準的。
+        # option_add() 這種全域樣式規則設，沒有直接的 widget 參數可以配置。字型用
+        # 跟終端機面板同一款等寬字（CONSOLE_FONT_FAMILY）。_discover_tool_scripts()
+        # 補空白對齊 `#` 流水號時，直接用「這個 font 物件」逐列 measure() 量測寬度
+        # （不是數字元數）——所以字型要在掃描前先建好。
         self._tool_listbox_font = tkfont.Font(
             family=CONSOLE_FONT_FAMILY, size=round(self._font_label.cget("size") * 1.5)
         )
+        self._tool_script_map = self._discover_tool_scripts()  # 顯示名稱（含流水號）→ 完整路徑
         combo = ttk.Combobox(
             tool_row2, textvariable=self._tool_script_var,
             values=list(self._tool_script_map.keys()), font=self._tool_listbox_font, height=16,
         )
         combo.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=2)
+        # option_add 對 ttk combobox 的 popdown listbox 不一定生效（要在 popdown 建立
+        # 前設、pattern 還要匹配得到）——實測 `#` 流水號對中文檔名列沒對齊，就是因為
+        # popdown 沒吃到這個等寬字型、改用了主題預設字型，使得 _discover_tool_scripts()
+        # 裡拿「這個字型」measure() 算出來的補空白數，跟實際渲染的字型對不上。這裡
+        # 直接對「真的那個 popdown listbox widget」下 configure，一定生效，量測與渲染
+        # 也就用同一個字型、`#` 才會對齊。option_add 保留當作 popdown 被重建時的保底。
         self.option_add("*TCombobox*Listbox.font", self._tool_listbox_font)
         self.option_add("*TCombobox*Listbox.background", COLOR_TOOL_LISTBOX_BG)
         self.option_add("*TCombobox*Listbox.foreground", COLOR_LABEL_FG)
         self.option_add("*TCombobox*Listbox.selectBackground", TAB_COLORS["模型與輸入來源"][1])
         self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+        try:
+            _popdown = combo.tk.call("ttk::combobox::PopdownWindow", combo)
+            combo.tk.call(
+                f"{_popdown}.f.l", "configure",
+                "-font", str(self._tool_listbox_font),
+                "-background", COLOR_TOOL_LISTBOX_BG,
+                "-foreground", COLOR_LABEL_FG,
+                "-selectbackground", TAB_COLORS["模型與輸入來源"][1],
+                "-selectforeground", "#ffffff",
+            )
+        except tk.TclError:
+            pass
         self._tool_combo = combo
 
         # 即時篩選：邊打字邊把清單縮小到「顯示名稱含有目前輸入內容」的腳本（不分大小
@@ -494,6 +512,9 @@ class SettingsWindow(tk.Tk):
         # 先安靜地縮小，游標／焦點全程留在輸入框，可以正常一路打完整個查詢字串；
         # 想看篩選後的清單，打完字自己按一次下拉箭頭或 ↓ 鍵展開即可。
         all_display_names = list(self._tool_script_map.keys())
+        # 同一個 list 物件也掛到 self 上：自訂排序存檔後 _reload_tool_scripts() 用 `[:]`
+        # 就地換掉內容，下面幾個閉包（篩選／說明列／Ctrl+F）捕捉的是同一個參照，不用改。
+        self._tool_all_display_names = all_display_names
         # 導覽鍵不觸發重新篩選，否則按 ↓ 選清單裡的項目會把該項目文字填回輸入框、
         # 又被當成新的篩選字串重新篩一次，跟使用者原本想「往下移動選取」的意圖對不上。
         _nav_keysyms = {"Up", "Down", "Return", "KP_Enter", "Escape", "Tab"}
@@ -603,7 +624,8 @@ class SettingsWindow(tk.Tk):
             ]
             if matches:
                 self._tool_desc_icon_var.set("🔍")
-                preview = "、".join(m.split("#")[0].strip() for m in matches[:3])
+                # 顯示名稱是「#NN␣␣相對路徑」，取空白後那段（去掉前面的流水號）
+                preview = "、".join(m.split(None, 1)[-1] for m in matches[:3])
                 more = f" 等共 {len(matches)} 支" if len(matches) > 3 else ""
                 self._tool_desc_var.set(
                     f"符合「{stripped}」：{preview}{more} —— 按 ↓ 或點下拉箭頭展開清單挑選"
@@ -626,6 +648,11 @@ class SettingsWindow(tk.Tk):
 
         self.bind_all("<Control-f>", _focus_tool_combo_search)
 
+        order_btn = _styled_button(
+            tool_row2, "↕ 排序", self._on_open_tool_order, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+            font=self._font_label, compact=True,
+        )
+        order_btn.pack(side="left", padx=(0, SPACE_SM))
         browse_btn = _styled_button(
             tool_row2, "瀏覽...", self._on_browse_tool_script, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
             font=self._font_label, compact=True,
@@ -649,8 +676,9 @@ class SettingsWindow(tk.Tk):
 
         tk.Label(
             tool_outer,
-            text="下拉選單只列出 cat_monitoring_system/tools/ 底下的腳本（依資料夾/檔名排序，"
-            "子資料夾會顯示成「資料夾名/檔名.py」）；其他位置的腳本（例如 cat_pose/ 底下）用「瀏覽...」選取。"
+            text="下拉選單只列出 cat_monitoring_system/tools/ 底下的腳本（子資料夾顯示成「資料夾名/檔名.py」）；"
+            "「↕ 排序」可自訂顯示順序（存到 settings_gui/tool_order.json），沒排到的自動接在最後依檔名排序。"
+            "其他位置的腳本（例如 cat_pose/ 底下）用「瀏覽...」選取。"
             "這些獨立工具大多需要先打開改寫死在檔案開頭的路徑/參數再執行，"
             "「開啟檔案」用 VS Code（找不到的話退回記事本）開啟目前選定腳本的原始碼。",
             bg=COLOR_HEADER_BG, fg=COLOR_HEADER_SUB_FG, font=self._font_hint,
@@ -669,15 +697,12 @@ class SettingsWindow(tk.Tk):
         絕對路徑短很多，才看得清楚選的是哪一支；「瀏覽...」則可另外選這個清單以外的
         任意 .py（例如 C:\\ai_project\\cat_pose\\ 底下那些獨立工具）。
 
-        每個顯示名稱後面補空白對齊、再接兩位數流水號（例如 "01"、"02"...），流水號
-        統一補到清單裡「最寬」檔名之後那一欄——用等寬字型（見 combo 那邊的
-        _tool_listbox_font）搭配這個補空白對齊，數字才會排成一直線。這裡用「顯示
-        寬度」（_display_width，全形/中文字元算 2 個半形字寬）而不是單純字元數
-        （len()）來算要補幾格空白：tools/ 底下不是所有腳本都是純 ASCII 檔名（例如
-        `影片拼接.py`），中文字元在等寬字型下通常還是佔兩個半形字的寬度，直接用
-        len() 對這種檔名補的空白數會不夠、流水號對不齊。流水號同時也是 Ctrl+F
-        打字篩選時，使用者一眼確認「這是清單第幾支」的依據。"""
+        顯示格式是「#NN␣␣相對路徑」——兩位數流水號放最左邊固定欄。流水號同時也是
+        Ctrl+F 打字篩選時，使用者一眼確認「這是清單第幾支」的依據。（早期版本把流水號
+        放右邊、靠補空白對齊，但中英混合檔名在 Tk listbox 裡沒辦法對齊到像素，改放
+        左邊固定欄才每列都對齊。）"""
         self._tool_script_desc_map = {}  # 顯示名稱（含流水號）→ 功能說明，給常駐說明列／Ctrl+F 用
+        self._tool_relnames_ordered = []  # 目前生效的腳本順序（relname 清單），給排序對話框用
         # 一定要在下面 tools_dir 不存在時的早退之前設好：_on_tool_script_var_change()
         # 在 _build_process_bar() 尾端會無條件呼叫一次，若 tools_dir 剛好讀不到（例如
         # 資料夾正在被同步/搬移）就會早退不往下跑，這個屬性沒設到就直接 AttributeError。
@@ -689,17 +714,25 @@ class SettingsWindow(tk.Tk):
         # 可執行區塊，選了直接執行只會靜靜跑完 import、什麼事都沒發生，對使用者來說
         # 像是壞掉了；docs/獨立運行腳本索引.md 也不會有這種模組的條目（本來就不是
         # 獨立腳本），列進下拉選單只會製造一個沒有說明、點了也沒反應的選項。
-        paths = sorted(
-            p for p in tools_dir.rglob("*.py")
+        raw_items = [
+            (str(p.relative_to(tools_dir)).replace("\\", "/"), str(p))
+            for p in tools_dir.rglob("*.py")
             if "__pycache__" not in p.parts and not p.name.startswith("_")
-        )
-        names = [str(p.relative_to(tools_dir)).replace("\\", "/") for p in paths]
-        widths = [_display_width(n) for n in names]
-        pad_width = max(widths, default=0) + 4
+        ]
+        # 依 settings_gui/tool_order.json 的自訂順序重排；沒列入的照檔名排在最後
+        ordered_items = _tool_order.apply_order(raw_items)
+        names = [rel for rel, _ in ordered_items]
+        paths = [pth for _, pth in ordered_items]
+        self._tool_relnames_ordered = list(names)  # 給「↕ 排序」對話框當目前順序的種子
+        # 流水號放「最左邊」固定欄（#NN + 兩個空白 + 檔名）：檔名裡混了中文與英文時，
+        # 「檔名靠左、流水號靠右補空白對齊」在 Tk listbox 裡沒辦法對齊到像素——Consolas
+        # 沒有中文字形、中文走系統 fallback 字型，寬度不是空白的整數倍，補空白最多只能
+        # 對到「半個空白」的誤差，中文檔名那幾列的 `#` 就會看得出偏掉（使用者兩次回報）。
+        # 改成流水號在最左邊，每列都從第 0 欄起算，永遠對齊。
         plain_descriptions = self._load_tool_script_descriptions()  # {相對路徑: 功能說明}
         mapping = {}
-        for idx, (name, width, p) in enumerate(zip(names, widths, paths), start=1):
-            display = f"{name}{' ' * (pad_width - width)}#{idx:02d}"
+        for idx, (name, p) in enumerate(zip(names, paths), start=1):
+            display = f"#{idx:02d}  {name}"
             mapping[display] = str(p)
             self._tool_script_desc_map[display] = plain_descriptions.get(name, "")
         return mapping
@@ -746,6 +779,40 @@ class SettingsWindow(tk.Tk):
         if sec6:
             _parse_section(sec6.group(0), prefix="train_data/")
         return descriptions
+
+    def _on_open_tool_order(self):
+        """「↕ 排序」按鈕：開排序對話框，存檔後重建下拉選單。"""
+        if not self._tool_relnames_ordered:
+            messagebox.showinfo("自訂工具排序", "目前沒有可排序的腳本。")
+            return
+
+        existing = set(self._tool_relnames_ordered)
+        locked_seed = [r for r in _tool_order.load_locked() if r in existing]
+
+        def _apply(new_relnames, locked_relnames):
+            ok, err = _tool_order.save_order(new_relnames, locked_relnames)
+            if not ok:
+                messagebox.showerror("自訂工具排序", f"寫入 tool_order.json 失敗：\n{err}")
+                return False
+            self._reload_tool_scripts()
+            return True
+
+        _tool_order.open_dialog(self, self._tool_relnames_ordered, _apply, locked_seed)
+
+    def _reload_tool_scripts(self):
+        """tool_order.json 改過後重建「獨立腳本工具」下拉選單：重新掃描＋套用新順序，
+        更新 combo 的 values 與 Ctrl+F 篩選用的完整清單（就地換內容，維持閉包參照）。
+        目前選定的腳本若還在，用「路徑相同」回找新的顯示名稱（流水號會因排序而變）
+        盡量保留選取。"""
+        prev_path = self._tool_script_map.get(self._tool_script_var.get())
+        self._tool_script_map = self._discover_tool_scripts()
+        self._tool_all_display_names[:] = list(self._tool_script_map.keys())
+        self._tool_combo["values"] = self._tool_all_display_names
+        if prev_path:
+            for disp, pth in self._tool_script_map.items():
+                if pth == prev_path:
+                    self._tool_script_var.set(disp)
+                    break
 
     def _on_window_close(self):
         """視窗關閉的唯一入口（右上角 X 與下方「關閉」按鈕都走這裡）：main.py 或

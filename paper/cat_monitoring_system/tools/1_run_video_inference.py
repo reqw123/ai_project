@@ -86,7 +86,7 @@ _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video:
     VIDEO_PATHS = [_env_test_video]
 
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_147.pt"
+YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_149.pt"
 STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_124_xy_conf_v_bone_att_on\124_best_model.pth"
 INFERENCE_DEVICE = 'cuda'   
 YOLO_IMGSZ = 640  # 與 YOLO 訓練尺寸一致
