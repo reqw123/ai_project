@@ -14,10 +14,16 @@ Optional drop-in integration (not required for this module to exist):
 mirrors the existing plugins/lick_stage registration in server/routes.py —
 frame_processor.py already calls plugin.update(kpts, kpt_conf) and
 plugin.close() on every registered plugin without reading a return value.
+
+第一階段（說明書「來源時間規格」）：update() 新增可選 keyword 契約參數
+（source_timestamp / dt_sec / cat_present / is_lick …），全部省略時退回舊
+行為（wall-clock 計時），與 plugins/lick_stage/manager.py 同一套設計。
 """
 
 import logging
 import time
+
+from plugins.lick_stage.analysis_context import FrameState, ReasonCode, SourceClock
 
 from .config import ExtZoneConfig as _C
 from .models import ExtZoneResult, ZoneStat
@@ -39,8 +45,22 @@ class ExtBodyZonePlugin:
         nodered_enabled: bool = _C.NODERED_ENABLED,
     ):
         self._frame_count = 0
+        # 舊路徑（wall-clock）
         self._elapsed_sec = 0.0
         self._last_wall_t = time.monotonic()
+        # 新路徑（來源時間）
+        self._clock = SourceClock()
+        self._source_elapsed = 0.0
+        self._session_id = ""
+        self._session_active = False
+        # 觀測分母（說明書「統計分母」）
+        self._observed_sec = 0.0
+        self._no_cat_sec = 0.0
+        self._valid_observed_sec = 0.0
+        self._stgcn_lick_sec = 0.0
+        self._assigned_zone_sec = 0.0
+        self._unassigned_lick_sec = 0.0
+
         self._zone_stats = {
             zid: ZoneStat() for zid in _C.ZONE_NAMES if zid != _C.ZONE_NO_TARGET
         }
@@ -61,11 +81,53 @@ class ExtBodyZonePlugin:
         except Exception as exc:
             _log.debug("ExtBodyZonePlugin output init failed: %s", exc)
 
+    # ── Session 生命週期 ────────────────────────────────────────────────
+    def start_session(self, session_id: str, **_meta) -> None:
+        self._session_id = session_id
+        self._session_active = True
+        self._clock.reset()
+        self._source_elapsed = 0.0
+        self._elapsed_sec = 0.0
+        self._last_wall_t = time.monotonic()
+        self._frame_count = 0
+        self._prev_zone = _C.ZONE_NO_TARGET
+
+    def finish_session(self, end_source_timestamp=None) -> None:
+        self._session_active = False
+
+    def reset_session(self, reason: str = "") -> None:
+        self._clock.reset()
+        self._source_elapsed = 0.0
+        self._prev_zone = _C.ZONE_NO_TARGET
+
     # ── Drop-in hook matching frame_processor's existing plugin protocol ──
-    def update(self, kpts, kpt_conf) -> None:
+    def update(
+        self,
+        kpts,
+        kpt_conf,
+        *,
+        source_timestamp=None,
+        dt_sec=None,
+        frame_idx=None,
+        cat_present=None,
+        is_lick=None,
+        lick_confidence=None,
+        track_id=None,
+        session_id=None,
+    ) -> None:
         """Fail-safe 進入點，符合 FrameProcessor 既有的 plugin 呼叫慣例。"""
         try:
-            self._run(kpts, kpt_conf, None)
+            self._run(
+                kpts,
+                kpt_conf,
+                None,
+                source_timestamp=source_timestamp,
+                dt_sec=dt_sec,
+                frame_idx=frame_idx,
+                cat_present=cat_present,
+                is_lick=is_lick,
+                session_id=session_id,
+            )
         except Exception as exc:
             _log.debug("ExtBodyZonePlugin.update error: %s", exc)
 
@@ -82,28 +144,105 @@ class ExtBodyZonePlugin:
             pass
 
     # ── Internal ────────────────────────────────────────────────────────
-    def _run(self, kpts, kpt_conf, nose_pt_override) -> None:
-        now = time.monotonic()
-        dt_sec = max(0.0, now - self._last_wall_t)
-        self._last_wall_t = now
+    def _run(
+        self,
+        kpts,
+        kpt_conf,
+        nose_pt_override,
+        *,
+        source_timestamp=None,
+        dt_sec=None,
+        frame_idx=None,
+        cat_present=None,
+        is_lick=None,
+        session_id=None,
+    ) -> None:
+        use_source_time = source_timestamp is not None or dt_sec is not None
+        if use_source_time:
+            if not self._session_active:
+                self.start_session(session_id or self._session_id or "S_auto")
+            if dt_sec is not None:
+                dt, discontinuity = self._clock.clamp_external_dt(
+                    dt_sec, source_timestamp
+                )
+            else:
+                dt, discontinuity, _ = self._clock.tick(source_timestamp)
+            self._source_elapsed += dt
+            self._elapsed_sec = self._source_elapsed
+        else:
+            now = time.monotonic()
+            dt = max(0.0, now - self._last_wall_t)
+            self._last_wall_t = now
+            self._elapsed_sec += dt
+            discontinuity = False
+
         self._frame_count += 1
-        self._elapsed_sec += dt_sec
+
+        cp = cat_present
+        il = is_lick
+        if cp is None:
+            cp = kpts is not None and kpt_conf is not None
+            il = cp
+
+        # 時間不連續：不累加任何分母
+        accum_dt = 0.0 if discontinuity else max(0.0, dt)
+        self._observed_sec += accum_dt
+
+        if not cp:
+            self._no_cat_sec += accum_dt
+            self._prev_zone = _C.ZONE_NO_TARGET
+            # 說明書 M2 才把「事件表 / 視窗表」接上；M1 shadow 模式下 CSV/MQTT
+            # 的輸出節奏維持舊行為（只在舔毛幀寫），非舔毛幀只更新內部分母。
+            return
+
+        self._valid_observed_sec += accum_dt
+
+        if not il:
+            self._prev_zone = _C.ZONE_NO_TARGET
+            return
 
         if kpts is None or kpt_conf is None:
+            # 舔毛但無姿態
             self._prev_zone = _C.ZONE_NO_TARGET
+            self._stgcn_lick_sec += accum_dt
+            self._unassigned_lick_sec += accum_dt
+            self._emit(
+                FrameState.LICK_UNASSIGNED,
+                ReasonCode.POSE_INVALID,
+                _C.ZONE_NO_TARGET,
+                0.0,
+                None,
+                None,
+            )
             return
 
         targets = build_zone_targets(kpts, kpt_conf)
         nose_pt = nose_pt_override if nose_pt_override is not None else kpts[_C.KP_NOSE]
         zone_id, zone_name, confidence = classify_zone(nose_pt, targets)
 
+        self._stgcn_lick_sec += accum_dt
         if zone_id != _C.ZONE_NO_TARGET:
+            self._assigned_zone_sec += accum_dt
             stat = self._zone_stats[zone_id]
-            stat.time_sec += dt_sec
+            stat.time_sec += accum_dt
             if self._prev_zone != zone_id:
                 stat.hits += 1
+            frame_state = FrameState.LICK_ASSIGNED
+            reason = None
+        else:
+            self._unassigned_lick_sec += accum_dt
+            frame_state = FrameState.LICK_UNASSIGNED
+            reason = (
+                ReasonCode.POSE_INVALID
+                if targets is None
+                else ReasonCode.NO_REGION_HIT
+            )
         self._prev_zone = zone_id
 
+        self._emit(frame_state, reason, zone_id, confidence, targets, nose_pt)
+
+    def _emit(self, frame_state, reason_code, zone_id, confidence, targets, nose_pt):
+        zone_name = _C.ZONE_NAMES.get(zone_id, "NO_TARGET")
         stat = self._zone_stats.get(zone_id)
         result = ExtZoneResult(
             current_zone=zone_id,
@@ -117,6 +256,16 @@ class ExtBodyZonePlugin:
             zone_breakdown={
                 _C.ZONE_NAMES[zid]: st for zid, st in self._zone_stats.items()
             },
+            schema_version="2.0",
+            session_id=self._session_id,
+            frame_state=frame_state,
+            reason_code=reason_code,
+            observed_sec=self._observed_sec,
+            valid_observed_sec=self._valid_observed_sec,
+            no_cat_sec=self._no_cat_sec,
+            stgcn_lick_sec=self._stgcn_lick_sec,
+            assigned_zone_sec=self._assigned_zone_sec,
+            unassigned_lick_sec=self._unassigned_lick_sec,
         )
         self._persist(result)
         self._publish_geometry(result, targets, nose_pt)

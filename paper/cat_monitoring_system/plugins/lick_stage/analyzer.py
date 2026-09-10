@@ -5,6 +5,12 @@ from typing import Optional
 
 import numpy as np
 
+from plugins.lick_stage.analysis_context import (
+    FrameState,
+    ReasonCode,
+    SCHEMA_VERSION,
+)
+from plugins.lick_stage.event_aggregator import EventAggregator
 from plugins.lick_stage.config import LickConfig as _C
 from plugins.lick_stage.contact_regions import (
     build_nose_trapezoid,
@@ -32,7 +38,12 @@ class LickAnalyzer:
     Call analyze() once per frame in order.
     """
 
-    def __init__(self):
+    def __init__(self, event_aggregator_factory=None):
+        # event_aggregator_factory：呼叫端（manager）提供的 () -> EventAggregator
+        # 工廠，讓 reset() 能在新 Session 建立乾淨的聚合器並接上 storage sink。
+        # 未提供時用無 sink 的預設聚合器（仍會逐幀計算，只是不落地）。
+        self._events_factory = event_aggregator_factory or (lambda: EventAggregator())
+        self._events = self._events_factory()
         self._stats = LickStatistics()
         self._state_history = deque(maxlen=_C.STATE_SMOOTH_WINDOW)
         self._ema_kpts: Optional[np.ndarray] = None
@@ -55,6 +66,34 @@ class LickAnalyzer:
         self.last_nose_xy: tuple = (0.0, 0.0)
         self.last_geom: Optional[dict] = None  # full target_geom dict
         self.last_nearest_label: str = "NO_TARGET"
+        # 第一階段：本幀契約資訊，供 _build_result 帶進 payload
+        self._ctx_session_id: str = ""
+        self._ctx_source_ts = None
+
+    def reset(self) -> None:
+        """清空所有跨幀狀態與累計統計（新 Session / 明確來源切換時呼叫）。"""
+        self._events = self._events_factory()
+        self._stats = LickStatistics()
+        self._state_history.clear()
+        self._ema_kpts = None
+        self._prev_trap_perp = None
+        self._prev_trap_dir = None
+        self._trap_perp_flip_streak = 0
+        self._trap_dir_wrong_streak = 0
+        self.last_trap_pts = None
+        self.last_hit = False
+        self.last_zone_label = "NO_TARGET"
+        self.last_nose_xy = (0.0, 0.0)
+        self.last_geom = None
+        self.last_nearest_label = "NO_TARGET"
+
+    def finalize(self, end_source_ts=None) -> None:
+        """Session 結束：結算最後一段 active bout 與最後一個未滿視窗。"""
+        self._stats.finalize()
+        try:
+            self._events.finalize(end_source_ts)
+        except Exception:
+            pass
 
     def analyze(
         self,
@@ -63,17 +102,83 @@ class LickAnalyzer:
         frame_idx: int,
         elapsed_sec: float,
         dt_sec: float,
+        *,
+        cat_present: Optional[bool] = None,
+        is_lick: Optional[bool] = None,
+        lick_confidence: Optional[float] = None,
+        source_timestamp=None,
+        session_id: str = "",
+        discontinuity: bool = False,
     ) -> LickResult:
-        """分析單一影格的舔舐區域與臉部朝向，回傳本幀分析結果。"""
-        if kpts is None or kpt_conf is None:
-            return self._handle_no_cat(frame_idx, elapsed_sec, dt_sec)
-        return self._handle_cat(kpts, kpt_conf, frame_idx, elapsed_sec, dt_sec)
+        """分析單一影格的舔舐區域與臉部朝向，回傳本幀分析結果。
+
+        向後相容：舊呼叫端只傳位置參數 (kpts, kpt_conf, frame_idx,
+        elapsed_sec, dt_sec)，語意是「kpts 有值 ⟺ 已通過 ST-GCN lick gate」。
+        新呼叫端（FrameProcessor 第一階段改動後）額外傳 cat_present / is_lick
+        等契約欄位，讓 NO_CAT 與 NOT_LICK 可被區分（說明書「狀態與原因碼重構」）。
+        """
+        if cat_present is None:
+            cat_present = kpts is not None and kpt_conf is not None
+        if is_lick is None:
+            is_lick = kpts is not None and kpt_conf is not None
+
+        self._ctx_session_id = session_id
+        self._ctx_source_ts = source_timestamp
+
+        if not cat_present:
+            result = self._handle_no_cat(
+                frame_idx, elapsed_sec, dt_sec, discontinuity
+            )
+        elif not is_lick:
+            result = self._handle_not_lick(
+                frame_idx, elapsed_sec, dt_sec, discontinuity
+            )
+        elif kpts is None or kpt_conf is None:
+            result = self._handle_lick_no_pose(
+                frame_idx, elapsed_sec, dt_sec, lick_confidence, discontinuity
+            )
+        else:
+            result = self._handle_cat(
+                kpts,
+                kpt_conf,
+                frame_idx,
+                elapsed_sec,
+                dt_sec,
+                lick_confidence,
+                discontinuity,
+            )
+
+        # 逐幀餵事件 / 視窗聚合器（說明書「單一事件聚合原則」）。純資料處理，
+        # 失敗不影響本幀結果。
+        try:
+            self._events.feed(
+                source_ts=(
+                    source_timestamp
+                    if source_timestamp is not None
+                    else elapsed_sec
+                ),
+                frame_idx=frame_idx,
+                dt_sec=dt_sec,
+                frame_state=result.frame_state,
+                zone_label=result.current_zone,
+                action_score=lick_confidence,
+                pose_quality=None,  # M4 由共用 PoseFrame 提供
+                reason_code=result.reason_code,
+                discontinuity=discontinuity,
+            )
+        except Exception:
+            pass
+        return result
 
     # ── Private helpers ───────────────────────────────────────────────
 
-    def _handle_no_cat(
-        self, frame_idx: int, elapsed_sec: float, dt_sec: float
-    ) -> LickResult:
+    def _reset_transient_state(self) -> None:
+        """清空跨幀平滑狀態（EMA / 梯形方向 / 翻轉計數）與 overlay 快取。
+
+        「貓離開畫面」與「非舔毛」都走這條路：兩者都不該讓陳舊姿態繼續拉動
+        下一段真正的舔毛判定（說明書「update：track 切換不得沿用前一隻貓的
+        狀態」的同一種考量）。
+        """
         self._ema_kpts = None
         self._prev_trap_perp = None
         self._prev_trap_dir = None
@@ -83,11 +188,81 @@ class LickAnalyzer:
         self.last_hit = False
         self.last_geom = None
         self.last_nearest_label = "NO_TARGET"
+
+    def _handle_no_cat(
+        self,
+        frame_idx: int,
+        elapsed_sec: float,
+        dt_sec: float,
+        discontinuity: bool = False,
+    ) -> LickResult:
+        self._reset_transient_state()
         self._state_history.append(_C.STATE_NO_CAT)
         state_sm, stability = smooth_state(self._state_history)
-        self._stats.update("NO_TARGET", dt_sec)
+        self._stats.update(
+            "NO_TARGET", dt_sec, FrameState.NO_CAT, discontinuity=discontinuity
+        )
         return self._build_result(
-            "NO_TARGET", state_sm, stability, False, frame_idx, elapsed_sec
+            "NO_TARGET",
+            state_sm,
+            stability,
+            False,
+            frame_idx,
+            elapsed_sec,
+            frame_state=FrameState.NO_CAT,
+        )
+
+    def _handle_not_lick(
+        self,
+        frame_idx: int,
+        elapsed_sec: float,
+        dt_sec: float,
+        discontinuity: bool = False,
+    ) -> LickResult:
+        """有貓、但 ST-GCN 當幀非 lick。時間計入 valid_observed_sec，不計舔毛。"""
+        self._reset_transient_state()
+        self._state_history.append(_C.STATE_NO_CAT)
+        state_sm, stability = smooth_state(self._state_history)
+        self._stats.update(
+            "NO_TARGET", dt_sec, FrameState.NOT_LICK, discontinuity=discontinuity
+        )
+        return self._build_result(
+            "NO_TARGET",
+            state_sm,
+            stability,
+            False,
+            frame_idx,
+            elapsed_sec,
+            frame_state=FrameState.NOT_LICK,
+        )
+
+    def _handle_lick_no_pose(
+        self,
+        frame_idx: int,
+        elapsed_sec: float,
+        dt_sec: float,
+        lick_confidence,
+        discontinuity: bool = False,
+    ) -> LickResult:
+        """呼叫端判定正在舔毛，但沒有可用姿態 → LICK_UNASSIGNED / POSE_INVALID。"""
+        self._reset_transient_state()
+        self._state_history.append(_C.STATE_NO_CAT)
+        state_sm, stability = smooth_state(self._state_history)
+        self._stats.update(
+            "NO_TARGET",
+            dt_sec,
+            FrameState.LICK_UNASSIGNED,
+            discontinuity=discontinuity,
+        )
+        return self._build_result(
+            "NO_TARGET",
+            state_sm,
+            stability,
+            False,
+            frame_idx,
+            elapsed_sec,
+            frame_state=FrameState.LICK_UNASSIGNED,
+            reason_code=ReasonCode.POSE_INVALID,
         )
 
     def _stabilize_vector(self, new_vec, prev_vec, flip_streak: int):
@@ -197,7 +372,14 @@ class LickAnalyzer:
         )
 
     def _handle_cat(
-        self, kpts, kpt_conf, frame_idx: int, elapsed_sec: float, dt_sec: float
+        self,
+        kpts,
+        kpt_conf,
+        frame_idx: int,
+        elapsed_sec: float,
+        dt_sec: float,
+        lick_confidence=None,
+        discontinuity: bool = False,
     ) -> LickResult:
         _nan = float("nan")
 
@@ -236,6 +418,9 @@ class LickAnalyzer:
             state_sm = state_now
             stability = 1.0
             zone_label = "NO_TARGET"
+            # 正面姿態下 2D 幾何無法分辨部位 → 未指派，原因 FRONT_VIEW_UNOBSERVABLE
+            frame_state = FrameState.LICK_UNASSIGNED
+            reason_code = ReasonCode.FRONT_VIEW_UNOBSERVABLE
             self.last_trap_pts = None
             self.last_hit = False
             self.last_geom = None
@@ -265,6 +450,13 @@ class LickAnalyzer:
 
             nearest_label, _dist, hit = find_nearest_zone(target_geom)
             zone_label = nearest_label if hit else "NO_TARGET"
+            if hit:
+                frame_state = FrameState.LICK_ASSIGNED
+                reason_code = None
+            else:
+                # 姿態有效但鼻端梯形未命中任何區域 → 未指派，原因 NO_REGION_HIT
+                frame_state = FrameState.LICK_UNASSIGNED
+                reason_code = ReasonCode.NO_REGION_HIT
 
             # Store overlay state for draw_overlay()
             trap_raw = target_geom.get("nose_contact_trapezoid")
@@ -278,7 +470,9 @@ class LickAnalyzer:
             nose_kp = smooth_kpts[_C.KP_NOSE]
             self.last_nose_xy = (float(nose_kp[0]), float(nose_kp[1]))
 
-        self._stats.update(zone_label, dt_sec)
+        self._stats.update(
+            zone_label, dt_sec, frame_state, discontinuity=discontinuity
+        )
         return self._build_result(
             zone_label,
             state_sm,
@@ -291,6 +485,8 @@ class LickAnalyzer:
             gaze_fwd,
             gaze_lat,
             gaze_angle,
+            frame_state=frame_state,
+            reason_code=reason_code,
         )
 
     def _build_result(
@@ -306,6 +502,8 @@ class LickAnalyzer:
         gaze_fwd: float = float("nan"),
         gaze_lat: float = float("nan"),
         gaze_angle: float = float("nan"),
+        frame_state: str = FrameState.NO_CAT,
+        reason_code=None,
     ) -> LickResult:
         trap_pts = self.last_trap_pts.tolist() if self.last_trap_pts is not None else []
         nose_xy = list(self.last_nose_xy) if trap_pts else []
@@ -314,9 +512,10 @@ class LickAnalyzer:
             hits, t = self._stats.zone_stats(key)
             return ZoneStats(hits=hits, time_sec=t)
 
+        st = self._stats
         return LickResult(
             current_zone=zone_label,
-            best_zone=self._stats.best_zone(),
+            best_zone=st.best_zone(),
             body=_zs("BODY"),
             fl=_zs("FL"),
             fr=_zs("FR"),
@@ -334,4 +533,22 @@ class LickAnalyzer:
             gaze_angle=gaze_angle,
             trap_pts=trap_pts,
             nose_xy=nose_xy,
+            # ── 第一階段 v2 契約欄位（說明書「統計分母與計算口徑」）──────
+            schema_version=SCHEMA_VERSION,
+            session_id=self._ctx_session_id,
+            source_timestamp=(
+                float(self._ctx_source_ts)
+                if isinstance(self._ctx_source_ts, (int, float))
+                else None
+            ),
+            frame_state=frame_state,
+            reason_code=reason_code,
+            observed_sec=st.observed_sec,
+            valid_observed_sec=st.valid_observed_sec,
+            no_cat_sec=st.no_cat_sec,
+            stgcn_lick_sec=st.stgcn_lick_sec,
+            assigned_zone_sec=st.assigned_zone_sec,
+            unassigned_lick_sec=st.unassigned_lick_sec,
+            zone_coverage_ratio=st.zone_coverage_ratio(),
+            unknown_rate=st.unknown_rate(),
         )

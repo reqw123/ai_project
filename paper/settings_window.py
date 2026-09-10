@@ -45,6 +45,7 @@ from settings_gui.process_manager import ProcessManager  # noqa: E402
 from settings_gui.field_search import FieldSearchBar  # noqa: E402
 from settings_gui import tab_docs_panel  # noqa: E402
 from settings_gui import tool_order as _tool_order  # noqa: E402
+from settings_gui import ui_state as _ui_state  # noqa: E402
 from settings_gui.style import (  # noqa: E402
     BTN_PRIMARY_BG,
     BTN_PRIMARY_ACTIVE,
@@ -467,6 +468,7 @@ class SettingsWindow(tk.Tk):
             family=CONSOLE_FONT_FAMILY, size=round(self._font_label.cget("size") * 1.5)
         )
         self._tool_script_map = self._discover_tool_scripts()  # 顯示名稱（含流水號）→ 完整路徑
+        self._restore_last_tool_selection()  # 還原上次選的腳本（見 ui_state.json）
         combo = ttk.Combobox(
             tool_row2, textvariable=self._tool_script_var,
             values=list(self._tool_script_map.keys()), font=self._tool_listbox_font, height=16,
@@ -548,7 +550,10 @@ class SettingsWindow(tk.Tk):
             tool_row_video, text="🎬 影片路徑（選填）:", bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
             font=self._font_hint,
         ).pack(side="left")
-        self._tool_video_path_var = tk.StringVar(value="")
+        # 影片路徑：記住上次填的值（settings_gui/ui_state.json，純 UI 便利記憶）
+        self._tool_video_path_var = tk.StringVar(
+            value=_ui_state.get("last_tool_video_path", "")
+        )
         tk.Entry(
             tool_row_video, textvariable=self._tool_video_path_var, font=self._font_hint,
         ).pack(side="left", fill="x", expand=True, padx=(6, 8))
@@ -799,6 +804,32 @@ class SettingsWindow(tk.Tk):
 
         _tool_order.open_dialog(self, self._tool_relnames_ordered, _apply, locked_seed)
 
+    def _restore_last_tool_selection(self):
+        """視窗開啟時，把「上次使用的獨立腳本」還原到下拉選單（見 ui_state.json）。
+
+        存的是完整路徑：若該路徑仍在掃描結果裡（`_tool_script_map` 的 value），
+        就設成對應的顯示名稱（`#NN  相對路徑`）；否則若檔案還在（例如「瀏覽...」
+        選的清單外腳本），直接把完整路徑設進去（`_on_start_tool` 的
+        `.get(raw, raw)` 會原樣當完整路徑用）。找不到就維持空白。"""
+        last = _ui_state.get("last_tool_script", "")
+        if not last:
+            return
+        for disp, pth in self._tool_script_map.items():
+            if pth == last:
+                self._tool_script_var.set(disp)
+                return
+        if Path(last).exists():
+            self._tool_script_var.set(last)
+
+    def _save_tool_ui_state(self):
+        """把目前的腳本選擇與影片路徑寫進 ui_state.json（純 UI 便利記憶）。"""
+        raw = self._tool_script_var.get().strip()
+        script_full = self._tool_script_map.get(raw, raw) if raw else ""
+        _ui_state.update(
+            last_tool_script=script_full or None,
+            last_tool_video_path=self._tool_video_path_var.get().strip() or None,
+        )
+
     def _reload_tool_scripts(self):
         """tool_order.json 改過後重建「獨立腳本工具」下拉選單：重新掃描＋套用新順序，
         更新 combo 的 values 與 Ctrl+F 篩選用的完整清單（就地換內容，維持閉包參照）。
@@ -835,6 +866,10 @@ class SettingsWindow(tk.Tk):
                     "關閉設定視窗",
                     f"{pm.active_label} 似乎沒有在預期時間內結束，請自行檢查工作管理員確認狀態。",
                 )
+        try:
+            self._save_tool_ui_state()  # 保留「上次選的腳本 / 影片路徑」到下次開視窗
+        except Exception:
+            pass
         self.destroy()
 
     def _on_start_main(self):
@@ -921,6 +956,8 @@ class SettingsWindow(tk.Tk):
         video_path = self._tool_video_path_var.get().strip()
         extra_env = {"TEST_VIDEO_PATH": video_path} if video_path else None
         self._process_manager.start_tool(script_file, extra_env=extra_env)
+        # 記住「上次使用的腳本 + 影片路徑」，下次開視窗自動還原
+        self._save_tool_ui_state()
 
     def _on_stop_tool(self):
         self._process_manager.stop_tool()

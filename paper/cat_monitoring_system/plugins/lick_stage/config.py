@@ -181,6 +181,13 @@ class LickConfig:
     ZONE_NO_TARGET = "NO_TARGET"  # 鼻子未命中任何區域
     ZONE_BODY = "BODY_CENTER"  # 命中身體中心區域
 
+    # ── 事件 / 視窗持久化（說明書第一階段「事件與視窗資料設計」）──────────
+    # 預設 None = 停用（維持 shadow 模式，不落地任何檔案）。給一個 .db 路徑
+    # 即啟用 SQLite 事件表 lick_events + 視窗摘要表 lick_window_summary，
+    # close_session() 時另匯出同名 .csv。可用環境變數覆寫。
+    STORAGE_DB_PATH = _env_str("CAT_MONITORING_LICK_STORAGE_DB", "") or None
+    WINDOW_SUMMARY_SEC = _env_float("CAT_MONITORING_LICK_WINDOW_SEC", 60.0)
+
     # ── Node-RED 推送設定 ─────────────────────────────────────────────────
     # 主機/port 預設跟主專案共用（見檔案開頭說明）；CAT_MONITORING_LICK_NODERED_URL
     # 可整條網址單獨覆寫，不受 NodeRedConfig.HOST/PORT 影響。

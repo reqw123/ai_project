@@ -46,6 +46,23 @@ class LickResult:
     trap_pts: list = field(default_factory=list)  # [[x,y]*4] or [] when no cat
     nose_xy: list = field(default_factory=list)  # [x, y] or []
 
+    # ── 第一階段 v2 契約欄位（說明書「狀態與原因碼重構」/「統計分母」）──────
+    # 目前與 v1 欄位並存（shadow 模式）：v1 欄位維持原本語意不動，Node-RED
+    # 舊面板照常運作；新面板改讀下列欄位。切換完成後 v1 欄位才會移除。
+    schema_version: str = "1.0"
+    session_id: str = ""
+    source_timestamp: float = None  # 來源媒體時間（秒）；None 代表呼叫端未提供
+    frame_state: str = "NO_CAT"  # 五種互斥狀態之一，見 analysis_context.FrameState
+    reason_code: str = None  # LICK_UNASSIGNED / 無效幀時的原因碼
+    observed_sec: float = 0.0  # 所有幀 dt 總和（含 NO_CAT）
+    valid_observed_sec: float = 0.0  # 畫面裡有貓的 dt 總和
+    no_cat_sec: float = 0.0
+    stgcn_lick_sec: float = 0.0  # 動作辨識輸出的舔毛時間
+    assigned_zone_sec: float = 0.0  # 可定位到部位的舔毛時間
+    unassigned_lick_sec: float = 0.0  # 幾何模組失敗的舔毛時間
+    zone_coverage_ratio: float = 0.0  # assigned ÷ stgcn
+    unknown_rate: float = 0.0  # unassigned ÷ stgcn
+
     def to_payload(self) -> dict:
         """組成可直接 POST 給 Node-RED 的 JSON-safe payload dict。"""
         # 佔比（%）：以 5 區累積時間總和為分母，在 Python 端算好直接送給
@@ -104,4 +121,18 @@ class LickResult:
             # Visualization-only geometry (Node-RED draws this; core never reads it)
             "trap_pts": self.trap_pts,
             "nose_xy": self.nose_xy,
+            # ── 第一階段 v2 契約欄位（與上方 v1 欄位並存）──────────────────
+            "schema_version": self.schema_version,
+            "session_id": self.session_id,
+            "source_timestamp": _jf(self.source_timestamp, 3),
+            "frame_state": self.frame_state,
+            "reason_code": self.reason_code,
+            "observed_sec": round(self.observed_sec, 2),
+            "valid_observed_sec": round(self.valid_observed_sec, 2),
+            "no_cat_sec": round(self.no_cat_sec, 2),
+            "stgcn_lick_sec": round(self.stgcn_lick_sec, 2),
+            "assigned_zone_sec": round(self.assigned_zone_sec, 2),
+            "unassigned_lick_sec": round(self.unassigned_lick_sec, 2),
+            "zone_coverage_ratio": round(self.zone_coverage_ratio, 4),
+            "unknown_rate": round(self.unknown_rate, 4),
         }

@@ -303,6 +303,21 @@ class FrameProcessor:
         self.csv_logger = CSVLogger()
         self.segment_logger = BehaviorSegmentLogger()
         self.frame_idx = 0
+        # ── 舔毛外掛的來源時間契約（說明書第一階段「來源時間規格」）──────
+        # source_fps 每次讀取都會呼叫 cap.get()，這裡在建構時快取一份，供
+        # process() 每幀換算 source_timestamp = frame_idx / source_fps 使用。
+        try:
+            self._plugin_source_fps = float(self.source_fps)
+        except Exception:
+            self._plugin_source_fps = float(STGCNConfig.TARGET_MODEL_FPS)
+        if not self._plugin_source_fps or self._plugin_source_fps <= 1.0:
+            self._plugin_source_fps = float(STGCNConfig.TARGET_MODEL_FPS)
+        self._plugin_video_id = os.path.basename(str(video_path)) or "video"
+        self._plugin_session_id = "S{}_{}".format(
+            time.strftime("%Y%m%d_%H%M%S"), os.getpid()
+        )
+        self._plugin_sessions_started = False
+        self._plugin_sessions_finished = False
         # 關鍵點 EMA：用於 overlay 顯示與異常偵測（不進入 ST-GCN buffer）
         self.kp_ema_alpha = kp_ema_alpha
         self._ema_kpts = None
@@ -433,23 +448,27 @@ class FrameProcessor:
 
             # === Plugin notification (raw keypoints, before any smoothing) ===
             # 舔舐二階段（plugins/lick_stage）只在 ST-GCN 目前已確認判定為 lick
-            # 時才餵入真實關鍵點；否則比照「貓咪不在畫面」的方式傳 (None, None)，
-            # 讓 plugin 內部走既有的 NO_TARGET 重置路徑——這樣 dt_sec 會正確算進
-            # NO_TARGET，而不是把 walk/scratch 等非舔舐期間的時間誤計進某個部位
-            # 的理毛時長，同時也會重置梯形方向平滑等跨幀狀態，避免用陳舊姿態接續。
+            # 時才餵入真實關鍵點；否則只傳契約欄位（kpts=None），讓 plugin 走既有
+            # 的 NOT_LICK / 重置路徑——不把 walk/scratch 等非舔舐期間的時間誤計進
+            # 某個部位的理毛時長，同時重置梯形方向平滑等跨幀狀態。
+            #
+            # 第一階段（說明書「來源時間規格」）：改以來源媒體時間
+            # source_timestamp = frame_idx / source_fps 驅動 plugin 內部計時，
+            # 不再讓 plugin 用 time.monotonic()——確保同一支影片以不同處理速度
+            # 得到一致的累積舔毛時長；並帶上 cat_present / is_lick，讓 plugin 能
+            # 區分「沒有貓」與「有貓但非舔毛」。
             is_lick_behavior = (
                 behavior_id == _LICK_BEHAVIOR_ID
                 and confidence
                 >= BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
             )
-            for _plugin in self._plugins:
-                try:
-                    if is_lick_behavior:
-                        _plugin.update(raw_kpts, kpt_conf)
-                    else:
-                        _plugin.update(None, None)
-                except Exception:
-                    pass
+            self._notify_plugins(
+                raw_kpts,
+                kpt_conf,
+                cat_present=True,
+                is_lick=is_lick_behavior,
+                lick_confidence=float(confidence),
+            )
 
             # === Frame-level EMA：僅用於 overlay 顯示與異常偵測，原始 raw_kpts 進 ST-GCN buffer ===
             # 注意：此 EMA 不影響 STGCN 推論路徑；ST-GCN 輸入的唯一平滑來源是下方 window-level EMA
@@ -609,11 +628,13 @@ class FrameProcessor:
 
         else:
             # === Plugin notification (no cat detected) ===
-            for _plugin in self._plugins:
-                try:
-                    _plugin.update(None, None)
-                except Exception:
-                    pass
+            self._notify_plugins(
+                None,
+                None,
+                cat_present=False,
+                is_lick=False,
+                lick_confidence=0.0,
+            )
 
             # 超過消失容忍門檻，才真的視為貓消失：重置 EMA、推論計數器、keypoints
             # buffer 與上次推論結果。_infer_frame_count 重置確保貓重新出現後推論
@@ -659,6 +680,84 @@ class FrameProcessor:
     def register_plugin(self, plugin) -> None:
         """Register an optional plugin. Called before the first frame."""
         self._plugins.append(plugin)
+
+    def _ensure_plugin_sessions(self) -> None:
+        """首次處理幀時，替支援 Session 生命週期的外掛開場（說明書第一階段
+        「Session 生命週期」）。不支援 start_session 的舊外掛自動略過。"""
+        if self._plugin_sessions_started:
+            return
+        self._plugin_sessions_started = True
+        for _plugin in self._plugins:
+            start = getattr(_plugin, "start_session", None)
+            if start is None:
+                continue
+            try:
+                start(
+                    self._plugin_session_id,
+                    video_id=self._plugin_video_id,
+                    model_version=getattr(STGCNConfig, "MODEL_TAG", "stgcn"),
+                    source_fps=self._plugin_source_fps,
+                )
+            except Exception:
+                pass
+
+    def finish_plugin_sessions(self, end_source_timestamp=None) -> None:
+        """來源播畢 / 管線關閉時呼叫：讓外掛結算最後一段未結束的 bout。"""
+        if self._plugin_sessions_finished:
+            return
+        self._plugin_sessions_finished = True
+        for _plugin in self._plugins:
+            finish = getattr(_plugin, "finish_session", None)
+            if finish is None:
+                continue
+            try:
+                finish(end_source_timestamp)
+            except Exception:
+                pass
+
+    def _current_source_timestamp(self) -> float:
+        """本幀的來源媒體時間（秒），跨處理速度不變（說明書「來源時間規格」）。
+
+        優先用 VideoCapture 的 CAP_PROP_POS_MSEC —— 這是解碼器回報的實際 PTS，
+        即使串流層做了抽幀（frame_step > 1）也正確。取不到（多數即時串流回
+        0 或不支援）才退回 frame_idx / source_fps。
+        """
+        try:
+            pos_ms = float(self.cap.get(cv2.CAP_PROP_POS_MSEC))
+            if pos_ms > 0.0:
+                return pos_ms / 1000.0
+        except Exception:
+            pass
+        return self.frame_idx / self._plugin_source_fps
+
+    def _notify_plugins(self, kpts, kpt_conf, *, cat_present, is_lick, lick_confidence):
+        """以第一階段契約參數通知所有外掛。kpts 只在 is_lick 時才餵真實值，
+        其餘情況傳 None（維持既有「不污染統計」的行為），但 cat_present /
+        is_lick / source_timestamp 一律帶上，讓外掛能區分 NO_CAT 與 NOT_LICK。"""
+        self._ensure_plugin_sessions()
+        source_ts = self._current_source_timestamp()
+        feed_kpts = kpts if is_lick else None
+        feed_conf = kpt_conf if is_lick else None
+        for _plugin in self._plugins:
+            try:
+                _plugin.update(
+                    feed_kpts,
+                    feed_conf,
+                    source_timestamp=source_ts,
+                    frame_idx=self.frame_idx,
+                    cat_present=cat_present,
+                    is_lick=is_lick,
+                    lick_confidence=lick_confidence,
+                    session_id=self._plugin_session_id,
+                )
+            except TypeError:
+                # 舊版外掛只接受 update(kpts, kpt_conf) —— 退回舊呼叫方式
+                try:
+                    _plugin.update(feed_kpts, feed_conf)
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
     def _draw_identity_badge(self, frame, bbox, is_target, match_key, match_dist):
         """身分驗證結果的獨立視覺提示，跟 Visualizer.draw() 完全分開畫。

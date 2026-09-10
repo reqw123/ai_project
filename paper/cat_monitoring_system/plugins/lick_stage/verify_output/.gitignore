@@ -1,0 +1,5 @@
+# verify_lick_stage_m2.py 的輸出，是可重新產生的驗證產物，不進版控
+*.db
+*.db-wal
+*.db-shm
+*.csv

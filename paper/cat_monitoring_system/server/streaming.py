@@ -90,6 +90,16 @@ class SharedFrameStreamer:
                         logging.info(
                             "SharedFrameStreamer: 本機影片檔案已播畢，停止處理（不自動循環）"
                         )
+                        # 讓舔毛外掛結算最後一段未結束的 bout（說明書第一階段
+                        # 「Session 生命週期：finish_session 結算 active bout」）
+                        _finish = getattr(
+                            self.frame_processor, "finish_plugin_sessions", None
+                        )
+                        if _finish is not None:
+                            try:
+                                _finish()
+                            except Exception:
+                                pass
                     continue
 
                 raw_frame_count += 1

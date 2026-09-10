@@ -35,6 +35,18 @@ class ExtZoneResult:
     # Node-RED "部位時長統計" table (mirrors plugins/lick_stage's per-zone fields)
     zone_breakdown: dict = field(default_factory=dict)
 
+    # ── 第一階段 v2 契約欄位（與 v1 欄位並存，見 plugins/lick_stage/models.py）──
+    schema_version: str = "1.0"
+    session_id: str = ""
+    frame_state: str = "NO_CAT"
+    reason_code: str = None
+    observed_sec: float = 0.0
+    valid_observed_sec: float = 0.0
+    no_cat_sec: float = 0.0
+    stgcn_lick_sec: float = 0.0
+    assigned_zone_sec: float = 0.0
+    unassigned_lick_sec: float = 0.0
+
     def to_payload(self) -> dict:
         """組成可直接 POST 給 Node-RED 的 JSON-safe payload dict。"""
         # 佔比（%）與「今日理毛之最」都在 Python 端算好，Node-RED 只負責顯示，
@@ -83,4 +95,20 @@ class ExtZoneResult:
                 }
                 for name, st in self.zone_breakdown.items()
             },
+            # ── 第一階段 v2 契約欄位 ──────────────────────────────────────
+            "schema_version": self.schema_version,
+            "session_id": self.session_id,
+            "frame_state": self.frame_state,
+            "reason_code": self.reason_code,
+            "observed_sec": round(self.observed_sec, 2),
+            "valid_observed_sec": round(self.valid_observed_sec, 2),
+            "no_cat_sec": round(self.no_cat_sec, 2),
+            "stgcn_lick_sec": round(self.stgcn_lick_sec, 2),
+            "assigned_zone_sec": round(self.assigned_zone_sec, 2),
+            "unassigned_lick_sec": round(self.unassigned_lick_sec, 2),
+            "zone_coverage_ratio": (
+                round(self.assigned_zone_sec / self.stgcn_lick_sec, 4)
+                if self.stgcn_lick_sec > 1e-9
+                else 0.0
+            ),
         }
