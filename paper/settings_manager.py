@@ -256,7 +256,8 @@ FIELD_SCHEMA = [
     {
         "json_key": "nodered.global_context_path", "env_var": "CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH",
         "attr": ("NodeRedConfig", "GLOBAL_CONTEXT_PATH"), "tab": "Flask 與 Node-RED",
-        "label": "個體化基線共用儲存路徑（global.json）", "value_type": "file", "validate": "output_path",
+        "label": "Node-RED 個體化基線儲存路徑", "value_type": "file", "validate": "output_path",
+        "hint": "global.json，Python 端不直接讀（即時讀寫者是 Node-RED；Python 基線歷史吃 daily_history.db）",
     },
     # ── 行為追蹤與警報門檻 ────────────────────────────────────────────
     {

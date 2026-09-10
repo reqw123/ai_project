@@ -1,6 +1,8 @@
-"""全域欄位搜尋列：跨 11 個分頁比對欄位「顯示標籤／JSON key／環境變數名稱」，
-停止打字約 300ms 後（debounce）自動跳到第一個符合欄位所在的分頁並高亮，其餘有
-符合結果的分頁在按鈕上顯示符合數量徽章。
+"""全域欄位搜尋列：跨 11 個分頁比對欄位「顯示標籤／JSON key／環境變數名稱／說明文字（hint）」，
+停止打字約 300ms 後（debounce）自動跳到第一個符合欄位所在的分頁並捲動定位。只要
+搜尋框內還有字元，「所有」分頁裡的符合欄位都會一直保持高亮外框（切到哪個分頁就
+看得到那個分頁被框起來的欄位），並在各分頁按鈕上顯示符合數量徽章；清空搜尋框才
+會一次拿掉全部高亮與徽章。
 
 這個 class 只管：搜尋欄本身的 Entry 元件、debounce 計時、比對 FIELD_SCHEMA 算出
 「符合的分頁與數量」＋「第一個符合結果」——實際畫面效果（切換分頁、幫欄位加
@@ -48,7 +50,10 @@ class FieldSearchBar:
 
         matches_by_tab: dict[str, list[str]] = {}
         for field in FIELD_SCHEMA:
-            haystack = f"{field['label']} {field['json_key']} {field.get('env_var') or ''}".lower()
+            haystack = (
+                f"{field['label']} {field['json_key']} "
+                f"{field.get('env_var') or ''} {field.get('hint') or ''}"
+            ).lower()
             if query in haystack:
                 matches_by_tab.setdefault(field["tab"], []).append(field["json_key"])
 
@@ -63,5 +68,10 @@ class FieldSearchBar:
         first_tab = next(tab for tab in TAB_ORDER if tab in matches_by_tab)
         matched_keys = matches_by_tab[first_tab]
         self.window._select_tab(first_tab)
-        self.window._highlight_fields(matched_keys)
+        # 高亮「所有」分頁的符合欄位，不只自動跳過去的第一個分頁——欄位列在各分頁
+        # 建構時就都存在（切分頁只是 pack_forget，widget 不會被銷毀），所以跨分頁
+        # 高亮可以一路保持到搜尋框被清空為止，使用者切到任一有徽章的分頁都看得到
+        # 命中的欄位被框起來，不會「一離開第一個分頁就沒框了」。
+        all_matched_keys = [k for keys in matches_by_tab.values() for k in keys]
+        self.window._highlight_fields(all_matched_keys)
         self.window._scroll_field_into_view(first_tab, matched_keys[0])

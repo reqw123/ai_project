@@ -1,15 +1,15 @@
 [
     {
-        "id": "f374f5debb3b6a37",
+        "id": "951cc683b12ab1e0",
         "type": "tab",
         "label": "CSV AI分析系統",
-        "disabled": true,
+        "disabled": false,
         "info": ""
     },
     {
-        "id": "6a975d0b3d152a4e",
+        "id": "ccb28dca1385af8f",
         "type": "inject",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "開始分析CSV",
         "props": [],
         "repeat": "",
@@ -21,17 +21,17 @@
         "y": 120,
         "wires": [
             [
-                "8b8e07465e2b83b9"
+                "fba584d8599d6a1e"
             ]
         ]
     },
     {
-        "id": "8b8e07465e2b83b9",
+        "id": "fba584d8599d6a1e",
         "type": "file in",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "讀取CSV",
-        "filename": "C:\\a\\noda_data.csv",
-        "filenameType": "str",
+        "filename": "CAT_MONITORING_NODA_DATA_CSV_PATH",
+        "filenameType": "env",
         "format": "utf8",
         "chunk": false,
         "sendError": true,
@@ -41,18 +41,18 @@
         "y": 120,
         "wires": [
             [
-                "e518d91e03d1c250",
-                "77ce08ade825bf7a"
+                "4fcb0d1d32a02e2c",
+                "b9796d369ede29f3"
             ]
         ]
     },
     {
-        "id": "77ce08ade825bf7a",
+        "id": "b9796d369ede29f3",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "建立GPT分析請求",
-        "func": "const apiKey = env.get('OPENAI_API_KEY');\n\nif (!apiKey) {\n    node.error('找不到 OPENAI_API_KEY');\n    return null;\n}\n\nlet csvData = msg.payload;\n\nmsg.url = 'https://api.openai.com/v1/chat/completions';\nmsg.method = 'POST';\n\nmsg.headers = {\n    'Authorization': 'Bearer ' + apiKey,\n    'Content-Type': 'application/json'\n};\n\nmsg.payload = {\n    model: 'gpt-4.1-mini',\n\n    messages: [\n        {\n            role: 'system',\n            content:\n`你是一套貓咪行為健康分析系統的核心分析引擎。\n\n【系統背景】\n\n本資料來自一套以電腦視覺為基礎的貓咪即時監測系統。\n系統使用 YOLO-Pose 擷取貓咪骨架關鍵點（17 個關節），經過 EMA 平滑與時序正規化後，送入 ST-GCN 時空圖卷積神經網路進行行為辨識。\n系統僅統計高信心行為結果，低於信心閾值的結果不納入分析。\n\n【行為定義】\n\n目前辨識以下五種行為：\n\nwalk：\n貓咪正常移動與活動。\n\nlick：\n舔舐行為。\n過度舔舐可能代表：\n壓力、焦慮、皮膚問題、皮膚搔癢或強迫行為。\n\nscratch：\n搔抓行為。\n過度搔抓可能代表：\n皮膚疾病、寄生蟲或局部不適。\n\nshake：\n甩頭行為。\n頻繁甩頭可能代表：\n耳道感染、耳朵異物或神經異常。\n\nstop：\n靜止不動（模型高信心判定為靜止）。\n長時間 stop 可能代表：\n身體不適、精神萎靡或活動力下降。\n\n【行為時間欄位語意說明】\n\nactive_time：五種行為（walk/lick/scratch/shake/stop）的累積時間總和。\nlow_conf_time：YOLO 偵測到貓但 ST-GCN 信心不足的累積時間（無法確定行為，非代表真正休息）；low_conf 則是對應的次數。\nnot_detected_time：YOLO 未偵測到貓的時間（貓不在畫面中，不納入健康分析）。\n\n【CSV 欄位定義】\n\n你收到的是 CSV 原始文字，可能包含多筆紀錄。\n每一列代表一筆統計紀錄，欄位名稱完全如下：\n\ntimestamp：紀錄時間\nwalk：行走次數\nwalk_time：行走時間（秒）\nlick：舔舐次數\nlick_time：舔舐時間（秒）\nscratch：搔抓次數\nscratch_time：搔抓時間（秒）\nshake：甩頭次數\nshake_time：甩頭時間（秒）\nstop：靜止次數\nstop_time：靜止時間（秒）\nactive_time：五種行為累積時間（秒）\nlow_conf：低信心幀次數\nlow_conf_time：低信心幀累積時間（秒，非代表真正休息）\nnot_detected_time：貓不在畫面的時間（秒）\nactivity_score：活動力分數（0–100）\n\n【分析原則】\n\n1. 請先解析 CSV 內容，逐列讀出欄位數值。\n2. 若有多筆資料，請優先以最新一列作為當前狀態，並可同時參考整體趨勢。\n3. 不可使用 total_walk、total_lick、avg_health_score 這類不存在於 CSV 的欄位名稱。\n4. 必須直接引用 CSV 中實際存在的數值，不可捏造不存在的數據。\n5. 若某欄位缺值，請明確說明缺值，不要自行補成 0。\n\n【分析項目】\n\n一、異常舔舐評估\n請分析 lick 與 lick_time。\n若 lick_time > 10 秒，請評估異常程度，並說明可能代表：\n壓力、焦慮、皮膚過敏、皮膚搔癢或強迫舔舐行為。\n\n二、活動力與靜止評估\n請分析 active_time、stop_time、walk_time、activity_score。\n請計算 stop_ratio = stop_time / active_time；\n若 stop_ratio > 0.5，請判斷是否有長時間靜止或活動力不足的情況。\n注意：low_conf_time 代表信心不足幀，not_detected_time 代表貓不在畫面，兩者均不應視為「休息」。\n\n三、異常甩頭評估\n請分析 shake 與 shake_time。\n若 shake > 10 次，請說明可能代表耳道感染、耳朵異物、神經異常或不適反應。\n\n四、整體健康風險評估\n本系統的 CSV 不含現成的健康分數欄位，請你依上述各項分析結果，綜合 activity_score、lick_time、scratch_time、shake、stop_ratio、low_conf_time 自行判斷整體風險等級（低／中／高），並說明理由。\n若多項異常同時偏高（例如舔舐／搔抓／甩頭同時超標，或活動力偏低合併靜止佔比過高），應提高風險等級；僅單一輕微異常則列為低風險。\n\n【輸出格式要求】\n\n請使用繁體中文。\n每個分析項目需有明確標題。\n必須引用 CSV 內實際數值。\n不可捏造不存在的數據。\n語氣需專業但容易理解。\n請在最後提供：\n健康總結、風險說明、飼主建議。\n`\n        },\n        {\n            role: 'user',\n            content:\n`以下是貓咪本次監測的統計 CSV 資料，請根據系統定義進行分析：\n\n${csvData}`\n        }\n    ],\n\n    temperature: 0.2,\n    max_tokens: 1500\n};\n\nreturn msg;",
-        "outputs": 1,
+        "func": "let csvData = msg.payload;\n\n// ── 防呆：file in 的 sendError 會把錯誤物件送進來；也可能是尚無資料的空檔 ──\nif (typeof csvData !== 'string') {\n    csvData = (csvData && Buffer.isBuffer(csvData)) ? csvData.toString('utf8') : '';\n}\ncsvData = csvData.replace(/^\\uFEFF/, '').trim();\nlet _lines = csvData.split(/\\r?\\n/).filter(function (l) { return l.trim() !== ''; });\n\n// 至少要有「標題列 + 1 筆資料」才值得送 GPT\nif (_lines.length < 2) {\n    let requester = flow.get('health_requester');\n    flow.set('health_requester', null);\n    node.warn('noda_data.csv 無資料列，略過 GPT 分析');\n    if (requester) {\n        let token = global.get('FB_TOKEN');\n        return [null, {\n            headers: { 'Content-Type': 'application/json' },\n            url: 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token,\n            payload: {\n                recipient: { id: requester },\n                message: { text: '\\u26A0\\uFE0F 目前尚無可分析的資料。\\n請確認「貓咪主控」流程正在執行，且系統已運行 5 分鐘以上（CSV 每 5 分鐘寫入一列）。' }\n            }\n        }];\n    }\n    return null;\n}\n\n// ── 只取最後 N 列（+ 標題），避免整份 CSV 塞爆 token / 費用 ──\nconst MAX_ROWS = 288;                 // 近一天：貓咪主控每 5 分鐘寫一列\nlet _header = _lines[0];\nlet _rows = _lines.slice(1);\nif (_rows.length > MAX_ROWS) _rows = _rows.slice(-MAX_ROWS);\ncsvData = [_header].concat(_rows).join('\\n');\n\n// ── 組 messages（system + user）──\nlet _messages = [\n    { role: 'system', content: `你是一套貓咪行為健康分析系統的核心分析引擎。\n\n【系統背景】\n\n本資料來自一套以電腦視覺為基礎的貓咪即時監測系統。\n系統使用 YOLO-Pose 擷取貓咪骨架關鍵點（17 個關節），經過 EMA 平滑與時序正規化後，送入 ST-GCN 時空圖卷積神經網路進行行為辨識。\n系統僅統計高信心行為結果，低於信心閾值的結果不納入分析。\n\n【行為定義】\n\n目前辨識以下五種行為：\n\nwalk：\n貓咪正常移動與活動。\n\nlick：\n舔舐行為。\n過度舔舐可能代表：\n壓力、焦慮、皮膚問題、皮膚搔癢或強迫行為。\n\nscratch：\n搔抓行為。\n過度搔抓可能代表：\n皮膚疾病、寄生蟲或局部不適。\n\nshake：\n甩頭行為。\n頻繁甩頭可能代表：\n耳道感染、耳朵異物或神經異常。\n\nstop：\n靜止不動（模型高信心判定為靜止）。\n長時間 stop 可能代表：\n身體不適、精神萎靡或活動力下降。\n\n【行為時間欄位語意說明】\n\nactive_time：五種行為（walk/lick/scratch/shake/stop）的累積時間總和。\nlow_conf_time：YOLO 偵測到貓但 ST-GCN 信心不足的累積時間（無法確定行為，非代表真正休息）；low_conf 則是對應的次數。\nnot_detected_time：YOLO 未偵測到貓的時間（貓不在畫面中，不納入健康分析）。\n\n【CSV 欄位定義】\n\n你收到的是 CSV 原始文字，可能包含多筆紀錄。\n每一列代表一筆統計紀錄，欄位名稱完全如下：\n\ntimestamp：紀錄時間\nwalk：行走次數\nwalk_time：行走時間（秒）\nlick：舔舐次數\nlick_time：舔舐時間（秒）\nscratch：搔抓次數\nscratch_time：搔抓時間（秒）\nshake：甩頭次數\nshake_time：甩頭時間（秒）\nstop：靜止次數\nstop_time：靜止時間（秒）\nactive_time：五種行為累積時間（秒）\nlow_conf：低信心幀次數\nlow_conf_time：低信心幀累積時間（秒，非代表真正休息）\nnot_detected_time：貓不在畫面的時間（秒）\nactivity_score：活動力分數（0–100）\n\n【分析原則】\n\n1. 請先解析 CSV 內容，逐列讀出欄位數值。\n2. 若有多筆資料，請優先以最新一列作為當前狀態，並可同時參考整體趨勢。\n3. 不可使用 total_walk、total_lick、avg_health_score 這類不存在於 CSV 的欄位名稱。\n4. 必須直接引用 CSV 中實際存在的數值，不可捏造不存在的數據。\n5. 若某欄位缺值，請明確說明缺值，不要自行補成 0。\n\n【分析項目】\n\n一、異常舔舐評估\n請分析 lick 與 lick_time。\n若 lick_time > 10 秒，請評估異常程度，並說明可能代表：\n壓力、焦慮、皮膚過敏、皮膚搔癢或強迫舔舐行為。\n\n二、活動力與靜止評估\n請分析 active_time、stop_time、walk_time、activity_score。\n請計算 stop_ratio = stop_time / active_time；\n若 stop_ratio > 0.5，請判斷是否有長時間靜止或活動力不足的情況。\n注意：low_conf_time 代表信心不足幀，not_detected_time 代表貓不在畫面，兩者均不應視為「休息」。\n\n三、異常甩頭評估\n請分析 shake 與 shake_time。\n若 shake > 10 次，請說明可能代表耳道感染、耳朵異物、神經異常或不適反應。\n\n四、整體健康風險評估\n本系統的 CSV 不含現成的健康分數欄位，請你依上述各項分析結果，綜合 activity_score、lick_time、scratch_time、shake、stop_ratio、low_conf_time 自行判斷整體風險等級（低／中／高），並說明理由。\n若多項異常同時偏高（例如舔舐／搔抓／甩頭同時超標，或活動力偏低合併靜止佔比過高），應提高風險等級；僅單一輕微異常則列為低風險。\n\n【輸出格式要求】\n\n請使用繁體中文。\n每個分析項目需有明確標題。\n必須引用 CSV 內實際數值。\n不可捏造不存在的數據。\n語氣需專業但容易理解。\n請在最後提供：\n健康總結、風險說明、飼主建議。\n` },\n    { role: 'user', content: `以下是貓咪本次監測的統計 CSV 資料，請根據系統定義進行分析：\n\n${csvData}` }\n];\n\n// ── 引擎選擇：OpenAI 或 Ollama（Dashboard 按鈕決定，記住供「哈基米」沿用）──\nlet provider    = msg.llm_provider || flow.get('llm_provider') || 'openai';\nlet ollamaBase  = (msg.ollama_base || flow.get('ollama_base') || 'http://127.0.0.1:11434').replace(/\\/+$/, '');\nlet ollamaModel = msg.ollama_model || flow.get('ollama_model') || '';\nflow.set('llm_provider', provider);\nif (msg.ollama_base)  flow.set('ollama_base', ollamaBase);\nif (msg.ollama_model) flow.set('ollama_model', ollamaModel);\n\nfunction _fbErr(txt) {\n    let requester = flow.get('health_requester');\n    flow.set('health_requester', null);\n    node.warn(txt);\n    if (!requester) return null;\n    let token = global.get('FB_TOKEN');\n    return [null, {\n        headers: { 'Content-Type': 'application/json' },\n        url: 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token,\n        payload: { recipient: { id: requester }, message: { text: txt } }\n    }];\n}\n\nif (provider === 'ollama') {\n    if (!ollamaModel) return _fbErr('\\u26a0\\ufe0f \\u5c1a\\u672a\\u9078\\u64c7 Ollama \\u6a21\\u578b\\uff0c\\u8acb\\u5728 Dashboard \\u5148\\u300c\\u6e2c\\u8a66\\u9023\\u7dda\\u300d\\u4e26\\u5f9e\\u4e0b\\u62c9\\u9078\\u55ae\\u6311\\u4e00\\u500b\\u6a21\\u578b\\u3002');\n    if (!/^https?:\\/\\//.test(ollamaBase)) ollamaBase = 'http://' + ollamaBase;\n    msg.url = ollamaBase + '/v1/chat/completions';\n    msg.method = 'POST';\n    msg.headers = { 'Content-Type': 'application/json' };\n    msg.payload = { model: ollamaModel, messages: _messages, temperature: 0.2, max_tokens: 1500, stream: false };\n    msg.requestTimeout = 300000;   // \\u672c\\u5730\\u6a21\\u578b\\u53ef\\u80fd\\u8981\\u6578\\u5206\\u9418\n    msg._llm = { provider: 'ollama', model: ollamaModel };\n} else {\n    let apiKey = env.get('OPENAI_API_KEY');\n    if (!apiKey) return _fbErr('\\u26a0\\ufe0f \\u672a\\u8a2d\\u5b9a OPENAI_API_KEY\\uff0c\\u7121\\u6cd5\\u4f7f\\u7528 OpenAI\\u3002\\u8acb\\u6539\\u7528 Ollama \\u6216\\u8a2d\\u5b9a\\u91d1\\u9470\\u3002');\n    let openaiModel = flow.get('openai_model') || 'gpt-4.1-mini';\n    msg.url = 'https://api.openai.com/v1/chat/completions';\n    msg.method = 'POST';\n    msg.headers = { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' };\n    msg.payload = { model: openaiModel, messages: _messages, temperature: 0.2, max_tokens: 1500 };\n    msg._llm = { provider: 'openai', model: openaiModel };\n}\n\nreturn [msg, null];\n",
+        "outputs": 2,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -62,15 +62,18 @@
         "y": 120,
         "wires": [
             [
-                "759baac833aa185a"
+                "02f54504fa53e19a"
+            ],
+            [
+                "c587a0476e4a955a"
             ]
         ]
     },
     {
-        "id": "759baac833aa185a",
+        "id": "02f54504fa53e19a",
         "type": "http request",
-        "z": "f374f5debb3b6a37",
-        "name": "OpenAI GPT分析",
+        "z": "951cc683b12ab1e0",
+        "name": "LLM 分析",
         "method": "use",
         "ret": "obj",
         "paytoqs": "ignore",
@@ -86,16 +89,16 @@
         "y": 120,
         "wires": [
             [
-                "63a3739f1565744c"
+                "a9f986dd9fbfbd7e"
             ]
         ]
     },
     {
-        "id": "63a3739f1565744c",
+        "id": "a9f986dd9fbfbd7e",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "解析GPT結果",
-        "func": "let result = '';\n\nif (\nmsg.payload &&\nmsg.payload.choices &&\nmsg.payload.choices[0] &&\nmsg.payload.choices[0].message\n) {\n\n\nresult =\n    msg.payload.choices[0].message.content;\n\n\n}\n\n// =======================\n// token usage\n// =======================\n\nlet usage =\nmsg.payload.usage || {};\n\nlet prompt_tokens =\nusage.prompt_tokens || 0;\n\nlet completion_tokens =\nusage.completion_tokens || 0;\n\nlet total_tokens =\nusage.total_tokens || 0;\n\n// =======================\n// log\n// =======================\n\nnode.warn({\n\n\nprompt_tokens,\n\ncompletion_tokens,\n\ntotal_tokens\n\n\n});\n\n// =======================\n// 成本估算（GPT-4.1-mini）\n// =======================\n\nlet inputCost =\nprompt_tokens * 0.4 / 1000000;\n\nlet outputCost =\ncompletion_tokens * 1.6 / 1000000;\n\nlet totalCost =\ninputCost + outputCost;\n\nnode.warn({\n\n\nusd_cost:\n    totalCost.toFixed(6)\n\n\n});\n\n// =======================\n// payload\n// =======================\n\nmsg.payload = {\n\nresult,\n\nusage: {\n\n    prompt_tokens,\n\n    completion_tokens,\n\n    total_tokens,\n\n    usd_cost:\n        totalCost.toFixed(6)\n}\n\n\n};\n\n// =======================\n// Messenger\n// =======================\n\nlet requester =\nflow.get('health_requester');\n\nif (requester) {\n\nflow.set(\n    'health_requester',\n    null\n);\n\nlet text =\n    result.length > 1900\n    ? result.substring(0,1900)\n      + '\\n\\n⋯（完整報告請查看 Dashboard）'\n    : result;\n\nlet token =\n    global.get('FB_TOKEN');\n\nlet fbMsg =\n    RED.util.cloneMessage(msg);\n\nfbMsg.headers = {\n    'Content-Type':\n        'application/json'\n};\n\nfbMsg.url =\n    'https://graph.facebook.com/v23.0/me/messages?access_token='\n    + token;\n\nfbMsg.payload = {\n\n    recipient: {\n        id: requester\n    },\n\n    message: {\n\n        text:\n            '🐱 貓咪健康分析完成！\\n\\n'\n            + text\n    }\n};\n\nnode.send([msg, fbMsg]);\n\nreturn null;\n\n\n}\n\nreturn [msg, null];\n",
+        "func": "let result = '';\nif (msg.payload && msg.payload.choices && msg.payload.choices[0] && msg.payload.choices[0].message) {\n    result = msg.payload.choices[0].message.content || '';\n}\n\nlet engine = msg._llm || { provider: 'openai', model: flow.get('openai_model') || 'gpt-4.1-mini' };\nlet engineLabel = engine.provider + (engine.model ? ' · ' + engine.model : '');\nlet isOllama = engine.provider === 'ollama';\n\n// ── 無有效回應（連線失敗 / senderr）──\nif (!result || !String(result).trim()) {\n    let requester = flow.get('health_requester');\n    flow.set('health_requester', null);\n    let detail = (typeof msg.payload === 'string') ? msg.payload.slice(0, 160)\n               : (msg.statusCode ? 'HTTP ' + msg.statusCode : '無回應');\n    node.warn('LLM 無有效回應 (' + engineLabel + '): ' + detail);\n    if (requester) {\n        let token = global.get('FB_TOKEN');\n        return [null, {\n            headers: { 'Content-Type': 'application/json' },\n            url: 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token,\n            payload: { recipient: { id: requester }, message: { text: '⚠️ 分析引擎沒有回應（' + engineLabel + '）\\n' + detail } }\n        }];\n    }\n    return null;\n}\n\nlet usage = (msg.payload && msg.payload.usage) || {};\nlet prompt_tokens = usage.prompt_tokens || 0;\nlet completion_tokens = usage.completion_tokens || 0;\nlet total_tokens = usage.total_tokens || (prompt_tokens + completion_tokens);\n\n// 成本：Ollama 本地推論 = 0；OpenAI 以 gpt-4.1-mini 價目估算\nlet totalCost = isOllama ? 0 : (prompt_tokens * 0.4 / 1000000 + completion_tokens * 1.6 / 1000000);\nnode.warn({ engine: engineLabel, prompt_tokens, completion_tokens, total_tokens, usd_cost: totalCost.toFixed(6) });\n\nmsg.payload = {\n    result,\n    engine: engineLabel,\n    usage: { prompt_tokens, completion_tokens, total_tokens, usd_cost: totalCost.toFixed(6) }\n};\n\n// ── Messenger 回覆（若由「哈基米」觸發）──\nlet requester = flow.get('health_requester');\nif (requester) {\n    flow.set('health_requester', null);\n    let text = result.length > 1900 ? result.substring(0, 1900) + '\\n\\n⋯（完整報告請查看 Dashboard）' : result;\n    let token = global.get('FB_TOKEN');\n    let fbMsg = RED.util.cloneMessage(msg);\n    fbMsg.headers = { 'Content-Type': 'application/json' };\n    fbMsg.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\n    fbMsg.payload = { recipient: { id: requester }, message: { text: '🐱 貓咪健康分析完成！（' + engineLabel + '）\\n\\n' + text } };\n    node.send([msg, fbMsg]);\n    return null;\n}\nreturn [msg, null];\n",
         "outputs": 2,
         "timeout": "",
         "noerr": 0,
@@ -106,18 +109,18 @@
         "y": 120,
         "wires": [
             [
-                "a1626f348b911c65",
-                "bf79b638e3d01d61"
+                "83cc7358cea8c83a",
+                "1d8c1de854f8f549"
             ],
             [
-                "df2b0efdd5d80d32"
+                "c587a0476e4a955a"
             ]
         ]
     },
     {
-        "id": "a1626f348b911c65",
+        "id": "83cc7358cea8c83a",
         "type": "debug",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "GPT分析結果",
         "active": true,
         "tosidebar": true,
@@ -132,11 +135,11 @@
         "wires": []
     },
     {
-        "id": "5cfdf0e09b325628",
+        "id": "af6660093ce1e40b",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "儲存Token",
-        "func": "global.set('FB_TOKEN','EAGATtlRnuOkBRhJ3tqpjyg3nsNITsTmzXdbCv5FDKTgLnkxykmhxHnifbZCHPCtB008PBW5cODDjg0pgGw59d4qVg2zdNQKikj9l02HZAmUKZBGT2wqKBSKbHmrml8JmniEmFdlWoilMSxbo6SqXZB8VsGkablzgDGYh6wotyRWHDAAAq2WBiDMes9krbXO9s4lrogZDZD');\nreturn msg;",
+        "func": "global.set('FB_TOKEN','EAGATtlRnuOkBRhJ3tqpjyg3nsNITsTmzXdbCv5FDKTgLnkxykmhxHnifbZCHPCtB008PBW5cODDjg0pgGw59d4qVg2zdNQKikj9l02HZAmUKZBGT2wqKBSKbHmrml8JmniEmFdlWoilMSxbo6SqXZB8VsGkablzgDGYh6wotyRWHDAAAq2WBiDMes9krbXO9s4lrogZDZD');\n\n// ── LLM 引擎預設值（要改主機/模型改這裡；Dashboard 的選擇會覆蓋並記住）──\nif (flow.get('llm_provider') === undefined) flow.set('llm_provider', 'openai');   // 'openai' | 'ollama'\nif (flow.get('ollama_base')  === undefined) flow.set('ollama_base',  'http://127.0.0.1:11434');\nif (flow.get('ollama_model') === undefined) flow.set('ollama_model', '');          // 空 = 尚未選\nif (flow.get('openai_model') === undefined) flow.set('openai_model', 'gpt-4.1-mini');\n\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -150,9 +153,9 @@
         ]
     },
     {
-        "id": "ebee56ab5fa97aaf",
+        "id": "1bf62cd163bb0dc0",
         "type": "http in",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "Webhook驗證",
         "url": "/messengerwebhook",
         "method": "get",
@@ -163,14 +166,14 @@
         "y": 720,
         "wires": [
             [
-                "4d614420cf236965"
+                "ee012298e8cde792"
             ]
         ]
     },
     {
-        "id": "4d614420cf236965",
+        "id": "ee012298e8cde792",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "解析訊息",
         "func": "let VERIFY_TOKEN = 'cat_ai_system';\n\nlet mode = msg.req.query['hub.mode'];\nlet token = msg.req.query['hub.verify_token'];\nlet challenge = msg.req.query['hub.challenge'];\n\nif(mode && token){\n\n    if(mode === 'subscribe' && token === VERIFY_TOKEN){\n\n        msg.payload = challenge;\n\n        return [msg,null];\n    }\n}\n\nmsg.statusCode = 403;\nmsg.payload = 'Forbidden';\n\nreturn [null,msg];",
         "outputs": 2,
@@ -183,17 +186,17 @@
         "y": 720,
         "wires": [
             [
-                "b333e61034a23558"
+                "d7f71c40560499eb"
             ],
             [
-                "6594695ed24b1cc6"
+                "2f5f20dd3e4a0692"
             ]
         ]
     },
     {
-        "id": "b333e61034a23558",
+        "id": "d7f71c40560499eb",
         "type": "http response",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "連線成功",
         "statusCode": "",
         "headers": {},
@@ -202,9 +205,9 @@
         "wires": []
     },
     {
-        "id": "6594695ed24b1cc6",
+        "id": "2f5f20dd3e4a0692",
         "type": "http response",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "連線失敗",
         "statusCode": "",
         "headers": {},
@@ -213,9 +216,9 @@
         "wires": []
     },
     {
-        "id": "0c762575707fa26c",
+        "id": "ddc82d6e1cdc7484",
         "type": "http in",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "Messenger接收入口",
         "url": "/messengerwebhook",
         "method": "post",
@@ -226,15 +229,15 @@
         "y": 460,
         "wires": [
             [
-                "afc51cf5008c073d",
-                "a7ab1fe987e63b26"
+                "52e19c94aec634c7",
+                "83ac51bdc2172524"
             ]
         ]
     },
     {
-        "id": "afc51cf5008c073d",
+        "id": "52e19c94aec634c7",
         "type": "http response",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "",
         "statusCode": "200",
         "headers": {},
@@ -243,9 +246,9 @@
         "wires": []
     },
     {
-        "id": "a7ab1fe987e63b26",
+        "id": "83ac51bdc2172524",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "解析Messenger訊息",
         "func": "let entry = msg.payload && msg.payload.entry && msg.payload.entry[0];\nlet event = entry && entry.messaging && entry.messaging[0];\n\n// 過濾：結構不完整（delivery/read receipt）\nif (!event || !event.message) { return null; }\n\n// 過濾：echo 事件（bot 自己送出的訊息被 FB 回送）\nif (event.message.is_echo) { return null; }\n\n// 過濾：沒有文字的訊息（貼圖、圖片等）\nlet text = event.message.text || '';\nif (!text) { return null; }\n\nmsg.sender = event.sender.id;\nmsg.text = text;\n\nreturn msg;",
         "outputs": 1,
@@ -258,14 +261,14 @@
         "y": 460,
         "wires": [
             [
-                "f86d7504340b1255"
+                "6b2db22dd5475c4f"
             ]
         ]
     },
     {
-        "id": "f86d7504340b1255",
+        "id": "6b2db22dd5475c4f",
         "type": "switch",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "指令分流",
         "property": "text",
         "propertyType": "msg",
@@ -301,26 +304,26 @@
         "y": 460,
         "wires": [
             [
-                "e8832219f1f473d4"
+                "9741032216de60c1"
             ],
             [
-                "cb2a7bb26986a5fa"
+                "c7af3a05d198e91a"
             ],
             [
-                "fa2b3c4d5e6f7081"
+                "9e7558d38e664025"
             ],
             [],
             [
-                "a3ac7399d9ac91e8"
+                "ce13218afff742e1"
             ]
         ]
     },
     {
-        "id": "e8832219f1f473d4",
+        "id": "9741032216de60c1",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "健康報告",
-        "func": "flow.set('health_requester', msg.sender);\nlet token = global.get('FB_TOKEN');\nlet msg1 = RED.util.cloneMessage(msg);\nmsg1.headers = {'Content-Type':'application/json'};\nmsg1.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\nmsg1.payload = {recipient:{id:msg.sender},message:{text:'🔍 正在分析貓咪健康資料，請稍候...'}};\nlet msg2 = {payload:null};\nreturn [msg1, msg2];",
+        "func": "// ── 60 秒冷卻：避免短時間重複觸發 GPT 分析（費用）──\nlet _now = Date.now();\nlet _last = flow.get('health_last_run') || 0;\nif (_now - _last < 60000) {\n    let _wait = Math.ceil((60000 - (_now - _last)) / 1000);\n    let _token = global.get('FB_TOKEN');\n    return [{\n        headers: { 'Content-Type': 'application/json' },\n        url: 'https://graph.facebook.com/v23.0/me/messages?access_token=' + _token,\n        payload: { recipient: { id: msg.sender }, message: { text: '⏳ 剛剛才分析過，請 ' + _wait + ' 秒後再試。' } }\n    }, null];\n}\nflow.set('health_last_run', _now);\n\nflow.set('health_requester', msg.sender);\nlet token = global.get('FB_TOKEN');\nlet msg1 = RED.util.cloneMessage(msg);\nmsg1.headers = {'Content-Type':'application/json'};\nmsg1.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\nmsg1.payload = {recipient:{id:msg.sender},message:{text:'🔍 正在分析貓咪健康資料，請稍候...'}};\nlet msg2 = {payload:null};\nreturn [msg1, msg2];",
         "outputs": 2,
         "timeout": "",
         "noerr": 0,
@@ -331,17 +334,17 @@
         "y": 400,
         "wires": [
             [
-                "df2b0efdd5d80d32"
+                "c587a0476e4a955a"
             ],
             [
-                "8b8e07465e2b83b9"
+                "fba584d8599d6a1e"
             ]
         ]
     },
     {
-        "id": "cb2a7bb26986a5fa",
+        "id": "c7af3a05d198e91a",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "攝影機畫面",
         "func": "let ip = global.get('python_ip') || '127.0.0.1';\nmsg.url = 'http://' + ip + ':5000/video_clip';\nmsg.method = 'GET';\nmsg.headers = {};\nmsg._sender = msg.sender;\nreturn msg;",
         "outputs": 1,
@@ -354,14 +357,14 @@
         "y": 460,
         "wires": [
             [
-                "172f9563e0182bd7"
+                "2d1a64da89ee46a1"
             ]
         ]
     },
     {
-        "id": "a3ac7399d9ac91e8",
+        "id": "ce13218afff742e1",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "一般回復",
         "func": "let token = global.get('FB_TOKEN');\n\nmsg.headers = {\n    'Content-Type':'application/json'\n};\n\nmsg.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\n\nmsg.payload = {\n\n    recipient:{\n        id:msg.sender\n    },\n\n    message:{\n\n        text:'🤖 AI 系統已收到：' + msg.text\n    }\n};\n\nreturn msg;",
         "outputs": 1,
@@ -374,14 +377,14 @@
         "y": 520,
         "wires": [
             [
-                "df2b0efdd5d80d32"
+                "c587a0476e4a955a"
             ]
         ]
     },
     {
-        "id": "df2b0efdd5d80d32",
+        "id": "c587a0476e4a955a",
         "type": "http request",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "",
         "method": "POST",
         "ret": "txt",
@@ -398,14 +401,14 @@
         "y": 420,
         "wires": [
             [
-                "24f5b8a954191ea9"
+                "c4cdf452bf1124ea"
             ]
         ]
     },
     {
-        "id": "24f5b8a954191ea9",
+        "id": "c4cdf452bf1124ea",
         "type": "debug",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "API回應",
         "active": true,
         "tosidebar": true,
@@ -420,9 +423,9 @@
         "wires": []
     },
     {
-        "id": "e907c8fc73e65892",
+        "id": "4ba1ec1ecbde7f2c",
         "type": "inject",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "異常警報",
         "props": [
             {
@@ -440,14 +443,14 @@
         "y": 640,
         "wires": [
             [
-                "a68cba6d93844814"
+                "d8aa3e3b2e8b32a6"
             ]
         ]
     },
     {
-        "id": "a68cba6d93844814",
+        "id": "d8aa3e3b2e8b32a6",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "主動推播",
         "func": "let token = global.get('FB_TOKEN');\n\nmsg.headers = {\n    'Content-Type':'application/json'\n};\n\nmsg.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\n\nmsg.payload = {\n\n    recipient:{\n        id:'27496669406603723'\n    },\n\n    message:{\n\n        text:`${msg.payload}\\n\\n🕒 ${new Date().toLocaleString('zh-TW')}`\n    }\n};\n\nreturn msg;",
         "outputs": 1,
@@ -460,14 +463,14 @@
         "y": 640,
         "wires": [
             [
-                "df2b0efdd5d80d32"
+                "c587a0476e4a955a"
             ]
         ]
     },
     {
-        "id": "04fddfdf80cce5d4",
+        "id": "d2857d12a433843f",
         "type": "http in",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "UI觸發健康分析",
         "url": "/ui-trigger-health",
         "method": "post",
@@ -478,16 +481,16 @@
         "y": 280,
         "wires": [
             [
-                "241a54c0df7cc944"
+                "20e62d890f4fc1ba"
             ]
         ]
     },
     {
-        "id": "241a54c0df7cc944",
+        "id": "20e62d890f4fc1ba",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "UI觸發-回應+啟動CSV",
-        "func": "let resp = RED.util.cloneMessage(msg);\nresp.statusCode = 200;\nresp.payload = 'ok';\nlet trigger = { payload: null };\nreturn [resp, trigger];",
+        "func": "let body = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};\nlet resp = RED.util.cloneMessage(msg);\nresp.statusCode = 200;\nresp.payload = 'ok';\nflow.set('health_requester', null);   // UI 觸發：清掉殘留的 Messenger sender\nlet trigger = {\n    payload: null,\n    llm_provider: body.provider || null,\n    ollama_base:  body.ollama_base || null,\n    ollama_model: body.ollama_model || null\n};\nreturn [resp, trigger];",
         "outputs": 2,
         "timeout": "",
         "noerr": 0,
@@ -498,17 +501,17 @@
         "y": 280,
         "wires": [
             [
-                "7b5dba9eec9f5b39"
+                "f8a3fd5a17dbad8e"
             ],
             [
-                "8b8e07465e2b83b9"
+                "fba584d8599d6a1e"
             ]
         ]
     },
     {
-        "id": "7b5dba9eec9f5b39",
+        "id": "f8a3fd5a17dbad8e",
         "type": "http response",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "",
         "statusCode": "200",
         "headers": {},
@@ -517,9 +520,9 @@
         "wires": []
     },
     {
-        "id": "e518d91e03d1c250",
+        "id": "4fcb0d1d32a02e2c",
         "type": "debug",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "GPT分析結果",
         "active": true,
         "tosidebar": true,
@@ -534,9 +537,9 @@
         "wires": []
     },
     {
-        "id": "172f9563e0182bd7",
+        "id": "2d1a64da89ee46a1",
         "type": "http request",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "取得截圖",
         "method": "use",
         "ret": "obj",
@@ -553,14 +556,14 @@
         "y": 520,
         "wires": [
             [
-                "b72e11992f8fecb4"
+                "8ed9db3985c38057"
             ]
         ]
     },
     {
-        "id": "b72e11992f8fecb4",
+        "id": "8ed9db3985c38057",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "處理截圖",
         "func": "let data = msg.payload;\nlet sender = msg._sender;\nlet token = global.get('FB_TOKEN');\n\n// Flask 失敗或 buffer 空 → 通知使用者\nif (!data || data.error || !data.path) {\n    node.warn('video_clip failed: ' + JSON.stringify(data));\n    if (sender) {\n        let errMsg = RED.util.cloneMessage(msg);\n        errMsg.headers = { 'Content-Type': 'application/json' };\n        errMsg.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\n        errMsg.payload = {\n            recipient: { id: sender },\n            message: { text: '⚠️ 錄影失敗。\\n可能原因：系統尚未啟動、buffer 尚未累積（請等 5 秒後再試），或 Flask 未執行。' }\n        };\n        node.send([null, null, errMsg]);\n    }\n    return null;\n}\n\nlet ts       = data.ts       || new Date().toLocaleString('zh-TW');\nlet path     = data.path     || '';\nlet duration = data.duration || 0;\nlet frames   = data.frames   || 0;\n\n// out1: null（Flask 已儲存，不需 Node-RED 再寫檔）\nlet msg1 = null;\n\n// out2: Dashboard 顯示（含縮圖）\nlet msg2 = RED.util.cloneMessage(msg);\nmsg2.payload = { ts, path, duration, frames, thumbnail: data.thumbnail || '' };\n\n// out3: Messenger 通知\nlet msg3 = null;\nif (sender) {\n    msg3 = RED.util.cloneMessage(msg);\n    msg3.headers = { 'Content-Type': 'application/json' };\n    msg3.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\n    msg3.payload = {\n        recipient: { id: sender },\n        message: { text: '🎥 錄影完成！\\n🕒 ' + ts + '\\n⏱ 時長：' + duration + ' 秒（' + frames + ' 幀）\\n📁 ' + path }\n    };\n}\n\nreturn [msg1, msg2, msg3];",
         "outputs": 3,
@@ -572,38 +575,19 @@
         "x": 1160,
         "y": 520,
         "wires": [
+            [],
             [
-                "b20f9895897096b2"
+                "ca272234daf5e6cd"
             ],
             [
-                "382cd1134655493f"
-            ],
-            [
-                "df2b0efdd5d80d32"
+                "c587a0476e4a955a"
             ]
         ]
     },
     {
-        "id": "b20f9895897096b2",
-        "type": "file",
-        "z": "f374f5debb3b6a37",
-        "name": "儲存截圖",
-        "filename": "filename",
-        "filenameType": "msg",
-        "appendNewline": false,
-        "createDir": true,
-        "overwriteFile": "true",
-        "encoding": "none",
-        "x": 1360,
-        "y": 420,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "fa2b3c4d5e6f7081",
+        "id": "9e7558d38e664025",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "/help",
         "func": "let token = global.get('FB_TOKEN');\n\n// ── 指令清單 ──────────────────────────────\nlet cmdList = [\n  '🐱 貓咪監測系統 · 可用指令',\n  '─────────────────',\n  '哈基米　→ AI 健康分析報告（需 10–20 秒）',\n  '/camera → 錄製最近 5 秒行為影片',\n  '/help　 → 顯示此說明'\n].join('\\n');\n\n// ── 公告欄（自訂內容） ──────────────────────\nlet bulletin = [\n  '',\n  '📌 公告欄 · 致即將畢業的你',\n  '─────────────────',\n  '你從零蓋了一套端對端系統：',\n  'YOLO-Pose → ST-GCN → Node-RED → GPT',\n  '連貓咪都受到 AI 守護，厲害了。',\n  '',\n  '🔔 畢業前最後叮嚀',\n  '□ 消融實驗數字整理進論文了嗎？',\n  '□ Dashboard 截圖放投影片了嗎？',\n  '□ 教授 feedback 都回應了嗎？',\n  '□ 論文初稿交前記得備份三份！',\n  '',\n  '終點就在前面了，',\n  '論文寫完的那天，貓咪陪你慶祝 🎓'\n].join('\\n');\n\nlet fullText = cmdList + bulletin;\n\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.url = 'https://graph.facebook.com/v23.0/me/messages?access_token=' + token;\nmsg.payload = { recipient: { id: msg.sender }, message: { text: fullText } };\nreturn msg;",
         "outputs": 1,
@@ -616,14 +600,14 @@
         "y": 580,
         "wires": [
             [
-                "df2b0efdd5d80d32"
+                "c587a0476e4a955a"
             ]
         ]
     },
     {
-        "id": "de6f708192031425",
+        "id": "ee8bcdd43a49d3ba",
         "type": "http in",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "UI觸發錄影",
         "url": "/ui-trigger-record",
         "method": "post",
@@ -634,15 +618,15 @@
         "y": 340,
         "wires": [
             [
-                "ef70819203142536",
-                "f081920314253647"
+                "fec8332e2b5f25c2",
+                "e3dfca92c209cb9b"
             ]
         ]
     },
     {
-        "id": "ef70819203142536",
+        "id": "fec8332e2b5f25c2",
         "type": "http response",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "",
         "statusCode": "200",
         "headers": {},
@@ -651,9 +635,9 @@
         "wires": []
     },
     {
-        "id": "f081920314253647",
+        "id": "e3dfca92c209cb9b",
         "type": "function",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "UI錄影-組請求",
         "func": "let ip = global.get('python_ip') || '127.0.0.1';\nmsg.url = 'http://' + ip + ':5000/video_clip';\nmsg.method = 'GET';\nmsg.headers = {};\nmsg._sender = null;\nreturn msg;",
         "outputs": 1,
@@ -666,14 +650,14 @@
         "y": 380,
         "wires": [
             [
-                "172f9563e0182bd7"
+                "2d1a64da89ee46a1"
             ]
         ]
     },
     {
-        "id": "13abf84ecaab3bef",
+        "id": "e0909d5fa5a25a93",
         "type": "inject",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "name": "設定Token",
         "props": [],
         "repeat": "",
@@ -685,20 +669,20 @@
         "y": 620,
         "wires": [
             [
-                "5cfdf0e09b325628"
+                "af6660093ce1e40b"
             ]
         ]
     },
     {
-        "id": "bf79b638e3d01d61",
+        "id": "1d8c1de854f8f549",
         "type": "ui_template",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "group": "901efcd57b51e81f",
         "name": "AI健康卡片",
         "order": 2,
         "width": "24",
         "height": "22",
-        "format": "<style>\n*{box-sizing:border-box;margin:0;padding:0}\n@keyframes pulse-ring{0%,100%{opacity:.18}50%{opacity:.38}}\n@keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}\n@keyframes fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}\n@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}\n@keyframes breath{0%,100%{opacity:.6;transform:scale(.98)}50%{opacity:1;transform:scale(1)}}\n@keyframes prog{0%{width:0%}100%{width:95%}}\n@keyframes dots{0%{content:'.'}33%{content:'..'}66%,100%{content:'...'}}\n\n.page{\n  font-family:'Microsoft JhengHei','PingFang TC','Segoe UI',sans-serif;\n  background:#0d1117;border-radius:16px;\n  position:relative;overflow:hidden;\n}\n.bg-layer{\n  position:absolute;inset:0;\n  background-image:url('/1.gif');\n  background-size:cover;background-position:center;\n  opacity:.10;pointer-events:none;z-index:0;\n}\n.orb{position:absolute;border-radius:50%;pointer-events:none;z-index:0}\n.orb1{width:400px;height:400px;top:-100px;right:-80px;\n  background:radial-gradient(circle,rgba(29,158,117,.22) 0%,transparent 70%);\n  animation:pulse-ring 6s ease-in-out infinite}\n.orb2{width:280px;height:280px;bottom:-60px;left:-50px;\n  background:radial-gradient(circle,rgba(55,138,221,.18) 0%,transparent 70%);\n  animation:pulse-ring 8s ease-in-out infinite 2s}\n\n.inner{\n  position:relative;z-index:1;padding:24px;\n  max-height:800px;overflow-y:auto;\n  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent;\n}\n.inner::-webkit-scrollbar{width:5px}\n.inner::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:99px}\n\n/* HEADER */\n.hdr{display:flex;align-items:center;gap:12px;margin-bottom:0;\n  padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,.08)}\n.hdr-ico{\n  width:50px;height:50px;border-radius:12px;flex-shrink:0;\n  background:rgba(29,158,117,.18);border:1px solid rgba(29,158,117,.35);\n  display:flex;align-items:center;justify-content:center}\n.hdr-ico i{font-size:24px;color:#5DCAA5}\n.hdr-info{flex:1}\n.hdr-title{\n  font-size:18px;font-weight:600;\n  background:linear-gradient(90deg,#e2e8f0,#9FE1CB 55%,#85B7EB);\n  background-size:200% auto;\n  -webkit-background-clip:text;-webkit-text-fill-color:transparent;\n  background-clip:text;animation:shimmer 5s linear infinite}\n.hdr-sub{font-size:13px;color:rgba(255,255,255,.4);margin-top:3px}\n.hdr-badge{\n  font-size:12px;padding:5px 13px;border-radius:99px;flex-shrink:0;\n  display:flex;align-items:center;gap:5px;transition:all .4s}\n.badge-idle   {background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.35)}\n.badge-loading{background:rgba(239,159,39,.15);border:1px solid rgba(239,159,39,.35);color:#EF9F27}\n.badge-done   {background:rgba(29,158,117,.15);border:1px solid rgba(29,158,117,.3);color:#5DCAA5}\n\n/* ── TRIGGER ZONE（header 正下方，置中）── */\n.trigger-zone{\n  display:flex;flex-direction:column;align-items:center;gap:12px;\n  padding:22px 0 20px;\n  border-bottom:1px solid rgba(255,255,255,.06);\n  margin-bottom:20px;\n}\n.trigger-btn{\n  display:inline-flex;align-items:center;justify-content:center;gap:9px;\n  font-family:inherit;font-size:15px;font-weight:600;\n  padding:13px 36px;border-radius:99px;border:none;cursor:pointer;\n  transition:transform .15s,box-shadow .2s,opacity .2s;\n  outline:none;\n}\n.trigger-btn:active{transform:scale(.96)!important}\n.btn-idle{\n  background:linear-gradient(135deg,#1d9e75 0%,#378add 100%);\n  color:#fff;\n  box-shadow:0 4px 22px rgba(29,158,117,.4);\n}\n.btn-idle:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(29,158,117,.55)}\n.btn-loading{\n  background:rgba(239,159,39,.12);\n  border:1.5px solid rgba(239,159,39,.45)!important;\n  color:#EF9F27;cursor:not-allowed;\n  animation:breath 1.8s ease-in-out infinite;\n}\n.btn-done{\n  background:rgba(29,158,117,.1);\n  border:1.5px solid rgba(29,158,117,.35)!important;\n  color:#5DCAA5;\n}\n.btn-done:hover{background:rgba(29,158,117,.2);box-shadow:0 4px 18px rgba(29,158,117,.3)}\n.spin-ico{display:inline-block;animation:spin 1s linear infinite}\n\n.prog-wrap{\n  width:280px;height:3px;border-radius:99px;\n  background:rgba(255,255,255,.06);overflow:hidden;\n}\n.prog-bar{\n  height:100%;border-radius:99px;\n  background:linear-gradient(90deg,#1d9e75,#378add,#9FE1CB);\n  background-size:200%;\n  animation:shimmer 1.5s linear infinite, prog 25s linear forwards;\n}\n.trigger-hint{font-size:12px;color:rgba(255,255,255,.28)}\n.trigger-time{font-size:12px;color:rgba(255,255,255,.22)}\n\n/* LOADING BANNER */\n.loading-banner{\n  display:flex;align-items:center;gap:12px;\n  padding:14px 18px;border-radius:10px;margin-bottom:16px;\n  border:1px solid rgba(239,159,39,.22);\n  background:rgba(239,159,39,.06);\n  animation:fade-in .3s ease;\n}\n.loading-banner i{font-size:20px;color:#EF9F27}\n.lb-txt b{font-size:14px;color:rgba(255,255,255,.85);display:block;margin-bottom:2px}\n.lb-txt span{font-size:12px;color:rgba(255,255,255,.4)}\n.dots::after{content:'.';animation:dots 1.2s steps(3,end) infinite}\n\n/* CARDS */\n.cards{display:flex;flex-direction:column;gap:12px}\n.card{border-radius:10px;overflow:hidden;\n  border:1px solid rgba(255,255,255,.07);\n  background:rgba(255,255,255,.04);\n  animation:fade-in .35s ease both}\n.card:nth-child(1){animation-delay:.05s}\n.card:nth-child(2){animation-delay:.10s}\n.card:nth-child(3){animation-delay:.15s}\n.card:nth-child(4){animation-delay:.20s}\n.card:nth-child(5){animation-delay:.25s}\n.card:nth-child(6){animation-delay:.30s}\n.card-hd{display:flex;align-items:center;gap:10px;\n  padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.06)}\n.ico{width:30px;height:30px;border-radius:7px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center}\n.ico i{font-size:15px}\n.c0{background:rgba(55,138,221,.2);border:1px solid rgba(55,138,221,.3)}.c0 i{color:#85B7EB}\n.c1{background:rgba(55,138,221,.2);border:1px solid rgba(55,138,221,.3)}.c1 i{color:#85B7EB}\n.c2{background:rgba(99,153,34,.2);border:1px solid rgba(99,153,34,.3)} .c2 i{color:#97C459}\n.c3{background:rgba(239,159,39,.2);border:1px solid rgba(239,159,39,.3)}.c3 i{color:#EF9F27}\n.c4{background:rgba(226,75,74,.2);border:1px solid rgba(226,75,74,.3)} .c4 i{color:#F09595}\n.c5{background:rgba(29,158,117,.2);border:1px solid rgba(29,158,117,.3)}.c5 i{color:#5DCAA5}\n.card-num{font-size:11px;color:rgba(255,255,255,.25);letter-spacing:.04em}\n.card-title{font-size:15px;font-weight:500;color:rgba(255,255,255,.9);flex:1}\n.card-body{padding:14px 16px;font-size:15px;line-height:1.9;\n  color:rgba(255,255,255,.72);white-space:pre-wrap;word-break:break-word}\n.placeholder{color:rgba(255,255,255,.22);font-style:italic}\n\n/* FOOTER */\n.ftr{display:flex;justify-content:space-between;align-items:center;\n  padding:14px 24px 18px;\n  border-top:1px solid rgba(255,255,255,.06);margin-top:4px}\n.ftr-l{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,.25)}\n.ftr-l i{font-size:13px}\n.ftr-r{font-size:12px;color:rgba(255,255,255,.2)}\n.links{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;padding:0 24px 18px}\n.lbtn{display:inline-flex;align-items:center;gap:5px;\n  font-size:12px;padding:6px 14px;border-radius:99px;\n  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);\n  color:rgba(255,255,255,.45);text-decoration:none;transition:all .2s}\n.lbtn:hover{background:rgba(29,158,117,.15);border-color:rgba(29,158,117,.4);color:#9FE1CB}\n.lbtn i{font-size:13px}\n</style>\n\n<div class=\"page\">\n  <div class=\"bg-layer\"></div>\n  <div class=\"orb orb1\"></div>\n  <div class=\"orb orb2\"></div>\n\n  <div class=\"inner\">\n\n    <!-- HEADER -->\n    <div class=\"hdr\">\n      <div class=\"hdr-ico\"><i class=\"ti ti-report-medical\"></i></div>\n      <div class=\"hdr-info\">\n        <div class=\"hdr-title\">GPT 健康分析結果</div>\n        <div class=\"hdr-sub\">基於 ST-GCN 行為辨識資料 · 自動分析報告</div>\n      </div>\n      <div class=\"hdr-badge\" ng-class=\"badgeCls\">\n        <i ng-class=\"'ti ' + badgeIco\"></i>{{badgeTxt}}\n      </div>\n    </div>\n\n    <!-- TRIGGER ZONE：header 正下方，置中 -->\n    <div class=\"trigger-zone\">\n      <button class=\"trigger-btn\"\n              ng-class=\"btnCls\"\n              ng-click=\"triggerAnalysis()\"\n              ng-disabled=\"uiState === 'loading'\">\n        <span class=\"spin-ico\" ng-if=\"uiState === 'loading'\">\n          <i class=\"ti ti-loader-2\"></i>\n        </span>\n        <i ng-if=\"uiState !== 'loading'\" ng-class=\"'ti ' + btnIcoName\"></i>\n        {{btnLabel}}\n      </button>\n      <div class=\"prog-wrap\" ng-if=\"uiState === 'loading'\">\n        <div class=\"prog-bar\"></div>\n      </div>\n      <span class=\"trigger-hint\" ng-if=\"uiState === 'idle'\">點擊按鈕啟動 AI 健康分析</span>\n      <span class=\"trigger-time\" ng-if=\"lastTime\">上次分析：{{lastTime}}</span>\n    </div>\n\n    <!-- LOADING BANNER -->\n    <div class=\"loading-banner\" ng-if=\"uiState === 'loading'\">\n      <i class=\"ti ti-brain\"></i>\n      <div class=\"lb-txt\">\n        <b>GPT 分析中<span class=\"dots\"></span></b>\n        <span>正在讀取監測資料並呼叫 GPT，通常需要 10–20 秒</span>\n      </div>\n    </div>\n\n    <!-- RESULT CARDS -->\n    <div class=\"cards\" ng-if=\"uiState === 'done'\">\n      <div class=\"card\" ng-repeat=\"s in sections track by $index\">\n        <div class=\"card-hd\">\n          <div class=\"ico\" ng-class=\"s.cls\"><i ng-class=\"'ti ' + s.ico\"></i></div>\n          <span class=\"card-num\">0{{$index+1}}</span>\n          <span class=\"card-title\">{{s.title}}</span>\n        </div>\n        <div class=\"card-body\">{{s.body}}</div>\n      </div>\n      <div class=\"card\" ng-if=\"!sections.length && rawText\">\n        <div class=\"card-hd\">\n          <div class=\"ico c1\"><i class=\"ti ti-file-text\"></i></div>\n          <span class=\"card-num\">--</span><span class=\"card-title\">分析內容</span>\n        </div>\n        <div class=\"card-body\">{{rawText}}</div>\n      </div>\n    </div>\n\n    <!-- IDLE PLACEHOLDER -->\n    <div class=\"cards\" ng-if=\"uiState === 'idle'\">\n      <div class=\"card\">\n        <div class=\"card-hd\">\n          <div class=\"ico c1\"><i class=\"ti ti-paw\"></i></div>\n          <span class=\"card-num\">--</span>\n          <span class=\"card-title\">尚無分析資料</span>\n        </div>\n        <div class=\"card-body placeholder\">請點擊上方「開始健康分析」按鈕，系統將讀取最新監測資料並透過 GPT 產生報告。</div>\n      </div>\n    </div>\n\n  </div>\n\n  <div class=\"links\">\n    <a class=\"lbtn\" href=\"https://www.merckvetmanual.com/cat-owners\" target=\"_blank\">\n      <i class=\"ti ti-external-link\"></i>默克獸醫手冊</a>\n    <a class=\"lbtn\" href=\"https://icatcare.org/advice/cat-behaviour/\" target=\"_blank\">\n      <i class=\"ti ti-external-link\"></i>iCatCare 行為指南</a>\n    <a class=\"lbtn\" href=\"https://www.avma.org/resources-tools/pet-owners/petcare/cat-care\" target=\"_blank\">\n      <i class=\"ti ti-external-link\"></i>AVMA 貓咪照護</a>\n  </div>\n  <div class=\"ftr\">\n    <div class=\"ftr-l\"><i class=\"ti ti-cpu\"></i><span>AI Cat Monitoring System</span></div>\n    <div class=\"ftr-r\">gpt-4.1-mini · Node-RED</div>\n  </div>\n</div>\n\n<script>\n(function(scope){\n  var META = [\n    {ico:'ti-droplet',       cls:'c1'},\n    {ico:'ti-run',           cls:'c2'},\n    {ico:'ti-refresh-alert', cls:'c3'},\n    {ico:'ti-shield-check',  cls:'c4'},\n    {ico:'ti-notes',         cls:'c5'}\n  ];\n\n  scope.sections = [];\n  scope.rawText  = '';\n  scope.lastTime = '';\n\n  // ── 狀態機 ──────────────────────\n  function setState(s){\n    scope.uiState = s;\n    if(s === 'idle'){\n      scope.btnCls     = 'btn-idle';\n      scope.btnIcoName = 'ti-stethoscope';\n      scope.btnLabel   = '開始健康分析';\n      scope.badgeCls   = 'badge-idle';\n      scope.badgeIco   = 'ti-clock';\n      scope.badgeTxt   = '尚未分析';\n    } else if(s === 'loading'){\n      scope.btnCls     = 'btn-loading';\n      scope.btnIcoName = 'ti-loader-2';\n      scope.btnLabel   = '分析中，請稍候...';\n      scope.badgeCls   = 'badge-loading';\n      scope.badgeIco   = 'ti-refresh';\n      scope.badgeTxt   = '分析中';\n    } else {\n      scope.btnCls     = 'btn-done';\n      scope.btnIcoName = 'ti-refresh';\n      scope.btnLabel   = '重新分析';\n      scope.badgeCls   = 'badge-done';\n      scope.badgeIco   = 'ti-circle-check';\n      scope.badgeTxt   = '已完成';\n    }\n  }\n\n  // 預設 idle，不依賴外部 msg\n  setState('idle');\n\n  // ── 按鈕觸發 ────────────────────\n  scope.triggerAnalysis = function(){\n    if(scope.uiState === 'loading') return;\n    setState('loading');\n    scope.sections = [];\n    scope.rawText  = '';\n\n    fetch('/ui-trigger-health', { method: 'POST' })\n      .then(function(r){\n        if(!r.ok) throw new Error(r.status);\n      })\n      .catch(function(e){\n        console.error('trigger failed', e);\n        setState('idle');\n      });\n  };\n\n  // ── 接收 GPT 結果 ────────────────\n  function parse(raw){\n    if(!raw || !raw.trim()) return [];\n    var text = raw\n      .replace(/\\*{1,3}([^\\*]+)\\*{1,3}/g, '$1')\n      .replace(/^#{1,4}\\s*/gm, '')\n      .replace(/【([^】]*)】/g, '$1');\n    var chunks = text.split(/(?=^\\s*[1-9][\\.、．:：\\s])/m);\n    var result = [];\n    chunks.forEach(function(chunk){\n      chunk = chunk.trim();\n      if(!chunk) return;\n      var m = chunk.match(/^([1-9])[\\.、．:：\\s]+([^\\n]{1,60})\\n([\\s\\S]*)/);\n      if(m){\n        var idx  = parseInt(m[1], 10) - 1;\n        var meta = META[idx] || META[META.length - 1];\n        result.push({\n          ico:   meta.ico,\n          cls:   meta.cls,\n          title: m[2].trim().replace(/[\\.。:：\\s]+$/, ''),\n          body:  m[3].trim()\n        });\n      } else if(result.length === 0 && chunk.length > 10){\n        result.push({ico:'ti-file-text', cls:'c0', title:'分析內容', body:chunk});\n      }\n    });\n    return result;\n  }\n\n  // 只有收到非空 payload 才切換到 done\nscope.$watch('msg.payload', function(val){\n\nif(!val) return;\n\n// =========================\n// payload.result 才是真正 GPT 文字\n// =========================\n\nvar text = '';\n\nif(typeof val === 'object' && val.result){\n\ntext = String(val.result).trim();\n\n} else {\n\ntext = String(val).trim();\n\n}\n\nif(!text) return;\n\nscope.rawText = text;\n\nscope.sections = parse(text);\n\nscope.lastTime =\nnew Date().toLocaleString('zh-TW');\n\nsetState('done');\n\n});\n})(scope);\n</script>",
+        "format": "<style>\n*{box-sizing:border-box;margin:0;padding:0}\n@keyframes pulse-ring{0%,100%{opacity:.18}50%{opacity:.38}}\n@keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}\n@keyframes fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}\n@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}\n@keyframes breath{0%,100%{opacity:.6;transform:scale(.98)}50%{opacity:1;transform:scale(1)}}\n@keyframes prog{0%{width:0%}100%{width:95%}}\n@keyframes dots{0%{content:'.'}33%{content:'..'}66%,100%{content:'...'}}\n\n.page{\n  font-family:'Microsoft JhengHei','PingFang TC','Segoe UI',sans-serif;\n  background:#0d1117;border-radius:16px;\n  position:relative;overflow:hidden;\n}\n.bg-layer{\n  position:absolute;inset:0;\n  background-image:url('/1.gif');\n  background-size:cover;background-position:center;\n  opacity:.10;pointer-events:none;z-index:0;\n}\n.orb{position:absolute;border-radius:50%;pointer-events:none;z-index:0}\n.orb1{width:400px;height:400px;top:-100px;right:-80px;\n  background:radial-gradient(circle,rgba(29,158,117,.22) 0%,transparent 70%);\n  animation:pulse-ring 6s ease-in-out infinite}\n.orb2{width:280px;height:280px;bottom:-60px;left:-50px;\n  background:radial-gradient(circle,rgba(55,138,221,.18) 0%,transparent 70%);\n  animation:pulse-ring 8s ease-in-out infinite 2s}\n\n.inner{\n  position:relative;z-index:1;padding:24px;\n  max-height:800px;overflow-y:auto;\n  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent;\n}\n.inner::-webkit-scrollbar{width:5px}\n.inner::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:99px}\n\n/* HEADER */\n.hdr{display:flex;align-items:center;gap:12px;margin-bottom:0;\n  padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,.08)}\n.hdr-ico{\n  width:50px;height:50px;border-radius:12px;flex-shrink:0;\n  background:rgba(29,158,117,.18);border:1px solid rgba(29,158,117,.35);\n  display:flex;align-items:center;justify-content:center}\n.hdr-ico i{font-size:24px;color:#5DCAA5}\n.hdr-info{flex:1}\n.hdr-title{\n  font-size:18px;font-weight:600;\n  background:linear-gradient(90deg,#e2e8f0,#9FE1CB 55%,#85B7EB);\n  background-size:200% auto;\n  -webkit-background-clip:text;-webkit-text-fill-color:transparent;\n  background-clip:text;animation:shimmer 5s linear infinite}\n.hdr-sub{font-size:13px;color:rgba(255,255,255,.4);margin-top:3px}\n.hdr-badge{\n  font-size:12px;padding:5px 13px;border-radius:99px;flex-shrink:0;\n  display:flex;align-items:center;gap:5px;transition:all .4s}\n.badge-idle   {background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.35)}\n.badge-loading{background:rgba(239,159,39,.15);border:1px solid rgba(239,159,39,.35);color:#EF9F27}\n.badge-done   {background:rgba(29,158,117,.15);border:1px solid rgba(29,158,117,.3);color:#5DCAA5}\n\n/* ── TRIGGER ZONE（header 正下方，置中）── */\n.trigger-zone{\n  display:flex;flex-direction:column;align-items:center;gap:12px;\n  padding:22px 0 20px;\n  border-bottom:1px solid rgba(255,255,255,.06);\n  margin-bottom:20px;\n}\n.trigger-btn{\n  display:inline-flex;align-items:center;justify-content:center;gap:9px;\n  font-family:inherit;font-size:15px;font-weight:600;\n  padding:13px 36px;border-radius:99px;border:none;cursor:pointer;\n  transition:transform .15s,box-shadow .2s,opacity .2s;\n  outline:none;\n}\n.trigger-btn:active{transform:scale(.96)!important}\n.btn-idle{\n  background:linear-gradient(135deg,#1d9e75 0%,#378add 100%);\n  color:#fff;\n  box-shadow:0 4px 22px rgba(29,158,117,.4);\n}\n.btn-idle:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(29,158,117,.55)}\n.btn-loading{\n  background:rgba(239,159,39,.12);\n  border:1.5px solid rgba(239,159,39,.45)!important;\n  color:#EF9F27;cursor:not-allowed;\n  animation:breath 1.8s ease-in-out infinite;\n}\n.btn-done{\n  background:rgba(29,158,117,.1);\n  border:1.5px solid rgba(29,158,117,.35)!important;\n  color:#5DCAA5;\n}\n.btn-done:hover{background:rgba(29,158,117,.2);box-shadow:0 4px 18px rgba(29,158,117,.3)}\n.spin-ico{display:inline-block;animation:spin 1s linear infinite}\n\n.prog-wrap{\n  width:280px;height:3px;border-radius:99px;\n  background:rgba(255,255,255,.06);overflow:hidden;\n}\n.prog-bar{\n  height:100%;border-radius:99px;\n  background:linear-gradient(90deg,#1d9e75,#378add,#9FE1CB);\n  background-size:200%;\n  animation:shimmer 1.5s linear infinite, prog 25s linear forwards;\n}\n.trigger-hint{font-size:12px;color:rgba(255,255,255,.28)}\n.trigger-time{font-size:12px;color:rgba(255,255,255,.22)}\n\n/* LOADING BANNER */\n.loading-banner{\n  display:flex;align-items:center;gap:12px;\n  padding:14px 18px;border-radius:10px;margin-bottom:16px;\n  border:1px solid rgba(239,159,39,.22);\n  background:rgba(239,159,39,.06);\n  animation:fade-in .3s ease;\n}\n.loading-banner i{font-size:20px;color:#EF9F27}\n.lb-txt b{font-size:14px;color:rgba(255,255,255,.85);display:block;margin-bottom:2px}\n.lb-txt span{font-size:12px;color:rgba(255,255,255,.4)}\n.dots::after{content:'.';animation:dots 1.2s steps(3,end) infinite}\n\n/* CARDS */\n.cards{display:flex;flex-direction:column;gap:12px}\n.card{border-radius:10px;overflow:hidden;\n  border:1px solid rgba(255,255,255,.07);\n  background:rgba(255,255,255,.04);\n  animation:fade-in .35s ease both}\n.card:nth-child(1){animation-delay:.05s}\n.card:nth-child(2){animation-delay:.10s}\n.card:nth-child(3){animation-delay:.15s}\n.card:nth-child(4){animation-delay:.20s}\n.card:nth-child(5){animation-delay:.25s}\n.card:nth-child(6){animation-delay:.30s}\n.card-hd{display:flex;align-items:center;gap:10px;\n  padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.06)}\n.ico{width:30px;height:30px;border-radius:7px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center}\n.ico i{font-size:15px}\n.c0{background:rgba(55,138,221,.2);border:1px solid rgba(55,138,221,.3)}.c0 i{color:#85B7EB}\n.c1{background:rgba(55,138,221,.2);border:1px solid rgba(55,138,221,.3)}.c1 i{color:#85B7EB}\n.c2{background:rgba(99,153,34,.2);border:1px solid rgba(99,153,34,.3)} .c2 i{color:#97C459}\n.c3{background:rgba(239,159,39,.2);border:1px solid rgba(239,159,39,.3)}.c3 i{color:#EF9F27}\n.c4{background:rgba(226,75,74,.2);border:1px solid rgba(226,75,74,.3)} .c4 i{color:#F09595}\n.c5{background:rgba(29,158,117,.2);border:1px solid rgba(29,158,117,.3)}.c5 i{color:#5DCAA5}\n.card-num{font-size:11px;color:rgba(255,255,255,.25);letter-spacing:.04em}\n.card-title{font-size:15px;font-weight:500;color:rgba(255,255,255,.9);flex:1}\n.card-body{padding:14px 16px;font-size:15px;line-height:1.9;\n  color:rgba(255,255,255,.72);white-space:pre-wrap;word-break:break-word}\n.placeholder{color:rgba(255,255,255,.22);font-style:italic}\n\n/* FOOTER */\n.ftr{display:flex;justify-content:space-between;align-items:center;\n  padding:14px 24px 18px;\n  border-top:1px solid rgba(255,255,255,.06);margin-top:4px}\n.ftr-l{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,.25)}\n.ftr-l i{font-size:13px}\n.ftr-r{font-size:12px;color:rgba(255,255,255,.2)}\n.links{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;padding:0 24px 18px}\n.lbtn{display:inline-flex;align-items:center;gap:5px;\n  font-size:12px;padding:6px 14px;border-radius:99px;\n  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);\n  color:rgba(255,255,255,.45);text-decoration:none;transition:all .2s}\n.lbtn:hover{background:rgba(29,158,117,.15);border-color:rgba(29,158,117,.4);color:#9FE1CB}\n.lbtn i{font-size:13px}\n\n/* ── LLM 引擎選擇 ── */\n.llm-bar{display:flex;flex-direction:column;gap:10px;width:100%;max-width:520px;margin-bottom:4px}\n.seg{display:flex;gap:6px;justify-content:center}\n.seg button{flex:0 0 auto;font-family:inherit;font-size:13px;padding:7px 20px;border-radius:99px;\n  border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:rgba(255,255,255,.5);cursor:pointer;transition:all .2s}\n.seg button.on{background:linear-gradient(135deg,#1d9e75,#378add);border-color:transparent;color:#fff;font-weight:600}\n.ollama-cfg{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;\n  padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(255,255,255,.03)}\n.ollama-cfg input{flex:1 1 200px;min-width:160px;font-family:inherit;font-size:13px;padding:8px 12px;border-radius:8px;\n  border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.25);color:rgba(255,255,255,.85);outline:none}\n.ollama-cfg select{flex:1 1 200px;min-width:160px;font-family:inherit;font-size:13px;padding:8px 12px;border-radius:8px;\n  border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.25);color:rgba(255,255,255,.85);outline:none}\n.ollama-cfg select:disabled{opacity:.4}\n.test-btn{font-family:inherit;font-size:13px;padding:8px 16px;border-radius:8px;border:1px solid rgba(55,138,221,.4);\n  background:rgba(55,138,221,.14);color:#85B7EB;cursor:pointer;white-space:nowrap;transition:all .2s}\n.test-btn:hover{background:rgba(55,138,221,.26)}\n.test-btn:disabled{opacity:.5;cursor:not-allowed}\n.llm-status{flex-basis:100%;text-align:center;font-size:12px;min-height:16px}\n.llm-status.ok{color:#5DCAA5}\n.llm-status.err{color:#F09595}\n</style>\n\n<div class=\"page\">\n  <div class=\"bg-layer\"></div>\n  <div class=\"orb orb1\"></div>\n  <div class=\"orb orb2\"></div>\n\n  <div class=\"inner\">\n\n    <!-- HEADER -->\n    <div class=\"hdr\">\n      <div class=\"hdr-ico\"><i class=\"ti ti-report-medical\"></i></div>\n      <div class=\"hdr-info\">\n        <div class=\"hdr-title\">GPT 健康分析結果</div>\n        <div class=\"hdr-sub\">基於 ST-GCN 行為辨識資料 · 自動分析報告</div>\n      </div>\n      <div class=\"hdr-badge\" ng-class=\"badgeCls\">\n        <i ng-class=\"'ti ' + badgeIco\"></i>{{badgeTxt}}\n      </div>\n    </div>\n\n    <!-- TRIGGER ZONE：header 正下方，置中 -->\n    <div class=\"trigger-zone\">\n\n      <!-- LLM 引擎選擇 -->\n      <div class=\"llm-bar\">\n        <div class=\"seg\">\n          <button ng-class=\"{on: provider==='openai'}\" ng-click=\"setProvider('openai')\">OpenAI</button>\n          <button ng-class=\"{on: provider==='ollama'}\" ng-click=\"setProvider('ollama')\">Ollama</button>\n        </div>\n        <div class=\"ollama-cfg\" ng-if=\"provider==='ollama'\">\n          <input ng-model=\"ollamaBase\" placeholder=\"http://127.0.0.1:11434  或  http://192.168.x.x:11434\">\n          <button class=\"test-btn\" ng-click=\"testOllama()\" ng-disabled=\"testing\">{{testing ? '測試中…' : '測試連線'}}</button>\n          <select ng-model=\"ollamaModel\" ng-disabled=\"!ollamaModels.length\"\n                  ng-options=\"opt.value as opt.label for opt in ollamaModels\">\n            <option value=\"\">— 先測試連線 —</option>\n          </select>\n          <span class=\"llm-status\" ng-class=\"testCls\">{{testMsg}}</span>\n        </div>\n      </div>\n      <button class=\"trigger-btn\"\n              ng-class=\"btnCls\"\n              ng-click=\"triggerAnalysis()\"\n              ng-disabled=\"uiState === 'loading'\">\n        <span class=\"spin-ico\" ng-if=\"uiState === 'loading'\">\n          <i class=\"ti ti-loader-2\"></i>\n        </span>\n        <i ng-if=\"uiState !== 'loading'\" ng-class=\"'ti ' + btnIcoName\"></i>\n        {{btnLabel}}\n      </button>\n      <div class=\"prog-wrap\" ng-if=\"uiState === 'loading'\">\n        <div class=\"prog-bar\"></div>\n      </div>\n      <span class=\"trigger-hint\" ng-if=\"uiState === 'idle'\">點擊按鈕啟動 AI 健康分析</span>\n      <span class=\"trigger-time\" ng-if=\"lastTime\">上次分析：{{lastTime}}</span>\n    </div>\n\n    <!-- LOADING BANNER -->\n    <div class=\"loading-banner\" ng-if=\"uiState === 'loading'\">\n      <i class=\"ti ti-brain\"></i>\n      <div class=\"lb-txt\">\n        <b>分析中<span class=\"dots\"></span></b>\n        <span>{{provider==='ollama' ? ('Ollama · '+ollamaModel+'，本地模型可能需要 1–3 分鐘') : '正在讀取監測資料並呼叫 OpenAI，通常需要 10–20 秒'}}</span>\n      </div>\n    </div>\n\n    <!-- RESULT CARDS -->\n    <div class=\"cards\" ng-if=\"uiState === 'done'\">\n      <div class=\"card\" ng-repeat=\"s in sections track by $index\">\n        <div class=\"card-hd\">\n          <div class=\"ico\" ng-class=\"s.cls\"><i ng-class=\"'ti ' + s.ico\"></i></div>\n          <span class=\"card-num\">0{{$index+1}}</span>\n          <span class=\"card-title\">{{s.title}}</span>\n        </div>\n        <div class=\"card-body\">{{s.body}}</div>\n      </div>\n      <div class=\"card\" ng-if=\"!sections.length && rawText\">\n        <div class=\"card-hd\">\n          <div class=\"ico c1\"><i class=\"ti ti-file-text\"></i></div>\n          <span class=\"card-num\">--</span><span class=\"card-title\">分析內容</span>\n        </div>\n        <div class=\"card-body\">{{rawText}}</div>\n      </div>\n    </div>\n\n    <!-- IDLE PLACEHOLDER -->\n    <div class=\"cards\" ng-if=\"uiState === 'idle'\">\n      <div class=\"card\">\n        <div class=\"card-hd\">\n          <div class=\"ico c1\"><i class=\"ti ti-paw\"></i></div>\n          <span class=\"card-num\">--</span>\n          <span class=\"card-title\">尚無分析資料</span>\n        </div>\n        <div class=\"card-body placeholder\">請點擊上方「開始健康分析」按鈕，系統將讀取最新監測資料並透過 GPT 產生報告。</div>\n      </div>\n    </div>\n\n  </div>\n\n  <div class=\"links\">\n    <a class=\"lbtn\" href=\"https://www.merckvetmanual.com/cat-owners\" target=\"_blank\">\n      <i class=\"ti ti-external-link\"></i>默克獸醫手冊</a>\n    <a class=\"lbtn\" href=\"https://icatcare.org/advice/cat-behaviour/\" target=\"_blank\">\n      <i class=\"ti ti-external-link\"></i>iCatCare 行為指南</a>\n    <a class=\"lbtn\" href=\"https://www.avma.org/resources-tools/pet-owners/petcare/cat-care\" target=\"_blank\">\n      <i class=\"ti ti-external-link\"></i>AVMA 貓咪照護</a>\n  </div>\n  <div class=\"ftr\">\n    <div class=\"ftr-l\"><i class=\"ti ti-cpu\"></i><span>AI Cat Monitoring System</span></div>\n    <div class=\"ftr-r\">{{engineLabel || ''}} · Node-RED</div>\n  </div>\n</div>\n\n<script>\n(function(scope){\n  var META = [\n    {ico:'ti-droplet',       cls:'c1'},\n    {ico:'ti-run',           cls:'c2'},\n    {ico:'ti-refresh-alert', cls:'c3'},\n    {ico:'ti-shield-check',  cls:'c4'},\n    {ico:'ti-notes',         cls:'c5'}\n  ];\n\n  scope.sections = [];\n  scope.rawText  = '';\n  scope.lastTime = '';\n  scope.engineLabel = '';\n\n  // ── LLM 引擎選擇 ──\n  scope.provider = 'openai';\n  scope.ollamaBase = 'http://127.0.0.1:11434';\n  scope.ollamaModel = '';\n  scope.ollamaModels = [];\n  scope.testing = false;\n  scope.testMsg = '';\n  scope.testCls = '';\n  try {\n    scope.provider   = localStorage.getItem('hc_provider')   || 'openai';\n    scope.ollamaBase = localStorage.getItem('hc_ollamaBase') || 'http://127.0.0.1:11434';\n    scope.ollamaModel= localStorage.getItem('hc_ollamaModel')|| '';\n  } catch(e){}\n\n  scope.setProvider = function(p){\n    scope.provider = p;\n    try { localStorage.setItem('hc_provider', p); } catch(e){}\n  };\n\n  scope.testOllama = function(){\n    scope.testing = true; scope.testMsg = '連線中…'; scope.testCls = '';\n    try { localStorage.setItem('hc_ollamaBase', scope.ollamaBase); } catch(e){}\n    fetch('/ui-ollama-models?base=' + encodeURIComponent(scope.ollamaBase))\n      .then(function(r){ return r.json(); })\n      .then(function(dd){\n        scope.testing = false;\n        if(dd.ok && dd.models && dd.models.length){\n          scope.ollamaModels = dd.models.map(function(mm){\n            var extra = [];\n            if(mm.param) extra.push(mm.param);\n            if(mm.size_gb) extra.push(mm.size_gb + 'GB');\n            if(mm.quant) extra.push(mm.quant);\n            return { value: mm.name, label: mm.name + (extra.length ? '  ('+extra.join(', ')+')' : '') };\n          });\n          if(!scope.ollamaModel || !dd.models.some(function(mm){ return mm.name === scope.ollamaModel; })){\n            scope.ollamaModel = dd.models[0].name;\n          }\n          scope.testMsg = '✓ 連線成功，' + dd.models.length + ' 個可用模型';\n          scope.testCls = 'ok';\n        } else {\n          scope.ollamaModels = [];\n          scope.testMsg = '✕ ' + (dd.error || '連線失敗');\n          scope.testCls = 'err';\n        }\n        scope.$apply();\n      })\n      .catch(function(err){\n        scope.testing = false;\n        scope.ollamaModels = [];\n        scope.testMsg = '✕ ' + err.message;\n        scope.testCls = 'err';\n        scope.$apply();\n      });\n  };\n\n  // ── 狀態機 ──────────────────────\n  function setState(s){\n    scope.uiState = s;\n    if(s === 'idle'){\n      scope.btnCls     = 'btn-idle';\n      scope.btnIcoName = 'ti-stethoscope';\n      scope.btnLabel   = '開始健康分析';\n      scope.badgeCls   = 'badge-idle';\n      scope.badgeIco   = 'ti-clock';\n      scope.badgeTxt   = '尚未分析';\n    } else if(s === 'loading'){\n      scope.btnCls     = 'btn-loading';\n      scope.btnIcoName = 'ti-loader-2';\n      scope.btnLabel   = '分析中，請稍候...';\n      scope.badgeCls   = 'badge-loading';\n      scope.badgeIco   = 'ti-refresh';\n      scope.badgeTxt   = '分析中';\n    } else {\n      scope.btnCls     = 'btn-done';\n      scope.btnIcoName = 'ti-refresh';\n      scope.btnLabel   = '重新分析';\n      scope.badgeCls   = 'badge-done';\n      scope.badgeIco   = 'ti-circle-check';\n      scope.badgeTxt   = '已完成';\n    }\n  }\n\n  // 預設 idle，不依賴外部 msg\n  setState('idle');\n\n  // ── 按鈕觸發 ────────────────────\n  scope.triggerAnalysis = function(){\n    if(scope.uiState === 'loading') return;\n    if(scope.provider === 'ollama' && !scope.ollamaModel){\n      scope.testMsg = '請先「測試連線」並選一個模型'; scope.testCls = 'err';\n      return;\n    }\n    try {\n      localStorage.setItem('hc_ollamaModel', scope.ollamaModel || '');\n    } catch(e){}\n    setState('loading');\n    scope.sections = [];\n    scope.rawText  = '';\n\n    var body = { provider: scope.provider };\n    if(scope.provider === 'ollama'){\n      body.ollama_base = scope.ollamaBase;\n      body.ollama_model = scope.ollamaModel;\n    }\n    fetch('/ui-trigger-health', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify(body)\n    })\n      .then(function(r){ if(!r.ok) throw new Error(r.status); })\n      .catch(function(e){\n        console.error('trigger failed', e);\n        setState('idle');\n      });\n  };\n\n  // ── 接收 GPT 結果 ────────────────\n  function parse(raw){\n    if(!raw || !raw.trim()) return [];\n    var text = raw\n      .replace(/\\*{1,3}([^\\*]+)\\*{1,3}/g, '$1')\n      .replace(/^#{1,4}\\s*/gm, '')\n      .replace(/【([^】]*)】/g, '$1');\n    var chunks = text.split(/(?=^\\s*[1-9][\\.、．:：\\s])/m);\n    var result = [];\n    chunks.forEach(function(chunk){\n      chunk = chunk.trim();\n      if(!chunk) return;\n      var m = chunk.match(/^([1-9])[\\.、．:：\\s]+([^\\n]{1,60})\\n([\\s\\S]*)/);\n      if(m){\n        var idx  = parseInt(m[1], 10) - 1;\n        var meta = META[idx] || META[META.length - 1];\n        result.push({\n          ico:   meta.ico,\n          cls:   meta.cls,\n          title: m[2].trim().replace(/[\\.。:：\\s]+$/, ''),\n          body:  m[3].trim()\n        });\n      } else if(result.length === 0 && chunk.length > 10){\n        result.push({ico:'ti-file-text', cls:'c0', title:'分析內容', body:chunk});\n      }\n    });\n    return result;\n  }\n\n  // 只有收到非空 payload 才切換到 done\nscope.$watch('msg.payload', function(val){\n\nif(!val) return;\n\n// =========================\n// payload.result 才是真正 GPT 文字\n// =========================\n\nvar text = '';\n\nif(typeof val === 'object' && val.result){\n\ntext = String(val.result).trim();\nscope.engineLabel = val.engine || '';\n\n} else {\n\ntext = String(val).trim();\n\n}\n\nif(!text) return;\n\nscope.rawText = text;\n\nscope.sections = parse(text);\n\nscope.lastTime =\nnew Date().toLocaleString('zh-TW');\n\nsetState('done');\n\n});\n})(scope);\n</script>",
         "storeOutMessages": true,
         "fwdInMessages": true,
         "resendOnRefresh": true,
@@ -711,9 +695,9 @@
         ]
     },
     {
-        "id": "382cd1134655493f",
+        "id": "ca272234daf5e6cd",
         "type": "ui_template",
-        "z": "f374f5debb3b6a37",
+        "z": "951cc683b12ab1e0",
         "group": "7ea2987c7719d8d9",
         "name": "即時截圖卡片",
         "order": 1,
@@ -730,6 +714,98 @@
         "wires": [
             []
         ]
+    },
+    {
+        "id": "c3ede2e640419ef1",
+        "type": "http in",
+        "z": "951cc683b12ab1e0",
+        "name": "GET /ui-ollama-models",
+        "url": "/ui-ollama-models",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 880,
+        "wires": [
+            [
+                "247fd2563a9227d2"
+            ]
+        ]
+    },
+    {
+        "id": "247fd2563a9227d2",
+        "type": "function",
+        "z": "951cc683b12ab1e0",
+        "name": "組 Ollama tags 請求",
+        "func": "let base = (msg.req.query.base || flow.get('ollama_base') || 'http://127.0.0.1:11434').trim();\nbase = base.replace(/\\/+$/, '');\nif (!/^https?:\\/\\//.test(base)) base = 'http://' + base;\nmsg._base = base;\nmsg.url = base + '/api/tags';\nmsg.method = 'GET';\nmsg.headers = {};\nmsg.requestTimeout = 5000;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 880,
+        "wires": [
+            [
+                "f6dae7a78f2ae466"
+            ]
+        ]
+    },
+    {
+        "id": "f6dae7a78f2ae466",
+        "type": "http request",
+        "z": "951cc683b12ab1e0",
+        "name": "Ollama /api/tags",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": true,
+        "headers": [],
+        "x": 610,
+        "y": 880,
+        "wires": [
+            [
+                "a33f2224dbab9514"
+            ]
+        ]
+    },
+    {
+        "id": "a33f2224dbab9514",
+        "type": "function",
+        "z": "951cc683b12ab1e0",
+        "name": "整理模型清單",
+        "func": "let d = msg.payload;\nlet out = { ok: false, base: msg._base || null, models: [], error: null };\nif (msg.statusCode && msg.statusCode >= 400) {\n    out.error = 'HTTP ' + msg.statusCode;\n} else if (!d || typeof d !== 'object' || !Array.isArray(d.models)) {\n    out.error = (typeof d === 'string') ? d.slice(0, 200)\n              : (d && d.error) ? String(d.error)\n              : '無法連線或回應格式不符（確認 Ollama 已啟動、OLLAMA_HOST=0.0.0.0）';\n} else {\n    out.ok = true;\n    out.models = d.models.map(function (x) {\n        let det = x.details || {};\n        return {\n            name: x.name,\n            size_gb: x.size ? (x.size / 1e9).toFixed(1) : null,\n            param: det.parameter_size || null,\n            quant: det.quantization_level || null\n        };\n    });\n}\nmsg.statusCode = 200;\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = out;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 820,
+        "y": 880,
+        "wires": [
+            [
+                "b96e6476ef20fb7f"
+            ]
+        ]
+    },
+    {
+        "id": "b96e6476ef20fb7f",
+        "type": "http response",
+        "z": "951cc683b12ab1e0",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1010,
+        "y": 880,
+        "wires": []
     },
     {
         "id": "901efcd57b51e81f",
@@ -757,11 +833,12 @@
         "type": "ui_tab",
         "name": "AI健康分析",
         "icon": "dashboard",
+        "order": 3,
         "disabled": false,
         "hidden": false
     },
     {
-        "id": "e6214d04b30ae99b",
+        "id": "4c5af102a66e3a6a",
         "type": "global-config",
         "env": [],
         "modules": {

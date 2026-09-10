@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import webbrowser
 from datetime import datetime
 import tkinter as tk
 from pathlib import Path
@@ -239,6 +240,7 @@ class SettingsWindow(tk.Tk):
         self._font_hint = tkfont.Font(family=_FONT_FAMILY, size=11)
         self._font_banner = tkfont.Font(family=_FONT_FAMILY, size=16, weight="bold")
         self._font_tabbtn = tkfont.Font(family=_FONT_FAMILY, size=13, weight="bold")
+        self._font_link = tkfont.Font(family=_FONT_FAMILY, size=11, underline=True)
 
         # 每個 json_key -> {"var":..., "widget":..., "badge_var":..., "field":..., ...}
         self._field_widgets = {}
@@ -272,6 +274,9 @@ class SettingsWindow(tk.Tk):
         # 裝在初次載入「之後」——避免初次載入時逐欄位 set() 觸發下面這個同步邏輯，
         # 誤判成「使用者剛剛改了 Host/Port」而動到端點欄位（見方法內註解）。
         self._wire_nodered_endpoint_autosync()
+        # 個體化基線儀表板網址列的綁定與初次刷新也要等欄位都建好、初值都填完之後
+        # （_build_process_bar() 建這條列時 _field_widgets 還是空的）。
+        self._wire_dashboard_link()
         self._process_manager.poll()
 
         # 到這裡整個視窗的固定佔用區塊（標題/流程列/獨立腳本工具列/資訊列/分頁按鈕列/
@@ -1398,7 +1403,9 @@ class SettingsWindow(tk.Tk):
     def _highlight_fields(self, json_keys):
         """幫指定欄位的外層 container 加高亮外框，並先清掉上一次的高亮——
         FieldSearchBar 每次重新搜尋都會呼叫這個方法（空清單＝單純清掉舊高亮，
-        對應搜尋欄被清空的情況）。"""
+        對應搜尋欄被清空的情況）。json_keys 可以橫跨多個分頁：欄位列在各分頁
+        建構時就都存在（切分頁只是 pack_forget），對目前沒顯示的分頁欄位設定
+        高亮一樣有效，等該分頁被切到就看得到。"""
         for key in self._highlighted_field_keys:
             info = self._field_widgets.get(key)
             if info is not None:
@@ -1508,6 +1515,25 @@ class SettingsWindow(tk.Tk):
             var.trace_add("write", _refresh_toggle_look)
             _refresh_toggle_look()
             info["var"] = var
+
+            # 個體化基線儀表板（Python 新引擎）：在這個開關右手邊放一條可 Ctrl+點擊
+            # 開啟的網頁連結。頁面由 main.py 的 Flask server 提供（見
+            # dashboard/refresher.py、config.BaselineDashboardConfig）；網址 port
+            # 跟著本分頁 flask.port 欄位即時變動（trace 綁定見 _wire_dashboard_link，
+            # 延後到欄位都建好之後），host 一律 127.0.0.1（本機開啟，不受 flask.host
+            # 綁 0.0.0.0 影響）。
+            if key == "flask.baseline_dashboard_enabled":
+                self._dashboard_link_var = tk.StringVar(value="")
+                link = tk.Label(
+                    control, textvariable=self._dashboard_link_var, bg=row_bg,
+                    fg="#1a5fb4", font=self._font_link, cursor="hand2", anchor="w",
+                )
+                link.pack(side="left", padx=(14, 0))
+                link.bind("<Control-Button-1>", lambda _e: self._open_dashboard_in_browser())
+                tk.Label(
+                    control, text="（Ctrl+點擊開啟）", bg=row_bg, fg=COLOR_HINT_FG,
+                    font=self._font_hint, anchor="w",
+                ).pack(side="left", padx=(6, 0))
         elif vt in ("int", "float", "str"):
             var = tk.StringVar()
             tk.Entry(control, textvariable=var, font=self._font_label).pack(side="left", fill="x", expand=True)
@@ -1740,6 +1766,14 @@ class SettingsWindow(tk.Tk):
             info["height_var"] = height_var
             info["toggle"] = _toggle
 
+        # 選填的欄位說明：FIELD_SCHEMA 裡有 "hint" 就在欄位列正下方補一行灰字
+        # （放不進 label、又不到「env 覆寫警告」那種等級的補充說明）。
+        if field.get("hint"):
+            tk.Label(
+                parent, text=field["hint"], bg=COLOR_TAB_BG, fg=COLOR_HINT_FG,
+                font=self._font_hint, anchor="w", justify="left", wraplength=750,
+            ).pack(fill="x", padx=14, pady=(1, 4))
+
         env_note_var = tk.StringVar(value="")
         tk.Label(
             parent, textvariable=env_note_var, bg=COLOR_TAB_BG, fg=COLOR_WARNING_FG,
@@ -1910,6 +1944,41 @@ class SettingsWindow(tk.Tk):
             value, source = self._resolve_field_display(field)
             self._set_field_value(key, value)
             self._apply_source(key, source)
+
+    # ── 個體化基線儀表板網址列 ──────────────────────────────────────
+    def _dashboard_url(self):
+        """個體化基線儀表板網址：host 一律 127.0.0.1（本機開啟），port 取「Flask
+        與 Node-RED」分頁 flask.port 欄位目前的值；欄位還沒建好、留空或打成非數字
+        時回退到 app 啟動當下的生效值（self._baseline_effective），再退到 5000。"""
+        info = self._field_widgets.get("flask.port")
+        raw = info["var"].get().strip() if info and "var" in info else ""
+        if not raw:
+            raw = str(self._baseline_effective.get("flask.port", 5000))
+        try:
+            port = int(float(raw))
+        except (TypeError, ValueError):
+            port = 5000
+        return f"http://127.0.0.1:{port}/dashboard/baseline"
+
+    def _refresh_dashboard_link(self, *_a):
+        """重算「個體化基線儀表板啟用」開關右邊那條網址連結的文字——flask.port
+        欄位改動時被 trace 回呼（見 _wire_dashboard_link）。"""
+        if hasattr(self, "_dashboard_link_var"):
+            self._dashboard_link_var.set(self._dashboard_url())
+
+    def _wire_dashboard_link(self):
+        """把儀表板網址連結跟本分頁 flask.port 欄位綁在一起：port 改動就即時重算。
+        連結 Label 在 _build_field_row() 畫「flask.baseline_dashboard_enabled」那列
+        時建立，但 trace 綁定與初次以實際欄位值刷新要等所有欄位都建好、初值都填完
+        （__init__ 尾端、_populate_from_effective_state() 之後）才做。"""
+        info = self._field_widgets.get("flask.port")
+        if info is not None and "var" in info:
+            info["var"].trace_add("write", self._refresh_dashboard_link)
+        self._refresh_dashboard_link()
+
+    def _open_dashboard_in_browser(self):
+        """Ctrl+點擊網址列 → 用系統預設瀏覽器開啟目前顯示的網址。"""
+        webbrowser.open(self._dashboard_url())
 
     def _wire_nodered_endpoint_autosync(self):
         """Host/Port 改變時，「進階設定」的 3 個 Node-RED 端點欄位如果目前的值

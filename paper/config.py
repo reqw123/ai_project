@@ -714,13 +714,19 @@ class NodeRedConfig:
         _runtime_default("nodered.timeout", 2, value_type=float),
     )
 
-    # 個體化基線共用儲存（原本是 Node-RED 內建 file-scoped context store；
-    # 2026-08-10 起改為 settings.js functionGlobalContext.gfile 手動用 fs
-    # 讀寫的固定路徑，Python 端與 Node-RED function node 都指向這裡）。
-    # 存放 v2_daily_history / v2_today / v2_baseline 等個體化基線相關資料。
-    # 只記錄路徑，尚未讀取／解析——之後 Python 端需要直接讀取這份資料時，
-    # 由此常數取得路徑，避免路徑散落各處造成不一致（對照 tracker_state.json
-    # 過去在 config.py 跟 Node-RED function node 裡各自寫死一份路徑的教訓）。
+    # Node-RED 個體化基線儲存檔的路徑（原本是 Node-RED 內建 file-scoped context
+    # store；2026-08-10 起改為 settings.js functionGlobalContext.gfile 手動用 fs
+    # 讀寫的固定路徑）。存放 v2_daily_history / v2_today / v2_baseline / v2_user_settings
+    # / v2_excluded_dates 等資料。
+    # 「共用」指的是「設定層」——一個環境變數同時驅動 settings.js 的 gfile 與這裡的
+    # 常數，讓兩邊自動指向同一個檔；不代表兩邊都拿它算基線。實際用途分工：
+    #   - Node-RED：即時讀寫，自己的「個體化基線計算器」節點完全靠這個檔。
+    #   - Python 執行期（Flask / dashboard / analytics）：完全不讀這個檔，基線歷史
+    #     一律吃 analytics/daily_store.py 的 daily_history.db（見該檔開頭「脫鉤」說明）。
+    #   - Python 只有工具會開這個檔：_tools/2_backfill_daily_store.py（一次性搬歷史
+    #     進 db）、_tools/1_read_context.py（唯讀診斷）——它們由此常數取得路徑。
+    #   - v2_user_settings / v2_excluded_dates 這些「設定值」會由 analytics_deviation_bridge.json
+    #     的 Node-RED 節點讀出來、透過 POST /api/deviation 帶給 Python，不是 Python 直接讀檔。
     # 2026-08-26：一度刻意「沒有」跟著 TRACKER_STATE_PATH/DAILY_HISTORY_DB_PATH 一起
     # 搬進 baseline_data/——真正的即時寫入者是 Node-RED（settings.js 的
     # functionGlobalContext.gfile 寫死路徑，不受這個 git 專案版本控制），當時只改
@@ -1217,7 +1223,7 @@ def get_config_summary() -> str:
       - Notify 端點   : {NodeRedConfig.ENDPOINT_NOTIFY}
       - Result v1 端點: {NodeRedConfig.ENDPOINT_RESULT}
       - Result v2 端點: {NodeRedConfig.ENDPOINT_RESULT_V2}
-      - 個體化基線共用儲存: {NodeRedConfig.GLOBAL_CONTEXT_PATH}
+      - Node-RED 基線儲存 (global.json): {NodeRedConfig.GLOBAL_CONTEXT_PATH}
 
     🎞️ 串流視覺化
       - 串流縮放尺寸      : {VisualizationConfig.STREAM_DISPLAY_SIZE}
