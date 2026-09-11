@@ -1,0 +1,1151 @@
+[
+  {
+    "id": "ba465c6e3ee42365",
+    "type": "ui_base",
+    "theme": {
+      "name": "theme-light",
+      "lightTheme": {
+        "default": "#0094CE",
+        "baseColor": "#0094CE",
+        "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif",
+        "edited": true,
+        "reset": false
+      },
+      "darkTheme": {
+        "default": "#097479",
+        "baseColor": "#097479",
+        "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif",
+        "edited": false
+      },
+      "customTheme": {
+        "name": "Untitled Theme 1",
+        "default": "#4B7930",
+        "baseColor": "#4B7930",
+        "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif"
+      },
+      "themeState": {
+        "base-color": {
+          "default": "#0094CE",
+          "value": "#0094CE",
+          "edited": false
+        },
+        "page-titlebar-backgroundColor": {
+          "value": "#0094CE",
+          "edited": false
+        },
+        "page-backgroundColor": {
+          "value": "#fafafa",
+          "edited": false
+        },
+        "page-sidebar-backgroundColor": {
+          "value": "#ffffff",
+          "edited": false
+        },
+        "group-textColor": {
+          "value": "#1bbfff",
+          "edited": false
+        },
+        "group-borderColor": {
+          "value": "#ffffff",
+          "edited": false
+        },
+        "group-backgroundColor": {
+          "value": "#ffffff",
+          "edited": false
+        },
+        "widget-textColor": {
+          "value": "#111111",
+          "edited": false
+        },
+        "widget-backgroundColor": {
+          "value": "#0094ce",
+          "edited": false
+        },
+        "widget-borderColor": {
+          "value": "#ffffff",
+          "edited": false
+        },
+        "base-font": {
+          "value": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif"
+        }
+      },
+      "angularTheme": {
+        "primary": "indigo",
+        "accents": "blue",
+        "warn": "red",
+        "background": "grey",
+        "palette": "light"
+      }
+    },
+    "site": {
+      "name": "Node-RED Dashboard",
+      "hideToolbar": "false",
+      "allowSwipe": "false",
+      "lockMenu": "false",
+      "allowTempTheme": "true",
+      "dateFormat": "DD/MM/YYYY",
+      "sizes": {
+        "sx": 48,
+        "sy": 48,
+        "gx": 6,
+        "gy": 6,
+        "cx": 6,
+        "cy": 6,
+        "px": 0,
+        "py": 0
+      }
+    }
+  },
+  {
+    "id": "tab_v2_cat_health",
+    "type": "ui_tab",
+    "name": "🐱 健康監測 v2",
+    "icon": "pets",
+    "order": 2,
+    "disabled": false,
+    "hidden": false
+  },
+  {
+    "id": "grp_p4_metrics",
+    "type": "ui_group",
+    "name": "P4 個體基線",
+    "tab": "tab_v2_cat_health",
+    "order": 4,
+    "disp": true,
+    "width": "24",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "grp_p2_behaviors",
+    "type": "ui_group",
+    "name": "P2 今日統計",
+    "tab": "tab_v2_cat_health",
+    "order": 2,
+    "disp": true,
+    "width": "24",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "grp_p3_dist",
+    "type": "ui_group",
+    "name": "P3 行為分析",
+    "tab": "tab_v2_cat_health",
+    "order": 3,
+    "disp": true,
+    "width": "24",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "grp_p1_realtime",
+    "type": "ui_group",
+    "name": "P1 即時監控",
+    "tab": "tab_v2_cat_health",
+    "order": 1,
+    "disp": true,
+    "width": "24",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "5b68e7e901e75e19",
+    "type": "tab",
+    "label": "第1層 核心資料流",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "457d7a0cc77babac",
+    "type": "tab",
+    "label": "第2層 行為分析引擎",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "34e73e2e234c0430",
+    "type": "tab",
+    "label": "第3層 基線引擎",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "8913de5d62305fee",
+    "type": "tab",
+    "label": "定時任務",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "17be7bb979f7f8d4",
+    "type": "http in",
+    "z": "5b68e7e901e75e19",
+    "name": "接收Python數據",
+    "url": "/yolo_result_v2",
+    "method": "post",
+    "upload": false,
+    "skipBodyParsing": false,
+    "x": 320,
+    "y": 192,
+    "wires": [
+      [
+        "375a62edf8201a0f",
+        "32a067a512334b08"
+      ]
+    ]
+  },
+  {
+    "id": "32a067a512334b08",
+    "type": "http response",
+    "z": "5b68e7e901e75e19",
+    "name": "200 OK",
+    "statusCode": "200",
+    "headers": {},
+    "x": 540,
+    "y": 302,
+    "wires": []
+  },
+  {
+    "id": "375a62edf8201a0f",
+    "type": "json",
+    "z": "5b68e7e901e75e19",
+    "name": "",
+    "property": "payload",
+    "action": "obj",
+    "pretty": false,
+    "x": 540,
+    "y": 192,
+    "wires": [
+      [
+        "49f95295c560b681"
+      ]
+    ]
+  },
+  {
+    "id": "49f95295c560b681",
+    "type": "function",
+    "z": "5b68e7e901e75e19",
+    "name": "行為統計累積器",
+    "func": "let data = msg.payload;\nif (!data || !data.today_stats) return [null, null, null, null];\nlet stats   = data.today_stats;\nlet current = data.current || {};\n\n// v2_today（數值來自 Python tracker）\nlet todayDate = new Date().toLocaleDateString('zh-TW');\nlet today = {\n    date:              todayDate,\n    walk:    { count: Number(stats.walk    || 0), time: Number(stats.walk_time    || 0) },\n    lick:    { count: Number(stats.lick    || 0), time: Number(stats.lick_time    || 0) },\n    scratch: { count: Number(stats.scratch || 0), time: Number(stats.scratch_time || 0) },\n    shake:   { count: Number(stats.shake   || 0), time: Number(stats.shake_time   || 0) },\n    stop:    { count: Number(stats.stop    || 0), time: Number(stats.stop_time    || 0) },\n    active_time:        Number(stats.active_time        || 0),\n    low_conf:           { count: Number(stats.low_conf || 0), time: Number(stats.low_conf_time || 0) },\n    not_detected_time:  Number(stats.not_detected_time  || 0),\n    monitoring_seconds: Number(stats.monitoring_seconds || 0),\n    cat_visible_time:   Number(stats.cat_visible_time   || 0),\n    total_uptime:       Number(stats.total_uptime       || 0)\n};\n// 百分比指標（Eckstein & Hart, 2000）：即時版，供 P1/P2/P3 Dashboard 直接顯示，\n// 定義與「每日統計彙整」節點一致（active_non_rest_time 排除 stop）\ntoday.active_non_rest_time = today.walk.time + today.lick.time + today.scratch.time + today.shake.time;\ntoday.active_ratio = today.monitoring_seconds > 0 ? parseFloat((today.active_non_rest_time / today.monitoring_seconds * 100).toFixed(2)) : 0;\ntoday.rest_ratio    = today.monitoring_seconds > 0 ? parseFloat((today.stop.time / today.monitoring_seconds * 100).toFixed(2)) : 0;\ntoday.lick_pct_of_day       = today.monitoring_seconds > 0    ? parseFloat((today.lick.time     / today.monitoring_seconds    * 100).toFixed(3)) : 0;\ntoday.scratch_pct_of_day    = today.monitoring_seconds > 0    ? parseFloat((today.scratch.time  / today.monitoring_seconds    * 100).toFixed(3)) : 0;\ntoday.lick_pct_of_active    = today.active_non_rest_time > 0  ? parseFloat((today.lick.time     / today.active_non_rest_time  * 100).toFixed(3)) : 0;\ntoday.scratch_pct_of_active = today.active_non_rest_time > 0  ? parseFloat((today.scratch.time  / today.active_non_rest_time  * 100).toFixed(3)) : 0;\nglobal.get(\"gfile\").set('v2_today', today);\n\n// 轉移矩陣、每小時分布：Python 計算好直接存入 context\nglobal.set('v2_transition_matrix', stats.transition_matrix   || {});\nglobal.set('v2_hourly',            stats.hourly_distribution || {});\n\n// emoji fallback\nlet emojiMap = {walk:'🚶',lick:'😸',scratch:'🐾',shake:'🔄',stop:'😴',not:'📷'};\nif (!current.emoji) current.emoji = emojiMap[current.behavior] || '🐱';\n\nmsg.payload           = data;\nmsg.payload.v2_today  = today;\nmsg.payload.v2_hourly = stats.hourly_distribution || {};\nmsg.payload.v2_matrix = stats.transition_matrix   || {};\n\n\nreturn [msg, msg, msg, null];",
+    "outputs": 4,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 760,
+    "y": 192,
+    "wires": [
+      [
+        "88b515fa19092291"
+      ],
+      [],
+      [
+        "e1458c25da1d111a"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "88b515fa19092291",
+    "type": "link out",
+    "z": "5b68e7e901e75e19",
+    "name": "→ P1即時監控",
+    "links": [
+      "2c8fc998d2296e0b"
+    ],
+    "x": 980,
+    "y": 192,
+    "wires": []
+  },
+  {
+    "id": "3d73511018a4d78a",
+    "type": "link out",
+    "z": "5b68e7e901e75e19",
+    "name": "→ P2今日統計",
+    "links": [
+      "1be6b1b84fb598bd"
+    ],
+    "x": 320,
+    "y": 302,
+    "wires": []
+  },
+  {
+    "id": "e1458c25da1d111a",
+    "type": "link out",
+    "z": "5b68e7e901e75e19",
+    "name": "→ 分析引擎",
+    "links": [
+      "a31e4075cebac8a3"
+    ],
+    "x": 980,
+    "y": 302,
+    "wires": []
+  },
+  {
+    "id": "2c8fc998d2296e0b",
+    "type": "link in",
+    "z": "5b68e7e901e75e19",
+    "name": "← P1資料入口",
+    "links": [
+      "88b515fa19092291"
+    ],
+    "x": 320,
+    "y": 412,
+    "wires": [
+      [
+        "7ccbfde4ed2ba5fd"
+      ]
+    ]
+  },
+  {
+    "id": "7ccbfde4ed2ba5fd",
+    "type": "ui_template",
+    "z": "5b68e7e901e75e19",
+    "group": "grp_p1_realtime",
+    "name": "P1 即時監控面板",
+    "order": 1,
+    "width": "24",
+    "height": "12",
+    "format": "<style>\n:root{\n  --ch-bg:#07111f;--ch-surface:#0d1a2b;--ch-surface-2:#122238;--ch-line:rgba(148,178,210,.14);\n  --ch-text:#f4f8fc;--ch-muted:#8da2b8;--ch-cyan:#55d6c2;--ch-blue:#63a7ff;--ch-violet:#a78bfa;\n  --ch-pink:#f472b6;--ch-slate:#71839a;--ch-ok:#4ade80;--ch-attn:#facc15;--ch-warn:#fb923c;--ch-high:#fb5c68;\n  --ch-shadow:0 18px 46px rgba(0,0,0,.28);--ch-radius:20px;\n}\nbody.nr-dashboard-theme,.nr-dashboard-theme md-content{background:radial-gradient(circle at 18% -10%,rgba(36,108,150,.18),transparent 34%),#06101d!important;color:var(--ch-text)}\n.nr-dashboard-theme md-toolbar{background:rgba(7,17,31,.94)!important;border-bottom:1px solid var(--ch-line);box-shadow:none!important}\n.nr-dashboard-theme md-sidenav{background:#081422!important;border-right:1px solid var(--ch-line)}\n.nr-dashboard-theme ui-card-panel,.nr-dashboard-theme .nr-dashboard-cardpanel{background:transparent!important;box-shadow:none!important;border:0!important}\n.nr-dashboard-theme .nr-dashboard-cardcontainer{background:transparent!important;box-shadow:none!important;border:0!important}\nbody.nr-dashboard-theme md-content md-card.nr-dashboard-template,.nr-dashboard-theme .nr-dashboard-template{background:transparent!important;box-shadow:none!important;border:0!important;padding:0!important}\n.nr-dashboard-theme .nr-dashboard-cardtitle{color:#90a5ba!important;font-weight:700!important;letter-spacing:.08em!important;text-transform:uppercase;font-size:11px!important}\n.p1-wrap,.p1-wrap *{box-sizing:border-box}\n.p1-wrap{font-family:Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;color:var(--ch-text);padding:clamp(12px,2vw,24px);background:linear-gradient(145deg,rgba(11,27,45,.96),rgba(6,16,29,.98));border:1px solid var(--ch-line);border-radius:var(--ch-radius);box-shadow:var(--ch-shadow);position:relative;overflow:hidden;isolation:isolate}\n.p1-wrap:before{content:\"\";position:absolute;width:360px;height:360px;border-radius:50%;right:-170px;top:-210px;background:radial-gradient(circle,rgba(85,214,194,.16),transparent 66%);z-index:-1;pointer-events:none}\n.p1-app-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:2px 2px 18px;border-bottom:1px solid var(--ch-line);margin-bottom:18px}\n.p1-brand{display:flex;align-items:center;gap:12px;min-width:0}\n.p1-brand-mark{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,rgba(85,214,194,.24),rgba(99,167,255,.12));border:1px solid rgba(85,214,194,.28);font-size:22px;box-shadow:0 0 24px rgba(85,214,194,.08)}\n.p1-title{font-size:18px;font-weight:850;letter-spacing:.02em}.p1-subtitle{font-size:11px;color:var(--ch-muted);margin-top:3px}\n.p1-live{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ch-line);border-radius:999px;padding:7px 11px;color:#b8c8d8;background:rgba(255,255,255,.035);font-size:11px;font-weight:700;white-space:nowrap}\n.p1-live-dot{width:8px;height:8px;border-radius:50%;background:var(--ch-ok);box-shadow:0 0 0 0 rgba(74,222,128,.45);animation:p1-live 2s infinite}\n.p1-live.is-stale .p1-live-dot{background:var(--ch-warn);animation:none}.p1-live.is-waiting .p1-live-dot{background:var(--ch-slate);animation:none}\n.p1-hero-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(280px,.85fr);gap:14px}\n.p1-card{background:linear-gradient(145deg,rgba(18,34,56,.88),rgba(10,24,41,.88));border:1px solid var(--ch-line);border-radius:18px;padding:clamp(16px,2vw,22px);position:relative;overflow:hidden}\n.p1-eyebrow{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--ch-muted);text-transform:uppercase;letter-spacing:.13em;font-weight:800}\n.p1-current-main{display:flex;align-items:center;gap:18px;margin:19px 0}\n.p1-emoji{width:72px;height:72px;flex:0 0 72px;display:grid;place-items:center;border-radius:22px;font-size:36px;background:linear-gradient(145deg,rgba(85,214,194,.2),rgba(99,167,255,.1));border:1px solid rgba(85,214,194,.24);box-shadow:inset 0 1px rgba(255,255,255,.07),0 10px 30px rgba(0,0,0,.18)}\n.p1-emoji.is-changing{animation:p1-pop .48s cubic-bezier(.2,.8,.2,1)}\n.p1-behavior{font-size:clamp(26px,4vw,38px);font-weight:900;line-height:1.05;letter-spacing:-.025em}.p1-time{font-size:12px;color:var(--ch-muted);margin-top:8px}\n.p1-score-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}\n.p1-score-box{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:13px 15px}\n.p1-score-val{font-size:24px;font-weight:900;letter-spacing:-.03em}.p1-score-lbl{font-size:10px;color:var(--ch-muted);margin-top:4px}\n.p1-risk-card{display:flex;flex-direction:column;align-items:center;text-align:center;justify-content:center;min-height:280px;transition:border-color .35s,box-shadow .35s}\n.p1-ring{width:144px;height:144px;border-radius:50%;padding:10px;display:grid;place-items:center;transition:background .6s ease;filter:drop-shadow(0 0 18px rgba(85,214,194,.1))}\n.p1-ring-inner{width:100%;height:100%;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0b1929;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 0 28px rgba(0,0,0,.28)}\n.p1-ring-score{font-size:40px;font-weight:950;line-height:1;letter-spacing:-.05em}.p1-ring-unit{font-size:10px;color:var(--ch-muted);margin-top:5px;letter-spacing:.1em}\n.p1-risk-badge{display:inline-flex;align-items:center;justify-content:center;gap:6px;margin-top:13px;padding:7px 13px;border-radius:999px;font-size:12px;font-weight:850;border:1px solid transparent}\n.risk-normal{color:#86efac;background:rgba(74,222,128,.1);border-color:rgba(74,222,128,.25)}\n.risk-attention{color:#fde047;background:rgba(250,204,21,.1);border-color:rgba(250,204,21,.25)}\n.risk-warning{color:#fdba74;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.28)}\n.risk-high{color:#fda4af;background:rgba(251,92,104,.11);border-color:rgba(251,92,104,.32)}\n.p1-risk-card.risk-high{box-shadow:inset 0 0 0 1px rgba(251,92,104,.12),0 0 28px rgba(251,92,104,.08);animation:p1-critical 2.2s ease-in-out infinite}\n.p1-components{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:14px}\n.p1-component{padding:8px 5px;border-radius:10px;background:rgba(255,255,255,.035);font-size:9px;color:var(--ch-muted)}.p1-component strong{display:block;color:var(--ch-text);font-size:14px;margin-bottom:2px}\n.p1-lower-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,.75fr);gap:14px;margin-top:14px}\n.p1-panel{background:rgba(10,24,41,.66);border:1px solid var(--ch-line);border-radius:18px;padding:17px}\n.p1-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:15px}.p1-section-title{font-size:13px;font-weight:850}.p1-section-hint{font-size:10px;color:var(--ch-muted)}\n.p1-bars{display:grid;gap:10px}.p1-bar-row{display:grid;grid-template-columns:72px minmax(0,1fr) 48px;align-items:center;gap:10px}\n.p1-bar-lbl{font-size:11px;color:#c6d3df;font-weight:650}.p1-bar-track{height:9px;background:rgba(142,163,184,.11);border-radius:999px;overflow:hidden}\n.p1-bar-fill{height:100%;border-radius:999px;transition:width .65s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 12px currentColor}\n.fill-walk{background:linear-gradient(90deg,#2abda8,#55d6c2)}.fill-lick{background:linear-gradient(90deg,#8568dc,#a78bfa)}.fill-scratch{background:linear-gradient(90deg,#db559d,#f472b6)}.fill-shake{background:linear-gradient(90deg,#438ce8,#63a7ff)}.fill-stop{background:linear-gradient(90deg,#566b82,#71839a)}\n.p1-bar-val{font-size:11px;color:#dce6ef;text-align:right;font-variant-numeric:tabular-nums}\n.p1-actions{display:grid;gap:9px}.p1-stream-btn{width:100%;border:1px solid rgba(99,167,255,.32);color:#a9ceff;background:linear-gradient(135deg,rgba(99,167,255,.16),rgba(85,214,194,.08));border-radius:12px;padding:11px 13px;font-size:12px;font-weight:750;cursor:pointer;font-family:inherit;transition:transform .18s,background .18s,border-color .18s}\n.p1-stream-btn:hover{transform:translateY(-1px);background:rgba(99,167,255,.22);border-color:rgba(99,167,255,.5)}\n.p1-overlay-title{font-size:10px;color:var(--ch-muted);letter-spacing:.08em;text-transform:uppercase;margin:4px 0 7px}\n.p1-overlay-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}\n.p1-ov-btn{min-height:38px;border-radius:11px;padding:8px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:700;transition:background .2s,color .2s,border-color .2s,transform .15s;border:1px solid}\n.p1-ov-btn:active{transform:scale(.98)}.p1-ov-on{background:rgba(85,214,194,.13);border-color:rgba(85,214,194,.34);color:#8ce6d8}.p1-ov-off{background:rgba(255,255,255,.025);border-color:var(--ch-line);color:#687d92}\n@keyframes p1-live{70%{box-shadow:0 0 0 7px rgba(74,222,128,0)}}@keyframes p1-pop{0%{transform:scale(.88);filter:brightness(1.8)}60%{transform:scale(1.08)}100%{transform:scale(1)}}\n@keyframes p1-critical{50%{border-color:rgba(251,92,104,.48);box-shadow:0 0 30px rgba(251,92,104,.14)}}\n@media(max-width:900px){.p1-hero-grid,.p1-lower-grid{grid-template-columns:1fr}.p1-risk-card{min-height:unset}.p1-ring{width:130px;height:130px}.p1-components{max-width:360px}}\n@media(max-width:560px){.p1-wrap{border-radius:16px;padding:13px}.p1-app-head{align-items:flex-start}.p1-title{font-size:16px}.p1-subtitle{display:none}.p1-live{padding:6px 9px}.p1-card,.p1-panel{border-radius:15px;padding:14px}.p1-current-main{gap:13px;margin:15px 0}.p1-emoji{width:58px;height:58px;flex-basis:58px;border-radius:18px;font-size:30px}.p1-behavior{font-size:27px}.p1-score-row{gap:7px}.p1-score-val{font-size:21px}.p1-bar-row{grid-template-columns:64px 1fr 43px;gap:7px}.p1-components{gap:5px}.p1-component{font-size:8px}.p1-overlay-grid{grid-template-columns:1fr 1fr}}\n@media(prefers-reduced-motion:reduce){.p1-wrap *{animation:none!important;transition:none!important}}\n</style>\n\n<div class=\"p1-wrap\" ng-init=\"init()\">\n  <header class=\"p1-app-head\">\n    <div class=\"p1-brand\">\n      <div class=\"p1-brand-mark\">🐱</div>\n      <div><div class=\"p1-title\">Cat Health Intelligence</div><div class=\"p1-subtitle\">個體化行為健康監測中心</div></div>\n    </div>\n    <div class=\"p1-live\" ng-class=\"{'is-stale':connectionState==='stale','is-waiting':connectionState==='waiting'}\">\n      <span class=\"p1-live-dot\"></span>{{connectionText()}}\n    </div>\n  </header>\n\n  <section class=\"p1-hero-grid\">\n    <article class=\"p1-card p1-current-card\">\n      <div class=\"p1-eyebrow\">● Live behavior · 即時行為</div>\n      <div class=\"p1-current-main\">\n        <div class=\"p1-emoji\" ng-class=\"{'is-changing':behaviorPulse}\">{{cur.emoji || '🐱'}}</div>\n        <div><div class=\"p1-behavior\">{{behaviorName(cur.behavior)}}</div><div class=\"p1-time\">最後辨識 · {{cur.timestamp || lastSeenText()}}</div></div>\n      </div>\n      <div class=\"p1-score-row\">\n        <div class=\"p1-score-box\"><div class=\"p1-score-val\">{{activityScore()}}</div><div class=\"p1-score-lbl\">活動力指數</div></div>\n        <div class=\"p1-score-box\"><div class=\"p1-score-val\">{{riskScore()}}</div><div class=\"p1-score-lbl\">綜合偏差分</div></div>\n      </div>\n    </article>\n\n    <article class=\"p1-card p1-risk-card\" ng-class=\"riskCls\">\n      <div class=\"p1-eyebrow\">Behavior risk · 行為風險</div>\n      <div class=\"p1-ring\" ng-style=\"riskRingStyle()\"><div class=\"p1-ring-inner\"><div class=\"p1-ring-score\">{{riskScore()}}</div><div class=\"p1-ring-unit\">/ 100</div></div></div>\n      <div class=\"p1-risk-badge\" ng-class=\"riskCls\">{{risk.emoji || '⏳'}} {{riskLevelZh(risk.level)}}</div>\n      <div class=\"p1-components\">\n        <div class=\"p1-component\"><strong>{{riskComponent('class_a')}}</strong>關鍵行為</div>\n        <div class=\"p1-component\"><strong>{{riskComponent('class_b')}}</strong>輔助行為</div>\n        <div class=\"p1-component\"><strong>{{riskComponent('class_c')}}</strong>行為模式</div>\n      </div>\n    </article>\n  </section>\n\n  <section class=\"p1-lower-grid\">\n    <div class=\"p1-panel\">\n      <div class=\"p1-section-head\"><div class=\"p1-section-title\">今日行為組成</div><div class=\"p1-section-hint\">依已辨識時間計算</div></div>\n      <div class=\"p1-bars\">\n        <div class=\"p1-bar-row\"><div class=\"p1-bar-lbl\">🚶 行走</div><div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-walk\" ng-style=\"{width:pct('walk')+'%'}\"></div></div><div class=\"p1-bar-val\">{{pct('walk')}}%</div></div>\n        <div class=\"p1-bar-row\"><div class=\"p1-bar-lbl\">😸 舔舐</div><div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-lick\" ng-style=\"{width:pct('lick')+'%'}\"></div></div><div class=\"p1-bar-val\">{{pct('lick')}}%</div></div>\n        <div class=\"p1-bar-row\"><div class=\"p1-bar-lbl\">🐾 搔抓</div><div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-scratch\" ng-style=\"{width:pct('scratch')+'%'}\"></div></div><div class=\"p1-bar-val\">{{pct('scratch')}}%</div></div>\n        <div class=\"p1-bar-row\"><div class=\"p1-bar-lbl\">↻ 甩頭</div><div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-shake\" ng-style=\"{width:pct('shake')+'%'}\"></div></div><div class=\"p1-bar-val\">{{pct('shake')}}%</div></div>\n        <div class=\"p1-bar-row\"><div class=\"p1-bar-lbl\">☾ 靜止</div><div class=\"p1-bar-track\"><div class=\"p1-bar-fill fill-stop\" ng-style=\"{width:pct('stop')+'%'}\"></div></div><div class=\"p1-bar-val\">{{pct('stop')}}%</div></div>\n      </div>\n    </div>\n\n    <div class=\"p1-panel p1-actions\">\n      <div class=\"p1-section-head\"><div class=\"p1-section-title\">影像顯示控制</div><div class=\"p1-section-hint\">Python Overlay</div></div>\n      <button onclick=\"if(window.gfvToggle){window.gfvToggle();}else{alert('請確認已載入貓咪主控流程');}\" class=\"gfv-p1-stream-btn p1-stream-btn\">▣ 開啟即時串流影像</button>\n      <div class=\"p1-overlay-title\">Overlay layers</div>\n      <div class=\"p1-overlay-grid\">\n        <button ng-click=\"overlayToggle('master')\" class=\"p1-ov-btn\" ng-class=\"overlayState.master?'p1-ov-on':'p1-ov-off'\">{{overlayState.master ? '全部關閉' : '全部開啟'}}</button>\n        <button ng-click=\"overlayToggle('skeleton')\" class=\"p1-ov-btn\" ng-class=\"overlayState.skeleton?'p1-ov-on':'p1-ov-off'\">骨架</button>\n        <button ng-click=\"overlayToggle('label')\" class=\"p1-ov-btn\" ng-class=\"overlayState.label?'p1-ov-on':'p1-ov-off'\">行為標籤</button>\n        <button ng-click=\"overlayToggle('bbox')\" class=\"p1-ov-btn\" ng-class=\"overlayState.bbox?'p1-ov-on':'p1-ov-off'\">偵測框</button>\n      </div>\n    </div>\n  </section>\n</div>\n\n<script>\n(function(scope){\n  scope.cur={};scope.risk={};scope.riskCls='risk-normal';scope.pythonIp='127.0.0.1';scope.overlayState={master:true,skeleton:true,label:true,bbox:true};\n  scope.connectionState='waiting';scope.lastSeen=null;scope.behaviorPulse=false;\n  var staleTimer=null,previousBehavior=null;\n  scope.init=function(){};\n  scope.payload=function(){return scope.msg&&scope.msg.payload?scope.msg.payload:{};};\n  scope.overlayToggle=function(key){\n    var url='http://'+scope.pythonIp+':5000/api/overlay';\n    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:key,action:'toggle'})})\n      .then(function(r){return r.json();}).then(function(d){if(d.state)scope.$evalAsync(function(){scope.overlayState=d.state;});}).catch(function(){});\n  };\n  scope.riskLevelZh=function(lvl){return (lvl==='Severe Behavioral Deviation'||lvl==='High Risk')?'重度行為偏差':(lvl==='Moderate Behavioral Deviation'||lvl==='Warning')?'中度行為偏差':(lvl==='Mild Behavioral Deviation'||lvl==='Attention')?'輕度行為偏差':lvl==='Normal'?'行為正常':lvl||'基線計算中';};\n  scope.behaviorName=function(b){return {walk:'行走',lick:'舔舐',scratch:'搔抓',shake:'甩頭',stop:'靜止',not:'不在畫面'}[b]||b||'等待辨識';};\n  scope.riskScore=function(){var v=Number(scope.risk.score);return isFinite(v)?Math.max(0,Math.min(100,Math.round(v))):0;};\n  scope.activityScore=function(){var v=Number(scope.payload().activity_score);return isFinite(v)?Math.round(v):0;};\n  scope.riskColor=function(){var lvl=scope.risk.level||'';return (lvl==='Severe Behavioral Deviation'||lvl==='High Risk')?'#fb5c68':(lvl==='Moderate Behavioral Deviation'||lvl==='Warning')?'#fb923c':(lvl==='Mild Behavioral Deviation'||lvl==='Attention')?'#facc15':'#4ade80';};\n  scope.riskRingStyle=function(){var score=scope.riskScore(),deg=score*3.6;return {background:'conic-gradient('+scope.riskColor()+' 0deg '+deg+'deg,rgba(142,163,184,.12) '+deg+'deg 360deg)'};};\n  scope.riskComponent=function(k){var c=scope.risk&&scope.risk.components;return c&&c[k]!=null?Math.round(c[k]):0;};\n  scope.pct=function(b){var td=scope.payload().v2_today;if(!td)return '0.00';var total=['walk','lick','scratch','shake','stop'].reduce(function(s,k){return s+Number(td[k]&&td[k].time||0);},0);if(!total)return '0.00';return (Number(td[b]&&td[b].time||0)/total*100).toFixed(2);};\n  scope.connectionText=function(){return scope.connectionState==='live'?'即時連線':scope.connectionState==='stale'?'資料暫停':'等待資料';};\n  scope.lastSeenText=function(){return scope.lastSeen?scope.lastSeen.toLocaleTimeString('zh-TW',{hour12:false}):'--:--:--';};\n  scope.$watch('msg',function(m){\n    if(!m||!m.payload)return;\n    scope.cur=m.payload.current||{};scope.risk=m.payload.risk||{};scope.lastSeen=new Date();scope.connectionState='live';\n    if(m.payload.system&&m.payload.system.ip)scope.pythonIp=m.payload.system.ip;\n    var lvl=scope.risk.level||'';\n    scope.riskCls=(lvl==='Severe Behavioral Deviation'||lvl==='High Risk')?'risk-high':(lvl==='Moderate Behavioral Deviation'||lvl==='Warning')?'risk-warning':(lvl==='Mild Behavioral Deviation'||lvl==='Attention')?'risk-attention':'risk-normal';\n    if(previousBehavior!==null&&previousBehavior!==scope.cur.behavior){scope.behaviorPulse=true;setTimeout(function(){scope.$evalAsync(function(){scope.behaviorPulse=false;});},520);}previousBehavior=scope.cur.behavior;\n    if(staleTimer)clearTimeout(staleTimer);staleTimer=setTimeout(function(){scope.$evalAsync(function(){scope.connectionState='stale';});},12000);\n  });\n  scope.$on('$destroy',function(){if(staleTimer)clearTimeout(staleTimer);});\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "cat-health-widget",
+    "x": 540,
+    "y": 412,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "1be6b1b84fb598bd",
+    "type": "link in",
+    "z": "5b68e7e901e75e19",
+    "name": "← P2資料入口",
+    "links": [
+      "2ae887ea7180e1aa"
+    ],
+    "x": 320,
+    "y": 522,
+    "wires": [
+      [
+        "706274e1914f132e"
+      ]
+    ]
+  },
+  {
+    "id": "706274e1914f132e",
+    "type": "ui_template",
+    "z": "5b68e7e901e75e19",
+    "group": "grp_p2_behaviors",
+    "name": "P2 今日統計面板",
+    "order": 1,
+    "width": "24",
+    "height": "14",
+    "format": "<style>\n.p2-wrap,.p2-wrap *{box-sizing:border-box}.p2-wrap{font-family:Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;color:var(--ch-text,#f4f8fc);padding:clamp(12px,2vw,22px);background:linear-gradient(145deg,rgba(11,27,45,.96),rgba(6,16,29,.98));border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:20px;box-shadow:0 18px 46px rgba(0,0,0,.24)}\n.p2-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:17px}.p2-title{font-size:17px;font-weight:900}.p2-kicker{font-size:10px;color:var(--ch-cyan,#55d6c2);letter-spacing:.13em;text-transform:uppercase;font-weight:800;margin-bottom:5px}.p2-date{font-size:11px;color:var(--ch-muted,#8da2b8)}\n.p2-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:14px}.p2-sum-box{min-width:0;background:linear-gradient(145deg,rgba(18,34,56,.9),rgba(10,24,41,.86));border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:16px;padding:15px;position:relative;overflow:hidden;transition:transform .2s,border-color .2s}.p2-sum-box:hover{transform:translateY(-2px);border-color:rgba(85,214,194,.28)}\n.p2-sum-box:after{content:\"\";position:absolute;right:-18px;bottom:-28px;width:72px;height:72px;border-radius:50%;background:radial-gradient(circle,rgba(85,214,194,.09),transparent 68%)}\n.p2-sum-ico{font-size:15px;opacity:.76;margin-bottom:10px}.p2-sum-val{font-size:clamp(19px,2.2vw,28px);font-weight:900;letter-spacing:-.035em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}.p2-sum-lbl{font-size:10px;color:var(--ch-muted,#8da2b8);margin-top:6px;line-height:1.35}\n.p2-panel{background:rgba(10,24,41,.7);border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:18px;padding:17px;margin-top:14px}.p2-panel-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-bottom:14px}.p2-panel-title{font-size:13px;font-weight:850}.p2-panel-hint{font-size:10px;color:var(--ch-muted,#8da2b8)}\n.p2-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.p2-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.065);border-radius:14px;padding:13px 12px;min-width:0}.p2-card-top{display:flex;align-items:center;justify-content:space-between;gap:7px}.p2-card-ico{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;font-size:18px;background:var(--behavior-soft)}.p2-card-pct{font-size:11px;font-weight:800;color:var(--behavior)}\n.p2-card-cnt{font-size:23px;font-weight:900;margin-top:11px;letter-spacing:-.03em}.p2-card-lbl{font-size:10px;color:var(--ch-muted,#8da2b8);margin-top:2px}.p2-card-bar{height:6px;border-radius:99px;background:rgba(142,163,184,.11);overflow:hidden;margin-top:11px}.p2-card-fill{height:100%;border-radius:99px;transition:width .65s cubic-bezier(.2,.8,.2,1)}.p2-card-time{font-size:10px;color:#c0cfdd;margin-top:7px;font-variant-numeric:tabular-nums}\n.p2-compare{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.p2-compare-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.065);border-radius:14px;padding:13px}.p2-compare-name{font-size:11px;font-weight:750;color:#d8e4ee;margin-bottom:12px}.p2-compare-value{font-size:22px;font-weight:900}.p2-compare-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.p2-chip{font-size:9px;padding:5px 7px;border-radius:999px;background:rgba(99,167,255,.1);color:#9fc8ff;border:1px solid rgba(99,167,255,.16)}.p2-chip.lit{background:rgba(167,139,250,.09);color:#c7b8ff;border-color:rgba(167,139,250,.17)}.p2-pct-hint{font-size:10px;color:var(--ch-muted,#8da2b8);line-height:1.6;margin-top:10px;padding-left:10px;border-left:2px solid rgba(85,214,194,.28)}\n.p2-hour-chart{height:180px;display:grid;grid-template-columns:repeat(24,minmax(8px,1fr));gap:3px;align-items:end;padding:8px 2px 0;border-bottom:1px solid rgba(148,178,210,.12);background:linear-gradient(to top,rgba(255,255,255,.018) 1px,transparent 1px);background-size:100% 36px}.p2-hour-col{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0;position:relative}.p2-stack-shell{height:140px;width:100%;display:flex;align-items:flex-end;justify-content:center}.p2-stack{width:min(14px,76%);min-height:3px;display:flex;flex-direction:column-reverse;border-radius:5px 5px 2px 2px;overflow:hidden;transition:height .55s cubic-bezier(.2,.8,.2,1);box-shadow:0 5px 14px rgba(0,0,0,.12)}.p2-segment{display:block;min-height:0;transition:height .55s}.p2-hour-lbl{height:22px;font-size:8px;color:#60778e;margin-top:5px}.p2-hour-col:nth-child(3n+1) .p2-hour-lbl{color:#91a6ba}.p2-now-marker{position:absolute;top:0;width:5px;height:5px;border-radius:50%;background:var(--ch-cyan,#55d6c2);box-shadow:0 0 0 4px rgba(85,214,194,.1)}\n.p2-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}.p2-legend-item{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--ch-muted,#8da2b8)}.p2-legend-dot{width:8px;height:8px;border-radius:3px}\n@media(max-width:1050px){.p2-summary{grid-template-columns:repeat(3,1fr)}.p2-grid{grid-template-columns:repeat(3,1fr)}}\n@media(max-width:700px){.p2-wrap{padding:13px;border-radius:16px}.p2-head{align-items:flex-start}.p2-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.p2-sum-box{padding:12px;border-radius:14px}.p2-sum-box:first-child{grid-column:1/-1}.p2-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.p2-card:last-child{grid-column:1/-1}.p2-compare{grid-template-columns:1fr}.p2-panel{padding:13px;border-radius:15px}.p2-hour-chart{gap:2px;overflow:hidden}.p2-stack{width:70%}.p2-hour-lbl{font-size:7px}.p2-panel-hint{display:none}}\n@media(max-width:390px){.p2-summary,.p2-grid{grid-template-columns:1fr}.p2-sum-box:first-child,.p2-card:last-child{grid-column:auto}.p2-hour-chart{height:160px}.p2-stack-shell{height:120px}}\n@media(prefers-reduced-motion:reduce){.p2-wrap *{animation:none!important;transition:none!important}}\n</style>\n\n<div class=\"p2-wrap\" ng-init=\"init()\">\n  <header class=\"p2-head\"><div><div class=\"p2-kicker\">Daily intelligence</div><div class=\"p2-title\">今日健康摘要</div></div><div class=\"p2-date\">{{todayDate()}} · 持續更新</div></header>\n\n  <section class=\"p2-summary\">\n    <div class=\"p2-sum-box\"><div class=\"p2-sum-ico\">◇</div><div class=\"p2-sum-val\" ng-style=\"{color:riskColor()}\">{{riskScore()}}</div><div class=\"p2-sum-lbl\">行為偏差分 / 100</div></div>\n    <div class=\"p2-sum-box\"><div class=\"p2-sum-ico\">⌁</div><div class=\"p2-sum-val\">{{fmtTime(totalActive())}}</div><div class=\"p2-sum-lbl\">今日活動時間</div></div>\n    <div class=\"p2-sum-box\"><div class=\"p2-sum-ico\">⇄</div><div class=\"p2-sum-val\">{{totalBehaviors()}}</div><div class=\"p2-sum-lbl\">行為辨識次數</div></div>\n    <div class=\"p2-sum-box\"><div class=\"p2-sum-ico\">◷</div><div class=\"p2-sum-val\" ng-style=\"{color:monColor()}\">{{fmtTime(monSec())}}</div><div class=\"p2-sum-lbl\">系統監控時長</div></div>\n    <div class=\"p2-sum-box\"><div class=\"p2-sum-ico\">◉</div><div class=\"p2-sum-val\" ng-style=\"{color:catVisibleColor()}\">{{fmtTime(catVisibleSec())}}</div><div class=\"p2-sum-lbl\">貓咪入鏡時間</div></div>\n  </section>\n\n  <section class=\"p2-panel\">\n    <div class=\"p2-panel-head\"><div class=\"p2-panel-title\">行為分類統計</div><div class=\"p2-panel-hint\">次數、累積時間與今日組成</div></div>\n    <div class=\"p2-grid\">\n      <article class=\"p2-card\" ng-repeat=\"b in behaviors\">\n        <div class=\"p2-card-top\"><div class=\"p2-card-ico\" ng-style=\"{background:b.soft}\">{{b.ico}}</div><div class=\"p2-card-pct\" ng-style=\"{color:b.color}\">{{pct(b.key)}}%</div></div>\n        <div class=\"p2-card-cnt\">{{behaviorCount(b.key)}}</div><div class=\"p2-card-lbl\">{{b.name}}次數</div>\n        <div class=\"p2-card-bar\"><div class=\"p2-card-fill\" ng-style=\"{width:pct(b.key)+'%',background:b.color}\"></div></div><div class=\"p2-card-time\">累積 {{fmtTime(behaviorTime(b.key))}}</div>\n      </article>\n    </div>\n  </section>\n\n  <section class=\"p2-panel\">\n    <div class=\"p2-panel-head\"><div class=\"p2-panel-title\">個體基線對照</div><div class=\"p2-panel-hint\">文獻數值僅供參考，偏差仍以個體基線判斷</div></div>\n    <div class=\"p2-compare\">\n      <article class=\"p2-compare-card\"><div class=\"p2-compare-name\">🏃 活動時間佔比</div><div class=\"p2-compare-value\">{{todayPct('active_ratio').toFixed(2)}}%</div><div class=\"p2-compare-meta\"><span class=\"p2-chip\">基線 {{fmtBlPct('active_ratio','mean')}}% ± {{fmtBlPct('active_ratio','std')}}</span><span class=\"p2-chip lit\">文獻約 43%</span></div></article>\n      <article class=\"p2-compare-card\"><div class=\"p2-compare-name\">😸 舔舐佔活動時間</div><div class=\"p2-compare-value\">{{todayPct('lick_pct_of_active').toFixed(2)}}%</div><div class=\"p2-compare-meta\"><span class=\"p2-chip\">基線 {{fmtBlPct('lick_pct_active','mean')}}% ± {{fmtBlPct('lick_pct_active','std')}}</span><span class=\"p2-chip lit\">文獻約 8%</span></div></article>\n      <article class=\"p2-compare-card\"><div class=\"p2-compare-name\">🐾 搔抓佔活動時間</div><div class=\"p2-compare-value\">{{todayPct('scratch_pct_of_active').toFixed(2)}}%</div><div class=\"p2-compare-meta\"><span class=\"p2-chip\">基線 {{fmtBlPct('scratch_pct_active','mean')}}% ± {{fmtBlPct('scratch_pct_active','std')}}</span><span class=\"p2-chip lit\">文獻約 0.2%</span></div></article>\n    </div>\n    <div class=\"p2-pct-hint\">比例計算排除靜止行為，以非休息活動時間作為分母；群體參考值不直接作為警報門檻。</div>\n  </section>\n\n  <section class=\"p2-panel\">\n    <div class=\"p2-panel-head\"><div class=\"p2-panel-title\">24 小時行為分布</div><div class=\"p2-panel-hint\">柱高代表該小時總辨識時間，顏色代表各行為組成</div></div>\n    <div class=\"p2-hour-chart\">\n      <div class=\"p2-hour-col\" ng-repeat=\"h in hours track by $index\" title=\"{{hourTitle(h)}}\">\n        <span class=\"p2-now-marker\" ng-if=\"isCurrentHour(h)\"></span>\n        <div class=\"p2-stack-shell\"><div class=\"p2-stack\" ng-style=\"{height:hHeight(h)+'px'}\"><span class=\"p2-segment\" ng-repeat=\"b in behaviors\" ng-style=\"{height:hPart(h,b.key)+'%',background:b.color}\"></span></div></div>\n        <span class=\"p2-hour-lbl\">{{$index%3===0?h:''}}</span>\n      </div>\n    </div>\n    <div class=\"p2-legend\"><div class=\"p2-legend-item\" ng-repeat=\"b in behaviors\"><span class=\"p2-legend-dot\" ng-style=\"{background:b.color}\"></span>{{b.name}}</div></div>\n  </section>\n</div>\n\n<script>\n(function(scope){\n  scope.init=function(){};scope.hours=Array.from({length:24},function(_,i){return String(i).padStart(2,'0');});\n  scope.behaviors=[\n    {key:'walk',name:'行走',ico:'🚶',color:'#55d6c2',soft:'rgba(85,214,194,.13)'},\n    {key:'lick',name:'舔舐',ico:'😸',color:'#a78bfa',soft:'rgba(167,139,250,.13)'},\n    {key:'scratch',name:'搔抓',ico:'🐾',color:'#f472b6',soft:'rgba(244,114,182,.13)'},\n    {key:'shake',name:'甩頭',ico:'↻',color:'#63a7ff',soft:'rgba(99,167,255,.13)'},\n    {key:'stop',name:'靜止',ico:'☾',color:'#71839a',soft:'rgba(113,131,154,.13)'}\n  ];\n  scope.payload=function(){return scope.msg&&scope.msg.payload?scope.msg.payload:{};};\n  scope.td=function(){return scope.payload().v2_today||{walk:{count:0,time:0},lick:{count:0,time:0},scratch:{count:0,time:0},shake:{count:0,time:0},stop:{count:0,time:0}};};\n  scope.todayDate=function(){return scope.td().date||new Date().toLocaleDateString('zh-TW');};\n  scope.behaviorCount=function(k){return Number(scope.td()[k]&&scope.td()[k].count||0);};scope.behaviorTime=function(k){return Number(scope.td()[k]&&scope.td()[k].time||0);};\n  scope.totalActive=function(){return Number(scope.td().active_time||0);};\n  scope.totalBehaviors=function(){return ['walk','lick','scratch','shake','stop'].reduce(function(s,k){return s+scope.behaviorCount(k);},0);};\n  scope.pct=function(b){var total=['walk','lick','scratch','shake','stop'].reduce(function(s,k){return s+scope.behaviorTime(k);},0);return total?(scope.behaviorTime(b)/total*100).toFixed(2):'0.00';};\n  scope.riskScore=function(){var r=scope.payload().risk;return r&&r.score!=null?Math.round(r.score):'--';};scope.riskColor=function(){var r=scope.payload().risk;return r&&r.color?r.color:'#71839a';};\n  scope.bl=function(){return scope.payload().baseline||null;};scope.fmtBlPct=function(key,field){var b=scope.bl();return b&&b.metrics&&b.metrics[key]&&b.metrics[key][field]!=null?(+b.metrics[key][field]).toFixed(2):'--';};\n  scope.todayPct=function(field){var v=scope.td()[field];return v!=null&&isFinite(Number(v))?Number(v):0;};\n  scope.monSec=function(){return Number(scope.td().total_uptime||0);};scope.monColor=function(){var h=scope.monSec()/3600;return h>=4?'#4ade80':h>=2?'#facc15':'#fb923c';};\n  scope.catVisibleSec=function(){return Number(scope.td().cat_visible_time||0);};scope.catVisibleColor=function(){var mon=scope.monSec(),ratio=mon>0?scope.catVisibleSec()/mon:0;return ratio>=.5?'#4ade80':ratio>=.2?'#facc15':'#fb923c';};\n  scope.fmtTime=function(s){s=Number(s)||0;var h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=Math.floor(s%60);return h?h+'時'+m+'分':m?m+'分'+sec+'秒':sec+'秒';};\n  scope.hourData=function(h){var hr=scope.payload().v2_hourly||{};return hr[h]||{};};scope.hTotal=function(h){var d=scope.hourData(h);return scope.behaviors.reduce(function(s,b){return s+Number(d[b.key]||0);},0);};\n  scope.hourMax=function(){var max=1;scope.hours.forEach(function(h){max=Math.max(max,scope.hTotal(h));});return max;};scope.hHeight=function(h){var total=scope.hTotal(h);return total?Math.max(4,Math.round(total/scope.hourMax()*134)):3;};\n  scope.hPart=function(h,k){var total=scope.hTotal(h);return total?Number(scope.hourData(h)[k]||0)/total*100:0;};scope.isCurrentHour=function(h){return Number(h)===new Date().getHours();};\n  scope.hourTitle=function(h){var d=scope.hourData(h),parts=scope.behaviors.map(function(b){return b.name+' '+scope.fmtTime(d[b.key]||0);});return h+':00｜'+parts.join('、');};\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "cat-health-widget",
+    "x": 540,
+    "y": 522,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "a31e4075cebac8a3",
+    "type": "link in",
+    "z": "457d7a0cc77babac",
+    "name": "← 分析引擎入口",
+    "links": [
+      "e1458c25da1d111a"
+    ],
+    "x": 40,
+    "y": 192,
+    "wires": [
+      [
+        "fceb2dbe2d809dbc"
+      ]
+    ]
+  },
+  {
+    "id": "fceb2dbe2d809dbc",
+    "type": "function",
+    "z": "457d7a0cc77babac",
+    "name": "行為分布計算",
+    "func": "let data = msg.payload;\nlet td   = data.v2_today || {};\nlet times = {\n    walk:    td.walk    ? td.walk.time    : 0,\n    lick:    td.lick    ? td.lick.time    : 0,\n    scratch: td.scratch ? td.scratch.time : 0,\n    shake:   td.shake   ? td.shake.time   : 0,\n    stop:    td.stop    ? td.stop.time    : 0\n};\nlet total = Object.values(times).reduce((a,b)=>a+b, 0);\nlet dist  = {};\nif (total > 0) {\n    for (let [k,v] of Object.entries(times)) dist[k] = parseFloat((v/total*100).toFixed(2));\n} else {\n    dist = {walk:0,lick:0,scratch:0,shake:0,stop:0};\n}\nflow.set('v2_distribution', dist);\nmsg.payload.distribution = dist;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 260,
+    "y": 192,
+    "wires": [
+      [
+        "5abf89638a049a00"
+      ]
+    ]
+  },
+  {
+    "id": "5abf89638a049a00",
+    "type": "function",
+    "z": "457d7a0cc77babac",
+    "name": "行為節律分析",
+    "func": "let data   = msg.payload;\nlet hourly = data.v2_hourly || {};\nlet periods = {\n    '00-06': {walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '06-12': {walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '12-18': {walk:0,lick:0,scratch:0,shake:0,stop:0,total:0},\n    '18-24': {walk:0,lick:0,scratch:0,shake:0,stop:0,total:0}\n};\nfor (let h=0; h<24; h++) {\n    let k  = String(h).padStart(2,'0');\n    let hd = hourly[k] || {};\n    let pd = h<6?'00-06':h<12?'06-12':h<18?'12-18':'18-24';\n    let bs = ['walk','lick','scratch','shake','stop'];\n    for (let b of bs) {\n        let v = hd[b] || 0;\n        periods[pd][b]     += v;\n        periods[pd].total  += v;\n    }\n}\nlet rhythm = {};\nfor (let [pd, d] of Object.entries(periods)) {\n    if (d.total === 0) { rhythm[pd] = {dominant:'none',pct:{},total:0}; continue; } // 'none' = 該時段無任何行為資料（未監控或貓始終不在畫面）\n    let bs  = ['walk','lick','scratch','shake','stop'];\n    let dom = bs.reduce((a,b) => d[a]>=d[b]?a:b, 'stop'); // 該時段佔時間最長的行為\n    let pct = {}; // 各行為佔該時段總秒數的百分比\n    for (let b of bs) pct[b] = parseFloat((d[b]/d.total*100).toFixed(2));\n    rhythm[pd] = {dominant:dom, pct, total:parseFloat(d.total.toFixed(1))};\n}\nflow.set('v2_rhythm', rhythm);\nmsg.payload.rhythm = rhythm;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 480,
+    "y": 192,
+    "wires": [
+      [
+        "643dfaa9c04fc92a"
+      ]
+    ]
+  },
+  {
+    "id": "643dfaa9c04fc92a",
+    "type": "function",
+    "z": "457d7a0cc77babac",
+    "name": "偏差分析引擎",
+    "func": "// ══════════════════════════════════════════════════════════════\n//  統計偏差分析引擎 v3.0\n//  完全移除固定百分比門檻，改用統計異常判斷\n//  每個指標輸出: today, mean, median, std, rolling_mean,\n//               z_score, robust_z, percentile, deviation_score\n// ══════════════════════════════════════════════════════════════\n\nlet data = msg.payload;\nlet td   = data.v2_today || {};\nlet bl;\nbl = global.get(\"gfile\").get('v2_baseline');\n\nif (!bl || !bl.metrics) {\n    msg.payload.deviation           = null;\n    msg.payload.deviation_available = false;\n    return msg;\n}\n\nlet m  = bl.metrics;\nlet l2 = bl.layer2 || {};\nlet l1 = bl.layer1 || {};\n\n// 鍵名對應表：metrics key → layer2/layer1 完整統計物件\nconst L2_MAP = {\n    lick_time:     'lick_duration',\n    lick_count:    'lick_frequency',\n    scratch_time:  'scratch_duration',\n    scratch_count: 'scratch_frequency',\n    shake_count:   'head_shake_frequency'\n};\nconst L1_MAP = {\n    walk_time: 'walk_duration',\n    stop_time: 'inactive_duration'\n};\n\nfunction getStats(key) {\n    let l2key = L2_MAP[key];\n    let l1key = L1_MAP[key];\n    if (l2key && l2[l2key]) return l2[l2key];\n    if (l1key && l1[l1key]) return l1[l1key];\n    return m[key] || {};\n}\n\n// Z-score：(今日值 − 歷史均值) / 歷史標準差\nfunction calcZScore(cur, key) {\n    let s = getStats(key);\n    if (!s || s.std === 0) return null;\n    return parseFloat(((cur - s.mean) / s.std).toFixed(2));\n}\n\n// Robust Z-score：0.6745 × (今日值 − Median) / IQR，抗離群值\nfunction calcRobustZ(cur, key) {\n    let s = getStats(key);\n    if (!s || !s.iqr || s.iqr === 0) return null;\n    return parseFloat((0.6745 * (cur - s.median) / s.iqr).toFixed(2));\n}\n\n// 百分位數：今日值落在歷史分布的哪個位置\nconst FIELD_MAP = {\n    lick_time:'lick_time', lick_count:'lick_count',\n    scratch_time:'scratch_time', scratch_count:'scratch_count',\n    shake_count:'shake_count', walk_time:'walk_time', stop_time:'stop_time',\n    lick_pct_day:'lick_pct_of_day', lick_pct_active:'lick_pct_of_active',\n    scratch_pct_day:'scratch_pct_of_day', scratch_pct_active:'scratch_pct_of_active',\n    active_ratio:'active_ratio', rest_ratio:'rest_ratio'\n};\nlet _history = global.get(\"gfile\").get('v2_daily_history') || [];\n\nfunction calcPercentile(cur, key) {\n    if (_history.length < 3) return null;\n    let field = FIELD_MAP[key] || key;\n    let vals  = _history.map(d => d[field] || 0).filter(v => typeof v === 'number' && !isNaN(v)).sort((a,b) => a - b);\n    if (vals.length === 0) return null;\n    return parseFloat((vals.filter(v => v <= cur).length / vals.length * 100).toFixed(1));\n}\n\n// 偏差分（0~100）：依 Z-score 線性映射\n// 0~1σ=正常(0~20), 1~2σ=輕度(20~50), 2~3σ=中度(50~80), >3σ=重度(80~100)\nfunction calcDeviationScore(z) {\n    if (z === null || z === undefined) return null;\n    let az = Math.abs(z);\n    if (az < 1.0) return parseFloat((az * 20).toFixed(1));\n    if (az < 2.0) return parseFloat((20 + (az - 1.0) * 30).toFixed(1));\n    if (az < 3.0) return parseFloat((50 + (az - 2.0) * 30).toFixed(1));\n    return parseFloat(Math.min(100, 80 + (az - 3.0) * 10).toFixed(1));\n}\n\n// 為每個指標建立完整統計記錄\nfunction buildRecord(cur, key) {\n    let s  = getStats(key);\n    let z  = calcZScore(cur, key);\n    let rz = calcRobustZ(cur, key);\n    let pc = calcPercentile(cur, key);\n    return {\n        today:           parseFloat((cur || 0).toFixed(2)),\n        mean:            s.mean        || 0,\n        median:          s.median      || 0,\n        std:             s.std         || 0,\n        rolling_mean:    s.rolling_mean|| 0,\n        z_score:         z,\n        robust_z:        rz,\n        percentile:      pc,\n        deviation_score: z !== null ? calcDeviationScore(z) : null\n    };\n}\n\nlet lick_t = td.lick    ? td.lick.time     : 0;\nlet lick_c = td.lick    ? td.lick.count    : 0;\nlet scr_t  = td.scratch ? td.scratch.time  : 0;\nlet scr_c  = td.scratch ? td.scratch.count : 0;\nlet shk_c  = td.shake   ? td.shake.count   : 0;\nlet shk_t  = td.shake   ? td.shake.time    : 0;\nlet walk_t = td.walk    ? td.walk.time     : 0;\nlet stop_t = td.stop    ? td.stop.time     : 0;\nlet mon_t  = td.monitoring_seconds || 0;\n// active_nr_t：排除 stop（靜止＝文獻 sleep/rest 的對應行為）之後的清醒活動時間，\n// 用來重現 Eckstein & Hart (2000) 的「佔非睡眠/休息時間比例」（~8%/~0.2%）\nlet active_nr_t = walk_t + lick_t + scr_t + shk_t;\nlet lick_pct_day_today     = mon_t > 0 ? (lick_t / mon_t * 100) : 0;\nlet lick_pct_active_today  = active_nr_t > 0 ? (lick_t / active_nr_t * 100) : 0;\nlet scr_pct_day_today      = mon_t > 0 ? (scr_t / mon_t * 100) : 0;\nlet scr_pct_active_today   = active_nr_t > 0 ? (scr_t / active_nr_t * 100) : 0;\nlet active_ratio_today     = mon_t > 0 ? (active_nr_t / mon_t * 100) : 0;\nlet rest_ratio_today       = mon_t > 0 ? (stop_t / mon_t * 100) : 0;\n\nlet dev = {\n    // 第二層：自理行為統計偏差（絕對值，保留供顯示/向後相容，不再是 Class A 主判準）\n    lick_duration:     buildRecord(lick_t, 'lick_time'),\n    lick_frequency:    buildRecord(lick_c, 'lick_count'),\n    scratch_duration:  buildRecord(scr_t,  'scratch_time'),\n    scratch_frequency: buildRecord(scr_c,  'scratch_count'),\n    head_shake:        buildRecord(shk_c,  'shake_count'),\n    // 第一層：活動基線統計偏差\n    walk_duration:     buildRecord(walk_t, 'walk_time'),\n    inactive_duration: buildRecord(stop_t, 'stop_time'),\n    // ── 百分比指標偏差（Eckstein & Hart, 2000 三層改革）：Class A 新主判準 ──\n    // 直接比較「今日行為佔活動/全天時間的比例」相對個體基線是否偏離，\n    // 不受「今天監控/在畫面時間比昨天長或短」影響，比絕對秒數更公平\n    lick_pct_day:       buildRecord(lick_pct_day_today,    'lick_pct_day'),\n    lick_pct_active:    buildRecord(lick_pct_active_today, 'lick_pct_active'),\n    scratch_pct_day:    buildRecord(scr_pct_day_today,     'scratch_pct_day'),\n    scratch_pct_active: buildRecord(scr_pct_active_today,  'scratch_pct_active'),\n    activity_ratio:     buildRecord(active_ratio_today,    'active_ratio'),\n    rest_ratio:         buildRecord(rest_ratio_today,       'rest_ratio'),\n\n    overall:       0,\n    baseline_days: bl.days_count || 0,\n    confidence:    bl.confidence || 'Low',\n    computed_at:   new Date().toISOString()\n};\n\n// 整體加權偏差分（各指標 deviation_score 加權平均，總和 = 1.0）\nconst WEIGHTS = { lick_pct_active:0.25, scratch_pct_active:0.25, head_shake:0.20, inactive_duration:0.15, walk_duration:0.15 };\nlet wSum = 0, wTotal = 0;\nfor (let [k, w] of Object.entries(WEIGHTS)) {\n    let ds = dev[k] && dev[k].deviation_score;\n    if (ds !== null && ds !== undefined) { wSum += ds * w; wTotal += w; }\n}\ndev.overall = wTotal > 0 ? parseFloat((wSum / wTotal).toFixed(1)) : 0;\n\n// 向後相容：保留 sigma 欄位（舊版 Dashboard 可能引用）\ndev.sigma = {\n    lick_time:    dev.lick_duration.z_score,\n    scratch_time: dev.scratch_duration.z_score,\n    shake_count:  dev.head_shake.z_score,\n    stop_time:    dev.inactive_duration.z_score\n};\n\nglobal.set('v2_deviation', dev);\nmsg.payload.deviation           = dev;\nmsg.payload.deviation_available = true;\nmsg.payload.baseline            = bl;\nmsg.payload.history_days        = _history.length;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 700,
+    "y": 192,
+    "wires": [
+      [
+        "26df4eb97fd53496"
+      ]
+    ]
+  },
+  {
+    "id": "26df4eb97fd53496",
+    "type": "function",
+    "z": "457d7a0cc77babac",
+    "name": "行為偏差融合引擎",
+    "func": "// ══════════════════════════════════════════════════════════════\n//  行為偏差融合引擎 v3.1（Scientific Priority Enhancement）\n//  ★ 三層研究架構：\n//     ① Population Reference → 文獻參考值（不直接判斷）\n//     ② Individual Baseline  → 個體化基線（真正判斷依據）\n//     ③ Behavioral Deviation → 行為偏差輸出（非疾病診斷）\n//  ★ 行為優先級：Class A（Critical）/ Class B（Supporting）/ Class C（Pattern）\n//  ★ Class A Override Rule：高重要性行為允許單獨觸發警報（防止 False Negative）\n//  ★ Single Behavior Critical Rule：舔舐/搔抓顯著偏離可獨立觸發偏差判定\n//  文獻：Eckstein & Hart (2000), VAScat, ISFM Feline Behaviour Guidelines\n// ══════════════════════════════════════════════════════════════\n\nlet cfg   = global.get(\"gfile\").get('v2_user_settings') || {};\nlet data  = msg.payload;\nlet dev   = data.deviation;\nlet dist  = data.distribution || flow.get('v2_distribution') || {};\nlet rhythm= data.rhythm       || flow.get('v2_rhythm')       || {};\nlet mx    = data.v2_matrix    || global.get('v2_transition_matrix') || {};\nlet td    = data.v2_today     || {};\nlet bl    = data.baseline     || {};\nif (!bl.computed_at) bl = global.get(\"gfile\").get('v2_baseline') || {};\n\n// ── Population Reference（群體文獻參考值，不直接參與異常判斷）──\nconst POPULATION_REFERENCE = {\n    lick_duration:    { mean_sec:3600, mean_display:'~60 min/day', source:'Eckstein & Hart (2000)', note:'健康室內成貓口腔梳理（群體參考，非異常門檻）' },\n    scratch_duration: { mean_sec:60,   mean_display:'~1 min/day',  source:'Eckstein & Hart (2000)', note:'健康室內成貓搔抓梳理（群體參考，非異常門檻）' },\n    lick_pct_active:    { mean_pct:8,   mean_display:'~8% of non-rest active time',  source:'Eckstein & Hart (2000)', note:'口腔梳理佔非睡眠/休息時間比例（群體參考，非異常門檻；Class A 主判準）' },\n    scratch_pct_active: { mean_pct:0.2, mean_display:'~0.2% of non-rest active time',source:'Eckstein & Hart (2000)', note:'搔抓梳理佔非睡眠/休息時間比例（群體參考，非異常門檻；Class A 主判準）' }\n};\n\n// ── 行為優先級分類（Behavior Priority Classification）──\n// Class A: Critical Behaviour\n//   - 與皮膚舒適度直接相關\n//   - 允許單獨觸發警報（Single Behavior Critical Rule）\n//   - Override Rule：Z≥2.5σ→Mild, Z≥3.0σ→Moderate, Z≥4.0σ→Severe\n// Class B: Supporting Behaviour\n//   - 輔助性偏差指標，提升警報 Confidence\n//   - 不得獨立觸發警報\n// Class C: Pattern Behaviour\n//   - 整體行為模式分析（節律、轉移）\n//   - 增強 Behavior Interpretation 品質\n// v3.2：Class A 主判準改為「佔活動時間百分比」z-score（取代絕對時長），\n// 直接對應 Eckstein & Hart (2000) 的 8%/0.2% 文獻定義，不受監控/在畫面時間\n// 長短影響——監控越久絕對秒數必然越大，但佔比不會，比絕對時長更能代表真異常。\nconst CLASS_A_FEATURES = {\n    lick_pct_active:    { weight:0.30, label:'Lick % of Active Time',    threshold_mild:2.5, threshold_mod:3.0, threshold_severe:4.0, can_independently_trigger:true },\n    lick_frequency:      { weight:0.15, label:'Lick Frequency',           threshold_mild:2.5, threshold_mod:3.0, threshold_severe:4.0, can_independently_trigger:true },\n    scratch_pct_active:  { weight:0.30, label:'Scratch % of Active Time', threshold_mild:2.5, threshold_mod:3.0, threshold_severe:4.0, can_independently_trigger:true },\n    scratch_frequency:   { weight:0.10, label:'Scratch Frequency',       threshold_mild:2.5, threshold_mod:3.0, threshold_severe:4.0, can_independently_trigger:true }\n};\nconst CLASS_B_FEATURES = {\n    head_shake:        { weight:0.40, label:'Head Shake',        can_independently_trigger:false },\n    walk_duration:     { weight:0.30, label:'Walk Duration',     can_independently_trigger:false },\n    inactive_duration: { weight:0.30, label:'Inactive Duration', can_independently_trigger:false }\n};\nconst LEVEL_ORDER = ['Normal','Mild Behavioral Deviation','Moderate Behavioral Deviation','Severe Behavioral Deviation'];\n\n// Feature Metadata\nconst FEATURE_METADATA = {\n    lick_pct_active: {\n        feature_name:'Lick % of Active Time', priority_class:'Class A (Critical)',\n        scientific_meaning:'理毛「佔非睡眠/休息時間比例」過高，可能與搔癢、疼痛、壓力等相關（VAScat, 2020）；改用比例而非絕對秒數，避免監控時間長短造成誤判',\n        population_ref:'健康成貓：約 8%（Eckstein & Hart, 2000）',\n        individual_ref:'此貓個體基線（請見 Individual Baseline 欄位）',\n        monitoring_purpose:'監測理毛佔活動時間比例是否偏離個體正常模式，不代表疾病診斷',\n        can_independently_trigger:true\n    },\n    scratch_pct_active: {\n        feature_name:'Scratch % of Active Time', priority_class:'Class A (Critical)',\n        scientific_meaning:'搔抓「佔非睡眠/休息時間比例」過高，可能與皮膚刺激、過敏、疼痛等相關；改用比例而非絕對秒數，避免監控時間長短造成誤判',\n        population_ref:'健康成貓：約 0.2%（Eckstein & Hart, 2000）',\n        individual_ref:'此貓個體基線（請見 Individual Baseline 欄位）',\n        monitoring_purpose:'監測搔抓佔活動時間比例是否偏離個體基線，不代表過敏診斷',\n        can_independently_trigger:true\n    },\n    lick_frequency: {\n        feature_name:'Lick Frequency', priority_class:'Class A (Critical)',\n        scientific_meaning:'理毛次數增加可能反映不適感',\n        population_ref:'N/A（次數難以跨研究標準化）',\n        individual_ref:'此貓個體基線（請見 Individual Baseline 欄位）',\n        monitoring_purpose:'與 Lick Duration 共同評估理毛行為偏差',\n        can_independently_trigger:true\n    },\n    scratch_frequency: {\n        feature_name:'Scratch Frequency', priority_class:'Class A (Critical)',\n        scientific_meaning:'搔抓次數可能反映皮膚刺激強度',\n        population_ref:'N/A',\n        individual_ref:'此貓個體基線（請見 Individual Baseline 欄位）',\n        monitoring_purpose:'與 Scratch Duration 共同評估搔抓行為偏差',\n        can_independently_trigger:true\n    },\n    head_shake: {\n        feature_name:'Head Shake Frequency', priority_class:'Class B (Supporting)',\n        scientific_meaning:'頻繁甩頭可能與耳部不適、耳蟎、耳道感染相關',\n        population_ref:'偶爾甩頭屬正常範圍，無固定群體參考值',\n        individual_ref:'此貓個體基線（請見 Individual Baseline 欄位）',\n        monitoring_purpose:'輔助評估整體偏差程度，不可獨立觸發警報',\n        can_independently_trigger:false\n    },\n    walk_duration: {\n        feature_name:'Walk Duration', priority_class:'Class B (Supporting)',\n        scientific_meaning:'行走時間代表整體活動量，減少可能代表不適',\n        population_ref:'因個體差異大，無固定群體參考值',\n        individual_ref:'此貓個體基線（請見 Individual Baseline 欄位）',\n        monitoring_purpose:'輔助評估活動基線偏差',\n        can_independently_trigger:false\n    },\n    inactive_duration: {\n        feature_name:'Inactive Duration', priority_class:'Class B (Supporting)',\n        scientific_meaning:'靜止時間過長可能代表低活力或不適',\n        population_ref:'因個體差異大，無固定群體參考值',\n        individual_ref:'此貓個體基線（請見 Individual Baseline 欄位）',\n        monitoring_purpose:'輔助評估活動基線偏差',\n        can_independently_trigger:false\n    }\n};\n\n// 若基線不足\nif (!dev || !dev.computed_at) {\n    let result = {\n        behavior_deviation_score:0, behavior_status:'基線建立中', behavior_trend:'Insufficient Data',\n        behavior_deviation_level:'Insufficient Data', score:0, level:'Insufficient Data',\n        color:'#9e9e9e', emoji:'⏳',\n        components:{ class_a:0,class_b:0,class_c:0,rhythm:0,transition:0,grooming:0,activity:0,distribution:0,frequency:0 },\n        class_a_triggered:false, class_a_override:null,\n        alerts:[],\n        xai_explanation:{\n            behavior_deviation:'Insufficient Data', top_contributors:[], class_a_triggered:false,\n            interpretation:'基線資料不足，尚無法進行行為偏差分析。請持續運行系統至少 '+(bl.required_days||7)+' 天。',\n            population_reference:POPULATION_REFERENCE,\n            research_note:'本系統採用三層研究架構：Population Reference（群體文獻值）→ Individual Baseline（個體基線）→ Behavioral Deviation（行為偏差）。',\n            disclaimer:'本系統僅監測行為偏差，不代表任何疾病診斷。'\n        },\n        population_reference:POPULATION_REFERENCE, confidence:bl.confidence||'Low',\n        computed_at:new Date().toISOString()\n    };\n    global.set('v2_risk',result);\n    msg.payload.risk=result; msg.payload.user_settings=cfg;\n    msg.payload.v2_event_tags=(global.get(\"gfile\").get('v2_event_tags')||[]).slice(-14);\n    msg.payload.v2_daily_history=(global.get(\"gfile\").get('v2_daily_history')||[]).slice(-30);\n    msg.payload.v2_excluded_dates=global.get(\"gfile\").get('v2_excluded_dates')||[];\n    msg.payload.v2_insufficient=true;\n    flow.set('v2_today_risk',{level:'Insufficient Data',score:0});\n    return [msg, null];\n}\n\nfunction gz(key) { return dev[key]&&dev[key].z_score!=null?(dev[key].z_score||0):0; }\n\nlet z_lick_d = gz('lick_pct_active');\nlet z_lick_f = gz('lick_frequency');\nlet z_scr_d  = gz('scratch_pct_active');\nlet z_scr_f  = gz('scratch_frequency');\nlet z_shake  = gz('head_shake');\nlet z_walk   = gz('walk_duration');\nlet z_stop   = gz('inactive_duration');\n\n// ── Class A Score（Critical Behaviour, 0~100）──\n// 加權 Z-score 融合（4個 Class A 特徵，權重總和歸一化）\nlet classAWeightedZ = (Math.abs(z_lick_d)*0.30 + Math.abs(z_lick_f)*0.15 + Math.abs(z_scr_d)*0.30 + Math.abs(z_scr_f)*0.10) / 0.85;\nlet classAScore = Math.min(100, classAWeightedZ * 25);\n\n// ── Class A Override Rule（Single Behavior Critical Rule）──\n// 高重要性行為允許單獨觸發偏差判定，防止 False Negative\n// 例：舔舐 +4σ，其他正常 → 仍觸發 Moderate Behavioral Deviation\nlet classAOverride = null;\nlet classADetails = {\n    lick_pct_active:   { z:z_lick_d, abs_z:Math.abs(z_lick_d), triggered:false },\n    lick_frequency:    { z:z_lick_f, abs_z:Math.abs(z_lick_f), triggered:false },\n    scratch_pct_active:{ z:z_scr_d,  abs_z:Math.abs(z_scr_d),  triggered:false },\n    scratch_frequency: { z:z_scr_f,  abs_z:Math.abs(z_scr_f),  triggered:false }\n};\nlet maxClassAZ = Math.max(...Object.values(classADetails).map(d=>d.abs_z));\n\nif      (maxClassAZ >= 4.0) { classAOverride = 'Severe Behavioral Deviation';   Object.keys(classADetails).forEach(k=>{ if(classADetails[k].abs_z>=4.0) classADetails[k].triggered=true; }); }\nelse if (maxClassAZ >= 3.0) { classAOverride = 'Moderate Behavioral Deviation'; Object.keys(classADetails).forEach(k=>{ if(classADetails[k].abs_z>=3.0) classADetails[k].triggered=true; }); }\nelse if (maxClassAZ >= 2.5) { classAOverride = 'Mild Behavioral Deviation';     Object.keys(classADetails).forEach(k=>{ if(classADetails[k].abs_z>=2.5) classADetails[k].triggered=true; }); }\nlet classATriggered = classAOverride !== null;\n\n// ── Class B Score（Supporting Behaviour, 0~100）──\nlet classBWeightedZ = Math.abs(z_shake)*0.40 + Math.abs(z_walk)*0.30 + Math.abs(z_stop)*0.30;\nlet classBScore = Math.min(100, classBWeightedZ * 25);\n\n// ── Class C Score（Pattern Behaviour, 0~100）──\nlet rhythmScore=0;\nlet night=rhythm['00-06']||{}, day06=rhythm['06-12']||{}, day12=rhythm['12-18']||{};\nif(night.dominant==='scratch'||night.dominant==='lick') rhythmScore+=35;\nif(night.dominant==='shake')                             rhythmScore+=30;\nif(night.pct&&night.pct.scratch>20)                     rhythmScore+=25;\nif(day06.pct&&day12.pct&&(day06.pct.walk||0)<10&&(day12.pct.walk||0)<10) rhythmScore+=20;\nrhythmScore=Math.min(100,rhythmScore);\n\nlet transScore=0;\nlet lsc=(mx['lick->scratch']||0)+(mx['scratch->lick']||0);\nlet shch=mx['shake->shake']||0, stst=mx['stop->stop']||0;\nconst BL_LSC=5;\nif(lsc>BL_LSC*3) transScore+=40; else if(lsc>BL_LSC*2) transScore+=25; else if(lsc>BL_LSC) transScore+=12;\nif(shch>15) transScore+=30; else if(shch>8) transScore+=15;\nif(stst>50) transScore+=20; else if(stst>30) transScore+=10;\ntransScore=Math.min(100,transScore);\nlet classCScore=Math.round((rhythmScore+transScore)/2);\n\n// ── Weighted Evidence Fusion（加權多重證據融合）──\n// Class A 主導（45%），Class B 輔助（25%），Class C 模式（30%）\nlet fusionScore=Math.round(classAScore*0.45 + classBScore*0.25 + classCScore*0.30);\n\n// ── 最終偏差等級決策（Fusion + Class A Override 取較高者）──\nfunction scoreToLevel(s){ if(s<20)return 'Normal'; if(s<45)return 'Mild Behavioral Deviation'; if(s<70)return 'Moderate Behavioral Deviation'; return 'Severe Behavioral Deviation'; }\nlet fusionLevel=scoreToLevel(fusionScore), finalLevel=fusionLevel;\nif(classAOverride!==null){\n    let fi=LEVEL_ORDER.indexOf(fusionLevel), oi=LEVEL_ORDER.indexOf(classAOverride);\n    if(oi>fi) finalLevel=classAOverride;\n}\n\n// 若 Override 生效，調整分數至對應等級最低值\nlet deviationMinScore={Normal:0,'Mild Behavioral Deviation':20,'Moderate Behavioral Deviation':45,'Severe Behavioral Deviation':70};\nlet behaviorDeviationScore=Math.max(fusionScore, finalLevel!==fusionLevel?(deviationMinScore[finalLevel]||0):0);\nlet deviationLevel=finalLevel;\nlet behaviorStatus,behaviorTrend,statusColor,statusEmoji;\nif(deviationLevel==='Normal')                       {behaviorStatus='行為正常';   behaviorTrend='穩定';   statusColor='#4caf50';statusEmoji='✅';}\nelse if(deviationLevel==='Mild Behavioral Deviation')   {behaviorStatus='輕度行為偏差';behaviorTrend='輕微偏離';statusColor='#ffa726';statusEmoji='⚠️';}\nelse if(deviationLevel==='Moderate Behavioral Deviation'){behaviorStatus='中度行為偏差';behaviorTrend='明顯偏離';statusColor='#ff7043';statusEmoji='🚨';}\nelse                                                     {behaviorStatus='重度行為偏差';behaviorTrend='顯著偏離';statusColor='#f44336';statusEmoji='🆘';}\n\n// ── XAI Explainable Output ──\nfunction sigmaLabel(z){\n    let az=Math.abs(z),sign=z>=0?'+':'';\n    if(az<1.0) return '正常範圍';\n    if(az<2.0) return sign+z.toFixed(1)+'σ（輕微偏離）';\n    if(az<3.0) return sign+z.toFixed(1)+'σ（明顯偏離）';\n    return sign+z.toFixed(1)+'σ（高度偏離）';\n}\n\nlet allContributors=[\n    {feature:'lick_pct_active',   z:z_lick_d,priority:'A',label:'Lick % of Active Time'},\n    {feature:'scratch_pct_active',z:z_scr_d, priority:'A',label:'Scratch % of Active Time'},\n    {feature:'lick_frequency',  z:z_lick_f,priority:'A',label:'Lick Frequency'},\n    {feature:'scratch_frequency',z:z_scr_f,priority:'A',label:'Scratch Frequency'},\n    {feature:'head_shake',       z:z_shake, priority:'B',label:'Head Shake'},\n    {feature:'inactive_duration',z:z_stop,  priority:'B',label:'Inactive Duration'},\n    {feature:'walk_duration',    z:z_walk,  priority:'B',label:'Walk Duration'}\n].sort((a,b)=>Math.abs(b.z)-Math.abs(a.z));\n\nlet topContributors=allContributors.map(c=>({\n    feature:c.feature, label:c.label, priority_class:'Class '+c.priority,\n    z_score:parseFloat(c.z.toFixed(2)), sigma_label:sigmaLabel(c.z),\n    can_independently_trigger:!!(CLASS_A_FEATURES[c.feature]),\n    metadata:FEATURE_METADATA[c.feature]||{}\n}));\n\n// 自動解釋文字（三層架構論文語言）\nlet abnormalA=topContributors.filter(c=>c.priority_class==='Class A'&&Math.abs(c.z_score)>=2.0);\nlet abnormalB=topContributors.filter(c=>c.priority_class==='Class B'&&Math.abs(c.z_score)>=2.0);\nlet allAbnormal=topContributors.filter(c=>Math.abs(c.z_score)>=1.5);\nlet interp;\nif(allAbnormal.length===0){\n    interp='今日各項行為指標均在個體正常波動範圍內（Z-score < 1.5σ）。\\n行為模式與個體歷史基線一致，建議繼續觀察。';\n} else {\n    let lines=[];\n    if(abnormalA.length>0){\n        lines.push('【Class A 關鍵行為偏差】'+abnormalA.map(c=>c.label+'（'+c.sigma_label+'）').join('、')+'。');\n        if(classATriggered&&finalLevel!==fusionLevel) lines.push('依 Class A Override Rule，此關鍵行為偏差觸發最低警報等級至「'+deviationLevel+'」。');\n    }\n    if(abnormalB.length>0) lines.push('【Class B 輔助行為偏差】'+abnormalB.map(c=>c.label+'（'+c.sigma_label+'）').join('、')+'，提升警報可信度。');\n    lines.push('綜合行為偏差分：'+behaviorDeviationScore+'/100（Class A融合:'+Math.round(classAScore)+' | Class B融合:'+Math.round(classBScore)+' | Pattern:'+Math.round(classCScore)+'）。');\n    lines.push('注意：本系統基於個體歷史基線判斷行為偏差，不代表疾病診斷。如有疑慮請諮詢獸醫。');\n    interp=lines.join('\\n');\n}\n\nlet xaiExplanation={\n    behavior_deviation:    deviationLevel,\n    class_a_triggered:     classATriggered,\n    class_a_override:      classAOverride,\n    class_a_details:       classADetails,\n    top_contributors:      topContributors,\n    class_a_behaviors:     topContributors.filter(c=>c.priority_class==='Class A'),\n    class_b_behaviors:     topContributors.filter(c=>c.priority_class==='Class B'),\n    interpretation:        interp,\n    population_reference:  POPULATION_REFERENCE,\n    research_note:         '系統研究架構：①Population Reference（Eckstein&Hart,2000）→ 群體文獻值，僅供合理性驗證 ②Individual Baseline（個體化基線）→ 真正的異常判斷依據 ③Behavioral Deviation → 行為偏差輸出（非疾病診斷）',\n    disclaimer:            '本系統依據個體歷史行為基線判斷偏差程度，不代表任何疾病診斷。如貓咪出現明顯異常，請諮詢獸醫。'\n};\n\n// 警報清單（Class A 允許獨立警報，標記 priority）\nlet alerts=[];\nif(Math.abs(z_lick_d)>=2.0) alerts.push({type:'lick',    priority:'A',z:z_lick_d,can_independently_trigger:true, msg:'[Class A] Lick % of Active Time '     +(z_lick_d>=0?'+':'')+z_lick_d.toFixed(1)+'σ vs 個體基線'});\nif(Math.abs(z_scr_d) >=2.0) alerts.push({type:'scratch', priority:'A',z:z_scr_d, can_independently_trigger:true, msg:'[Class A] Scratch % of Active Time '  +(z_scr_d >=0?'+':'')+z_scr_d.toFixed(1) +'σ vs 個體基線'});\nif(Math.abs(z_lick_f)>=2.0) alerts.push({type:'lick_f',  priority:'A',z:z_lick_f,can_independently_trigger:true, msg:'[Class A] Lick Frequency '    +(z_lick_f>=0?'+':'')+z_lick_f.toFixed(1)+'σ vs 個體基線'});\nif(Math.abs(z_scr_f) >=2.0) alerts.push({type:'scr_f',   priority:'A',z:z_scr_f, can_independently_trigger:true, msg:'[Class A] Scratch Frequency ' +(z_scr_f >=0?'+':'')+z_scr_f.toFixed(1) +'σ vs 個體基線'});\nif(Math.abs(z_shake) >=2.0) alerts.push({type:'shake',    priority:'B',z:z_shake, can_independently_trigger:false,msg:'[Class B] Head Shake '        +(z_shake >=0?'+':'')+z_shake.toFixed(1) +'σ vs 個體基線'});\nif(Math.abs(z_walk)  >=2.0) alerts.push({type:'activity', priority:'B',z:z_walk,  can_independently_trigger:false,msg:'[Class B] Walk Duration '     +(z_walk  >=0?'+':'')+z_walk.toFixed(1)  +'σ vs 個體基線'});\nif(Math.abs(z_stop)  >=2.0) alerts.push({type:'inactive', priority:'B',z:z_stop,  can_independently_trigger:false,msg:'[Class B] Inactive Duration ' +(z_stop  >=0?'+':'')+z_stop.toFixed(1)  +'σ vs 個體基線'});\nif(lsc>BL_LSC*2)             alerts.push({type:'transition',priority:'C',msg:'[Class C] Lick↔Scratch 切換 '+lsc+' 次（異常轉移模式）'});\n\nlet result={\n    behavior_deviation_score:behaviorDeviationScore, behavior_status:behaviorStatus,\n    behavior_trend:behaviorTrend, behavior_deviation_level:deviationLevel,\n    score:behaviorDeviationScore, level:deviationLevel, color:statusColor, emoji:statusEmoji,\n    components:{ class_a:Math.round(classAScore), class_b:Math.round(classBScore), class_c:Math.round(classCScore),\n                 rhythm:Math.round(rhythmScore), transition:Math.round(transScore),\n                 grooming:Math.round(classAScore), activity:Math.round(classBScore),\n                 distribution:Math.round(classAScore), frequency:Math.round(classBScore) },\n    class_a_triggered:classATriggered, class_a_override:classAOverride,\n    class_a_details:classADetails, fusion_score:fusionScore,\n    alerts, xai_explanation:xaiExplanation, feature_metadata:FEATURE_METADATA,\n    population_reference:POPULATION_REFERENCE, confidence:bl.confidence||'Low',\n    computed_at:new Date().toISOString()\n};\n\nglobal.set('v2_risk',result);\nmsg.payload.risk=result; msg.payload.user_settings=cfg;\nmsg.payload.v2_event_tags=(global.get(\"gfile\").get('v2_event_tags')||[]).slice(-14);\nmsg.payload.v2_daily_history=(global.get(\"gfile\").get('v2_daily_history')||[]).slice(-30);\nmsg.payload.v2_excluded_dates=global.get(\"gfile\").get('v2_excluded_dates')||[];\nmsg.payload.v2_insufficient=global.get('v2_baseline_insufficient')||false;\nlet blAlert=global.get('v2_baseline_alert')||null;\nif(blAlert){msg.payload.v2_baseline_alert=blAlert;global.set('v2_baseline_alert',null);}\nlet exclRejected=global.get('v2_exclude_rejected')||null;\nif(exclRejected){msg.payload.v2_exclude_rejected=exclRejected;global.set('v2_exclude_rejected',null);}\nlet autoRestored=global.get('v2_baseline_auto_restore')||null;\nif(autoRestored){msg.payload.v2_baseline_auto_restore=autoRestored;global.set('v2_baseline_auto_restore',null);}\nlet delRejected=global.get('v2_delete_rejected')||null;\nif(delRejected){msg.payload.v2_delete_rejected=delRejected;global.set('v2_delete_rejected',null);}\nlet delSuccess=global.get('v2_delete_success')||null;\nif(delSuccess){msg.payload.v2_delete_success=delSuccess;global.set('v2_delete_success',null);}\nflow.set('v2_today_risk',{level:deviationLevel,score:behaviorDeviationScore});\n\nlet NOTIFY_LEVEL=cfg.notify_level!=null?+cfg.notify_level:2;\nlet shouldNotify=NOTIFY_LEVEL===1?deviationLevel==='Severe Behavioral Deviation'\n               :NOTIFY_LEVEL===3?deviationLevel!=='Normal'\n               :(deviationLevel==='Moderate Behavioral Deviation'||deviationLevel==='Severe Behavioral Deviation');\nreturn [msg, shouldNotify?msg:null];",
+    "outputs": 2,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 920,
+    "y": 192,
+    "wires": [
+      [
+        "2ae887ea7180e1aa",
+        "ee0e9829b20d49ee",
+        "e74d1a2bb652eaad",
+        "d8f92427230998d4"
+      ],
+      [
+        "f244e725229b9e77"
+      ]
+    ]
+  },
+  {
+    "id": "2ae887ea7180e1aa",
+    "type": "link out",
+    "z": "457d7a0cc77babac",
+    "name": "→ P3行為分析",
+    "links": [
+      "c5a70e438f5ba61f",
+      "1be6b1b84fb598bd"
+    ],
+    "x": 1140,
+    "y": 192,
+    "wires": []
+  },
+  {
+    "id": "ee0e9829b20d49ee",
+    "type": "link out",
+    "z": "457d7a0cc77babac",
+    "name": "→ P4個體基線",
+    "links": [
+      "c558f3926f34e5cc"
+    ],
+    "x": 1140,
+    "y": 302,
+    "wires": []
+  },
+  {
+    "id": "e74d1a2bb652eaad",
+    "type": "link out",
+    "z": "457d7a0cc77babac",
+    "name": "→ 貓咪主控健康警示（2026-08-09 分工明確：僅供顯示，不重算）",
+    "links": [],
+    "x": 1140,
+    "y": 362,
+    "wires": []
+  },
+  {
+    "id": "d8f92427230998d4",
+    "type": "debug",
+    "z": "457d7a0cc77babac",
+    "name": "🧪 融合引擎輸出1除錯（暫時，確認無誤可刪）",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload.risk",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1140,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "f244e725229b9e77",
+    "type": "function",
+    "z": "457d7a0cc77babac",
+    "name": "Discord 風險通知",
+    "func": "let risk = msg.payload.risk || {};\n\nlet _dcfg = global.get(\"gfile\").get('v2_user_settings') || {};\nlet _url  = _dcfg.discord_webhook || '';\nif (!_url) { node.warn('Discord webhook URL 未設定，請在 P4 飼主設定中填入'); return null; }\n\nlet lastSent = flow.get('v2_last_discord_risk') || '';\nlet key = (risk.behavior_deviation_level||risk.level) + '|' + (risk.alerts||[]).map(a=>a.type).join(',');\nif (lastSent === key) return null;\nflow.set('v2_last_discord_risk', key);\n\nlet color = {\n    'Normal':65280, 'Mild Behavioral Deviation':16776960,\n    'Moderate Behavioral Deviation':16753920, 'Severe Behavioral Deviation':16711680,\n    'Insufficient Data':8421504\n}[risk.behavior_deviation_level||risk.level] || 16711680;\n\nlet xai     = risk.xai_explanation || {};\nlet topList = (xai.top_contributors || []).slice(0,5);\nlet topText = topList.length>0 ? topList.map(c=>'['+(c.priority_class||'').replace('Class ','')+'] '+(c.label||'?')+': '+(c.sigma_label||'?')).join('\\n') : '（基線不足）';\n\nlet fields = [\n    { name:'🎯 行為偏差分',   value:String(risk.behavior_deviation_score||0)+'/100', inline:true },\n    { name:'📊 偏差等級',     value:(risk.emoji||'')+' '+(risk.behavior_deviation_level||risk.level||'N/A'), inline:true },\n    { name:'🔴 Class A 關鍵', value:String(risk.components?risk.components.class_a:0), inline:true },\n    { name:'🔵 Class B 輔助', value:String(risk.components?risk.components.class_b:0), inline:true },\n    { name:'🌙 節律/轉移',   value:String(risk.components?risk.components.class_c:0),  inline:true },\n    { name:'📈 基線信心',     value:String(risk.confidence||'Low'), inline:true }\n];\nif (risk.class_a_triggered) {\n    let triggeredFeatures = Object.entries(risk.class_a_details||{}).filter(([,d])=>d.triggered).map(([k])=>k.replace('_',' ')).join(', ');\n    fields.push({ name:'🚨 Class A Override', value:'Override 觸發：'+triggeredFeatures+'\\n判定等級提升至：'+(risk.class_a_override||''), inline:false });\n}\nfields.push({ name:'🔍 Top Contributors', value:topText, inline:false });\nif (risk.alerts&&risk.alerts.length>0) {\n    let classAAlerts = risk.alerts.filter(a=>a.priority==='A').map(a=>a.msg).join('\\n');\n    let classBAlerts = risk.alerts.filter(a=>a.priority!=='A').map(a=>a.msg).join('\\n');\n    if (classAAlerts) fields.push({ name:'🔴 Class A 偏差警報', value:classAAlerts, inline:false });\n    if (classBAlerts) fields.push({ name:'🔵 Class B/C 輔助警報', value:classBAlerts, inline:false });\n}\nif (xai.interpretation) fields.push({ name:'💬 行為解釋', value:xai.interpretation.substring(0,400), inline:false });\nfields.push({ name:'⚠️ 免責聲明', value:'本通知代表行為偏差，不代表疾病診斷。如有疑慮請諮詢獸醫。', inline:false });\n\nmsg.headers={'Content-Type':'application/json'};\nmsg.url=_url;\nmsg.payload={\n    username:'Cat Behavior Monitor',\n    embeds:[{\n        title:(risk.emoji||'🔔')+' 行為偏差通知：'+(risk.behavior_deviation_level||risk.level),\n        description:'個體化行為基線比較分析結果（Individualized Behavioral Deviation Monitoring）',\n        color, fields,\n        footer:{ text:new Date().toLocaleString('zh-TW') }\n    }]\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1140,
+    "y": 412,
+    "wires": [
+      [
+        "9af14ec63806f832"
+      ]
+    ]
+  },
+  {
+    "id": "9af14ec63806f832",
+    "type": "http request",
+    "z": "457d7a0cc77babac",
+    "name": "送到Discord",
+    "method": "POST",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 1360,
+    "y": 192,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "c5a70e438f5ba61f",
+    "type": "link in",
+    "z": "457d7a0cc77babac",
+    "name": "← P3入口",
+    "links": [
+      "2ae887ea7180e1aa"
+    ],
+    "x": 40,
+    "y": 302,
+    "wires": [
+      [
+        "4db6d499e135d369"
+      ]
+    ]
+  },
+  {
+    "id": "4db6d499e135d369",
+    "type": "ui_template",
+    "z": "457d7a0cc77babac",
+    "group": "grp_p3_dist",
+    "name": "P3 行為分析面板",
+    "order": 1,
+    "width": "24",
+    "height": "18",
+    "format": "<style>\n.p3,.p3 *{box-sizing:border-box}.p3{font-family:Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;color:var(--ch-text,#f4f8fc);padding:clamp(12px,2vw,22px);background:linear-gradient(145deg,rgba(11,27,45,.96),rgba(6,16,29,.98));border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:20px;box-shadow:0 18px 46px rgba(0,0,0,.24)}\n.p3-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:17px}.p3-kicker{font-size:10px;color:var(--ch-violet,#a78bfa);letter-spacing:.13em;text-transform:uppercase;font-weight:800;margin-bottom:5px}.p3-title{font-size:17px;font-weight:900}.p3-head-note{font-size:10px;color:var(--ch-muted,#8da2b8);text-align:right;max-width:360px;line-height:1.5}\n.p3-dashboard{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:14px}.p3-section{background:rgba(10,24,41,.7);border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:18px;padding:17px;min-width:0}.p3-section.wide{grid-column:1/-1}.p3-sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:15px}.p3-sec-title{font-size:13px;font-weight:850}.p3-sec-hint{font-size:10px;color:var(--ch-muted,#8da2b8)}\n.p3-dist-list{display:grid;gap:11px}.p3-dist-row{display:grid;grid-template-columns:78px minmax(0,1fr) 52px;align-items:center;gap:9px}.p3-dist-lbl{font-size:11px;color:#d4e0ea;font-weight:700}.p3-dist-bar{height:12px;background:rgba(142,163,184,.1);border-radius:999px;overflow:hidden}.p3-dist-fill{height:100%;border-radius:999px;transition:width .65s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 12px rgba(99,167,255,.1)}.p3-dist-val{font-size:11px;text-align:right;color:#c6d4e1;font-variant-numeric:tabular-nums}\n.p3-dev-list{display:grid;gap:11px}.p3-dev-row{display:grid;grid-template-columns:92px minmax(0,1fr) 70px;align-items:center;gap:9px}.p3-dev-lbl{font-size:11px;color:#d4e0ea;font-weight:700}.p3-dev-track{height:12px;border-radius:999px;background:linear-gradient(90deg,rgba(74,222,128,.09) 0 20%,rgba(250,204,21,.09) 20% 50%,rgba(251,146,60,.09) 50% 80%,rgba(251,92,104,.1) 80% 100%);position:relative;overflow:hidden}.p3-dev-fill{height:100%;border-radius:999px;transition:width .65s;background:linear-gradient(90deg,#55d6c2,#63a7ff)}.p3-dev-fill.attn{background:linear-gradient(90deg,#facc15,#fb923c)}.p3-dev-fill.high{background:linear-gradient(90deg,#fb923c,#fb5c68)}.p3-dev-num{text-align:right}.p3-dev-score{font-size:11px;font-weight:850}.p3-dev-z{display:block;font-size:9px;color:var(--ch-muted,#8da2b8);margin-top:2px}\n.p3-rhythm-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.p3-rhythm-card{background:linear-gradient(145deg,rgba(18,34,56,.72),rgba(10,24,41,.7));border:1px solid rgba(255,255,255,.065);border-radius:14px;padding:13px;min-width:0}.p3-rh-period{font-size:10px;color:var(--ch-muted,#8da2b8);font-weight:750}.p3-rh-main{display:flex;align-items:center;gap:10px;margin:10px 0}.p3-rh-dom{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:rgba(99,167,255,.1);font-size:19px}.p3-rh-name{font-size:12px;font-weight:850}.p3-rh-pct{font-size:10px;color:#a9bed1;margin-top:2px}.p3-rh-mini{display:grid;gap:4px}.p3-rh-mini-row{display:grid;grid-template-columns:19px 1fr;align-items:center;gap:4px}.p3-rh-mini-lbl{font-size:9px}.p3-rh-mini-bar{height:4px;background:rgba(142,163,184,.09);border-radius:99px;overflow:hidden}.p3-rh-mini-fill{height:100%;border-radius:99px;transition:width .55s}\n.p3-mx-wrap{overflow-x:auto;padding-bottom:3px}.p3-mx-table{border-collapse:separate;border-spacing:5px;width:100%;min-width:520px}.p3-mx-table th{font-size:10px;color:var(--ch-muted,#8da2b8);font-weight:700;padding:6px}.p3-mx-table td{padding:0;text-align:center}.p3-mx-cell{height:42px;display:flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid rgba(255,255,255,.055);font-size:11px;font-weight:850;color:#eff7ff;transition:transform .18s,filter .18s}.p3-mx-cell:hover{transform:scale(1.04);filter:brightness(1.2)}.p3-empty{text-align:center;padding:30px;color:var(--ch-muted,#8da2b8);font-size:12px}\n@media(max-width:900px){.p3-dashboard{grid-template-columns:1fr}.p3-section.wide{grid-column:auto}.p3-rhythm-grid{grid-template-columns:repeat(2,1fr)}}\n@media(max-width:560px){.p3{padding:13px;border-radius:16px}.p3-head-note,.p3-sec-hint{display:none}.p3-section{padding:13px;border-radius:15px}.p3-rhythm-grid{grid-template-columns:1fr 1fr;gap:7px}.p3-rhythm-card{padding:10px}.p3-dist-row{grid-template-columns:68px 1fr 45px;gap:6px}.p3-dev-row{grid-template-columns:78px 1fr 59px;gap:6px}.p3-mx-table{min-width:450px}.p3-mx-cell{height:38px}}\n@media(max-width:380px){.p3-rhythm-grid{grid-template-columns:1fr}}\n@media(prefers-reduced-motion:reduce){.p3 *{animation:none!important;transition:none!important}}\n</style>\n\n<div class=\"p3\" ng-init=\"init()\">\n  <header class=\"p3-head\"><div><div class=\"p3-kicker\">Behavior analytics</div><div class=\"p3-title\">行為模式分析</div></div><div class=\"p3-head-note\">從行為組成、時段節律、轉移關係與個體基線偏差四個面向觀察</div></header>\n\n  <div class=\"p3-dashboard\">\n    <section class=\"p3-section\">\n      <div class=\"p3-sec-head\"><div class=\"p3-sec-title\">今日行為佔比</div><div class=\"p3-sec-hint\">辨識時間組成</div></div>\n      <div class=\"p3-dist-list\">\n        <div class=\"p3-dist-row\" ng-repeat=\"b in behaviors\"><div class=\"p3-dist-lbl\">{{b.ico}} {{b.name}}</div><div class=\"p3-dist-bar\"><div class=\"p3-dist-fill\" ng-style=\"{width:distPct(b.key)+'%',background:b.color}\"></div></div><div class=\"p3-dist-val\">{{distPct(b.key)}}%</div></div>\n      </div>\n    </section>\n\n    <section class=\"p3-section\">\n      <div class=\"p3-sec-head\"><div class=\"p3-sec-title\">個體基線偏差</div><div class=\"p3-sec-hint\">偏差分 0–100 · Z-score 另列</div></div>\n      <div class=\"p3-dev-list\" ng-if=\"deviationAvailable()\">\n        <div class=\"p3-dev-row\" ng-repeat=\"r in deviationRows\"><div class=\"p3-dev-lbl\">{{r.ico}} {{r.lbl}}</div><div class=\"p3-dev-track\"><div class=\"p3-dev-fill\" ng-class=\"devTone(r.metric)\" ng-style=\"{width:devWidth(r.metric)+'%'}\"></div></div><div class=\"p3-dev-num\"><span class=\"p3-dev-score\" ng-style=\"{color:devColor(r.metric)}\">{{devScore(r.metric)}}</span><span class=\"p3-dev-z\">{{devZ(r.metric)}}</span></div></div>\n      </div>\n      <div class=\"p3-empty\" ng-if=\"!deviationAvailable()\">個體化基線建立後顯示偏差分析</div>\n    </section>\n\n    <section class=\"p3-section wide\">\n      <div class=\"p3-sec-head\"><div class=\"p3-sec-title\">四時段行為節律</div><div class=\"p3-sec-hint\">各時段主導行為與內部比例</div></div>\n      <div class=\"p3-rhythm-grid\">\n        <article class=\"p3-rhythm-card\" ng-repeat=\"pd in periods\">\n          <div class=\"p3-rh-period\">◷ {{pd}}</div><div class=\"p3-rh-main\"><div class=\"p3-rh-dom\">{{domEmoji(rhythmData(pd).dominant)}}</div><div><div class=\"p3-rh-name\">{{domName(rhythmData(pd).dominant)}}</div><div class=\"p3-rh-pct\">{{dominantPct(pd)}}</div></div></div>\n          <div class=\"p3-rh-mini\"><div class=\"p3-rh-mini-row\" ng-repeat=\"b in behaviors\"><div class=\"p3-rh-mini-lbl\">{{b.ico}}</div><div class=\"p3-rh-mini-bar\"><div class=\"p3-rh-mini-fill\" ng-style=\"{width:rhythmPct(pd,b.key)+'%',background:b.color}\"></div></div></div></div>\n        </article>\n      </div>\n    </section>\n\n    <section class=\"p3-section wide\">\n      <div class=\"p3-sec-head\"><div class=\"p3-sec-title\">行為轉移矩陣</div><div class=\"p3-sec-hint\">列為前一行為，欄為下一行為；色彩越亮代表轉移越頻繁</div></div>\n      <div class=\"p3-mx-wrap\"><table class=\"p3-mx-table\"><thead><tr><th>FROM \\ TO</th><th ng-repeat=\"to in behaviors\">{{to.ico}} {{to.name}}</th></tr></thead><tbody><tr ng-repeat=\"from in behaviors\"><th>{{from.ico}} {{from.name}}</th><td ng-repeat=\"to in behaviors\"><div class=\"p3-mx-cell\" ng-style=\"{background:matrixCellColor(from.key,to.key),color:matrixTextColor(from.key,to.key)}\">{{matrixVal(from.key,to.key)}}</div></td></tr></tbody></table></div>\n    </section>\n  </div>\n</div>\n\n<script>\n(function(scope){\n  scope.behaviors=[\n    {key:'walk',name:'行走',ico:'🚶',color:'#55d6c2'},{key:'lick',name:'舔舐',ico:'😸',color:'#a78bfa'},\n    {key:'scratch',name:'搔抓',ico:'🐾',color:'#f472b6'},{key:'shake',name:'甩頭',ico:'↻',color:'#63a7ff'},{key:'stop',name:'靜止',ico:'☾',color:'#71839a'}\n  ];\n  scope.deviationRows=[\n    {metric:'lick_duration',lbl:'舔舐時間',ico:'😸'},{metric:'scratch_duration',lbl:'搔抓時間',ico:'🐾'},\n    {metric:'head_shake',lbl:'甩頭次數',ico:'↻'},{metric:'inactive_duration',lbl:'靜止時間',ico:'☾'},{metric:'walk_duration',lbl:'行走時間',ico:'🚶'}\n  ];\n  scope.periods=['00-06','06-12','12-18','18-24'];scope.rhythm={};scope.matrix={};scope.init=function(){};\n  scope.payload=function(){return scope.msg&&scope.msg.payload?scope.msg.payload:{};};scope.distPct=function(k){var d=scope.payload().distribution;return d&&d[k]!=null?Number(d[k]).toFixed(2):'0.00';};\n  scope.domEmoji=function(d){return {walk:'🚶',lick:'😸',scratch:'🐾',shake:'↻',stop:'☾',none:'—'}[d]||'—';};scope.domName=function(d){return {walk:'行走',lick:'舔舐',scratch:'搔抓',shake:'甩頭',stop:'靜止',none:'無資料'}[d]||d||'無資料';};\n  scope.rhythmData=function(pd){return scope.rhythm[pd]||{dominant:'none',pct:{},total:0};};scope.rhythmPct=function(pd,k){return Number(scope.rhythmData(pd).pct&&scope.rhythmData(pd).pct[k]||0);};scope.dominantPct=function(pd){var r=scope.rhythmData(pd),v=r.dominant!=='none'?scope.rhythmPct(pd,r.dominant):0;return r.dominant==='none'?'尚無資料':v.toFixed(2)+'%';};\n  scope.matrixVal=function(f,t){return Number(scope.matrix[f+'->'+t]||0);};scope.matrixMax=function(){var vals=Object.values(scope.matrix||{}).map(Number);return Math.max.apply(Math,vals.concat([1]));};\n  scope.matrixCellColor=function(f,t){var v=scope.matrixVal(f,t);if(!v)return 'rgba(113,131,154,.035)';var a=Math.min(.78,.1+v/scope.matrixMax()*.68);return 'rgba(99,167,255,'+a+')';};scope.matrixTextColor=function(f,t){return scope.matrixVal(f,t)/scope.matrixMax()>.55?'#06101d':'#edf6ff';};\n  scope.devRecord=function(k){var d=scope.payload().deviation;return d&&d[k]?d[k]:null;};scope.deviationAvailable=function(){return !!scope.payload().deviation_available&&!!scope.payload().deviation;};\n  scope.devScore=function(k){var r=scope.devRecord(k);return r&&r.deviation_score!=null?Number(r.deviation_score).toFixed(1):'--';};scope.devZ=function(k){var r=scope.devRecord(k);if(!r||r.z_score==null)return 'Z --';var z=Number(r.z_score);return 'Z '+(z>=0?'+':'')+z.toFixed(2)+'σ';};\n  scope.devWidth=function(k){var r=scope.devRecord(k);return r&&r.deviation_score!=null?Math.max(1,Math.min(100,Number(r.deviation_score))):0;};scope.devTone=function(k){var s=Number(scope.devScore(k));return s>=50?'high':s>=20?'attn':'';};scope.devColor=function(k){var s=Number(scope.devScore(k));return s>=50?'#fb7b84':s>=20?'#facc15':'#55d6c2';};\n  scope.$watch('msg.payload',function(p){if(!p)return;scope.rhythm=p.rhythm||{};scope.matrix=p.v2_matrix||{};});\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "cat-health-widget",
+    "x": 260,
+    "y": 302,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "c558f3926f34e5cc",
+    "type": "link in",
+    "z": "457d7a0cc77babac",
+    "name": "← P4入口",
+    "links": [
+      "ee0e9829b20d49ee"
+    ],
+    "x": 40,
+    "y": 412,
+    "wires": [
+      [
+        "4bd6613cb2cccb60"
+      ]
+    ]
+  },
+  {
+    "id": "4bd6613cb2cccb60",
+    "type": "ui_template",
+    "z": "457d7a0cc77babac",
+    "group": "grp_p4_metrics",
+    "name": "P4 個體基線面板",
+    "order": 1,
+    "width": "24",
+    "height": "24",
+    "format": "<style>\n.p4,.p4 *{box-sizing:border-box}\n.p4{font-family:Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;color:var(--ch-text,#f4f8fc);padding:clamp(12px,1.35vw,19px);background:linear-gradient(145deg,rgba(11,27,45,.97),rgba(6,16,29,.99));border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:20px;box-shadow:0 18px 46px rgba(0,0,0,.24);position:relative;min-width:0}\n.p4-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 9px}.p4-head-main{display:flex;align-items:center;gap:10px}.p4-head-mark{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:linear-gradient(145deg,rgba(85,214,194,.18),rgba(99,167,255,.1));border:1px solid rgba(85,214,194,.24);font-size:17px}.p4-kicker{font-size:11.5px;color:var(--ch-cyan,#55d6c2);letter-spacing:.12em;text-transform:uppercase;font-weight:850}.p4-title{font-size:20px;font-weight:900;margin-top:2px}.p4-head-state{display:flex;align-items:center;gap:7px;padding:7px 11px;border-radius:999px;background:rgba(85,214,194,.07);border:1px solid rgba(85,214,194,.18);color:#9be8dc;font-size:12.5px;font-weight:800;white-space:nowrap}.p4-head-dot{width:7px;height:7px;border-radius:50%;background:#55d6c2;box-shadow:0 0 12px rgba(85,214,194,.7)}\n\n.p4-rule{position:relative;display:grid;grid-template-columns:50px minmax(250px,.72fr) minmax(0,1.8fr);gap:14px;align-items:center;margin-bottom:9px;padding:13px 17px 13px 22px;border-radius:15px;background:linear-gradient(145deg,rgba(13,28,48,.96),rgba(8,18,32,.98));border:1px solid rgba(99,167,255,.34);box-shadow:0 0 20px rgba(99,167,255,.1);overflow:hidden;animation:p4-in .38s ease-out both}.p4-rule:before{content:\"\";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,#55d6c2,#63a7ff);animation:p4-breathe 4.8s ease-in-out infinite}.p4-rule-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:13px;background:rgba(99,167,255,.12);border:1px solid rgba(99,167,255,.25);font-size:25px}.p4-rule-title{font-size:18px;font-weight:900;line-height:1.25}.p4-rule-sub{font-size:14px;color:#c8d9e6;font-weight:750;margin-top:3px}.p4-rule-badge{display:inline-flex;margin-top:6px;padding:3px 8px;border-radius:999px;background:rgba(99,167,255,.13);border:1px solid rgba(99,167,255,.3);color:#acd2ff;font-size:12px;font-weight:800}.p4-rule-lines{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.p4-rule-line{height:100%;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.027);border:1px solid rgba(255,255,255,.055);font-size:14px;line-height:1.55;color:#e2ebf3;font-weight:650;overflow-wrap:anywhere}.p4-rule-line strong{font-weight:850}.p4-pop{color:#72b0ff}.p4-cite{color:#add2ff}.p4-warn{color:#ffb45f}.p4-ind{color:#63dfa5}.p4-mark{background:rgba(74,222,128,.11);border-bottom:2px solid rgba(74,222,128,.46);border-radius:3px;padding:0 2px}\n\n.p4-topboard{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px}.p4-compact-panel,.p4-panel{background:rgba(10,24,41,.72);border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:15px;min-width:0}.p4-compact-panel{padding:9px 11px}.p4-mini-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}.p4-mini-title{font-size:13.5px;font-weight:900;color:#f1f7fb}.p4-mini-hint{font-size:11.5px;color:var(--ch-muted,#8da2b8);text-align:right}.p4-row-no{display:inline-grid;place-items:center;width:24px;height:20px;margin-right:7px;border-radius:7px;background:rgba(99,167,255,.1);border:1px solid rgba(99,167,255,.18);color:#9fc8ff;font-size:10.5px;font-weight:900}\n.p4-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.p4-kpi{min-width:0;display:grid;grid-template-columns:32px minmax(0,1fr);align-items:center;gap:9px;padding:8px 11px;border-radius:11px;background:linear-gradient(145deg,rgba(18,34,56,.85),rgba(10,24,41,.82));border:1px solid rgba(255,255,255,.06)}.p4-kpi-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:rgba(99,167,255,.09);color:#a8cdf9;font-size:14px}.p4-kpi-val{font-size:clamp(18px,1.55vw,23px);font-weight:900;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}.p4-kpi-label{font-size:12px;color:#9fb3c5;margin-top:2px;white-space:nowrap}\n.p4-periods{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.p4-period{min-width:0;padding:7px 9px;border-radius:11px;background:rgba(255,255,255,.027);border:1px solid rgba(255,255,255,.058);text-align:center}.p4-period-top{display:flex;align-items:center;justify-content:center;gap:6px}.p4-period-icon{font-size:13px}.p4-period-name{font-size:13px;font-weight:900;color:#e1ebf3}.p4-period-days{font-size:12.5px;font-weight:850;margin-top:3px;font-variant-numeric:tabular-nums}.p4-confidence{display:flex;align-items:center;gap:8px;margin-top:6px;padding:5px 9px;border-radius:9px;background:rgba(85,214,194,.045);border:1px solid rgba(85,214,194,.11)}.p4-conf-icon{width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:rgba(85,214,194,.1);font-size:12px}.p4-conf-main{font-size:12px;font-weight:850}.p4-conf-desc{font-size:11px;color:var(--ch-muted,#8da2b8);margin-left:auto;text-align:right}\n\n.p4-main-metrics{margin-bottom:10px}.p4-followups{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(360px,.75fr);gap:10px;align-items:stretch}.p4-followups>.p4-panel{height:100%}.p4-panel{padding:11px 12px}.p4-panel-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:8px}.p4-panel-title{font-size:14px;font-weight:900}.p4-panel-hint{font-size:11px;color:var(--ch-muted,#8da2b8);text-align:right}.p4-side{display:grid;gap:10px;min-width:0}\n.p4-main-metrics .p4-panel-title{font-size:16px}.p4-main-metrics .p4-panel-hint{font-size:12px}.p4-table-wrap{overflow-x:auto}.p4-table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed;overflow:hidden;border:1px solid rgba(255,255,255,.075);border-radius:12px}.p4-table th{font-size:12.5px;line-height:1.25;color:#b6c8d7;font-weight:850;background:rgba(255,255,255,.042);padding:9px;text-align:right;border-bottom:1px solid rgba(255,255,255,.075)}.p4-table th:first-child,.p4-table td:first-child{text-align:left;width:22%}.p4-table th:nth-child(2){width:15%}.p4-table th:nth-child(3){width:25%}.p4-table th:nth-child(4){width:14%}.p4-table th:nth-child(5){width:11%}.p4-table th:nth-child(6){width:13%}.p4-table td{font-size:14.5px;line-height:1.22;font-weight:650;color:#e2ebf2;padding:9px;text-align:right;border-bottom:1px solid rgba(255,255,255,.052);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.p4-table tbody tr:nth-child(even) td{background:rgba(99,167,255,.012)}.p4-table tr:last-child td{border-bottom:0}.p4-table tbody tr:hover td{background:rgba(99,167,255,.045)}.p4-table td:nth-child(2){font-size:15px;font-weight:850;color:#c9e8ff}.p4-table td:nth-child(4),.p4-table td:nth-child(5){font-weight:780}.p4-metric-name{font-size:15px;font-weight:850;color:#f7fafc}.p4-baseline-cell{font-weight:720;color:#d0e4f2}.p4-sigma{display:inline-flex;align-items:center;justify-content:center;min-width:56px;padding:5px 9px;border-radius:999px;font-size:11.5px;font-weight:900}.sig-ok{background:rgba(74,222,128,.1);color:#86efac}.sig-mid{background:rgba(250,204,21,.1);color:#fde047}.sig-high{background:rgba(251,92,104,.11);color:#fda4af}.p4-mobile-metrics{display:none}.p4-metric-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:13px;padding:13px}.p4-metric-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:14.5px;font-weight:900}.p4-metric-today{font-size:22px;font-weight:900;margin:10px 0}.p4-metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.p4-metric-mini{background:rgba(255,255,255,.025);border-radius:8px;padding:8px}.p4-metric-mini small{display:block;color:var(--ch-muted,#8da2b8);font-size:11px}.p4-metric-mini strong{display:block;margin-top:3px;font-size:12px}\n.p4-empty{text-align:center;padding:28px 16px}.p4-empty-icon{width:54px;height:54px;display:grid;place-items:center;margin:0 auto 10px;border-radius:17px;background:rgba(99,167,255,.08);border:1px solid rgba(99,167,255,.15);font-size:23px}.p4-empty-title{font-size:15px;font-weight:850}.p4-empty-copy{font-size:12px;color:var(--ch-muted,#8da2b8);line-height:1.6;margin-top:6px}.p4-progress{height:7px;background:rgba(142,163,184,.1);border-radius:999px;overflow:hidden;max-width:360px;margin:12px auto 0}.p4-progress-fill{height:100%;background:linear-gradient(90deg,#63a7ff,#55d6c2);border-radius:999px;transition:width .6s}\n\n.p4-ref-list{display:grid;gap:5px}.p4-ref-head,.p4-ref-item{display:grid;grid-template-columns:minmax(125px,1.25fr) minmax(70px,.65fr) minmax(82px,.75fr) minmax(94px,.9fr);gap:7px;align-items:center}.p4-ref-head{padding:0 8px 5px;color:#91a7ba;font-size:10px;font-weight:850;text-align:right}.p4-ref-head span:first-child{text-align:left}.p4-ref-item{padding:7px 8px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);font-size:11px;text-align:right}.p4-ref-name{text-align:left;min-width:0}.p4-ref-name strong{display:block;font-size:11.5px;color:#eef5fa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.p4-ref-name small{display:block;font-size:9.5px;color:var(--ch-muted,#8da2b8);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.p4-ref-today{font-size:12.5px;font-weight:900;color:#9fc8ff}.p4-ref-literature{color:#c7d8e5}.p4-ref-baseline{color:#8ce6d8}.p4-sanity{margin-top:7px;border-radius:10px;padding:7px 9px;font-size:10.5px;line-height:1.45}.p4-sanity.warn{color:#fed7aa;background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.2)}.p4-sanity.ok{color:#9aebba;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.15)}\n\n.p4-settings-panel{display:flex;flex-direction:column}.p4-settings-summary{display:flex;flex:1;flex-direction:column;gap:9px}.p4-profile{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:center;padding:10px 11px;border-radius:11px;background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.06)}.p4-profile-name{font-size:14px;font-weight:900}.p4-profile-meta{font-size:11.5px;color:var(--ch-muted,#8da2b8);margin-top:3px}.p4-setting-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.p4-setting-stat{min-width:0;padding:8px 6px;border-radius:10px;text-align:center;background:rgba(99,167,255,.055);border:1px solid rgba(99,167,255,.12)}.p4-setting-stat span{display:block;font-size:10px;color:#92a8ba;white-space:nowrap}.p4-setting-stat strong{display:block;margin-top:3px;font-size:13px;font-weight:900;color:#e9f3f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.p4-setting-pills{display:flex;flex-wrap:wrap;gap:6px}.p4-setting-pill{padding:6px 8px;border-radius:8px;background:rgba(99,167,255,.07);border:1px solid rgba(99,167,255,.13);font-size:11px;color:#c7d9e8}.p4-setting-pill strong{color:#94eadc}.p4-summary-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#83d9cd;font-weight:850;margin-top:1px}.p4-thresholds{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}.p4-threshold{min-height:55px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:7px 3px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)}.p4-threshold span{display:block;font-size:10.5px;color:#9cafc0}.p4-threshold strong{display:block;font-size:13px;color:#f2f7fb;margin-top:3px}.p4-notify-rule{padding:8px 10px;border-radius:10px;background:rgba(250,204,21,.055);border:1px solid rgba(250,204,21,.13);color:#d7c98a;font-size:10.5px;line-height:1.45}.p4-notify-rule strong{color:#fde47b;font-weight:850}.p4-edit-btn{width:100%;min-height:42px;margin-top:auto;border:1px solid rgba(85,214,194,.3);border-radius:10px;background:linear-gradient(135deg,rgba(85,214,194,.17),rgba(99,167,255,.11));color:#a1eee2;font:900 12.5px Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;cursor:pointer}.p4-edit-btn:hover{filter:brightness(1.12)}\n\n.p4-actionbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.p4-tool-btn{min-height:40px;border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:12px;background:rgba(10,24,41,.68);color:#dce8f2;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;font:800 12px Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;cursor:pointer}.p4-tool-btn:hover{background:rgba(255,255,255,.035)}.p4-tool-meta{color:var(--ch-muted,#8da2b8);font-size:10px;font-weight:650;margin-left:auto}.p4-chevron{width:23px;height:23px;display:grid;place-items:center;border-radius:7px;background:rgba(255,255,255,.045);transition:transform .2s}.p4-chevron.open{transform:rotate(180deg)}.p4-drawer{margin-top:8px;padding:13px;border:1px solid var(--ch-line,rgba(148,178,210,.14));border-radius:14px;background:rgba(10,24,41,.72)}\n\n.p4-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.p4-form-group{min-width:0}.p4-set-divider{font-size:11px;color:#84dbcf;letter-spacing:.1em;text-transform:uppercase;font-weight:850;margin:12px 0 10px}.p4-set-row{display:grid;grid-template-columns:125px minmax(0,1fr);align-items:center;gap:10px;margin-bottom:10px}.p4-set-lbl{font-size:12.5px;color:#c5d7e4}.p4-set-ctrl{display:flex;align-items:center;gap:9px;min-width:0}.p4 input[type=text],.p4 input[type=password],.p4 input[type=number]{width:100%;min-width:0;padding:9px 10px;background:rgba(255,255,255,.04);border:1px solid rgba(148,178,210,.17);border-radius:10px;color:#f2f7fb;font:12.5px Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;outline:none}.p4 input:focus{border-color:rgba(85,214,194,.5);box-shadow:0 0 0 3px rgba(85,214,194,.07)}.p4 input[type=range]{width:100%;accent-color:#55d6c2;cursor:pointer}.p4-set-num{min-width:65px;text-align:right;color:#8ce6d8;font-size:12px;font-weight:800;white-space:nowrap}.p4-date-inputs{display:grid;grid-template-columns:1fr auto 1fr auto;align-items:center;gap:5px}.p4-form-unit{font-size:11px;color:var(--ch-muted,#8da2b8)}.p4-set-hint{font-size:11px;color:var(--ch-muted,#8da2b8);line-height:1.5;margin:-4px 0 10px 135px}.p4-set-age{font-size:11.5px;color:#8ce6d8;margin:-4px 0 10px 135px}.p4-actions{display:flex;gap:8px;margin-top:12px}.p4-btn{border:1px solid transparent;border-radius:11px;padding:10px 13px;color:#f7fbff;font:850 12.5px Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;cursor:pointer;transition:transform .15s,filter .15s;min-height:40px}.p4-btn:hover{filter:brightness(1.12);transform:translateY(-1px)}.p4-btn.primary{background:linear-gradient(135deg,#2cbda9,#378fcc)}.p4-btn.secondary{background:rgba(99,167,255,.1);border-color:rgba(99,167,255,.25);color:#afd2ff}.p4-btn.danger{background:rgba(251,92,104,.11);border-color:rgba(251,92,104,.24);color:#fda4af}.p4-btn.block{flex:1}\n\n.p4-subtitle{font-size:12px;font-weight:850;color:#c9d9e5;margin:8px 0}.p4-evt-tags{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}.p4-evt-tag{padding:7px 10px;border-radius:999px;font-size:11.5px;cursor:pointer;border:1px solid rgba(148,178,210,.16);color:#c7d6e3;background:rgba(255,255,255,.03);user-select:none}.p4-evt-tag.active{background:rgba(85,214,194,.11);border-color:rgba(85,214,194,.4);color:#93eadc}.p4-events-layout{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:16px}.p4-evt-hist-row{padding:8px 0;border-bottom:1px solid rgba(255,255,255,.045);font-size:11.5px;line-height:1.5}.p4-evt-date{color:var(--ch-muted,#8da2b8);margin-right:6px}.p4-evt-tags-text{color:#c7b8ff}.p4-evt-note{color:#8ce6d8;font-style:italic}\n.p4-hist-list{display:grid;gap:6px;margin-top:10px}.p4-hist-row{display:grid;grid-template-columns:95px minmax(0,1fr) auto;align-items:center;gap:9px;padding:9px 10px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}.p4-hist-date{font-size:11.5px;font-weight:780}.p4-hist-info{display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-width:0}.p4-pill{font-size:10px;padding:3px 6px;border-radius:999px;font-weight:780}.p4-pill.ok{background:rgba(74,222,128,.09);color:#86efac}.p4-pill.short{background:rgba(113,131,154,.11);color:#94a6b8}.p4-pill.hi{background:rgba(251,92,104,.11);color:#fda4af}.p4-pill.warn{background:rgba(251,146,60,.1);color:#fdba74}.p4-pill.attn{background:rgba(250,204,21,.09);color:#fde047}.p4-pill.normal{background:rgba(74,222,128,.09);color:#86efac}.p4-hist-hrs,.p4-hist-missing{font-size:10.5px;color:var(--ch-muted,#8da2b8)}.p4-hist-missing{color:#fdba74}.p4-excl-btn{border-radius:9px;padding:7px 9px;font-size:10.5px;font-weight:800;cursor:pointer;border:1px solid rgba(148,178,210,.14);color:#9eb1c4;background:rgba(255,255,255,.025)}.p4-excl-btn.active{background:rgba(251,92,104,.09);border-color:rgba(251,92,104,.25);color:#fda4af}.p4-del-zone{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.055)}.p4-del-hint{grid-column:1/-1;font-size:10.5px;color:var(--ch-muted,#8da2b8);line-height:1.5}.p4-error{grid-column:1/-1;font-size:11px;color:#fda4af;font-weight:700}\n\n.p4-baseline-warning-backdrop{position:fixed;inset:0;z-index:10040;display:grid;place-items:center;padding:20px;background:rgba(2,7,14,.78);backdrop-filter:blur(7px)}.p4-baseline-warning{position:relative;width:min(590px,100%);overflow:hidden;padding:24px;border-radius:22px;background:linear-gradient(145deg,#162538,#0d1929);border:2px solid rgba(251,146,60,.62);box-shadow:0 28px 90px rgba(0,0,0,.62),0 0 38px rgba(251,146,60,.18);animation:p4-warning-in .3s cubic-bezier(.2,.85,.25,1)}.p4-baseline-warning:before{content:\"\";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,#facc15,#fb923c,#fb5c68)}.p4-baseline-warning.error{border-color:rgba(251,92,104,.68);box-shadow:0 28px 90px rgba(0,0,0,.62),0 0 42px rgba(251,92,104,.2)}.p4-baseline-warning.protect{border-color:rgba(250,204,21,.68);box-shadow:0 28px 90px rgba(0,0,0,.62),0 0 42px rgba(250,204,21,.18)}.p4-baseline-warning-head{display:flex;align-items:center;gap:16px}.p4-baseline-warning-icon{flex:0 0 62px;width:62px;height:62px;display:grid;place-items:center;border-radius:19px;background:rgba(251,146,60,.13);border:1px solid rgba(251,146,60,.34);color:#fdba74;font-size:30px;font-weight:950;box-shadow:inset 0 1px rgba(255,255,255,.06);animation:p4-warning-pulse 2.2s ease-in-out infinite}.p4-baseline-warning.error .p4-baseline-warning-icon{background:rgba(251,92,104,.13);border-color:rgba(251,92,104,.38);color:#fda4af}.p4-baseline-warning.protect .p4-baseline-warning-icon{background:rgba(250,204,21,.12);border-color:rgba(250,204,21,.36);color:#fde047}.p4-baseline-warning-kicker{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:#f2b67d;font-weight:900}.p4-baseline-warning-title{font-size:23px;line-height:1.25;font-weight:950;color:#fff4e9;margin-top:4px}.p4-baseline-warning-message{margin-top:17px;padding:15px 16px;border-radius:13px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.075);color:#f1f5f8;font-size:16px;font-weight:700;line-height:1.7;white-space:pre-line;overflow-wrap:anywhere}.p4-baseline-warning-note{display:flex;align-items:flex-start;gap:8px;margin-top:12px;color:#b9c8d5;font-size:13px;line-height:1.55}.p4-baseline-warning-actions{display:flex;justify-content:flex-end;margin-top:20px}.p4-baseline-warning-btn{min-width:145px;min-height:47px;border:1px solid rgba(251,146,60,.46);border-radius:12px;background:linear-gradient(135deg,#d66d25,#b94b32);color:#fff;font:900 14px Inter,\"Noto Sans TC\",\"Microsoft JhengHei\",sans-serif;cursor:pointer;box-shadow:0 10px 25px rgba(145,59,28,.25)}.p4-baseline-warning-btn:hover{filter:brightness(1.12);transform:translateY(-1px)}.p4-modal-backdrop{position:fixed;inset:0;z-index:10010;background:rgba(2,8,15,.75);backdrop-filter:blur(5px);display:grid;place-items:center;padding:18px}.p4-modal{width:min(940px,100%);max-height:88vh;overflow-y:auto;background:#101f33;border:1px solid rgba(99,167,255,.22);border-radius:18px;padding:19px;box-shadow:0 28px 80px rgba(0,0,0,.52);animation:p4-modal-in .22s ease}.p4-modal.danger-modal{width:min(420px,100%);border-color:rgba(251,92,104,.25)}.p4-modal-head{position:sticky;top:-19px;z-index:2;margin:-19px -19px 13px;padding:16px 18px;background:rgba(16,31,51,.97);border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between;gap:10px}.p4-modal-title{font-size:17px;font-weight:900}.p4-modal-sub{font-size:11.5px;color:var(--ch-muted,#8da2b8);margin-top:3px}.p4-modal-close{width:34px;height:34px;border-radius:10px;border:1px solid rgba(148,178,210,.15);background:rgba(255,255,255,.035);color:#dbe7f0;font-size:18px;cursor:pointer}.p4-modal-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:rgba(251,92,104,.1);font-size:22px}.p4-modal-copy{font-size:12px;color:var(--ch-muted,#8da2b8);line-height:1.6;margin-top:7px}.p4-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:17px}.p4-toast{position:fixed;right:24px;bottom:24px;z-index:10020;max-width:min(390px,calc(100vw - 28px));display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:13px;background:#122238;border:1px solid rgba(148,178,210,.2);box-shadow:0 18px 55px rgba(0,0,0,.42);font-size:12px;line-height:1.5;animation:p4-toast-in .28s ease}.p4-toast.success{border-color:rgba(74,222,128,.28)}.p4-toast.warn{border-color:rgba(251,146,60,.3)}.p4-toast.error{border-color:rgba(251,92,104,.34)}.p4-toast-icon{font-size:17px}.p4-toast-copy{white-space:pre-line}\n\n@keyframes p4-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes p4-breathe{0%,100%{filter:brightness(.78)}50%{filter:brightness(1.35)}}@keyframes p4-warning-in{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes p4-warning-pulse{0%,100%{transform:scale(1);filter:brightness(.9)}50%{transform:scale(1.045);filter:brightness(1.2)}}@keyframes p4-modal-in{from{opacity:0;transform:scale(.97)}}@keyframes p4-toast-in{from{opacity:0;transform:translateY(10px)}}\n@media(max-width:1080px){.p4-rule{grid-template-columns:44px minmax(210px,.6fr) minmax(0,1.5fr)}.p4-rule-lines{grid-template-columns:1fr}.p4-followups{grid-template-columns:1fr}.p4-ref-list{min-width:0}}\n@media(max-width:850px){.p4{padding:12px;border-radius:16px}.p4-head-state,.p4-mini-hint,.p4-tool-meta{display:none}.p4-rule{grid-template-columns:44px 1fr;align-items:start}.p4-rule-lines{grid-column:1/-1}.p4-kpis{grid-template-columns:repeat(2,1fr)}.p4-periods{grid-template-columns:repeat(2,1fr)}.p4-table-wrap{display:none}.p4-mobile-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.p4-form-grid,.p4-events-layout{grid-template-columns:1fr}.p4-set-hint,.p4-set-age{margin-left:0}.p4-actionbar{grid-template-columns:1fr}.p4-hist-row{grid-template-columns:80px 1fr}.p4-hist-row .p4-excl-btn{grid-column:1/-1;width:100%}}\n@media(max-width:540px){.p4-head{align-items:flex-start}.p4-title{font-size:17px}.p4-rule{grid-template-columns:1fr;padding:14px 14px 14px 19px}.p4-rule-icon{width:40px;height:40px}.p4-rule-line{font-size:14px}.p4-kpis{grid-template-columns:1fr 1fr}.p4-kpi{grid-template-columns:26px 1fr;padding:8px}.p4-kpi-icon{width:26px;height:26px}.p4-kpi-label{font-size:10px}.p4-confidence{align-items:flex-start}.p4-conf-desc{font-size:10px}.p4-mobile-metrics{grid-template-columns:1fr}.p4-metric-grid{grid-template-columns:repeat(2,1fr)}.p4-ref-head{display:none}.p4-ref-item{grid-template-columns:1fr 1fr;gap:6px;text-align:left}.p4-ref-name{grid-column:1/-1}.p4-ref-name strong,.p4-ref-name small{white-space:normal}.p4-ref-item>span:before{display:block;font-size:9px;color:#8197aa;margin-bottom:2px}.p4-ref-today:before{content:\"今日\"}.p4-ref-literature:before{content:\"群體參考\"}.p4-ref-baseline:before{content:\"此貓基線\"}.p4-thresholds{grid-template-columns:repeat(3,1fr)}.p4-set-row{grid-template-columns:1fr;gap:6px}.p4-date-inputs{grid-template-columns:1fr auto 1fr auto}.p4-actions{flex-direction:column}.p4-del-zone{grid-template-columns:1fr}.p4-hist-row{grid-template-columns:1fr}.p4-hist-row .p4-excl-btn{grid-column:auto}.p4-modal{padding:15px}.p4-modal-head{top:-15px;margin:-15px -15px 12px}.p4-baseline-warning{padding:20px;border-radius:18px}.p4-baseline-warning-head{align-items:flex-start;gap:12px}.p4-baseline-warning-icon{flex-basis:52px;width:52px;height:52px;border-radius:16px;font-size:25px}.p4-baseline-warning-title{font-size:20px}.p4-baseline-warning-message{font-size:15px;padding:13px}.p4-baseline-warning-btn{width:100%}.p4-toast{right:14px;bottom:14px}}\n@media(prefers-reduced-motion:reduce){.p4 *{animation:none!important;transition:none!important}}\n</style>\n\n<div class=\"p4\" ng-init=\"init()\">\n  <section class=\"p4-rule\" role=\"note\" aria-label=\"群體參考與個體基線判讀原則\">\n    <div class=\"p4-rule-icon\">📖</div>\n    <div><div class=\"p4-rule-title\">Population Reference vs Individual Baseline</div><div class=\"p4-rule-sub\">群體參考與個體基線的判讀原則</div><span class=\"p4-rule-badge\">重要判讀原則</span></div>\n    <div class=\"p4-rule-lines\">\n      <div class=\"p4-rule-line\"><strong class=\"p4-pop\">Population Reference</strong> 來自文獻（<strong class=\"p4-cite\">Eckstein &amp; Hart, 2000</strong>）。</div>\n      <div class=\"p4-rule-line\">此數值代表群體正常範圍，<strong class=\"p4-warn\">不代表異常門檻</strong>。</div>\n      <div class=\"p4-rule-line\">系統異常判斷<span class=\"p4-mark\">以此貓的 <strong class=\"p4-ind\">Individual Baseline</strong> 為依據</span>。</div>\n    </div>\n  </section>\n\n  <header class=\"p4-head\">\n    <div class=\"p4-head-main\"><div class=\"p4-head-mark\">◎</div><div><div class=\"p4-kicker\">Personal baseline</div><div class=\"p4-title\">個體化健康基線</div></div></div>\n    <div class=\"p4-head-state\"><span class=\"p4-head-dot\"></span>{{blReady()?'基線已建立':v2Insufficient?'有效資料不足':'基線建立中'}}</div>\n  </header>\n\n  <section class=\"p4-topboard\">\n    <div class=\"p4-compact-panel\">\n      <div class=\"p4-mini-head\"><div class=\"p4-mini-title\"><span class=\"p4-row-no\">01</span>核心基線狀態</div><div class=\"p4-mini-hint\">基線天數、計算日期、整體偏差與建立狀態</div></div>\n      <div class=\"p4-kpis\">\n        <article class=\"p4-kpi\"><div class=\"p4-kpi-icon\">▦</div><div><div class=\"p4-kpi-val\" ng-style=\"{color:blDays()>=14?'#86efac':blDays()>=7?'#fde047':'#fda4af'}\">{{blDays()}}</div><div class=\"p4-kpi-label\">基線使用天數</div></div></article>\n        <article class=\"p4-kpi\"><div class=\"p4-kpi-icon\">◷</div><div><div class=\"p4-kpi-val\">{{blDate()}}</div><div class=\"p4-kpi-label\">最近計算日期</div></div></article>\n        <article class=\"p4-kpi\"><div class=\"p4-kpi-icon\">◇</div><div><div class=\"p4-kpi-val\" ng-style=\"{color:devColorOverall()}\">{{devOv()!=null?devOv()+'%':'--'}}</div><div class=\"p4-kpi-label\">整體偏差</div></div></article>\n        <article class=\"p4-kpi\"><div class=\"p4-kpi-icon\">◎</div><div><div class=\"p4-kpi-val\">{{blReady()?'已建立':v2Insufficient?'資料不足':'建立中'}}</div><div class=\"p4-kpi-label\">基線狀態</div></div></article>\n      </div>\n    </div>\n    <div class=\"p4-compact-panel\">\n      <div class=\"p4-mini-head\"><div class=\"p4-mini-title\"><span class=\"p4-row-no\">02</span>四時段資料覆蓋</div><div class=\"p4-mini-hint\">每時段監控超過 5 分鐘才計入有效覆蓋</div></div>\n      <div class=\"p4-periods\"><article class=\"p4-period\" ng-repeat=\"p in periods\"><div class=\"p4-period-top\"><span class=\"p4-period-icon\">{{covEmoji(periodData(p))}}</span><span class=\"p4-period-name\">{{p}}</span></div><div class=\"p4-period-days\" ng-style=\"{color:covColor(periodData(p))}\">{{periodData(p).covered}} / {{periodData(p).total}} 天</div></article></div>\n      <div class=\"p4-confidence\"><div class=\"p4-conf-icon\" ng-style=\"{color:confColor()}\">{{confidenceIcon()}}</div><div class=\"p4-conf-main\" ng-style=\"{color:confColor()}\">{{bl&&bl.confidence||'Low'}} · {{confDesc()}}</div><div class=\"p4-conf-desc\">Low &lt; 7 天 · Medium 7–29 天 · High ≥ 30 天</div></div>\n    </div>\n  </section>\n\n  <section class=\"p4-panel p4-main-metrics\" ng-if=\"blReady()\">\n    <div class=\"p4-panel-head\"><div class=\"p4-panel-title\"><span class=\"p4-row-no\">03</span>11 類個體化基線指標</div><div class=\"p4-panel-hint\">今日值、此貓基線、Median、Z-score 與狀態</div></div>\n    <div class=\"p4-table-wrap\"><table class=\"p4-table\"><thead><tr><th>指標</th><th>今日</th><th>此貓基線 Mean ± Std</th><th>Median</th><th>Z-score</th><th>狀態</th></tr></thead><tbody><tr ng-repeat=\"r in rows\"><td><span class=\"p4-metric-name\">{{r.ico}} {{r.lbl}}</span></td><td>{{formatMetric(todayRaw(r),r)}}</td><td class=\"p4-baseline-cell\">{{formatMetric(blRaw(r,'mean'),r)}} ± {{formatMetric(blRaw(r,'std'),r)}}</td><td>{{formatMetric(blRaw(r,'median'),r)}}</td><td ng-style=\"{color:devColor(r.key)}\">{{devPct(r.key)}}</td><td><span class=\"p4-sigma\" ng-class=\"sigClsByRow(r)\">{{sigText(r)}}</span></td></tr></tbody></table></div>\n    <div class=\"p4-mobile-metrics\"><article class=\"p4-metric-card\" ng-repeat=\"r in rows\"><div class=\"p4-metric-card-head\"><span>{{r.ico}} {{r.lbl}}</span><span class=\"p4-sigma\" ng-class=\"sigClsByRow(r)\">{{sigText(r)}}</span></div><div class=\"p4-metric-today\" ng-style=\"{color:devColor(r.key)}\">{{formatMetric(todayRaw(r),r)}} · {{devPct(r.key)}}</div><div class=\"p4-metric-grid\"><div class=\"p4-metric-mini\"><small>Mean</small><strong>{{formatMetric(blRaw(r,'mean'),r)}}</strong></div><div class=\"p4-metric-mini\"><small>Std</small><strong>{{formatMetric(blRaw(r,'std'),r)}}</strong></div><div class=\"p4-metric-mini\"><small>Median</small><strong>{{formatMetric(blRaw(r,'median'),r)}}</strong></div><div class=\"p4-metric-mini\"><small>Z-score</small><strong>{{devPct(r.key)}}</strong></div></div></article></div>\n  </section>\n  <section class=\"p4-panel p4-empty p4-main-metrics\" ng-if=\"!blReady()\"><div class=\"p4-panel-head\"><div class=\"p4-panel-title\"><span class=\"p4-row-no\">03</span>11 類個體化基線指標</div></div><div class=\"p4-empty-icon\">{{v2Insufficient?'!':'▥'}}</div><div class=\"p4-empty-title\">{{v2Insufficient?'有效資料不足':'個體化基線建立中'}}</div><div class=\"p4-empty-copy\">目前累積 {{histDays()}} 天，需要至少 {{reqDays()}} 天有效資料。<br>{{v2Insufficient?'請調整基線天數或等待更多有效資料。':'系統達到門檻後會自動啟動計算。'}}</div><div class=\"p4-progress\"><div class=\"p4-progress-fill\" ng-style=\"{width:histProgress()+'%'}\"></div></div></section>\n\n  <section class=\"p4-followups\">\n    <section class=\"p4-panel\">\n      <div class=\"p4-panel-head\"><div class=\"p4-panel-title\">Population Reference 對照</div><div class=\"p4-panel-hint\">主要三行之後的文獻合理性參考</div></div>\n      <div class=\"p4-ref-list\"><div class=\"p4-ref-head\"><span>類別</span><span>今日</span><span>群體參考</span><span>此貓基線</span></div><article class=\"p4-ref-item\" ng-repeat=\"r in referenceRows\"><div class=\"p4-ref-name\"><strong>{{r.ico}} {{r.name}}</strong><small>{{r.note}}</small></div><span class=\"p4-ref-today\">{{referenceToday(r)}}</span><span class=\"p4-ref-literature\">{{r.literature}}</span><span class=\"p4-ref-baseline\">{{referenceBaseline(r)}}</span></article></div>\n      <div class=\"p4-sanity warn\" ng-if=\"blReady()&&sanityWarn()\">⚠ 基線合理性提醒：{{sanityWarn()}}</div><div class=\"p4-sanity ok\" ng-if=\"blReady()&&!sanityWarn()\">✓ 合理性驗證通過；結果屬於行為觀察，不是疾病診斷。</div><div class=\"p4-sanity warn\" ng-if=\"!blReady()\">○ 個體基線尚未建立，群體數值僅供文獻參考。</div>\n    </section>\n\n    <section class=\"p4-panel p4-settings-panel\">\n      <div class=\"p4-panel-head\"><div class=\"p4-panel-title\">基本設定摘要</div><div class=\"p4-panel-hint\">主要三行之後顯示目前生效值</div></div>\n      <div class=\"p4-settings-summary\">\n        <div class=\"p4-profile\"><div><div class=\"p4-profile-name\">🐱 {{settings.cat_name||'尚未設定貓咪名稱'}}</div><div class=\"p4-profile-meta\">{{settings.cat_breed||'品種未設定'}} · {{catAgeStr()||'出生年月未設定'}}</div></div><span class=\"p4-setting-pill\"><strong>{{settings.baseline_days}}</strong> 天基線</span></div>\n        <div class=\"p4-setting-stats\"><div class=\"p4-setting-stat\"><span>目前使用</span><strong>{{blDays()}} 天</strong></div><div class=\"p4-setting-stat\"><span>最低需求</span><strong>{{settings.baseline_days}} 天</strong></div><div class=\"p4-setting-stat\"><span>信心水準</span><strong ng-style=\"{color:confColor()}\">{{bl&&bl.confidence||'Low'}}</strong></div></div>\n        <div class=\"p4-setting-pills\"><span class=\"p4-setting-pill\">通知靈敏度：<strong>{{notifyLevelName(settings.notify_level)}}</strong></span><span class=\"p4-setting-pill\">Discord：<strong>{{settings.discord_webhook?'已設定':'未設定'}}</strong></span></div>\n        <div class=\"p4-summary-label\">Behavior thresholds · 行為警戒值</div>\n        <div class=\"p4-thresholds\"><div class=\"p4-threshold\"><span>舔舐</span><strong>{{settings.lick_pct}}%</strong></div><div class=\"p4-threshold\"><span>搔抓</span><strong>{{settings.scratch_pct}}%</strong></div><div class=\"p4-threshold\"><span>甩頭</span><strong>{{settings.shake_pct}}%</strong></div><div class=\"p4-threshold\"><span>靜止</span><strong>{{settings.stop_pct}}%</strong></div><div class=\"p4-threshold\"><span>轉移</span><strong>{{settings.lsc_count}} 次</strong></div></div>\n        <div class=\"p4-notify-rule\"><strong>目前通知條件：</strong>{{notifyLevelDesc(settings.notify_level)}}</div>\n        <button class=\"p4-edit-btn\" ng-click=\"settingsOpen=true\">⚙ 編輯完整設定</button>\n      </div>\n    </section>\n  </section>\n\n  <div class=\"p4-actionbar\">\n    <button class=\"p4-tool-btn\" ng-click=\"evtOpen=!evtOpen\">📌 今日事件標記<span class=\"p4-tool-meta\">就醫、換糧與壓力事件</span><span class=\"p4-chevron\" ng-class=\"{open:evtOpen}\">⌄</span></button>\n    <button class=\"p4-tool-btn\" ng-click=\"histOpen=!histOpen\">▤ 歷史資料管理<span class=\"p4-tool-meta\">最近 30 天 · 排除與刪除</span><span class=\"p4-chevron\" ng-class=\"{open:histOpen}\">⌄</span></button>\n  </div>\n\n  <section class=\"p4-drawer\" ng-if=\"evtOpen\"><div class=\"p4-events-layout\"><div><div class=\"p4-subtitle\">今天 · {{todayDateStr()}}</div><div class=\"p4-evt-tags\"><span class=\"p4-evt-tag\" ng-repeat=\"t in evtTagDefs\" ng-class=\"{active:selTags.indexOf(t.key)>=0}\" ng-click=\"toggleTag(t.key)\">{{t.ico}} {{t.lbl}}</span></div><input type=\"text\" ng-model=\"$parent.evtNote\" placeholder=\"自訂備註（選填）\"><div class=\"p4-actions\"><button class=\"p4-btn primary block\" ng-click=\"saveEvent()\">記錄今日事件</button></div></div><div><div class=\"p4-subtitle\">近期事件</div><div class=\"p4-evt-hist-row\" ng-repeat=\"e in recentEvents\"><span class=\"p4-evt-date\">{{e.date}}</span><span class=\"p4-evt-tags-text\">{{e.tags.join(' · ')}}</span><span class=\"p4-evt-note\" ng-if=\"e.note\"> — {{e.note}}</span></div><div class=\"p4-empty-copy\" ng-if=\"recentEvents.length===0\">尚無事件記錄</div></div></div></section>\n\n  <section class=\"p4-drawer\" ng-if=\"histOpen\"><div class=\"p4-subtitle\">異常事件日可暫時排除，排除後會立即重算個體基線</div><div class=\"p4-hist-list\"><div class=\"p4-hist-row\" ng-repeat=\"d in historyDays\"><div class=\"p4-hist-date\">{{d.date}}</div><div class=\"p4-hist-info\"><span class=\"p4-hist-hrs\">{{d.hrs}}h</span><span class=\"p4-pill ok\" ng-if=\"d.valid&&excludedDates.indexOf(d.date)<0\">✓ 計入</span><span class=\"p4-pill short\" ng-if=\"!d.valid\">監控過短</span><span class=\"p4-pill {{d.risk.cls}}\" ng-if=\"d.risk\">{{d.risk.short}}</span><span ng-if=\"d.hasEvt\">📌</span><span class=\"p4-hist-missing\" ng-if=\"d.missing&&d.missing.length\">缺 {{d.missing.join('、')}}</span></div><button ng-if=\"d.valid\" class=\"p4-excl-btn\" ng-class=\"{active:excludedDates.indexOf(d.date)>=0}\" ng-click=\"toggleExclude(d.date)\">{{excludedDates.indexOf(d.date)>=0?'取消排除':'排除此天'}}</button></div><div class=\"p4-empty-copy\" ng-if=\"historyDays.length===0\">尚無歷史資料</div></div><div class=\"p4-del-zone\"><input type=\"text\" ng-model=\"$parent.deleteDateInput\" placeholder=\"YYYY/M/D，例如 2026/6/12\"><button class=\"p4-btn danger\" ng-click=\"confirmDeleteDay()\">永久刪除此天</button><div class=\"p4-del-hint\">此操作無法復原；如果只是不希望這天影響基線，請使用「排除此天」。</div><div class=\"p4-error\" ng-if=\"deleteError\">{{deleteError}}</div></div></section>\n\n  <div class=\"p4-modal-backdrop\" ng-if=\"settingsOpen\" ng-click=\"$parent.settingsOpen=false\">\n    <div class=\"p4-modal\" ng-click=\"$event.stopPropagation()\">\n      <div class=\"p4-modal-head\"><div><div class=\"p4-modal-title\">⚙ 飼主與監控設定</div><div class=\"p4-modal-sub\">貓咪資料 · 個體基線 · 行為閾值 · Discord</div></div><button class=\"p4-modal-close\" ng-click=\"$parent.settingsOpen=false\" aria-label=\"關閉設定\">×</button></div>\n      <div class=\"p4-form-grid\">\n        <div class=\"p4-form-group\"><div class=\"p4-set-divider\">Cat profile</div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">名字</div><div class=\"p4-set-ctrl\"><input type=\"text\" ng-model=\"settings.cat_name\" placeholder=\"例：小花\"></div></div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">品種</div><div class=\"p4-set-ctrl\"><input type=\"text\" ng-model=\"settings.cat_breed\" placeholder=\"例：混種貓（選填）\"></div></div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">出生年月</div><div class=\"p4-date-inputs\"><input type=\"number\" ng-model=\"settings.cat_birth_year\" min=\"2000\" max=\"2030\" placeholder=\"年\"><span class=\"p4-form-unit\">年</span><input type=\"number\" ng-model=\"settings.cat_birth_month\" min=\"1\" max=\"12\" placeholder=\"月\"><span class=\"p4-form-unit\">月</span></div></div><div class=\"p4-set-age\">{{catAgeStr()}}</div><div class=\"p4-set-divider\">Baseline</div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">基線最少天數</div><div class=\"p4-set-ctrl\"><input type=\"range\" min=\"3\" max=\"14\" step=\"1\" ng-model=\"settings.baseline_days\"><span class=\"p4-set-num\">{{settings.baseline_days}} 天</span></div></div><div class=\"p4-set-hint\">達到門檻才開始建立；系統最多使用最近 30 天有效資料。</div></div>\n        <div class=\"p4-form-group\"><div class=\"p4-set-divider\">Behavior thresholds</div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">舔舐上限</div><div class=\"p4-set-ctrl\"><input type=\"range\" min=\"10\" max=\"50\" step=\"1\" ng-model=\"settings.lick_pct\"><span class=\"p4-set-num\">{{settings.lick_pct}}%</span></div></div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">搔抓上限</div><div class=\"p4-set-ctrl\"><input type=\"range\" min=\"5\" max=\"40\" step=\"1\" ng-model=\"settings.scratch_pct\"><span class=\"p4-set-num\">{{settings.scratch_pct}}%</span></div></div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">甩頭上限</div><div class=\"p4-set-ctrl\"><input type=\"range\" min=\"3\" max=\"30\" step=\"1\" ng-model=\"settings.shake_pct\"><span class=\"p4-set-num\">{{settings.shake_pct}}%</span></div></div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">靜止上限</div><div class=\"p4-set-ctrl\"><input type=\"range\" min=\"30\" max=\"80\" step=\"5\" ng-model=\"settings.stop_pct\"><span class=\"p4-set-num\">{{settings.stop_pct}}%</span></div></div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">轉移警戒</div><div class=\"p4-set-ctrl\"><input type=\"range\" min=\"3\" max=\"30\" step=\"1\" ng-model=\"settings.lsc_count\"><span class=\"p4-set-num\">{{settings.lsc_count}} 次</span></div></div></div>\n      </div>\n      <div class=\"p4-set-divider\">Notifications</div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">通知靈敏度</div><div class=\"p4-set-ctrl\"><input type=\"range\" min=\"1\" max=\"3\" step=\"1\" ng-model=\"settings.notify_level\"><span class=\"p4-set-num\">{{notifyLevelName(settings.notify_level)}}</span></div></div><div class=\"p4-set-hint\">{{notifyLevelDesc(settings.notify_level)}}</div><div class=\"p4-set-row\"><div class=\"p4-set-lbl\">Discord Webhook</div><div class=\"p4-set-ctrl\"><input type=\"password\" ng-model=\"settings.discord_webhook\" placeholder=\"https://discord.com/api/webhooks/...\"></div></div><div class=\"p4-actions\"><button class=\"p4-btn primary block\" ng-click=\"saveSettings()\">儲存並套用設定</button><button class=\"p4-btn secondary block\" ng-click=\"testDiscord()\">傳送測試通知</button></div>\n    </div>\n  </div>\n\n  <div class=\"p4-baseline-warning-backdrop\" ng-if=\"baselineWarning.open\" role=\"alertdialog\" aria-modal=\"true\" aria-label=\"重要基線警告\">\n    <div class=\"p4-baseline-warning\" ng-class=\"baselineWarning.type\">\n      <div class=\"p4-baseline-warning-head\"><div class=\"p4-baseline-warning-icon\">{{baselineWarning.type==='error'?'!':baselineWarning.type==='protect'?'◆':'⚠'}}</div><div><div class=\"p4-baseline-warning-kicker\">Baseline protection · 基線保護</div><div class=\"p4-baseline-warning-title\">{{baselineWarning.title}}</div></div></div>\n      <div class=\"p4-baseline-warning-message\">{{baselineWarning.message}}</div>\n      <div class=\"p4-baseline-warning-note\"><span>ⓘ</span><span>為維持個體基線可信度，系統必須保留足夠的有效監測天數。請確認提示內容後再調整排除日期。</span></div>\n      <div class=\"p4-baseline-warning-actions\"><button class=\"p4-baseline-warning-btn\" ng-click=\"dismissBaselineWarning()\">我知道了</button></div>\n    </div>\n  </div>\n\n  <div class=\"p4-toast\" ng-if=\"toast.open\" ng-class=\"toast.type\"><span class=\"p4-toast-icon\">{{toast.icon}}</span><span class=\"p4-toast-copy\">{{toast.message}}</span></div>\n  <div class=\"p4-modal-backdrop\" ng-if=\"deleteModalOpen\" ng-click=\"cancelDelete()\"><div class=\"p4-modal danger-modal\" ng-click=\"$event.stopPropagation()\"><div class=\"p4-modal-icon\">!</div><div class=\"p4-modal-title\" style=\"margin-top:13px\">永久刪除 {{pendingDeleteDate}}？</div><div class=\"p4-modal-copy\">這一天的所有基線資料將被清除，而且無法復原。若只是不希望這天影響基線，建議改用「排除此天」。</div><div class=\"p4-modal-actions\"><button class=\"p4-btn secondary\" ng-click=\"cancelDelete()\">取消</button><button class=\"p4-btn danger\" ng-click=\"executeDeleteDay()\">確認永久刪除</button></div></div></div>\n</div>\n\n<script>\n(function(scope){\n  scope.rows=[\n    {ico:'😸',lbl:'舔舐次數',key:'lick_count',metric:'lick_count',type:'count'},{ico:'😸',lbl:'舔舐時間',key:'lick_time',metric:'lick_time',type:'time'},\n    {ico:'🐾',lbl:'搔抓次數',key:'scratch_count',metric:'scratch_count',type:'count'},{ico:'🐾',lbl:'搔抓時間',key:'scratch_time',metric:'scratch_time',type:'time'},\n    {ico:'↻',lbl:'甩頭次數',key:'shake_count',metric:'shake_count',type:'count'},{ico:'🚶',lbl:'行走次數',key:'walk_count',metric:'walk_count',type:'count'},\n    {ico:'🚶',lbl:'行走時間',key:'walk_time',metric:'walk_time',type:'time'},{ico:'☾',lbl:'靜止時間',key:'stop_time',metric:'stop_time',type:'time'},\n    {ico:'😸',lbl:'舔舐佔活動時間',key:'lick_pct_active',metric:'lick_pct_active',type:'pct'},{ico:'🐾',lbl:'搔抓佔活動時間',key:'scratch_pct_active',metric:'scratch_pct_active',type:'pct'},\n    {ico:'🏃',lbl:'活動時間佔比',key:'active_ratio',metric:'active_ratio',type:'pct'}\n  ];\n  scope.referenceRows=[\n    {ico:'😸',name:'舔舐時間 / 天',key:'lick_time',metric:'lick_time',type:'time',literature:'約 60 分鐘',note:'健康室內成貓口腔梳理參考'},\n    {ico:'🐾',name:'搔抓時間 / 天',key:'scratch_time',metric:'scratch_time',type:'time',literature:'約 1 分鐘',note:'健康室內成貓搔抓梳理參考'},\n    {ico:'😸',name:'舔舐佔活動時間',key:'lick_pct_active',metric:'lick_pct_active',type:'pct',literature:'約 8%',note:'排除睡眠與休息時間'},\n    {ico:'🐾',name:'搔抓佔活動時間',key:'scratch_pct_active',metric:'scratch_pct_active',type:'pct',literature:'約 0.2%',note:'排除睡眠與休息時間'},\n    {ico:'🏃',name:'活動時間佔比',key:'active_ratio',metric:'active_ratio',type:'pct',literature:'約 43%',note:'佔全天監控時間比例'}\n  ];\n  scope.periods=['00-06','06-12','12-18','18-24'];scope.bl=null;scope.dev=null;scope.settings={baseline_days:7,lick_pct:20,scratch_pct:15,shake_pct:10,stop_pct:55,lsc_count:10,notify_level:2,discord_webhook:'',cat_name:'',cat_breed:'',cat_birth_year:0,cat_birth_month:1};\n  scope.settingsOpen=false;scope.evtOpen=false;scope.histOpen=false;scope._settingsSaving=false;scope._excludePending=false;scope.v2Insufficient=false;scope.selTags=[];scope.evtNote='';scope.recentEvents=[];scope.historyDays=[];scope.excludedDates=[];scope.deleteDateInput='';scope.deleteError='';scope.deleteModalOpen=false;scope.pendingDeleteDate='';scope.toast={open:false,type:'success',icon:'✓',message:''};var toastTimer=null;\n  scope.baselineWarning={open:false,type:'warn',title:'',message:''};scope.showBaselineWarning=function(type,title,message){scope.baselineWarning={open:true,type:type||'warn',title:title||'個體基線提醒',message:String(message||'')};};scope.dismissBaselineWarning=function(){scope.baselineWarning.open=false;};scope.init=function(){};scope.payload=function(){return scope.msg&&scope.msg.payload?scope.msg.payload:{};};scope.showToast=function(type,message){var icons={success:'✓',warn:'!',error:'×',info:'i'};if(toastTimer)clearTimeout(toastTimer);scope.toast={open:true,type:type,icon:icons[type]||'i',message:message};toastTimer=setTimeout(function(){scope.$evalAsync(function(){scope.toast.open=false;});},4200);};\n  scope.notifyLevelName=function(v){return ['','低','中','高'][+v||2];};scope.notifyLevelDesc=function(v){return ['','只有高風險（分數 ≥ 70）才推播','警告以上（分數 ≥ 45）推播','留意以上（分數 ≥ 20）即推播'][+v||2];};\n  scope.catAgeStr=function(){var y=parseInt(scope.settings.cat_birth_year)||0,m=parseInt(scope.settings.cat_birth_month)||0;if(!y||!m)return '';var now=new Date(),mos=(now.getFullYear()-y)*12+(now.getMonth()+1-m);if(mos<0)return '出生年月超過今天';var yrs=Math.floor(mos/12),rem=mos%12,s=yrs>0?yrs+'歲':'';if(rem>0)s+=(s?' ':'')+rem+'個月';if(!s)s='未滿 1 個月';return '年齡：'+s+'（'+(mos<24?'幼貓':mos<120?'成貓':'老貓')+'）';};\n  scope.evtTagDefs=[{key:'vet',ico:'🏥',lbl:'帶去看醫生'},{key:'food',ico:'🍽',lbl:'換了貓糧'},{key:'stranger',ico:'👤',lbl:'陌生人來訪'},{key:'stress',ico:'😿',lbl:'情緒緊張'},{key:'medicine',ico:'💊',lbl:'服藥/治療'},{key:'other',ico:'📝',lbl:'其他'}];\n  scope.toggleExclude=function(date){var i=scope.excludedDates.indexOf(date);if(i>=0)scope.excludedDates.splice(i,1);else scope.excludedDates.push(date);scope._excludePending=true;setTimeout(function(){scope.$evalAsync(function(){scope._excludePending=false;});},3000);scope.send({payload:{action:'toggle_exclude_date',date:date}});};\n  scope.confirmDeleteDay=function(){var raw=(scope.deleteDateInput||'').trim(),m=raw.match(/^(\\d{4})\\/(0?[1-9]|1[0-2])\\/(0?[1-9]|[12]\\d|3[01])$/);if(!m){scope.deleteError='格式錯誤，請輸入 YYYY/M/D，例如 2026/6/12';return;}var y=parseInt(m[1],10),mo=parseInt(m[2],10),d=parseInt(m[3],10),check=new Date(y,mo-1,d);if(check.getFullYear()!==y||check.getMonth()!==mo-1||check.getDate()!==d){scope.deleteError=raw+' 不是真實存在的日期';return;}scope.deleteError='';scope.pendingDeleteDate=y+'/'+mo+'/'+d;scope.deleteModalOpen=true;};\n  scope.cancelDelete=function(){scope.deleteModalOpen=false;scope.pendingDeleteDate='';};scope.executeDeleteDay=function(){if(!scope.pendingDeleteDate)return;scope.send({payload:{action:'delete_daily_record',date:scope.pendingDeleteDate}});scope.deleteModalOpen=false;scope.pendingDeleteDate='';scope.deleteDateInput='';scope.showToast('warn','刪除要求已送出，等待系統確認');};\n  scope.toggleTag=function(key){var i=scope.selTags.indexOf(key);if(i>=0)scope.selTags.splice(i,1);else scope.selTags.push(key);};scope.todayDateStr=function(){return new Date().toLocaleDateString('zh-TW');};\n  scope.saveEvent=function(){if(scope.selTags.length===0&&!(scope.evtNote||'').trim()){scope.showToast('warn','請選擇事件標記或填寫備註');return;}var labels=scope.selTags.map(function(k){var t=scope.evtTagDefs.find(function(d){return d.key===k;});return t?t.lbl:k;});scope.send({payload:{action:'save_event_tag',date:new Date().toLocaleDateString('zh-TW'),tags:labels,note:(scope.evtNote||'').trim()}});scope.selTags=[];scope.evtNote='';scope.showToast('success','今日事件已記錄');};\n  scope.saveSettings=function(){var s={baseline_days:parseInt(scope.settings.baseline_days)||7,lick_pct:parseInt(scope.settings.lick_pct)||20,scratch_pct:parseInt(scope.settings.scratch_pct)||15,shake_pct:parseInt(scope.settings.shake_pct)||10,stop_pct:parseInt(scope.settings.stop_pct)||55,lsc_count:parseInt(scope.settings.lsc_count)||10,notify_level:parseInt(scope.settings.notify_level)||2,discord_webhook:(scope.settings.discord_webhook||'').trim(),cat_name:(scope.settings.cat_name||'').trim(),cat_breed:(scope.settings.cat_breed||'').trim(),cat_birth_year:parseInt(scope.settings.cat_birth_year)||0,cat_birth_month:parseInt(scope.settings.cat_birth_month)||1};scope.send({payload:{action:'save_settings',settings:s}});scope._settingsSaving=true;setTimeout(function(){scope.$evalAsync(function(){scope._settingsSaving=false;});},3000);scope.showToast('success','設定已儲存，閾值立即生效');};\n  scope.testDiscord=function(){var url=(scope.settings.discord_webhook||'').trim();if(!url){scope.showToast('warn','請先填入 Discord Webhook URL');return;}scope.send({payload:{action:'test_discord',discord_webhook:url}});scope.showToast('info','測試通知已送出，請檢查 Discord');};\n  scope.blReady=function(){return !!scope.bl&&!!scope.bl.metrics;};scope.blDays=function(){return scope.bl?Number(scope.bl.days_count||0):0;};scope.blDate=function(){if(!scope.bl||!scope.bl.computed_at)return '--';var d=new Date(scope.bl.computed_at);return isNaN(d.getTime())?'--':d.toLocaleDateString('zh-TW');};scope.devOv=function(){return scope.dev&&scope.dev.overall!=null?scope.dev.overall:null;};scope.devColorOverall=function(){var v=Math.abs(Number(scope.devOv()||0));return v>=80?'#fda4af':v>=50?'#fdba74':v>=20?'#fde047':'#86efac';};\n  scope.histDays=function(){return Number(scope.payload().history_days||0);};scope.reqDays=function(){var p=scope.payload();return Number(p&&p.baseline&&p.baseline.required_days||p.required_days||scope.settings.baseline_days||7);};scope.histProgress=function(){return Math.min(100,scope.histDays()/Math.max(1,scope.reqDays())*100);};\n  scope.periodData=function(p){return scope.bl&&scope.bl.period_coverage&&scope.bl.period_coverage[p]||{covered:0,total:scope.blDays()};};scope.covEmoji=function(cv){var r=cv.covered/Math.max(cv.total,1);return r>=.8?'✓':r>=.5?'!':'×';};scope.covColor=function(cv){var r=cv.covered/Math.max(cv.total,1);return r>=.8?'#86efac':r>=.5?'#fde047':'#fda4af';};\n  scope.confColor=function(){return scope.bl&&scope.bl.confidence==='High'?'#86efac':scope.bl&&scope.bl.confidence==='Medium'?'#fde047':'#fdba74';};scope.confDesc=function(){return scope.bl&&scope.bl.confidence==='High'?'高信心水準':scope.bl&&scope.bl.confidence==='Medium'?'中等信心水準':'初期參考水準';};scope.confidenceIcon=function(){return scope.bl&&scope.bl.confidence==='High'?'✓':scope.bl&&scope.bl.confidence==='Medium'?'◐':'○';};scope.sanityWarn=function(){var w=scope.bl&&scope.bl.sanity_warnings;return w&&w.length?w.join('；'):'';};\n  scope.blRaw=function(r,field){var m=scope.bl&&scope.bl.metrics&&scope.bl.metrics[r.metric];return m&&m[field]!=null?Number(m[field]):null;};var TODAY_PCT_FIELD={lick_pct_active:'lick_pct_of_active',scratch_pct_active:'scratch_pct_of_active',active_ratio:'active_ratio'};\n  scope.todayRaw=function(r){var td=scope.payload().v2_today;if(!td)return null;if(TODAY_PCT_FIELD[r.key])return td[TODAY_PCT_FIELD[r.key]]!=null?Number(td[TODAY_PCT_FIELD[r.key]]):null;if(r.type==='time'){var bk=r.key.replace('_time','');return td[bk]?Number(td[bk].time):null;}var ck=r.key.replace('_count','');return td[ck]?Number(td[ck].count):null;};\n  scope.formatMetric=function(v,r){if(v==null||!isFinite(Number(v)))return '--';v=Number(v);if(r.type==='pct')return v.toFixed(2)+'%';if(r.type==='count')return v.toFixed(v%1?1:0)+' 次';var h=Math.floor(v/3600),m=Math.floor(v%3600/60),s=Math.round(v%60);return h?h+'時 '+m+'分':m?m+'分 '+s+'秒':s+'秒';};\n  var DEV_MAP={lick_count:'lick_frequency',lick_time:'lick_duration',scratch_count:'scratch_frequency',scratch_time:'scratch_duration',shake_count:'head_shake',walk_time:'walk_duration',stop_time:'inactive_duration',lick_pct_active:'lick_pct_active',scratch_pct_active:'scratch_pct_active',active_ratio:'activity_ratio'};\n  scope.devRecord=function(k){return scope.dev&&DEV_MAP[k]&&scope.dev[DEV_MAP[k]]?scope.dev[DEV_MAP[k]]:null;};scope.devPct=function(k){var r=scope.devRecord(k);if(!r||r.z_score==null)return '--';var z=Number(r.z_score);return (z>=0?'+':'')+z.toFixed(2)+'σ';};scope.devColor=function(k){var r=scope.devRecord(k),az=r&&r.z_score!=null?Math.abs(Number(r.z_score)):0;return az>=2?'#fda4af':az>=1?'#fde047':'#86efac';};scope.sigClsByRow=function(r){var rec=scope.devRecord(r.key),az=rec&&rec.z_score!=null?Math.abs(Number(rec.z_score)):0;return az>=2?'sig-high':az>=1?'sig-mid':'sig-ok';};scope.sigText=function(r){var rec=scope.devRecord(r.key),az=rec&&rec.z_score!=null?Math.abs(Number(rec.z_score)):null;return az==null?'--':az>=2?'偏離':az>=1?'留意':'穩定';};\n  scope.referenceToday=function(r){return scope.formatMetric(scope.todayRaw(r),r);};scope.referenceBaseline=function(r){var mean=scope.blRaw(r,'mean'),std=scope.blRaw(r,'std');if(mean==null)return '--';return scope.formatMetric(mean,r)+' ± '+scope.formatMetric(std,r);};\n  scope.$watch('msg.payload',function(p){\n    if(!p)return;scope.bl=p.baseline||null;scope.dev=p.deviation||null;scope.v2Insufficient=!!p.v2_insufficient;if(p.user_settings&&!scope.settingsOpen&&!scope._settingsSaving)Object.assign(scope.settings,p.user_settings);if(p.v2_event_tags)scope.recentEvents=(p.v2_event_tags||[]).slice().reverse().slice(0,7);\n    if(p.v2_daily_history){var evtDates=(p.v2_event_tags||[]).map(function(e){return e.date;});scope.historyDays=(p.v2_daily_history||[]).slice().reverse().slice(0,30).map(function(d){var r=d.risk||null,lv=r?r.level:'',rObj=r?{cls:(lv==='Severe Behavioral Deviation'||lv==='High Risk')?'hi':(lv==='Moderate Behavioral Deviation'||lv==='Warning')?'warn':(lv==='Mild Behavioral Deviation'||lv==='Attention')?'attn':'normal',short:(lv==='Severe Behavioral Deviation'||lv==='High Risk')?'重度':(lv==='Moderate Behavioral Deviation'||lv==='Warning')?'中度':(lv==='Mild Behavioral Deviation'||lv==='Attention')?'輕度':'正常'}:null,period=d.periods||{},all=['00-06','06-12','12-18','18-24'],missing=all.filter(function(x){return !period[x]||Number(period[x].monitoring_sec||0)<=300;});return {date:d.date,hrs:d.monitoring_hours||0,valid:Number(d.monitoring_seconds||0)>=3600,risk:rObj,hasEvt:evtDates.indexOf(d.date)>=0,missing:missing};});}\n    if(p.v2_exclude_rejected){scope._excludePending=false;if(p.v2_excluded_dates)scope.excludedDates=(p.v2_excluded_dates||[]).slice();scope.showBaselineWarning('error','無法排除此基線日期',p.v2_exclude_rejected);}else if(p.v2_excluded_dates&&!scope._excludePending)scope.excludedDates=(p.v2_excluded_dates||[]).slice();\n    if(p.v2_baseline_alert)scope.showBaselineWarning('warn','個體基線有效天數不足',p.v2_baseline_alert);if(p.v2_baseline_auto_restore&&p.v2_baseline_auto_restore.length)scope.showBaselineWarning('protect','已啟動個體基線保護','排除天數已超過可用基線門檻。\\n系統已自動取消以下日期的排除：'+p.v2_baseline_auto_restore.join('、'));if(p.v2_delete_rejected)scope.showToast('error','刪除失敗\\n'+p.v2_delete_rejected);if(p.v2_delete_success)scope.showToast('success',p.v2_delete_success);\n  });\n  scope.$on('$destroy',function(){if(toastTimer)clearTimeout(toastTimer);});\n})(scope);\n</script>\n\n\n\n\n\n",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "cat-health-widget",
+    "x": 260,
+    "y": 412,
+    "wires": [
+      [
+        "76199834b266f16a"
+      ]
+    ]
+  },
+  {
+    "id": "76199834b266f16a",
+    "type": "function",
+    "z": "457d7a0cc77babac",
+    "name": "使用者設定管理器",
+    "func": "let action = msg.payload && msg.payload.action;\n\n// ── 測試 Discord 通知 ──────────────────────────────────────────\nif (action === 'test_discord') {\n    let url = (msg.payload.discord_webhook || '').trim();\n    if (!url) { node.warn('Discord URL 未填入，無法發送測試通知'); return [null, null]; }\n    msg.headers = {'Content-Type':'application/json'};\n    msg.url     = url;\n    msg.payload = {\n        username: 'Cat Health Monitor',\n        embeds: [{\n            title: '🔔 測試通知',\n            description: 'Cat Health Monitor 系統測試訊息\\n若看到此訊息，代表 Discord Webhook 設定正確！',\n            color: 3066993,\n            footer: {text: new Date().toLocaleString('zh-TW')}\n        }]\n    };\n    return [null, msg];  // output 2 → 送到 Discord\n}\n\n// ── 儲存設定 ──────────────────────────────────────────────────\nif (action === 'save_settings') {\n    let s    = msg.payload.settings || {};\n    let prev = global.get(\"gfile\").get('v2_user_settings') || {};\n    let validated = {\n        baseline_days:   Math.min(14, Math.max(3,  parseInt(s.baseline_days) || 7)),\n        lick_pct:        Math.min(50, Math.max(10, parseInt(s.lick_pct)      || 20)),\n        scratch_pct:     Math.min(40, Math.max(5,  parseInt(s.scratch_pct)   || 15)),\n        shake_pct:       Math.min(30, Math.max(3,  parseInt(s.shake_pct)     || 10)),\n        stop_pct:        Math.min(80, Math.max(30, parseInt(s.stop_pct)      || 55)),\n        lsc_count:       Math.min(30, Math.max(3,  parseInt(s.lsc_count)     || 10)),\n        discord_webhook: (s.discord_webhook || '').trim(),\n        notify_level:    Math.min(3, Math.max(1, parseInt(s.notify_level) || 2)),\n        cat_name:        (s.cat_name  || '').trim().slice(0,20),\n        cat_breed:       (s.cat_breed || '').trim().slice(0,30),\n        cat_birth_year:  parseInt(s.cat_birth_year)  || 0,\n        cat_birth_month: Math.min(12, Math.max(1, parseInt(s.cat_birth_month) || 1))\n    };\n    global.get(\"gfile\").set('v2_user_settings', validated);\n    node.warn('飼主設定已儲存：' + JSON.stringify(validated));\n\n    // URL 或靈敏度有變更 → 清除 dedup\n    if ((prev.discord_webhook !== validated.discord_webhook && validated.discord_webhook) ||\n        prev.notify_level !== validated.notify_level) {\n        flow.set('v2_last_discord_risk', '');\n        node.warn('Discord 設定已更新，已重置通知去重快取');\n    }\n\n    // 任何設定儲存都觸發基線重算（確保天數或閾值變更後立即生效）\n    node.warn('設定已儲存，觸發基線重算');\n    msg.payload = {};\n    return [msg, null];  // output 1 → 觸發基線重算\n}\n\n// ── 事件標記儲存 ──────────────────────────────────────────────────\nif (action === 'save_event_tag') {\n    let tags = msg.payload.tags || [];\n    let note = (msg.payload.note || '').trim();\n    let date = msg.payload.date || new Date().toLocaleDateString('zh-TW');\n    if (tags.length === 0 && !note) return [null, null];\n    let events = global.get(\"gfile\").get('v2_event_tags') || [];\n    events = events.filter(function(e){ return e.date !== date; });\n    events.push({date: date, tags: tags, note: note});\n    if (events.length > 90) events = events.slice(-90);\n    global.get(\"gfile\").set('v2_event_tags', events);\n    node.warn('事件標記已儲存：' + date + ' [' + tags.join(',') + ']');\n    return [null, null];\n}\n\n// ── 排除日期切換（立即觸發基線重算）────────────────────────────────\nif (action === 'toggle_exclude_date') {\n    let exDate = (msg.payload.date || '').trim();\n    if (!exDate) return [null, null];\n    let excluded = global.get(\"gfile\").get('v2_excluded_dates') || [];\n    let ei = excluded.indexOf(exDate);\n    if (ei < 0) {  // 新增排除 → 先檢查剩餘有效天數\n        let cfg = global.get(\"gfile\").get('v2_user_settings') || {};\n        let minDays = cfg.baseline_days != null ? +cfg.baseline_days : 7;\n        let history = global.get(\"gfile\").get('v2_daily_history') || [];\n        let newExcluded = excluded.concat([exDate]);\n        let validRemaining = history.filter(d =>\n            (d.monitoring_seconds || 0) >= 3600 &&\n            !newExcluded.includes(d.date)\n        ).length;\n        if (validRemaining < minDays) {\n            let rejectMsg = '排除後剩餘有效天數（' + validRemaining + ' 天）將少於基線設定天數（' + minDays + ' 天），請先降低基線天數或等待更多資料累積';\n            global.set('v2_exclude_rejected', rejectMsg);\n            node.warn('阻擋排除：' + rejectMsg);\n            return [null, null];\n        }\n    }\n    if (ei >= 0) excluded.splice(ei, 1);  // 已排除 → 取消排除\n    else excluded.push(exDate);             // 未排除 → 加入排除\n    global.get(\"gfile\").set('v2_excluded_dates', excluded);\n    node.warn('排除日期更新：' + JSON.stringify(excluded));\n    msg.payload = {};\n    return [msg, null];  // output 1 → 觸發基線重算\n}\n\n// ── 刪除指定某天的歷史記錄（永久刪除，含同步移除排除清單，觸發基線重算）──────\nif (action === 'delete_daily_record') {\n    let rawDate = (msg.payload.date || '').trim();\n    let m = rawDate.match(/^(\\d{4})\\/(0?[1-9]|1[0-2])\\/(0?[1-9]|[12]\\d|3[01])$/);\n    if (!m) {\n        let rejectMsg = '日期格式錯誤：「' + rawDate + '」。請輸入 YYYY/M/D 格式，例如 2026/6/12。';\n        global.set('v2_delete_rejected', rejectMsg);\n        node.warn('阻擋刪除（格式錯誤）：' + rejectMsg);\n        return [null, null];\n    }\n    let delY = parseInt(m[1], 10), delM = parseInt(m[2], 10), delD = parseInt(m[3], 10);\n    let checkDate = new Date(delY, delM - 1, delD);\n    if (checkDate.getFullYear() !== delY || checkDate.getMonth() !== delM - 1 || checkDate.getDate() !== delD) {\n        let rejectMsg = '「' + rawDate + '」不是真實存在的日期。';\n        global.set('v2_delete_rejected', rejectMsg);\n        node.warn('阻擋刪除（不存在的日期）：' + rejectMsg);\n        return [null, null];\n    }\n    let normDate = delY + '/' + delM + '/' + delD;  // 正規化成儲存格式（不補零），確保能比對到\n\n    let delHistory = global.get(\"gfile\").get('v2_daily_history') || [];\n    let delBefore = delHistory.length;\n    let delNewHistory = delHistory.filter(rec => rec.date !== normDate);\n    if (delNewHistory.length === delBefore) {\n        let rejectMsg = '找不到 ' + normDate + ' 的歷史資料，未執行任何刪除。';\n        global.set('v2_delete_rejected', rejectMsg);\n        node.warn('阻擋刪除（查無資料）：' + rejectMsg);\n        return [null, null];\n    }\n    global.get(\"gfile\").set('v2_daily_history', delNewHistory);\n\n    let delExcluded = global.get(\"gfile\").get('v2_excluded_dates') || [];\n    let delEi = delExcluded.indexOf(normDate);\n    if (delEi >= 0) {\n        delExcluded.splice(delEi, 1);\n        global.get(\"gfile\").set('v2_excluded_dates', delExcluded);\n    }\n\n    let successMsg = '已刪除 ' + normDate + ' 的歷史資料（剩餘 ' + delNewHistory.length + ' 天），基線重新計算中...';\n    global.set('v2_delete_success', successMsg);\n    node.warn('已刪除歷史記錄：' + normDate + '，剩餘 ' + delNewHistory.length + ' 天');\n    msg.payload = {};\n    return [msg, null];  // output 1 → 觸發基線重算\n}\n\nreturn [null, null];",
+    "outputs": 2,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 480,
+    "y": 302,
+    "wires": [
+      [
+        "bad10131202e1b0b"
+      ],
+      [
+        "9af14ec63806f832"
+      ]
+    ]
+  },
+  {
+    "id": "bad10131202e1b0b",
+    "type": "link out",
+    "z": "457d7a0cc77babac",
+    "name": "→ 觸發基線重算（設定變更）",
+    "links": [
+      "ce3b0d9f21a695a1"
+    ],
+    "x": 700,
+    "y": 302,
+    "wires": []
+  },
+  {
+    "id": "9209cb7bea68933b",
+    "type": "link in",
+    "z": "457d7a0cc77babac",
+    "name": "← 設定即時回填P4",
+    "links": [
+      "f478feb4e8f8e293"
+    ],
+    "x": 40,
+    "y": 522,
+    "wires": [
+      [
+        "4bd6613cb2cccb60"
+      ]
+    ]
+  },
+  {
+    "id": "cba04ae1f2eb5e75",
+    "type": "function",
+    "z": "34e73e2e234c0430",
+    "name": "個體化基線計算器",
+    "func": "// ══════════════════════════════════════════════════════════════\n//  三層式個體化基線計算器 v3.1（Scientific Enhancement）\n//  ★ 新增 Population Reference Layer（文獻參考值，僅供合理性驗證）\n//  ★ 新增 Sanity Check（個體基線 vs 群體參考值的合理性比對）\n//  ★ 三層研究架構：\n//     Population Reference → Individual Baseline → Behavioral Deviation\n//  文獻：Eckstein & Hart (2000), VAScat, ISFM Feline Behaviour Guidelines\n// ══════════════════════════════════════════════════════════════\n\nconst _blCfg = global.get(\"gfile\").get('v2_user_settings') || {};\nconst MIN_BASELINE_DAYS = _blCfg.baseline_days != null ? +_blCfg.baseline_days : 7;\nconst MIN_DAILY_SEC = 3600;\nconst REQUIRED_PERIODS = [];\nconst EWMA_ALPHA = 0.15;\nconst MAX_BASELINE_DAYS = Math.max(MIN_BASELINE_DAYS, 30);\n\n// ── Population Reference（群體文獻參考值）──\n// 來源：Eckstein & Hart (2000), VAScat Feline Grooming Study\n// 用途：\n//   1. 系統初始化與合理性驗證（Sanity Check）\n//   2. Dashboard 顯示供飼主理解「群體正常值」\n//   3. 【不得直接作為異常判斷門檻】\n// 系統異常判斷依賴個體化基線（Individual Baseline），非此群體參考值\nconst POPULATION_REFERENCE = {\n    lick_duration:    { mean_sec:3600, mean_display:'~60 min/day',  ci:'(SD 未明確報告)', source:'Eckstein & Hart (2000)', note:'健康室內成貓，口腔梳理（Oral Grooming）' },\n    scratch_duration: { mean_sec:60,   mean_display:'~1 min/day',   ci:'(SD 未明確報告)', source:'Eckstein & Hart (2000)', note:'健康室內成貓，搔抓梳理（Scratch Grooming）' },\n    head_shake:       { mean_display:'Rare',   source:'Clinical observation', note:'偶爾甩頭屬正常範圍，無固定參考值' },\n    walk_duration:    { mean_display:'Varies', source:'Individual-dependent', note:'活動量因個體、年齡、環境差異大' },\n    // ── 百分比參考值（文獻 Table/Results，兩種分母並列）──\n    // 「全天時間預算」= 全天所有狀態（含 stop/睡眠休息）；「非睡眠休息時間」= 排除 stop 之後的清醒活動時間\n    lick_pct_day:       { mean_pct:4,   mean_display:'~4% of full day',            source:'Eckstein & Hart (2000)', note:'口腔梳理佔全天時間預算比例' },\n    lick_pct_active:    { mean_pct:8,   mean_display:'~8% of non-rest active time',source:'Eckstein & Hart (2000)', note:'口腔梳理佔「非睡眠/休息時間」比例' },\n    scratch_pct_day:    { mean_pct:0.1, mean_display:'~0.1% of full day',            source:'Eckstein & Hart (2000)', note:'搔抓梳理佔全天時間預算比例' },\n    scratch_pct_active: { mean_pct:0.2, mean_display:'~0.2% of non-rest active time',source:'Eckstein & Hart (2000)', note:'搔抓梳理佔「非睡眠/休息時間」比例' },\n    active_ratio:       { mean_pct:43,  mean_display:'~43% of full day',  source:'Eckstein & Hart (2000)', note:'一般活動（含行走等非靜止清醒行為）佔全天比例' },\n    rest_ratio:         { mean_pct:50,  mean_display:'~50% of full day',  source:'Eckstein & Hart (2000)', note:'睡眠/休息佔全天比例' }\n};\n\nlet history = global.get(\"gfile\").get('v2_daily_history') || [];\n\nif (history.length < MIN_BASELINE_DAYS) {\n    let alertMsg = '歷史資料不足（' + history.length + ' 天），尚需 ' + (MIN_BASELINE_DAYS - history.length) + ' 天才能建立基線。';\n    node.warn(alertMsg);\n    global.set('v2_baseline_alert', alertMsg);\n    global.set('v2_baseline_insufficient', true);\n    msg.payload = { error:'基線資料不足', current_days:history.length, required_days:MIN_BASELINE_DAYS, population_reference:POPULATION_REFERENCE };\n    return msg;\n}\n\nlet validDays = history.filter(d => {\n    if ((d.monitoring_seconds || 0) < MIN_DAILY_SEC) return false;\n    if (!d.periods) return true;\n    return REQUIRED_PERIODS.every(p => d.periods[p] && d.periods[p].monitoring_sec > 300);\n});\n\nlet v2Excluded = global.get(\"gfile\").get('v2_excluded_dates') || [];\nlet autoRestored = [];\nif (v2Excluded.length > 0) {\n    let noExcl = validDays.filter(d => !v2Excluded.includes(d.date));\n    if (noExcl.length < MIN_BASELINE_DAYS) {\n        // 套用排除後天數不足新門檻 → 從「已排除」清單中，日期最新的開始依序取消排除遞補，\n        // 絕不悄悄多算，而是真的解除排除狀態並同步回 v2_excluded_dates，讓 UI 按鈕（計入/不計入）保持一致\n        let excludedValid = validDays.filter(d => v2Excluded.includes(d.date))\n            .sort((a, b) => new Date(b.date) - new Date(a.date));\n        let stillExcluded = v2Excluded.slice();\n        for (let d of excludedValid) {\n            if (noExcl.length >= MIN_BASELINE_DAYS) break;\n            let idx = stillExcluded.indexOf(d.date);\n            if (idx >= 0) stillExcluded.splice(idx, 1);\n            noExcl.push(d);\n            autoRestored.push(d.date);\n        }\n        if (autoRestored.length > 0) {\n            global.get(\"gfile\").set('v2_excluded_dates', stillExcluded);\n            node.warn('基線天數不足新門檻，自動取消排除（由近到遠遞補）：' + autoRestored.join(', '));\n        }\n    }\n    validDays = noExcl;\n    node.warn('排除 ' + (v2Excluded.length - autoRestored.length) + ' 天後基線有效天數：' + validDays.length);\n}\nglobal.set('v2_baseline_auto_restore', autoRestored.length > 0 ? autoRestored : null);\n\nif (validDays.length < MIN_BASELINE_DAYS) {\n    let alertMsg = '有效資料（' + validDays.length + ' 天，已含自動遞補）少於基線設定天數（' + MIN_BASELINE_DAYS + ' 天）。\\n請降低基線最少天數設定，或等待更多有效資料累積。';\n    node.warn('基線有效天不足：' + alertMsg);\n    global.set('v2_baseline_alert', alertMsg);\n    global.set('v2_baseline_insufficient', true);\n    msg.payload = { error:'基線有效天不足', current_days:validDays.length, required_days:MIN_BASELINE_DAYS };\n    return msg;\n}\n\nvalidDays.sort((a, b) => new Date(a.date) - new Date(b.date));\nlet days = validDays.slice(-MAX_BASELINE_DAYS);\n\nfunction calcConfidence(n) {\n    if (n < 7)  return 'Low';\n    if (n < 30) return 'Medium';\n    return 'High';\n}\n\nfunction calcFullStats(vals) {\n    let arr = vals.filter(v => v !== null && v !== undefined).map(Number);\n    let n = arr.length;\n    if (n === 0) return { mean:0,median:0,std:0,iqr:0,q1:0,q3:0,sample_count:0,rolling_mean:0,rolling_std:0,last_update:new Date().toISOString() };\n    let sorted = [...arr].sort((a,b) => a - b);\n    let mean   = arr.reduce((s,v) => s+v, 0) / n;\n    let std    = Math.sqrt(arr.reduce((s,v) => s+Math.pow(v-mean,2),0)/n);\n    let median = n%2===0 ? (sorted[n/2-1]+sorted[n/2])/2 : sorted[Math.floor(n/2)];\n    let q1_idx=(n-1)*0.25, q3_idx=(n-1)*0.75;\n    let q1=sorted[Math.floor(q1_idx)]+(q1_idx%1)*(sorted[Math.ceil(q1_idx)]-sorted[Math.floor(q1_idx)]);\n    let q3=sorted[Math.floor(q3_idx)]+(q3_idx%1)*(sorted[Math.ceil(q3_idx)]-sorted[Math.floor(q3_idx)]);\n    let ewma=arr[0];\n    for(let i=1;i<n;i++) ewma=EWMA_ALPHA*arr[i]+(1-EWMA_ALPHA)*ewma;\n    let ewmaArr=[arr[0]],cur=arr[0];\n    for(let i=1;i<n;i++){cur=EWMA_ALPHA*arr[i]+(1-EWMA_ALPHA)*cur;ewmaArr.push(cur);}\n    let rollVar=arr.map((v,i)=>Math.pow(v-ewmaArr[i],2)).reduce((s,v)=>s+v,0)/n;\n    return { mean:parseFloat(mean.toFixed(2)),median:parseFloat(median.toFixed(2)),std:parseFloat(std.toFixed(2)),iqr:parseFloat((q3-q1).toFixed(2)),q1:parseFloat(q1.toFixed(2)),q3:parseFloat(q3.toFixed(2)),sample_count:n,rolling_mean:parseFloat(ewma.toFixed(2)),rolling_std:parseFloat(Math.sqrt(rollVar).toFixed(2)),last_update:new Date().toISOString() };\n}\n\nlet layer1 = {\n    walk_duration:     calcFullStats(days.map(d=>d.walk_time||0)),\n    walk_count:        calcFullStats(days.map(d=>d.walk_count||0)),\n    low_conf_duration: calcFullStats(days.map(d=>d.low_conf_time||0)),\n    inactive_duration: calcFullStats(days.map(d=>d.stop_time||0)),\n    stop_count:        calcFullStats(days.map(d=>d.stop_count||0)),\n    active_ratio:      calcFullStats(days.map(d=>{ let mon=d.monitoring_seconds||1; return parseFloat(((d.active_time||0)/mon*100).toFixed(2)); })),\n    daily_monitoring:  calcFullStats(days.map(d=>d.monitoring_seconds||0))\n};\nlet layer2 = {\n    lick_frequency:       calcFullStats(days.map(d=>d.lick_count   ||0)),\n    lick_duration:        calcFullStats(days.map(d=>d.lick_time    ||0)),\n    scratch_frequency:    calcFullStats(days.map(d=>d.scratch_count||0)),\n    scratch_duration:     calcFullStats(days.map(d=>d.scratch_time ||0)),\n    head_shake_frequency: calcFullStats(days.map(d=>d.shake_count  ||0))\n};\n// ── 百分比指標統計（Eckstein & Hart, 2000 三層改革）──\n// 刻意不補 ||0：舊格式（改版前）的每日紀錄沒有這些欄位，calcFullStats 內建的\n// null/undefined 過濾會自動把這些舊天數排除在外，避免用假的 0 污染百分比基線，\n// 而不是像 layer1/layer2 的絕對秒數那樣「沒有這個行為就是真的 0」。\nlet layer2_pct = {\n    lick_pct_of_day:       calcFullStats(days.map(d=>d.lick_pct_of_day)),\n    lick_pct_of_active:    calcFullStats(days.map(d=>d.lick_pct_of_active)),\n    scratch_pct_of_day:    calcFullStats(days.map(d=>d.scratch_pct_of_day)),\n    scratch_pct_of_active: calcFullStats(days.map(d=>d.scratch_pct_of_active)),\n    active_ratio:          calcFullStats(days.map(d=>d.active_ratio)),\n    rest_ratio:            calcFullStats(days.map(d=>d.rest_ratio))\n};\nlet layer3_hourly = {};\nfor (let p of ['00-06','06-12','12-18','18-24']) {\n    layer3_hourly[p] = calcFullStats(days.map(d=>d.periods&&d.periods[p]?(d.periods[p].monitoring_sec||0):0));\n}\nlet periodCoverage = {};\nfor (let p of ['00-06','06-12','12-18','18-24']) {\n    let covered=days.filter(d=>d.periods&&d.periods[p]&&d.periods[p].monitoring_sec>300).length;\n    periodCoverage[p]={ covered, total:days.length };\n}\nlet metrics = {\n    lick_count:    { mean:layer2.lick_frequency.mean,       std:layer2.lick_frequency.std,       median:layer2.lick_frequency.median,       iqr:layer2.lick_frequency.iqr },\n    lick_time:     { mean:layer2.lick_duration.mean,        std:layer2.lick_duration.std,        median:layer2.lick_duration.median,        iqr:layer2.lick_duration.iqr },\n    scratch_count: { mean:layer2.scratch_frequency.mean,    std:layer2.scratch_frequency.std,    median:layer2.scratch_frequency.median,    iqr:layer2.scratch_frequency.iqr },\n    scratch_time:  { mean:layer2.scratch_duration.mean,     std:layer2.scratch_duration.std,     median:layer2.scratch_duration.median,     iqr:layer2.scratch_duration.iqr },\n    shake_count:   { mean:layer2.head_shake_frequency.mean, std:layer2.head_shake_frequency.std, median:layer2.head_shake_frequency.median, iqr:layer2.head_shake_frequency.iqr },\n    shake_time:    { mean:0,std:0,median:0,iqr:0 },\n    walk_time:     { mean:layer1.walk_duration.mean,        std:layer1.walk_duration.std,        median:layer1.walk_duration.median,        iqr:layer1.walk_duration.iqr },\n    walk_count:    { mean:layer1.walk_count.mean, std:layer1.walk_count.std, median:layer1.walk_count.median, iqr:layer1.walk_count.iqr },\n    stop_time:     { mean:layer1.inactive_duration.mean,    std:layer1.inactive_duration.std,    median:layer1.inactive_duration.median,    iqr:layer1.inactive_duration.iqr },\n    stop_count:    { mean:layer1.stop_count.mean, std:layer1.stop_count.std, median:layer1.stop_count.median, iqr:layer1.stop_count.iqr },\n    // 百分比指標（見 layer2_pct）：sample_count 可能因舊格式歷史天數而低於 days.length\n    lick_pct_day:       { mean:layer2_pct.lick_pct_of_day.mean,       std:layer2_pct.lick_pct_of_day.std,       median:layer2_pct.lick_pct_of_day.median,       iqr:layer2_pct.lick_pct_of_day.iqr,       sample_count:layer2_pct.lick_pct_of_day.sample_count },\n    lick_pct_active:    { mean:layer2_pct.lick_pct_of_active.mean,    std:layer2_pct.lick_pct_of_active.std,    median:layer2_pct.lick_pct_of_active.median,    iqr:layer2_pct.lick_pct_of_active.iqr,    sample_count:layer2_pct.lick_pct_of_active.sample_count },\n    scratch_pct_day:    { mean:layer2_pct.scratch_pct_of_day.mean,    std:layer2_pct.scratch_pct_of_day.std,    median:layer2_pct.scratch_pct_of_day.median,    iqr:layer2_pct.scratch_pct_of_day.iqr,    sample_count:layer2_pct.scratch_pct_of_day.sample_count },\n    scratch_pct_active: { mean:layer2_pct.scratch_pct_of_active.mean, std:layer2_pct.scratch_pct_of_active.std, median:layer2_pct.scratch_pct_of_active.median, iqr:layer2_pct.scratch_pct_of_active.iqr, sample_count:layer2_pct.scratch_pct_of_active.sample_count },\n    active_ratio:       { mean:layer2_pct.active_ratio.mean,          std:layer2_pct.active_ratio.std,          median:layer2_pct.active_ratio.median,          iqr:layer2_pct.active_ratio.iqr,          sample_count:layer2_pct.active_ratio.sample_count },\n    rest_ratio:         { mean:layer2_pct.rest_ratio.mean,            std:layer2_pct.rest_ratio.std,            median:layer2_pct.rest_ratio.median,            iqr:layer2_pct.rest_ratio.iqr,            sample_count:layer2_pct.rest_ratio.sample_count }\n};\n\n// ── Sanity Check（合理性驗證：個體基線 vs 群體文獻值）──\n// 目的：提示可能的資料品質問題，不直接影響異常判斷\n// 若個體基線大幅偏離文獻值，代表資料可能有問題（錄影時間、辨識精度等）\nlet sanityWarnings = [];\nlet lickMean = layer2.lick_duration.mean;   // 個體舔舐基線（秒/天）\nlet scrMean  = layer2.scratch_duration.mean; // 個體搔抓基線（秒/天）\n\n// 舔舐合理範圍：0.5 ~ 6 × 群體參考值\nif (lickMean > 6 * 3600) {\n    sanityWarnings.push('Lick Duration 個體基線（' + (lickMean/60).toFixed(0) + ' min/day）遠超群體參考值（~60 min/day）。請確認錄影時間、辨識模型精度及資料品質。');\n    node.warn('[Sanity] Lick baseline too high: ' + (lickMean/60).toFixed(0) + ' min/day vs ~60 min/day pop ref');\n}\nif (lickMean > 0 && lickMean < 0.5 * 3600) {\n    sanityWarnings.push('Lick Duration 個體基線（' + (lickMean/60).toFixed(1) + ' min/day）遠低於群體參考值（~60 min/day）。監控時間可能不足或模型漏偵。');\n    node.warn('[Sanity] Lick baseline too low: ' + (lickMean/60).toFixed(1) + ' min/day vs ~60 min/day pop ref');\n}\n// 搔抓合理範圍：0.1 ~ 10 × 群體參考值\nif (scrMean > 10 * 60) {\n    sanityWarnings.push('Scratch Duration 個體基線（' + (scrMean/60).toFixed(0) + ' min/day）遠超群體參考值（~1 min/day）。請確認辨識精度。');\n    node.warn('[Sanity] Scratch baseline too high: ' + (scrMean/60).toFixed(1) + ' min/day vs ~1 min/day pop ref');\n}\n\n// 百分比指標合理性驗證：需至少 3 天有效百分比樣本才檢查（避免舊格式歷史天數不足時誤判）\nlet lickPctMean = layer2_pct.lick_pct_of_active.mean;\nlet scrPctMean  = layer2_pct.scratch_pct_of_active.mean;\nif (layer2_pct.lick_pct_of_active.sample_count >= 3 && lickPctMean > 8 * 4) {\n    sanityWarnings.push('Lick % of Active Time 個體基線（' + lickPctMean.toFixed(1) + '%）遠超群體參考值（~8%）。請確認錄影時間、辨識模型精度及資料品質。');\n    node.warn('[Sanity] Lick pct-of-active too high: ' + lickPctMean.toFixed(1) + '% vs ~8% pop ref');\n}\nif (layer2_pct.scratch_pct_of_active.sample_count >= 3 && scrPctMean > 0.2 * 10) {\n    sanityWarnings.push('Scratch % of Active Time 個體基線（' + scrPctMean.toFixed(2) + '%）遠超群體參考值（~0.2%）。請確認辨識精度。');\n    node.warn('[Sanity] Scratch pct-of-active too high: ' + scrPctMean.toFixed(2) + '% vs ~0.2% pop ref');\n}\n\nlet confidence = calcConfidence(days.length);\n\nlet baseline = {\n    computed_at:         new Date().toISOString(),\n    days_count:          days.length,\n    required_days:       MIN_BASELINE_DAYS,\n    confidence:          confidence,\n    required_periods:    REQUIRED_PERIODS,\n    period_coverage:     periodCoverage,\n    layer1, layer2, layer3_hourly, metrics,\n    // 新增：群體參考值（供 Dashboard 顯示與合理性比較）\n    population_reference: POPULATION_REFERENCE,\n    // 新增：合理性驗證結果\n    sanity_warnings: sanityWarnings,\n    sanity_ok:       sanityWarnings.length === 0\n};\n\nglobal.get(\"gfile\").set('v2_baseline', baseline);\nglobal.set('v2_baseline_insufficient', false);\nnode.warn('基線計算完成：' + days.length + ' 天資料，信心等級：' + confidence + (sanityWarnings.length>0?' ⚠️ Sanity Warning':''));\nmsg.payload = baseline;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 430,
+    "y": 302,
+    "wires": [
+      [
+        "308aa0a676e890fb",
+        "5dc3336f1c5a63b1"
+      ]
+    ]
+  },
+  {
+    "id": "5a025ab7f3284135",
+    "type": "csv",
+    "z": "34e73e2e234c0430",
+    "name": "基線CSV",
+    "sep": ",",
+    "hdrin": false,
+    "hdrout": "once",
+    "multi": "one",
+    "ret": "\\n",
+    "temp": "computed_at,days_count,confidence,lick_count_mean,lick_count_std,lick_count_median,lick_count_iqr,lick_time_mean,lick_time_std,lick_time_median,lick_time_iqr,scratch_count_mean,scratch_count_std,scratch_count_median,scratch_count_iqr,scratch_time_mean,scratch_time_std,scratch_time_median,scratch_time_iqr,shake_count_mean,shake_count_std,shake_count_median,shake_count_iqr,shake_time_mean,shake_time_std,shake_time_median,shake_time_iqr,walk_time_mean,walk_time_std,walk_time_median,walk_time_iqr,walk_count_mean,walk_count_std,walk_count_median,walk_count_iqr,stop_time_mean,stop_time_std,stop_time_median,stop_time_iqr,stop_count_mean,stop_count_std,stop_count_median,stop_count_iqr",
+    "skip": "0",
+    "strings": true,
+    "include_empty_strings": false,
+    "include_null_values": false,
+    "x": 870,
+    "y": 302,
+    "wires": [
+      [
+        "75edd504a643b182"
+      ]
+    ]
+  },
+  {
+    "id": "75edd504a643b182",
+    "type": "file",
+    "z": "34e73e2e234c0430",
+    "name": "baseline.csv",
+    "filename": "CAT_MONITORING_BASELINE_CSV_PATH",
+    "filenameType": "env",
+    "appendNewline": true,
+    "createDir": true,
+    "overwriteFile": "false",
+    "encoding": "utf8",
+    "x": 1090,
+    "y": 302,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ce3b0d9f21a695a1",
+    "type": "link in",
+    "z": "34e73e2e234c0430",
+    "name": "← 基線計算觸發",
+    "links": [
+      "e61ddafa2eaa44bd"
+    ],
+    "x": 210,
+    "y": 302,
+    "wires": [
+      [
+        "cba04ae1f2eb5e75"
+      ]
+    ]
+  },
+  {
+    "id": "308aa0a676e890fb",
+    "type": "function",
+    "z": "34e73e2e234c0430",
+    "name": "扁平化基線物件（供CSV匯出）",
+    "func": "// 個體化基線計算器輸出的 baseline 物件是巢狀結構\n// （baseline.metrics.lick_count.mean 這種路徑），但下游 CSV 節點的\n// 欄位樣板原本寫的是扁平 key（lick_count_mean），兩者對不上，\n// 導致 baseline.csv 每一列統計欄位其實都是空的，而且樣板還漏了\n// walk_time/walk_count/stop_time/stop_count 四個指標。\n//\n// 這裡只做「攤平」，完全不改變基線計算本身的任何數值 —— 不動\n// 個體化基線計算器的統計邏輯。\n\nlet bl = msg.payload;\nif (!bl || !bl.metrics) {\n    node.warn('基線資料不足（' + (bl && bl.current_days) + ' 天），略過本次 baseline.csv 寫入');\n    return null;\n}\n\nlet m = bl.metrics;\nfunction flat(key) {\n    let s = m[key] || {};\n    return { mean: s.mean || 0, std: s.std || 0, median: s.median || 0, iqr: s.iqr || 0 };\n}\n\nlet out = { computed_at: bl.computed_at, days_count: bl.days_count, confidence: bl.confidence };\nconst METRIC_KEYS = [\n    'lick_count', 'lick_time', 'scratch_count', 'scratch_time',\n    'shake_count', 'shake_time', 'walk_time', 'walk_count',\n    'stop_time', 'stop_count',\n];\nfor (let key of METRIC_KEYS) {\n    let f = flat(key);\n    out[key + '_mean']   = f.mean;\n    out[key + '_std']    = f.std;\n    out[key + '_median'] = f.median;\n    out[key + '_iqr']    = f.iqr;\n}\n\nmsg.payload = out;\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 650,
+    "y": 302,
+    "wires": [
+      [
+        "5a025ab7f3284135"
+      ]
+    ]
+  },
+  {
+    "id": "5dc3336f1c5a63b1",
+    "type": "function",
+    "z": "34e73e2e234c0430",
+    "name": "設定變更→立即回填P4面板",
+    "func": "// 修正「飼主設定拉桿調整後儲存未正確套用（尤其基線天數）」：\n// 儲存設定會正確寫入 global.v2_user_settings，也會正確觸發\n// 個體化基線計算器重算（後端數值本身沒有算錯）。但個體化基線計算器\n// 原本只有一條輸出接去 CSV 匯出節點，完全沒有接回 P4 面板——P4 只透過\n// 「行為偏差融合引擎」那條即時（Python 資料觸發）的鏈路更新畫面。\n// 兩條鏈路互相獨立，導致使用者存檔後，P4 面板（基線天數、指標表格、\n// 設定滑桿）要等到下一次即時資料週期才會刷新，看起來像「沒套用」。\n//\n// 這裡不改個體化基線計算器的計算邏輯，只是在它算完之後，額外組一份\n// P4 面板看得懂的 payload，直接回推過去，讓存檔後畫面立即更新。\n\nlet bl  = msg.payload;\nlet cfg = global.get(\"gfile\").get('v2_user_settings') || {};\nlet dev = global.get('v2_deviation') || null;\nlet historyLen = (global.get(\"gfile\").get('v2_daily_history') || []).length;\n\nlet out = {};\nif (bl && bl.metrics) {\n    out.baseline         = bl;\n    out.v2_insufficient  = false;\n} else {\n    out.v2_insufficient  = true;\n    out.required_days    = (bl && bl.required_days) || cfg.baseline_days || 7;\n}\nout.deviation           = dev;\nout.user_settings       = cfg;\nout.history_days        = historyLen;\nout.v2_daily_history    = (global.get(\"gfile\").get('v2_daily_history') || []).slice(-30);\nout.v2_event_tags       = (global.get(\"gfile\").get('v2_event_tags') || []).slice(-14);\nout.v2_excluded_dates   = global.get(\"gfile\").get('v2_excluded_dates') || [];\nlet autoRestored = global.get('v2_baseline_auto_restore') || null;\nif (autoRestored) { out.v2_baseline_auto_restore = autoRestored; global.set('v2_baseline_auto_restore', null); }\nlet delSuccess = global.get('v2_delete_success') || null;\nif (delSuccess) { out.v2_delete_success = delSuccess; global.set('v2_delete_success', null); }\n\nreturn { payload: out };\n",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 650,
+    "y": 412,
+    "wires": [
+      [
+        "f478feb4e8f8e293"
+      ]
+    ]
+  },
+  {
+    "id": "f478feb4e8f8e293",
+    "type": "link out",
+    "z": "34e73e2e234c0430",
+    "name": "→ 立即回填P4",
+    "links": [
+      "9209cb7bea68933b"
+    ],
+    "x": 870,
+    "y": 412,
+    "wires": []
+  },
+  {
+    "id": "e19637c741bbcbff",
+    "type": "function",
+    "z": "8913de5d62305fee",
+    "name": "每日統計彙整",
+    "func": "let today  = global.get(\"gfile\").get('v2_today') || {};\nlet hourly = global.get('v2_hourly') || {};\nlet date   = today.date || new Date().toLocaleDateString('zh-TW');\n\n// 計算各時段的行為與監控秒數\nconst PERIOD_HOURS = {\n    '00-06': ['00','01','02','03','04','05'],\n    '06-12': ['06','07','08','09','10','11'],\n    '12-18': ['12','13','14','15','16','17'],\n    '18-24': ['18','19','20','21','22','23']\n};\nlet periods = {};\nfor (let [name, hrs] of Object.entries(PERIOD_HOURS)) {\n    let d = {walk:0,lick:0,scratch:0,shake:0,stop:0,monitoring_sec:0};\n    for (let h of hrs) {\n        let hd = hourly[h] || {};\n        for (let b of ['walk','lick','scratch','shake','stop']) d[b] += (hd[b]||0);\n        d.monitoring_sec += (hd.monitoring_sec || 0);\n    }\n    d.total = d.walk+d.lick+d.scratch+d.shake+d.stop;\n    periods[name] = d;\n}\n\nlet rec = {\n    date,\n    lick_count:    today.lick    ? today.lick.count    : 0,\n    lick_time:     today.lick    ? today.lick.time     : 0,\n    scratch_count: today.scratch ? today.scratch.count : 0,\n    scratch_time:  today.scratch ? today.scratch.time  : 0,\n    shake_count:   today.shake   ? today.shake.count   : 0,\n    shake_time:    today.shake   ? today.shake.time    : 0,\n    walk_count:    today.walk    ? today.walk.count    : 0,\n    walk_time:     today.walk    ? today.walk.time     : 0,\n    stop_count:    today.stop    ? today.stop.count    : 0,\n    stop_time:     today.stop    ? today.stop.time     : 0,\n    active_time:        today.active_time       || 0,\n    low_conf_count:     today.low_conf ? today.low_conf.count : 0,\n    low_conf_time:      today.low_conf ? today.low_conf.time  : 0,\n    not_detected_time:  today.not_detected_time  || 0,\n    monitoring_seconds: today.monitoring_seconds || 0,\n    monitoring_hours:   parseFloat(((today.monitoring_seconds || 0) / 3600).toFixed(2)),\n    cat_visible_seconds: Math.max(0, (today.monitoring_seconds || 0) - (today.not_detected_time || 0)),\n    stop_ratio:    today.active_time > 0\n        ? parseFloat(((today.stop ? today.stop.time : 0) / today.active_time).toFixed(3))\n        : 0,\n    // ── 百分比指標（Eckstein & Hart, 2000）：文獻用「佔全天時間預算 / 佔非睡眠休息時間」\n    // 雙重比例描述理毛/搔抓程度，而非只看絕對秒數，故 active_non_rest_time 刻意排除\n    // stop（靜止＝本系統對應文獻 sleep/rest 的行為），只留 walk/lick/scratch/shake ──\n    active_non_rest_time: (today.walk?today.walk.time:0)+(today.lick?today.lick.time:0)+(today.scratch?today.scratch.time:0)+(today.shake?today.shake.time:0),\n    active_ratio: today.monitoring_seconds > 0\n        ? parseFloat((((today.walk?today.walk.time:0)+(today.lick?today.lick.time:0)+(today.scratch?today.scratch.time:0)+(today.shake?today.shake.time:0)) / today.monitoring_seconds * 100).toFixed(2))\n        : 0,\n    rest_ratio: today.monitoring_seconds > 0\n        ? parseFloat(((today.stop?today.stop.time:0) / today.monitoring_seconds * 100).toFixed(2))\n        : 0,\n    lick_pct_of_day: today.monitoring_seconds > 0\n        ? parseFloat(((today.lick?today.lick.time:0) / today.monitoring_seconds * 100).toFixed(3))\n        : 0,\n    scratch_pct_of_day: today.monitoring_seconds > 0\n        ? parseFloat(((today.scratch?today.scratch.time:0) / today.monitoring_seconds * 100).toFixed(3))\n        : 0,\n    lick_pct_of_active: ((today.walk?today.walk.time:0)+(today.lick?today.lick.time:0)+(today.scratch?today.scratch.time:0)+(today.shake?today.shake.time:0)) > 0\n        ? parseFloat(((today.lick?today.lick.time:0) / ((today.walk?today.walk.time:0)+(today.lick?today.lick.time:0)+(today.scratch?today.scratch.time:0)+(today.shake?today.shake.time:0)) * 100).toFixed(3))\n        : 0,\n    scratch_pct_of_active: ((today.walk?today.walk.time:0)+(today.lick?today.lick.time:0)+(today.scratch?today.scratch.time:0)+(today.shake?today.shake.time:0)) > 0\n        ? parseFloat(((today.scratch?today.scratch.time:0) / ((today.walk?today.walk.time:0)+(today.lick?today.lick.time:0)+(today.scratch?today.scratch.time:0)+(today.shake?today.shake.time:0)) * 100).toFixed(3))\n        : 0,\n    periods,\n    risk: flow.get('v2_today_risk') || null\n};\n\nlet newDay = {\n    date: new Date().toLocaleDateString('zh-TW'),\n    walk:    {count:0,time:0}, lick:    {count:0,time:0},\n    scratch: {count:0,time:0}, shake:   {count:0,time:0},\n    stop:    {count:0,time:0},\n    active_time:0, low_conf:{count:0,time:0}, not_detected_time:0, monitoring_seconds:0\n};\nglobal.get(\"gfile\").set('v2_today', newDay);\nglobal.set('v2_hourly', {});\nglobal.set('v2_transition_matrix', {});\n\nconst MIN_RECORD_SEC = 1800; // 一天至少要有 30 分鐘（1800 秒）的監控才納入歷史，避免幾乎沒開系統的天污染基線\nif ((rec.monitoring_seconds || 0) < MIN_RECORD_SEC) {\n    node.warn('今日監控時間不足（' + rec.monitoring_seconds + ' 秒），跳過歷史記錄');\n    return null;\n}\n\nlet history = global.get(\"gfile\").get('v2_daily_history') || [];\nhistory = history.filter(h => h.date !== date); // 同一天只保留最新一筆，避免重複污染基線\nhistory.push(rec);\nif (history.length > 90) history = history.slice(-90);\nglobal.get(\"gfile\").set('v2_daily_history', history);\nnode.warn('每日彙整完成：' + date + '，歷史 ' + history.length + ' 天');\n\nmsg.payload = rec;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 540,
+    "y": 82,
+    "wires": [
+      [
+        "b2a6163a781cc5d3",
+        "dee2d28cb31b0411"
+      ]
+    ]
+  },
+  {
+    "id": "b2a6163a781cc5d3",
+    "type": "csv",
+    "z": "8913de5d62305fee",
+    "name": "每日歷史CSV",
+    "sep": ",",
+    "hdrin": false,
+    "hdrout": "once",
+    "multi": "one",
+    "ret": "\\n",
+    "temp": "date,lick_count,lick_time,scratch_count,scratch_time,shake_count,shake_time,walk_count,walk_time,stop_count,stop_time,active_time,low_conf_count,low_conf_time,stop_ratio,monitoring_seconds,monitoring_hours",
+    "skip": "0",
+    "strings": true,
+    "include_empty_strings": false,
+    "include_null_values": false,
+    "x": 760,
+    "y": 82,
+    "wires": [
+      [
+        "45ad1d7450205c07"
+      ]
+    ]
+  },
+  {
+    "id": "45ad1d7450205c07",
+    "type": "file",
+    "z": "8913de5d62305fee",
+    "name": "daily_history.csv",
+    "filename": "CAT_MONITORING_NODERED_DAILY_HISTORY_CSV_PATH",
+    "filenameType": "env",
+    "appendNewline": true,
+    "createDir": true,
+    "overwriteFile": "false",
+    "encoding": "utf8",
+    "x": 980,
+    "y": 82,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "dee2d28cb31b0411",
+    "type": "function",
+    "z": "8913de5d62305fee",
+    "name": "判斷是否重算基線",
+    "func": "// 每次午夜觸發都重算基線（確保昨日資料納入後立即更新）\nconst _rCfg = global.get(\"gfile\").get('v2_user_settings') || {};\nconst MIN_BASELINE_DAYS = _rCfg.baseline_days != null ? +_rCfg.baseline_days : 7;\nlet history = global.get(\"gfile\").get('v2_daily_history') || [];\nif (history.length < MIN_BASELINE_DAYS) {\n    node.warn('歷史不足（' + history.length + ' 天），跳過基線計算');\n    return null;\n}\nnode.warn('午夜觸發基線更新');\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 760,
+    "y": 192,
+    "wires": [
+      [
+        "e61ddafa2eaa44bd"
+      ]
+    ]
+  },
+  {
+    "id": "fb93fbafbadaedb0",
+    "type": "inject",
+    "z": "8913de5d62305fee",
+    "name": "每日午夜觸發",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "15 0 0 * * *",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 320,
+    "y": 82,
+    "wires": [
+      [
+        "e19637c741bbcbff"
+      ]
+    ]
+  },
+  {
+    "id": "e93c17bcc45740b5",
+    "type": "inject",
+    "z": "8913de5d62305fee",
+    "name": "每小時快照",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "3600",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 320,
+    "y": 192,
+    "wires": [
+      [
+        "a5e102e42c389036"
+      ]
+    ]
+  },
+  {
+    "id": "a5e102e42c389036",
+    "type": "function",
+    "z": "8913de5d62305fee",
+    "name": "小時偏差快照",
+    "func": "let dev  = global.get('v2_deviation') || {};\nlet risk = global.get('v2_risk')      || {};\nif (!dev.computed_at) return null;\n\nfunction getZ(key)  { return dev[key] && dev[key].z_score  != null ? (dev[key].z_score  || 0) : 0; }\nfunction getDs(key) { return dev[key] && dev[key].deviation_score != null ? (dev[key].deviation_score || 0) : 0; }\n\nmsg.payload = {\n    timestamp:                new Date().toLocaleString('zh-TW'),\n    lick_z:                   getZ('lick_duration'),\n    scratch_z:                getZ('scratch_duration'),\n    shake_z:                  getZ('head_shake'),\n    stop_z:                   getZ('inactive_duration'),\n    overall_deviation:        dev.overall || 0,\n    behavior_deviation_level: risk.behavior_deviation_level || risk.level || 'N/A',\n    behavior_deviation_score: risk.behavior_deviation_score || risk.score || 0,\n    confidence:               dev.confidence || 'Low'\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 540,
+    "y": 192,
+    "wires": [
+      [
+        "0a37b03b73bca270"
+      ]
+    ]
+  },
+  {
+    "id": "0a37b03b73bca270",
+    "type": "csv",
+    "z": "8913de5d62305fee",
+    "name": "偏差快照CSV",
+    "sep": ",",
+    "hdrin": false,
+    "hdrout": "once",
+    "multi": "one",
+    "ret": "\\n",
+    "temp": "timestamp,lick_z,scratch_z,shake_z,stop_z,overall_deviation,behavior_deviation_level,behavior_deviation_score,confidence",
+    "skip": "0",
+    "strings": true,
+    "include_empty_strings": false,
+    "include_null_values": false,
+    "x": 760,
+    "y": 302,
+    "wires": [
+      [
+        "c8feaaae1dde21bc"
+      ]
+    ]
+  },
+  {
+    "id": "c8feaaae1dde21bc",
+    "type": "file",
+    "z": "8913de5d62305fee",
+    "name": "deviation_log.csv",
+    "filename": "CAT_MONITORING_DEVIATION_LOG_CSV_PATH",
+    "filenameType": "env",
+    "appendNewline": true,
+    "createDir": true,
+    "overwriteFile": "false",
+    "encoding": "utf8",
+    "x": 980,
+    "y": 302,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "e61ddafa2eaa44bd",
+    "type": "link out",
+    "z": "8913de5d62305fee",
+    "name": "→ 觸發基線計算",
+    "links": [
+      "ce3b0d9f21a695a1"
+    ],
+    "x": 980,
+    "y": 192,
+    "wires": []
+  },
+  {
+    "id": "acaaa2656bbe58bd",
+    "type": "inject",
+    "z": "8913de5d62305fee",
+    "name": "手動觸發基線計算",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 320,
+    "y": 302,
+    "wires": [
+      [
+        "e61ddafa2eaa44bd"
+      ]
+    ]
+  },
+  {
+    "id": "8406d6f34e3c8194",
+    "type": "inject",
+    "z": "8913de5d62305fee",
+    "name": "手動觸發每日彙整",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 320,
+    "y": 412,
+    "wires": [
+      [
+        "e19637c741bbcbff"
+      ]
+    ]
+  },
+  {
+    "id": "37f14dcc90699c11",
+    "type": "inject",
+    "z": "8913de5d62305fee",
+    "name": "系統啟動檢查",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 2,
+    "topic": "",
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 320,
+    "y": 522,
+    "wires": [
+      [
+        "0fbfea6608e93e82"
+      ]
+    ]
+  },
+  {
+    "id": "0fbfea6608e93e82",
+    "type": "function",
+    "z": "8913de5d62305fee",
+    "name": "跨日資料清除",
+    "func": "let todayDate = new Date().toLocaleDateString('zh-TW');\nlet today     = global.get(\"gfile\").get('v2_today');\nlet savedDate = today ? today.date : null;\n\nif (savedDate && savedDate !== todayDate) {\n    const MIN_RECORD_SEC = 1800;\n    let monSec = today.monitoring_seconds || 0;\n    if (monSec >= MIN_RECORD_SEC) {\n        let _hourly = global.get('v2_hourly') || {};\n        const _PHRS = {'00-06':['00','01','02','03','04','05'],'06-12':['06','07','08','09','10','11'],'12-18':['12','13','14','15','16','17'],'18-24':['18','19','20','21','22','23']};\n        let _periods = {};\n        for (let [_n,_hs] of Object.entries(_PHRS)) {\n            let _d={walk:0,lick:0,scratch:0,shake:0,stop:0,monitoring_sec:0};\n            for (let _h of _hs) { let _hd=_hourly[_h]||{}; for (let _b of ['walk','lick','scratch','shake','stop']) _d[_b]+=(_hd[_b]||0); _d.monitoring_sec+=(_hd.monitoring_sec||0); }\n            _d.total=_d.walk+_d.lick+_d.scratch+_d.shake+_d.stop; _periods[_n]=_d;\n        }\n        let rec = {\n            date:          savedDate,\n            lick_count:    today.lick    ? today.lick.count    : 0,\n            lick_time:     today.lick    ? today.lick.time     : 0,\n            scratch_count: today.scratch ? today.scratch.count : 0,\n            scratch_time:  today.scratch ? today.scratch.time  : 0,\n            shake_count:   today.shake   ? today.shake.count   : 0,\n            shake_time:    today.shake   ? today.shake.time    : 0,\n            walk_count:    today.walk    ? today.walk.count    : 0,\n            walk_time:     today.walk    ? today.walk.time     : 0,\n            stop_count:    today.stop    ? today.stop.count    : 0,\n            stop_time:     today.stop    ? today.stop.time     : 0,\n            active_time:        today.active_time       || 0,\n            low_conf_count:     today.low_conf ? today.low_conf.count : 0,\n            low_conf_time:      today.low_conf ? today.low_conf.time  : 0,\n            monitoring_seconds: monSec,\n            monitoring_hours:   parseFloat((monSec / 3600).toFixed(2)),\n            stop_ratio: today.active_time > 0\n                ? parseFloat(((today.stop ? today.stop.time : 0) / today.active_time).toFixed(3))\n                : 0,\n            risk: null,\n            periods: _periods\n        };\n        let history = global.get(\"gfile\").get('v2_daily_history') || [];\n        history = history.filter(h => h.date !== savedDate);\n        history.push(rec);\n        if (history.length > 90) history = history.slice(-90);\n        global.get(\"gfile\").set('v2_daily_history', history);\n        node.warn('[啟動] 已彙整前一天資料：' + savedDate + '（' + monSec + ' 秒）');\n    } else {\n        node.warn('[啟動] 前一天（' + savedDate + '）監控時間不足（' + monSec + ' 秒），跳過歷史記錄');\n    }\n    let newDay = {\n        date: todayDate,\n        walk:    {count:0,time:0}, lick:    {count:0,time:0},\n        scratch: {count:0,time:0}, shake:   {count:0,time:0},\n        stop:    {count:0,time:0},\n        active_time:0, low_conf:{count:0,time:0}, not_detected_time:0, monitoring_seconds:0\n    };\n    global.get(\"gfile\").set('v2_today', newDay);\n    global.set('v2_hourly',           {});\n    global.set('v2_transition_matrix', {});\n    node.warn('[啟動] 偵測到跨日舊資料（' + savedDate + '），已彙整並清除 → 今天：' + todayDate);\n} else if (!savedDate) {\n    node.warn('[啟動] 無歷史資料，全新啟動。');\n} else {\n    node.warn('[啟動] 日期吐合（' + todayDate + '），保留今日資料繼續累積。');\n}\nreturn null;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 540,
+    "y": 302,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "95f2e8490f5236d3",
+    "type": "inject",
+    "z": "8913de5d62305fee",
+    "name": "手動觸發全部重置",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 320,
+    "y": 632,
+    "wires": [
+      [
+        "14c4462265cd4431"
+      ]
+    ]
+  },
+  {
+    "id": "14c4462265cd4431",
+    "type": "function",
+    "z": "8913de5d62305fee",
+    "name": "全部清除（徹底重置）",
+    "func": "global.get(\"gfile\").set('v2_today', null);\nglobal.set('v2_hourly', {});\nglobal.set('v2_transition_matrix', {});\nnode.warn('[手動重置] 所有 Node-RED 資料已清除，下次啟動將顯示「全新啟動」');\nreturn null;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 540,
+    "y": 412,
+    "wires": [
+      []
+    ]
+  }
+]

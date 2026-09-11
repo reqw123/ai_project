@@ -409,6 +409,7 @@ class LickAnalyzer:
         angle_deg = compute_head_ear_angle(smooth_kpts, kpt_conf)
 
         gaze_fwd = gaze_lat = gaze_angle = _nan
+        geometry_score = _nan
 
         if front_guard:
             if (
@@ -452,7 +453,7 @@ class LickAnalyzer:
             else:
                 state_sm, stability = smooth_state(self._state_history)
 
-            nearest_label, _dist, hit = find_nearest_zone(target_geom)
+            nearest_label, geometry_score, hit = find_nearest_zone(target_geom)
             zone_label = nearest_label if hit else "NO_TARGET"
             if hit:
                 frame_state = FrameState.LICK_ASSIGNED
@@ -489,6 +490,7 @@ class LickAnalyzer:
             gaze_fwd,
             gaze_lat,
             gaze_angle,
+            geometry_score,
             frame_state=frame_state,
             reason_code=reason_code,
         )
@@ -506,6 +508,7 @@ class LickAnalyzer:
         gaze_fwd: float = float("nan"),
         gaze_lat: float = float("nan"),
         gaze_angle: float = float("nan"),
+        geometry_score: float = float("nan"),
         frame_state: str = FrameState.NO_CAT,
         reason_code=None,
     ) -> LickResult:
@@ -525,6 +528,8 @@ class LickAnalyzer:
             fr=_zs("FR"),
             hl=_zs("HL"),
             hr=_zs("HR"),
+            ambiguous=_zs("AMBIGUOUS"),
+            geometry_score=geometry_score,
             face_state=state_sm,
             state_stability=stability,
             valid=valid,

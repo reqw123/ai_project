@@ -568,22 +568,31 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
 
 def find_nearest_zone(target_geom) -> Tuple[str, float, bool]:
     """
-    Test nose-contact trapezoid against all contact regions.
+    Test nose-contact trapezoid against all contact regions, scoring every
+    intersecting candidate instead of just picking whichever is nearest by
+    raw distance (M5：候選評分 + AMBIGUOUS，取代舊版純距離排序)。
 
-    Returns (zone_label, distance, hit).
-    zone_label is BODY_CENTER, FL, FR, HL, HR, or NO_TARGET.
+    每個命中候選都換算成正規化分數 geometry_score ∈ [0,1]（1 - 距離/該候選
+    區域的特徵尺度：身體橢圓用 region_ry，四肢用腳尖圓半徑），分數越接近 1
+    代表鼻尖越貼近該區域中心/骨架。當最高分跟次高分（不同 zone）差距小於
+    AMBIGUITY_MARGIN 時，回傳 ZONE_AMBIGUOUS 而不是武斷選一個——這種情況
+    代表鼻尖確實碰觸到身體，只是幾何上無法可靠分辨是哪個相鄰區域（例如
+    正好在身體與前肢交界處）。
+
+    Returns (zone_label, geometry_score, hit)。
+    zone_label 可能是 BODY_CENTER, FL, FR, HL, HR, AMBIGUOUS, 或 NO_TARGET。
     """
     if target_geom is None:
-        return _C.ZONE_NO_TARGET, float("nan"), False
+        return _C.ZONE_NO_TARGET, 0.0, False
 
     nose_pt = target_geom.get("nose")
     nose_trap = np.asarray(
         target_geom.get("nose_contact_trapezoid", []), dtype=np.float64
     )
     if nose_pt is None or nose_trap.ndim != 2 or nose_trap.shape[0] != 4:
-        return _C.ZONE_NO_TARGET, float("nan"), False
+        return _C.ZONE_NO_TARGET, 0.0, False
 
-    candidates = []
+    candidates = []  # (score, zone_label)
 
     # Body center ellipse
     if _polygon_contacts_oriented_ellipse(
@@ -605,7 +614,9 @@ def find_nearest_zone(target_geom) -> Tuple[str, float, bool]:
             * float(target_geom["body_len"])
             * np.asarray(target_geom["body_axis_unit"], dtype=np.float64),
         )
-        candidates.append((d_body, _C.ZONE_BODY))
+        body_scale = max(float(target_geom["region_ry"]), 1e-6)
+        score = max(0.0, min(1.0, 1.0 - d_body / body_scale))
+        candidates.append((score, _C.ZONE_BODY))
 
     # Limb paw circles (group → minimum distance)
     limb_dist = {g: float("inf") for g in ("FL", "FR", "HL", "HR")}
@@ -631,12 +642,32 @@ def find_nearest_zone(target_geom) -> Tuple[str, float, bool]:
             if g in limb_dist and d < limb_dist[g]:
                 limb_dist[g] = d
 
+    # 四肢的特徵尺度：paw circle 半徑（跟 strip 半寬同一比例級數，兩者共用
+    # 這一個尺度已足夠當正規化分母，見 config.py LIMB_PAW_CIRCLE_R_RATIO/
+    # LIMB_STRIP_HW_RATIO 的說明）。
+    limb_scale = max(
+        float(target_geom.get("eff_len", 0.0))
+        * _C.LIMB_PAW_CIRCLE_R_RATIO
+        * _C.LIMB_CONTACT_SCALE,
+        1e-6,
+    )
     for group, dist in limb_dist.items():
         if math.isfinite(dist):
-            candidates.append((dist, group))
+            score = max(0.0, min(1.0, 1.0 - dist / limb_scale))
+            candidates.append((score, group))
 
     if not candidates:
-        return _C.ZONE_NO_TARGET, float("nan"), False
+        return _C.ZONE_NO_TARGET, 0.0, False
 
-    d_min, label_min = min(candidates, key=lambda x: x[0])
-    return label_min, float(d_min), True
+    # 同一個 zone 可能同時被多個候選命中（例如四肢的 paw circle 跟 strip）；
+    # 每個 zone 只留最高分，才能正確比較「不同 zone 之間」是否構成 AMBIGUOUS
+    best_per_zone: dict = {}
+    for score, zone in candidates:
+        if zone not in best_per_zone or score > best_per_zone[zone]:
+            best_per_zone[zone] = score
+    ranked = sorted(best_per_zone.items(), key=lambda kv: kv[1], reverse=True)
+
+    best_zone, best_score = ranked[0]
+    if len(ranked) >= 2 and (best_score - ranked[1][1]) < _C.AMBIGUITY_MARGIN:
+        return _C.ZONE_AMBIGUOUS, best_score, True
+    return best_zone, best_score, True

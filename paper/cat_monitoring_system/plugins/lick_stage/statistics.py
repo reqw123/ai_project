@@ -20,7 +20,7 @@
 
 from plugins.lick_stage.analysis_context import FrameState
 
-_ZONES = ("BODY", "FL", "FR", "HL", "HR")
+_ZONES = ("BODY", "FL", "FR", "HL", "HR", "AMBIGUOUS")
 
 # Maps raw zone labels to statistics keys
 _LABEL_TO_KEY = {
@@ -29,6 +29,11 @@ _LABEL_TO_KEY = {
     "FR": "FR",
     "HL": "HL",
     "HR": "HR",
+    # M5：候選評分最高分/次高分差距太小時的結果（見 contact_regions.py
+    # find_nearest_zone()）。歸為自己獨立的一個 zone bucket，語意是「確實
+    # 碰觸到身體，只是幾何上無法可靠分辨是哪個相鄰區域」——跟 NO_TARGET
+    # （完全沒碰到任何區域）是不同的失敗模式，不該混在一起。
+    "AMBIGUOUS": "AMBIGUOUS",
 }
 
 
