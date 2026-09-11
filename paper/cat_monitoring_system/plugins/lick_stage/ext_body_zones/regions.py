@@ -44,6 +44,47 @@ def _point_on_strip(pt, p0, p1, half_width: float) -> Tuple[bool, float]:
     return hit, abs(perp)
 
 
+def _bbox_diagonal(kpts, kpt_conf) -> float:
+    """Bbox diagonal of every keypoint above LIMB_CONF_THRESHOLD (the lowest
+    existing bar) — only used as the last-resort scale fallback, so it makes
+    no assumption about which specific keypoints are visible."""
+    pts = [
+        np.asarray(kpts[i], dtype=np.float64)
+        for i in range(len(kpt_conf))
+        if float(kpt_conf[i]) > _C.LIMB_CONF_THRESHOLD
+    ]
+    if len(pts) < 2:
+        return float("nan")
+    arr = np.asarray(pts, dtype=np.float64)
+    span = arr.max(axis=0) - arr.min(axis=0)
+    return math.hypot(float(span[0]), float(span[1]))
+
+
+def _compute_body_scale(
+    kpts, kpt_conf, chest, hip, mid_back_ok: bool, chest_hip_len: float
+) -> Tuple[float, str]:
+    """Hybrid scale (M5), replacing the old absolute BODY_LEN_MIN/MAX_PX clamp.
+
+    Priority: chest-midback-hip path length (resists curl-compression of the
+    straight-line distance) -> straight chest-hip distance -> bbox diagonal *
+    BBOX_TO_BODY_LEN_RATIO. See config.py for the rationale.
+    """
+    if mid_back_ok:
+        mid_back = np.asarray(kpts[_C.KP_MID_BACK], dtype=np.float64)
+        spine_len = _norm(chest - mid_back) + _norm(mid_back - hip)
+        if spine_len > _C.SCALE_DEGENERATE_LEN_PX:
+            return spine_len, "spine_path"
+
+    if chest_hip_len > _C.SCALE_DEGENERATE_LEN_PX:
+        return chest_hip_len, "chest_hip"
+
+    bbox_diag = _bbox_diagonal(kpts, kpt_conf)
+    if math.isfinite(bbox_diag) and bbox_diag > 1e-6:
+        return bbox_diag * _C.BBOX_TO_BODY_LEN_RATIO, "bbox_fallback"
+
+    return max(chest_hip_len, 1e-6), "degenerate"
+
+
 def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
     """Build all 7 zone target shapes from one frame of keypoints.
 
@@ -63,9 +104,12 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
         return None
     body_axis_unit = body_axis / body_len
     body_normal = _perp(body_axis_unit)
-    eff_len = max(_C.BODY_LEN_MIN_PX, min(_C.BODY_LEN_MAX_PX, body_len))
+    mid_back_ok = _conf_ok(kpt_conf, _C.KP_MID_BACK)
+    eff_len, scale_source = _compute_body_scale(
+        kpts, kpt_conf, chest, hip, mid_back_ok, body_len
+    )
 
-    if _conf_ok(kpt_conf, _C.KP_MID_BACK):
+    if mid_back_ok:
         torso_center = np.asarray(kpts[_C.KP_MID_BACK], dtype=np.float64)
     else:
         torso_center = 0.5 * (chest + hip)
@@ -139,6 +183,8 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
     return {
         "body_axis_unit": body_axis_unit,
         "body_normal": body_normal,
+        "eff_len": eff_len,
+        "scale_source": scale_source,  # "spine_path" / "chest_hip" / "bbox_fallback" / "degenerate"
         "torso_center": torso_center,
         "torso_ru": torso_ru,
         "torso_rv": torso_rv,

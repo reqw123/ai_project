@@ -79,9 +79,18 @@ class ExtZoneConfig:
     LIMB_PAW_RADIUS_RATIO = 0.05
     TAIL_STRIP_HW_RATIO = 0.045  # tail strip half width (single shared region)
 
-    # Body length clamp (guards against exploding geometry on extreme poses)
-    BODY_LEN_MIN_PX = 300.0
-    BODY_LEN_MAX_PX = 650.0
+    # ── Hybrid body scale (M5, replaces the old absolute BODY_LEN_MIN/MAX_PX
+    # clamp) ── Fixed 300-650px clamp implicitly assumed roughly constant
+    # camera distance; a curled-up grooming cat compresses the straight-line
+    # chest-hip distance regardless of true scale, so clamping to a fixed
+    # floor systematically distorted geometry sizing. See
+    # _compute_body_scale() in regions.py: chest-midback-hip path length
+    # (resists curl-compression) -> straight chest-hip distance -> bbox
+    # diagonal * ratio below. Independent copy of the same idea implemented
+    # in plugins/lick_stage/config.py — kept separate on purpose (this
+    # module must stay zero-dependency on the sibling plugin).
+    SCALE_DEGENERATE_LEN_PX = 20.0  # below this, treat chest-hip/path length as detection noise, not a curled pose
+    BBOX_TO_BODY_LEN_RATIO = 0.65  # bbox_fallback: body_len ≈ bbox diagonal * this ratio; coarse default, recalibrate if verify tooling shows frequent bbox_fallback
 
     # ── Output (file / MQTT only — never fed back to the main program) ────
     OUTPUT_ENABLED = True

@@ -158,6 +158,15 @@ def trap_dir_from_perp(trap_perp):
     是可以無條件成立的物理假設，不需要依賴「朝向 body_center」這種容易被雜訊
     干擾的判斷。這也讓 trap_dir 完全由 trap_perp 決定，不再是獨立的雜訊來源
     ——只要 trap_perp 穩定，trap_dir 就保證穩定，且短邊（nose 端）保證在上面。
+
+    2026-09-11 M5 曾試過改成 body-anchored（用 body_axis_unit 取代 y>=0），
+    三支影片實測後撤回：lick_31（蜷曲舔前肢）幾乎沒影響，但 lick_28/lick_3
+    這兩支影片 coverage 反而退步 8~11 個百分點——懷疑是這兩支影片的
+    body_axis_unit 在畫面上常態性不朝下，導致新舊翻轉準則經常不一致，且退步
+    方向跟「body-anchored 應該更準」的預期相反，實作本身可能有 bug（例如
+    安全網翻轉方向或 trap_perp/trap_dir 耦合方式），須先查清楚再重新導入，
+    不要只憑物理假設「聽起來更對」就直接上。詳見
+    舔拭行為二階段分析模組說明.md 的「三階段重構：進度總表與下次接續」。
     """
     trap_perp = np.asarray(trap_perp, dtype=np.float64)
     d = np.array([-float(trap_perp[1]), float(trap_perp[0])], dtype=np.float64)
@@ -304,12 +313,60 @@ def _polygon_contacts_oriented_ellipse(
     return False
 
 
+# ── Hybrid body scale (M5) ──────────────────────────────────────────────────
+
+
+def _bbox_diagonal(kpts, kpt_conf) -> float:
+    """所有信心足夠（> LIMB_CONF_THRESHOLD，最低的既有門檻）關鍵點的 bbox 對角線。
+
+    只在 chest-hip 折線/直線長度都退化到不可信時當保底，不要求任何特定關鍵點，
+    純粹用「畫面上偵測到的貓咪範圍」估計尺度。
+    """
+    pts = [
+        np.asarray(kpts[i], dtype=np.float64)
+        for i in range(len(kpt_conf))
+        if float(kpt_conf[i]) > _C.LIMB_CONF_THRESHOLD
+    ]
+    if len(pts) < 2:
+        return float("nan")
+    arr = np.asarray(pts, dtype=np.float64)
+    span = arr.max(axis=0) - arr.min(axis=0)
+    return math.hypot(float(span[0]), float(span[1]))
+
+
+def _compute_body_scale(
+    kpts, kpt_conf, chest, hip, mid_back, mid_back_ok: bool, chest_hip_len: float
+) -> Tuple[float, str]:
+    """混合尺度：取代舊的絕對像素夾鉗（見 config.py 移除說明）。
+
+    優先序：chest-midback-hip 折線長（抵抗蜷曲造成的直線距離壓縮，跟
+    curvature_boost 想解決的問題同源，但這裡補的是 eff_len 本身）→
+    chest-hip 直線距離 → bbox 對角線 × BBOX_TO_BODY_LEN_RATIO。
+    """
+    if mid_back_ok and mid_back is not None:
+        seg1 = chest - mid_back
+        seg2 = mid_back - hip
+        spine_len = math.hypot(float(seg1[0]), float(seg1[1])) + math.hypot(
+            float(seg2[0]), float(seg2[1])
+        )
+        if spine_len > _C.SCALE_DEGENERATE_LEN_PX:
+            return spine_len, "spine_path"
+
+    if chest_hip_len > _C.SCALE_DEGENERATE_LEN_PX:
+        return chest_hip_len, "chest_hip"
+
+    bbox_diag = _bbox_diagonal(kpts, kpt_conf)
+    if math.isfinite(bbox_diag) and bbox_diag > 1e-6:
+        return bbox_diag * _C.BBOX_TO_BODY_LEN_RATIO, "bbox_fallback"
+
+    return max(chest_hip_len, 1e-6), "degenerate"
+
+
 # ── Limb region builders ──────────────────────────────────────────────────────
 
 
-def _build_limb_joint_targets(kpts, kpt_conf, body_len: float) -> list:
+def _build_limb_joint_targets(kpts, kpt_conf, eff_len: float) -> list:
     """Circle regions at each paw keypoint."""
-    eff_len = max(_C.CONTACT_BODY_LEN_MIN_PX, min(_C.CONTACT_BODY_LEN_MAX_PX, body_len))
     paw_radius = max(1e-6, eff_len * _C.LIMB_PAW_CIRCLE_R_RATIO * _C.LIMB_CONTACT_SCALE)
     targets = []
     for group, _knee_idx, paw_idx in _C.LIMB_SEGMENTS:
@@ -324,9 +381,8 @@ def _build_limb_joint_targets(kpts, kpt_conf, body_len: float) -> list:
     return targets
 
 
-def _build_limb_strip_targets(kpts, kpt_conf, body_len: float) -> list:
+def _build_limb_strip_targets(kpts, kpt_conf, eff_len: float) -> list:
     """Rectangle strips along knee-to-paw segments."""
-    eff_len = max(_C.CONTACT_BODY_LEN_MIN_PX, min(_C.CONTACT_BODY_LEN_MAX_PX, body_len))
     half_w = max(1e-6, eff_len * _C.LIMB_STRIP_HW_RATIO * _C.LIMB_CONTACT_SCALE)
     edge_gap = max(0.0, eff_len * _C.LIMB_STRIP_EDGE_GAP * _C.LIMB_CONTACT_SCALE)
     paw_radius = max(1e-6, eff_len * _C.LIMB_PAW_CIRCLE_R_RATIO * _C.LIMB_CONTACT_SCALE)
@@ -421,8 +477,12 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
         midback_angle_deg = float("nan")
     curvature_boost = _curvature_size_boost(midback_angle_deg)
 
+    # 混合尺度（M5，取代舊的絕對像素夾鉗）：見 _compute_body_scale() 說明。
+    eff_len, scale_source = _compute_body_scale(
+        kpts, kpt_conf, chest, hip, mid_back, mid_back_ok, body_len
+    )
+
     # Nose contact trapezoid
-    eff_len = max(_C.CONTACT_BODY_LEN_MIN_PX, min(_C.CONTACT_BODY_LEN_MAX_PX, body_len))
     trap_height = max(
         1e-6,
         _C.NOSE_TRAP_THICKNESS_RATIO
@@ -467,8 +527,8 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
         nose, trap_perp, trap_dir, trap_top_half, trap_bot_half, trap_height
     )
 
-    limb_targets = _build_limb_joint_targets(kpts, kpt_conf, body_len)
-    limb_strip_targets = _build_limb_strip_targets(kpts, kpt_conf, body_len)
+    limb_targets = _build_limb_joint_targets(kpts, kpt_conf, eff_len)
+    limb_strip_targets = _build_limb_strip_targets(kpts, kpt_conf, eff_len)
 
     return {
         "nose": nose,
@@ -480,6 +540,8 @@ def compute_geometry(kpts, kpt_conf) -> Optional[dict]:
         "mid_back": mid_back,  # (2,) pixel coords，或 None（信心不足）；供 overlay 標角度數字用
         "midback_angle_deg": midback_angle_deg,
         "curvature_boost": curvature_boost,
+        "eff_len": eff_len,  # 混合尺度後的有效身體長度（M5），供 debug/overlay 使用
+        "scale_source": scale_source,  # "spine_path" / "chest_hip" / "bbox_fallback" / "degenerate"
         "region_rx": region_rx,
         "region_ry": region_ry,
         "nose_contact_trapezoid": nose_trap,

@@ -79,12 +79,17 @@ class LickConfig:
     FRONT_VIEW_GUARD_ENABLED = True  # 是否啟用正面保護機制
     FRONT_VIEW_BODY_EAR_RATIO_MAX = 0.75  # 耳間距/身體尺度比值超過此值即觸發保護
 
-    # ── 接觸幾何尺寸夾鉗（防止極端姿勢下幾何爆炸） ──────────────────────
-    # 身體長度像素上下限，下面「鼻子接觸梯形」與「四肢／腳尖」都共用同一組
-    # 夾鉗（各自在使用處呼叫 clamp(body_len, MIN, MAX)），置於這裡是因為
-    # 它是後面幾個區塊共用的前置參考值，不屬於任何單一區塊。
-    CONTACT_BODY_LEN_MIN_PX = 300.0  # 身體長度像素下限，低於此值夾鉗到此
-    CONTACT_BODY_LEN_MAX_PX = 650.0  # 身體長度像素上限，高於此值夾鉗到此
+    # ── 混合尺度（M5，取代舊的絕對像素夾鉗 CONTACT_BODY_LEN_MIN/MAX_PX）───
+    # 舊版用固定 300–650px 夾鉗 body_len（chest-hip 直線距離），隱含「攝影機
+    # 距離大致固定」的假設；貓咪蜷曲理毛時 chest-hip 直線距離會被姿態壓縮
+    # （跟 CURVATURE_* 想解決的問題同源，但那組只補償梯形尺寸，沒補償
+    # 「鼻子接觸梯形」與「四肢／腳尖」共用的 eff_len 本身），夾到固定下限反而
+    # 讓幾何尺寸系統性偏離真實比例。改用 _compute_body_scale()（見
+    # contact_regions.py）三層 fallback：mid_back 信心足夠時用
+    # chest-midback-hip 折線長（抵抗蜷曲造成的直線壓縮）→ 退回 chest-hip
+    # 直線距離 → 退回 bbox 對角線 × 下面這個比例常數。
+    SCALE_DEGENERATE_LEN_PX = 20.0  # 折線/直線長度低於此值視為偵測本身有問題（不是姿態彎曲），才觸發 bbox fallback
+    BBOX_TO_BODY_LEN_RATIO = 0.65  # bbox_fallback 時 body_len ≈ bbox 對角線 × 此比例；粗略預設值，若 verify 工具顯示 bbox_fallback 頻繁觸發需依實測重新校準
 
     # ── 鼻子接觸梯形幾何參數 ──────────────────────────────────────────────
     # 全部是相對身體長度的比例常數，不是絕對物理單位：單眼 2D 攝影機無法

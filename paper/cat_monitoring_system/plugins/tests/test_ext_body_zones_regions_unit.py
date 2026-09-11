@@ -8,8 +8,11 @@ import 它一樣會觸發 `plugins/lick_stage/__init__.py` → manager.py → ov
 → cv2 這條鏈，見 test_contact_regions_unit.py 開頭說明）。
 
 所有期望值直接依照原始碼手動推導，關鍵設計：
-- body_len = |Hip - Chest|，會被 BODY_LEN_MIN_PX(300)/BODY_LEN_MAX_PX(650) 夾鉗
-  成 eff_len，所有其餘比例（半徑/半寬）都是 eff_len 的倍數
+- body_len = |Hip - Chest|；M5 移除絕對像素夾鉗，改用 _compute_body_scale() 混合尺度
+  （mid_back 信心足夠時用 chest-midback-hip 折線長，否則退回 chest-hip 直線距離，
+  再退回 bbox fallback）算出 eff_len，所有其餘比例（半徑/半寬）都是 eff_len 的倍數。
+  預設測試 fixture 不設 mid_back，故落在「chest_hip」分支，eff_len = body_len = 100
+  （不再夾鉗到 300）。
 - classify_zone() 判定優先序：四肢腳掌圓 > 四肢長條 > 尾巴長條 >
   （頭/胸口判定停用）> 軀幹橢圓（腹側 vs 側背）> NO_TARGET
 """
@@ -26,6 +29,7 @@ pytest.importorskip(
 
 from plugins.lick_stage.ext_body_zones.config import ExtZoneConfig as _C
 from plugins.lick_stage.ext_body_zones.regions import (
+    _compute_body_scale,
     _conf_ok,
     _norm,
     _perp,
@@ -37,13 +41,13 @@ from plugins.lick_stage.ext_body_zones.regions import (
 )
 
 NUM_JOINTS = 17  # 完整 17 點 YOLO-Pose 骨架
-EFF_LEN = _C.BODY_LEN_MIN_PX  # body_len=100 < 300 一律被夾鉗到下限 300
+EFF_LEN = 100.0  # 預設 fixture 沒有 mid_back，混合尺度退回 chest_hip 直線距離（不夾鉗）
 
 
 def _kpts(overrides=None):
     kpts = np.zeros((NUM_JOINTS, 2), dtype=np.float64)
     kpts[_C.KP_CHEST] = (0, 0)
-    kpts[_C.KP_HIP] = (0, 100)  # body_len = 100（會被夾鉗到 EFF_LEN=300）
+    kpts[_C.KP_HIP] = (0, 100)  # body_len = 100 = EFF_LEN（無 mid_back 時不再夾鉗）
     for idx, pt in (overrides or {}).items():
         kpts[idx] = pt
     return kpts
@@ -126,6 +130,57 @@ class TestPointOnStrip:
 
 
 # ============================================================================
+# _compute_body_scale()（M5：混合尺度，取代舊的絕對像素夾鉗）
+# ============================================================================
+
+
+class TestComputeBodyScale:
+    def test_prefers_spine_path_when_mid_back_confident(self):
+        kpts = _kpts({_C.KP_MID_BACK: (0.0, 50.0)})
+        eff_len, source = _compute_body_scale(
+            kpts, _full_conf(), np.array([0.0, 0.0]), np.array([0.0, 100.0]), True, 100.0
+        )
+        assert source == "spine_path"
+        assert eff_len == pytest.approx(100.0)
+
+    def test_spine_path_resists_curl_compression(self):
+        kpts = _kpts({_C.KP_MID_BACK: (40.0, 30.0)})
+        eff_len, source = _compute_body_scale(
+            kpts, _full_conf(), np.array([0.0, 0.0]), np.array([0.0, 60.0]), True, 60.0
+        )
+        assert source == "spine_path"
+        assert eff_len > 60.0
+
+    def test_falls_back_to_chest_hip_when_mid_back_not_confident(self):
+        eff_len, source = _compute_body_scale(
+            _kpts(), _full_conf(), np.array([0.0, 0.0]), np.array([0.0, 50.0]), False, 50.0
+        )
+        assert source == "chest_hip"
+        assert eff_len == pytest.approx(50.0)  # 不再夾鉗到絕對像素下限
+
+    def test_falls_back_to_bbox_when_spine_and_chest_hip_both_degenerate(self):
+        kpts = _kpts(
+            {_C.KP_MID_BACK: (0.0, 0.0), _C.KP_NOSE: (0.0, -30.0), _C.KP_HIP: (0.0, 5.0)}
+        )
+        conf = np.zeros(NUM_JOINTS, dtype=np.float64)
+        conf[_C.KP_NOSE] = 1.0
+        conf[_C.KP_HIP] = 1.0
+        eff_len, source = _compute_body_scale(
+            kpts, conf, np.array([0.0, 0.0]), np.array([0.0, 5.0]), True, 5.0
+        )
+        assert source == "bbox_fallback"
+        assert eff_len == pytest.approx(35.0 * _C.BBOX_TO_BODY_LEN_RATIO)
+
+    def test_degenerate_when_bbox_also_unavailable(self):
+        conf = np.zeros(NUM_JOINTS, dtype=np.float64)
+        eff_len, source = _compute_body_scale(
+            _kpts(), conf, np.array([0.0, 0.0]), np.array([0.0, 0.0]), False, 0.0
+        )
+        assert source == "degenerate"
+        assert eff_len == pytest.approx(1e-6)
+
+
+# ============================================================================
 # build_zone_targets()
 # ============================================================================
 
@@ -152,8 +207,11 @@ class TestBuildZoneTargets:
         result = build_zone_targets(_kpts(), _full_conf())
         assert result["body_axis_unit"] == pytest.approx([0.0, 1.0])
 
-    def test_short_body_length_is_clamped_to_minimum(self):
+    def test_short_body_length_uses_chest_hip_distance_unclamped(self):
+        """M5：mid_back 不可信時退回 chest-hip 直線距離，不再夾鉗到絕對像素下限。"""
         result = build_zone_targets(_kpts(), _full_conf())
+        assert result["eff_len"] == pytest.approx(EFF_LEN)
+        assert result["scale_source"] == "chest_hip"
         assert result["head_radius"] == pytest.approx(EFF_LEN * _C.HEAD_RADIUS_RATIO)
         assert result["neck_radius"] == pytest.approx(EFF_LEN * _C.NECK_RADIUS_RATIO)
 
@@ -269,12 +327,12 @@ class TestClassifyZone:
         conf = _full_conf({_C.KP_FL_KNEE: 1.0, _C.KP_FL_PAW: 1.0})
         targets = build_zone_targets(kpts, conf)
         paw_radius = EFF_LEN * _C.LIMB_PAW_RADIUS_RATIO
-        assert paw_radius == pytest.approx(15.0)
+        assert paw_radius == pytest.approx(5.0)
         zone_id, name, zconf = classify_zone((105, 50), targets)
         assert (zone_id, name) == (_C.ZONE_FORELIMB, "FORELIMB")
         limb_strip_hw = EFF_LEN * _C.LIMB_STRIP_HW_RATIO
-        assert limb_strip_hw == pytest.approx(18.0)
-        assert zconf == pytest.approx(1.0 - 5.0 / 18.0)
+        assert limb_strip_hw == pytest.approx(6.0)
+        assert zconf == pytest.approx(1.0 - 5.0 / 6.0)
 
     def test_nose_on_tail_strip_gives_tail_when_no_limb_hit(self):
         kpts = _kpts(
@@ -288,11 +346,11 @@ class TestClassifyZone:
             {_C.KP_TAIL_ROOT: 1.0, _C.KP_TAIL_MID: 1.0, _C.KP_TAIL_TIP: 1.0}
         )
         targets = build_zone_targets(kpts, conf)
-        zone_id, name, zconf = classify_zone((5, 175), targets)
+        zone_id, name, zconf = classify_zone((2, 175), targets)
         assert (zone_id, name) == (_C.ZONE_TAIL, "TAIL")
         tail_hw = EFF_LEN * _C.TAIL_STRIP_HW_RATIO
-        assert tail_hw == pytest.approx(13.5)
-        assert zconf == pytest.approx(1.0 - 5.0 / 13.5)
+        assert tail_hw == pytest.approx(4.5)
+        assert zconf == pytest.approx(1.0 - 2.0 / 4.5)
 
     def test_nose_on_ventral_side_of_torso_gives_abdomen(self):
         """torso_center=(0,50)（無 mid_back fallback），body_normal=[-1,0]，
@@ -300,13 +358,13 @@ class TestClassifyZone:
         targets = _base_targets()
         zone_id, name, zconf = classify_zone((-10, 50), targets)
         assert (zone_id, name) == (_C.ZONE_ABDOMEN, "ABDOMEN")
-        assert zconf == pytest.approx(1.0 - math.sqrt((10.0 / 90.0) ** 2))
+        assert zconf == pytest.approx(1.0 - math.sqrt((10.0 / 30.0) ** 2))
 
     def test_nose_on_dorsal_side_of_torso_gives_side_back(self):
         targets = _base_targets()
         zone_id, name, zconf = classify_zone((10, 50), targets)
         assert (zone_id, name) == (_C.ZONE_SIDE_BACK, "SIDE_BACK")
-        assert zconf == pytest.approx(1.0 - math.sqrt((10.0 / 90.0) ** 2))
+        assert zconf == pytest.approx(1.0 - math.sqrt((10.0 / 30.0) ** 2))
 
     def test_nose_far_from_everything_gives_no_target(self):
         targets = _base_targets()

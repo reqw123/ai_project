@@ -22,6 +22,7 @@ pytest.importorskip(
 
 from plugins.lick_stage.contact_regions import (
     _aabb_overlap,
+    _compute_body_scale,
     _compute_midback_angle_deg,
     _curvature_size_boost,
     _distance_point_to_segment,
@@ -74,6 +75,89 @@ class TestTrapDirFromPerp:
         result = trap_dir_from_perp(trap_perp)
         assert result == pytest.approx(expected)
         assert result[1] >= 0.0  # 永遠指向影像座標系「下方」
+
+
+# ============================================================================
+# _compute_body_scale()（M5：混合尺度，取代舊的絕對像素夾鉗）
+# ============================================================================
+
+
+def _scale_kpts(overrides=None):
+    kpts = np.zeros((NUM_JOINTS, 2), dtype=np.float64)
+    for idx, pt in (overrides or {}).items():
+        kpts[idx] = pt
+    return kpts
+
+
+def _scale_conf(confident_idxs=()):
+    conf = np.zeros(NUM_JOINTS, dtype=np.float64)
+    for idx in confident_idxs:
+        conf[idx] = 1.0
+    return conf
+
+
+class TestComputeBodyScale:
+    def test_prefers_spine_path_when_mid_back_confident(self):
+        chest = np.array([0.0, 0.0])
+        mid_back = np.array([0.0, 50.0])
+        hip = np.array([0.0, 100.0])
+        eff_len, source = _compute_body_scale(
+            _scale_kpts(), _scale_conf(), chest, hip, mid_back, True, 100.0
+        )
+        assert source == "spine_path"
+        assert eff_len == pytest.approx(100.0)  # 一直線時折線長跟直線距離相等
+
+    def test_spine_path_resists_curl_compression(self):
+        """蜷曲姿勢：chest-hip 直線距離被壓縮，但折線長仍反映真實身體尺度。"""
+        chest = np.array([0.0, 0.0])
+        mid_back = np.array([40.0, 30.0])
+        hip = np.array([0.0, 60.0])
+        eff_len, source = _compute_body_scale(
+            _scale_kpts(), _scale_conf(), chest, hip, mid_back, True, 60.0
+        )
+        assert source == "spine_path"
+        assert eff_len > 60.0  # 折線長度 > 直線距離，沒有被彎曲姿態低估
+
+    def test_falls_back_to_chest_hip_when_mid_back_not_confident(self):
+        eff_len, source = _compute_body_scale(
+            _scale_kpts(),
+            _scale_conf(),
+            np.array([0.0, 0.0]),
+            np.array([0.0, 50.0]),
+            None,
+            False,
+            50.0,
+        )
+        assert source == "chest_hip"
+        assert eff_len == pytest.approx(50.0)  # 不再夾鉗到絕對像素下限
+
+    def test_falls_back_to_bbox_when_spine_and_chest_hip_both_degenerate(self):
+        kpts = _scale_kpts({_C.KP_NOSE: (0.0, -30.0), _C.KP_HIP: (0.0, 5.0)})
+        conf = _scale_conf((_C.KP_NOSE, _C.KP_HIP))
+        eff_len, source = _compute_body_scale(
+            kpts,
+            conf,
+            np.array([0.0, 0.0]),
+            np.array([0.0, 5.0]),
+            np.array([0.0, 0.0]),
+            True,
+            5.0,
+        )
+        assert source == "bbox_fallback"
+        assert eff_len == pytest.approx(35.0 * _C.BBOX_TO_BODY_LEN_RATIO)
+
+    def test_degenerate_when_bbox_also_unavailable(self):
+        eff_len, source = _compute_body_scale(
+            _scale_kpts(),
+            _scale_conf(),
+            np.array([0.0, 0.0]),
+            np.array([0.0, 0.0]),
+            None,
+            False,
+            0.0,
+        )
+        assert source == "degenerate"
+        assert eff_len == pytest.approx(1e-6)
 
 
 # ============================================================================
