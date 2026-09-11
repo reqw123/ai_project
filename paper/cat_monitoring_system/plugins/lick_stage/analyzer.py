@@ -323,10 +323,9 @@ class LickAnalyzer:
         平常的臨界水平抖動只會讓計數器歸零、不會觸發翻轉，不影響上述
         「不每幀強制」想保留的穩定性。
 
-        2026-09-11：曾試過把這裡的 y>=0 改成 body_axis_unit 方向判斷
-        （見 contact_regions.py 的 trap_dir_from_perp() docstring），三支
-        影片實測後撤回——lick_28/lick_3 coverage 反而退步，懷疑實作有 bug，
-        待下次查清楚再重新導入。
+        2026-09-11：兩次試過拿掉這裡的 y>=0（先改 body_axis_unit，再改
+        head_axis_unit），三支影片實測都測不贏這個版本，已撤回，見
+        contact_regions.py 的 trap_dir_from_perp() docstring 完整沿革。
         """
         if target_geom is None:
             return
