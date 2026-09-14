@@ -18,6 +18,7 @@
 """
 import argparse
 import json
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -38,6 +39,13 @@ DATASET_ROOT = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪�
 CLASS_TO_ANALYZE = "scratch"  # scratch / lick / shake / walk
 VIDEO_FOLDER = str(Path(DATASET_ROOT) / CLASS_TO_ANALYZE)
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    YOLO_MODEL_PATH = _env_yolo_model
+
 TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5

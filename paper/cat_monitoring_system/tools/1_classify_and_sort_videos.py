@@ -39,6 +39,13 @@ DEST_BASE = r"C:\Users\homec\Downloads\istock\class"  # TODO: 五個行為資料
 DEST_FOLDERS = {name: rf"{DEST_BASE}\{name}" for name in BEHAVIOR_CLASSES}  # walk/lick/scratch/shake/stop
 
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_119.pt"
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    YOLO_MODEL_PATH = _env_yolo_model
+
 STGCN_MODEL_PATH = r"C:\ai_project\stgcn_models\run_105_xy_conf_v_bone_att_on\105_best_model.pth"
 INFERENCE_DEVICE = 'cuda'
 YOLO_IMGSZ = 640

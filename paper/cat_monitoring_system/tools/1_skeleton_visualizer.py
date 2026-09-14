@@ -298,6 +298,12 @@ if _env_test_video:
     MAX_VIDEOS = 1
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
 
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    YOLO_MODEL_PATH = _env_yolo_model
+
 INFERENCE_DEVICE = "cuda"
 YOLO_IMGSZ = 640
 TARGET_MODEL_FPS = 30.0

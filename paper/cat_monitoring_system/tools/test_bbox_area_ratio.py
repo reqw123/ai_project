@@ -56,6 +56,13 @@ if _env_test_video:
     VIDEO_PATH = _env_test_video
 
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_134.pt"
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH／
+# MODE2_YOLO_MODEL_PATH，兩個模式都套用，對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    YOLO_MODEL_PATH = _env_yolo_model
+
 LOOP_PLAYBACK = True  # 影片播完是否自動從頭重播（webcam 模式下無影響）
 
 DISPLAY_RESOLUTION = "1080p"  # "720p" 或 "1080p"，控制 GUI 視窗顯示解析度
@@ -75,6 +82,8 @@ USER_RECT_DRAG_COLOR = (60, 220, 220)  # 黃綠色：拖曳中、尚未放開左
 
 # ── 模式 2：資料夾批次分類（沿用 cat_pose/cat_pose_size_tier_report.py 原始設定）──
 MODE2_YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_114.pt"  # 換成你要用的模型
+if _env_yolo_model:
+    MODE2_YOLO_MODEL_PATH = _env_yolo_model
 MODE2_FOLDER = r"C:\Users\homec\OneDrive\圖片\Screenshots\screen_cat"           # 換成你的資料夾
 MODE2_OUTPUT_DIR = r"C:\Users\homec\OneDrive\圖片\Screenshots\screen_cat\class"  # 預設輸出資料夾，請自行修改
 MODE2_MIN_RATIO_PCT = 50.0  # 門檻（%）：低於此值視為 small，高於則分層 5 級 (50% ~ 100%)

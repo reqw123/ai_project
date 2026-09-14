@@ -105,6 +105,13 @@ VIDEO_FOLDERS = [
 ]
 OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
 MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，對應
+# settings_window.py 的「🧠 模型路徑」欄位）；模式 3「換新模型後重新推論骨架」正好用得上。
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    MODEL_PATH = _env_yolo_model
+
 TARGET_FPS = 30
 IMGSZ = 640
 CONF_THRESHOLD = 0.5

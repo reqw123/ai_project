@@ -19,6 +19,7 @@ Output directory: <output>/single_eval_NNN_<name>/
 """
 import argparse
 import csv
+import os
 import re
 from pathlib import Path
 from collections import deque
@@ -62,6 +63,14 @@ CH_TO_FEATURE = {
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
 DEFAULT_YOLO    = r"C:\ai_project\yolo_models\v11s_114.pt"
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 DEFAULT_YOLO，對應
+# settings_window.py 的「🧠 模型路徑」欄位）；命令列的 --yolo 仍然優先於這裡（argparse
+# 只有在沒帶 --yolo 時才會用到這個預設值）。
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    DEFAULT_YOLO = _env_yolo_model
+
 DEFAULT_IMGSZ   = 640
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16

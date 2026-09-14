@@ -76,6 +76,12 @@ if _env_test_video:
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
 YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_147.pt"
 
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    YOLO_MODEL_PATH = _env_yolo_model
+
 # 輸出 CSV 路徑（可直接在此處修改）
 OUTPUT_CSV_PATH = r"C:\ai_project\paper\output\ear_distance\left_right_ear_distance.csv"
 # Node-RED 即時推送（設為 None 或空字串可停用）
