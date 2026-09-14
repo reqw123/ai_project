@@ -96,3 +96,72 @@ def test_discontinuity_closes_bout_without_bridging():
     _feed_lick_run(agg, 6, 5)
     agg.finalize()
     assert len(events) == 2  # 斷點兩側是兩個獨立事件
+
+
+# ============================================================================
+# M6：gap_tolerance_sec / min_bout_sec（預設 0.0 才是舊行為，見上面全部
+# 案例——這裡另外測「明確傳非零值」才會啟用的新行為，見 action_gate.py）
+# ============================================================================
+
+
+def test_default_params_reproduce_m2_immediate_close():
+    """不傳 gap_tolerance_sec/min_bout_sec：完全等同 M2，跟
+    test_contiguous_lick_run_becomes_one_event_on_close 是同一個場景，
+    這裡只是明確標記「這是 shadow 模式基準行為」。"""
+    events = []
+    agg = EventAggregator(on_event=events.append)
+    _feed_lick_run(agg, 0, 5)
+    agg.feed(source_ts=5 * _DT, frame_idx=5, dt_sec=_DT,
+              frame_state=FrameState.NOT_LICK, zone_label="NO_TARGET")
+    assert len(events) == 1
+
+
+def test_gap_tolerance_merges_brief_interruption_into_one_event():
+    events = []
+    agg = EventAggregator(gap_tolerance_sec=0.5, on_event=events.append)
+    _feed_lick_run(agg, 0, 5)
+    # 3 幀非 lick（合計 0.1s，遠低於 0.5s 寬限）——不該結算
+    for f in range(5, 8):
+        agg.feed(source_ts=f * _DT, frame_idx=f, dt_sec=_DT,
+                  frame_state=FrameState.NOT_LICK, zone_label="NO_TARGET")
+    assert events == []
+    _feed_lick_run(agg, 8, 5)
+    agg.finalize()
+    assert len(events) == 1  # 中間的短暫中斷被吸收，合併成一個事件
+    ev = events[0]
+    assert ev["start_frame"] == 0
+    assert ev["end_frame"] == 12  # 最後一段 lick 的最後一幀（8..12）
+    # duration_sec 只算真正 lick 的 dt（5+5=10 幀），不含中間的寬限期
+    assert ev["duration_sec"] == pytest.approx(10 * _DT, abs=1e-3)
+
+
+def test_min_bout_discards_short_noise_bout():
+    events = []
+    agg = EventAggregator(min_bout_sec=1.0, on_event=events.append)
+    _feed_lick_run(agg, 0, 3)  # 3 幀 @30fps ≈ 0.1s，遠低於 1.0s 門檻
+    agg.feed(source_ts=3 * _DT, frame_idx=3, dt_sec=_DT,
+              frame_state=FrameState.NOT_LICK, zone_label="NO_TARGET")
+    assert events == []  # 太短，安靜丟棄，不產生事件
+
+
+def test_min_bout_keeps_bout_reaching_threshold():
+    events = []
+    agg = EventAggregator(min_bout_sec=3 * _DT, on_event=events.append)
+    _feed_lick_run(agg, 0, 5)  # 5 幀，剛好超過門檻（3 幀）
+    agg.feed(source_ts=5 * _DT, frame_idx=5, dt_sec=_DT,
+              frame_state=FrameState.NOT_LICK, zone_label="NO_TARGET")
+    assert len(events) == 1
+
+
+def test_gap_tolerance_still_closes_after_exceeding_it():
+    events = []
+    agg = EventAggregator(gap_tolerance_sec=0.05, on_event=events.append)
+    _feed_lick_run(agg, 0, 5)
+    # 非 lick 累積時間超過 0.05s 寬限（≈2 幀 @30fps）——餵 5 幀確定超過
+    for i, f in enumerate(range(5, 10)):
+        agg.feed(source_ts=f * _DT, frame_idx=f, dt_sec=_DT,
+                  frame_state=FrameState.NOT_LICK, zone_label="NO_TARGET")
+        if events:
+            break
+    assert len(events) == 1  # 寬限期用盡，真的關閉並送出事件
+    assert events[0]["end_frame"] == 4  # 邊界是最後一個 lick 幀，不含寬限期

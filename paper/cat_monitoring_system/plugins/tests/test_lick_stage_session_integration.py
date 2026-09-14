@@ -36,7 +36,13 @@ def test_full_session_persists_events_and_windows(tmp_path):
 
     kpts, conf = _pose()
     f = 0
-    # 3 段舔毛，中間插非舔毛 —— 應形成 3 個事件
+    # 3 段舔毛，中間插非舔毛，間隔長度刻意超過 config.py 的
+    # GAP_TOLERANCE_SEC（M6 起 manager.py 真的接上 action_gate.py，見
+    # _make_event_aggregator()）——確保 3 段真的形成 3 個獨立事件，不會被
+    # M6 的短暫中斷合併機制吸收掉；驗證「短間隔會被合併」是另一個測試
+    # （test_short_gap_across_session_merges_into_one_event）的工作，兩者
+    # 刻意分開，各自驗證一種行為。
+    _gap_frames = int(_C.GAP_TOLERANCE_SEC * _FPS) + 5  # 明確超過門檻
     for _bout in range(3):
         for _ in range(20):  # 每段 20 幀 ≈ 0.67 秒
             plugin.update(
@@ -45,7 +51,7 @@ def test_full_session_persists_events_and_windows(tmp_path):
                 session_id="S_ITEST",
             )
             f += 1
-        for _ in range(10):  # 非舔毛間隔
+        for _ in range(_gap_frames):  # 非舔毛間隔（超過 GAP_TOLERANCE_SEC）
             plugin.update(
                 None, None, source_timestamp=f / _FPS, frame_idx=f,
                 cat_present=True, is_lick=False, session_id="S_ITEST",
@@ -89,6 +95,48 @@ def test_full_session_persists_events_and_windows(tmp_path):
     ).fetchone()
     assert sess == (4, 1)
     conn.close()
+
+
+def test_short_gap_across_session_merges_into_one_event(tmp_path):
+    """M6：跟上面那個測試互補——這裡間隔刻意設在 GAP_TOLERANCE_SEC 之內，
+    驗證 manager.py 真的把 config.py 的值接進 EventAggregator/ActionGate
+    （見 _make_event_aggregator()），不是只有寫好但沒接上。"""
+    db = str(tmp_path / "sess.db")
+    plugin = LickStagePlugin(nodered_url=None, storage_db_path=db)
+    plugin.start_session(
+        "S_MERGE", video_id="clip.mp4", cat_id="cat_A", period="PM", source_fps=_FPS
+    )
+
+    kpts, conf = _pose()
+    f = 0
+    _gap_frames = max(1, int(_C.GAP_TOLERANCE_SEC * _FPS) - 5)  # 明確低於門檻
+    for _bout in range(3):
+        for _ in range(20):
+            plugin.update(
+                kpts, conf, source_timestamp=f / _FPS, frame_idx=f,
+                cat_present=True, is_lick=True, lick_confidence=0.9,
+                session_id="S_MERGE",
+            )
+            f += 1
+        for _ in range(_gap_frames):
+            plugin.update(
+                None, None, source_timestamp=f / _FPS, frame_idx=f,
+                cat_present=True, is_lick=False, session_id="S_MERGE",
+            )
+            f += 1
+
+    plugin.finish_session(end_source_timestamp=f / _FPS)
+    plugin.close()
+
+    conn = sqlite3.connect(db)
+    events = conn.execute(
+        "SELECT start_frame, end_frame FROM lick_events WHERE session_id=? ORDER BY id",
+        ("S_MERGE",),
+    ).fetchall()
+    conn.close()
+    assert len(events) == 1  # 3 段短間隔的舔毛全部合併成一個事件
+    assert events[0][0] == 0
+    assert events[0][1] == f - _gap_frames - 1  # 最後一段 lick 的最後一幀
 
 
 def test_session_disabled_storage_still_runs(tmp_path):

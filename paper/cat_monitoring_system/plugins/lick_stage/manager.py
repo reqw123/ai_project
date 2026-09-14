@@ -71,6 +71,13 @@ class LickStagePlugin:
         return EventAggregator(
             window_sec=_C.WINDOW_SUMMARY_SEC,
             period=period,
+            # M6：正式接上 bout 邊界狀態機（action_gate.py）。EventAggregator
+            # 本身預設 0.0（等同 M2 舊行為），這裡明確傳 config.py 的值才是
+            # 「真正啟用」M6；STORAGE_DB_PATH 預設仍是 None（shadow 模式），
+            # 所以就算 M6 邊界判斷開始生效，沒開 storage 的話事件內容還是
+            # 不會落地，兩層 shadow 各自獨立生效。
+            gap_tolerance_sec=_C.GAP_TOLERANCE_SEC,
+            min_bout_sec=_C.MIN_BOUT_SEC,
             on_event=self._storage.write_event,
             on_window=self._storage.write_window,
         )

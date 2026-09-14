@@ -196,6 +196,26 @@ class LickConfig:
     # 分數的實際分布）重新校準。
     AMBIGUITY_MARGIN = 0.15
 
+    # ── Bout 狀態機（M6，取代 event_aggregator.py 舊版「一遇到非 lick 幀就
+    # 結算」的粗聚合，見 action_gate.py）─────────────────────────────────
+    # START/CONTINUE 不是兩個信心數值門檻，是兩組寬鬆度不同的 FrameState
+    # 集合（見 action_gate.py 開頭說明）：START 沿用 FrameState.LICK（跟
+    # 原本開始一個 bout 的條件一致）；CONTINUE 額外容許 LOW_LICK_CONF——
+    # 已經在舔毛的情況下，信心值短暫掉到 M1 的 low_conf_threshold 以下
+    # 不會馬上結束事件，這就是 hysteresis，不是新發明一套原始浮點數門檻
+    # （lick_confidence 在 is_lick=False 時語意上不是「P(lick)」，見
+    # action_gate.py 的說明，故意不直接拿它做二次門檻）。
+    #
+    # GAP_TOLERANCE_SEC：CONTINUE 條件都不滿足（真的是 NOT_LICK/NO_CAT）
+    # 時，先不結束 bout，給這麼多秒的寬限期；寬限期內恢復就當沒中斷過。
+    # 粗略預設值（半秒——貓咪換個角度、模型漏偵測一兩幀的典型時間量級），
+    # 之後可依實測（不同影片的真實停頓分布）重新校準。
+    GAP_TOLERANCE_SEC = _env_float("CAT_MONITORING_LICK_GAP_TOLERANCE_SEC", 0.5)
+    # MIN_BOUT_SEC：bout 真正關閉時，若累積的（CONTINUE 條件下的）舔毛時長
+    # 低於這個值，整段丟棄，不產生事件——避免零星幾幀誤判被聚成一筆「事件」
+    # 污染事件表。粗略預設值，之後可依實測重新校準。
+    MIN_BOUT_SEC = _env_float("CAT_MONITORING_LICK_MIN_BOUT_SEC", 0.5)
+
     # ── 事件 / 視窗持久化（說明書第一階段「事件與視窗資料設計」）──────────
     # 預設 None = 停用（維持 shadow 模式，不落地任何檔案）。給一個 .db 路徑
     # 即啟用 SQLite 事件表 lick_events + 視窗摘要表 lick_window_summary，
