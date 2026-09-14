@@ -216,6 +216,16 @@ class LickConfig:
     # 污染事件表。粗略預設值，之後可依實測重新校準。
     MIN_BOUT_SEC = _env_float("CAT_MONITORING_LICK_MIN_BOUT_SEC", 0.5)
 
+    # ZONE_SWITCH_MIN_SEC（M6 第二部分，見 bout_aggregator.py）：同一個
+    # raw bout 內部，候選 zone 要連續累積這麼多秒才算「真的換部位」，
+    # 觸發子事件切分；累積不夠又跳回原 zone 就當雜訊抖動吸收掉，不切分。
+    # 粗略預設值（1 秒——比 GAP_TOLERANCE_SEC 更保守，避免候選評分在相鄰
+    # zone 間的正常抖動被誤判成真的換部位），之後可依實測重新校準。刻意
+    # 大於 MIN_BOUT_SEC，避免「子事件已送出、但整個 raw bout 事後被
+    # min_bout 丟棄」的邊界情形（見 bout_aggregator.py 開頭「呼叫端注意
+    # 事項」）。
+    ZONE_SWITCH_MIN_SEC = _env_float("CAT_MONITORING_LICK_ZONE_SWITCH_MIN_SEC", 1.0)
+
     # ── 事件 / 視窗持久化（說明書第一階段「事件與視窗資料設計」）──────────
     # 預設 None = 停用（維持 shadow 模式，不落地任何檔案）。給一個 .db 路徑
     # 即啟用 SQLite 事件表 lick_events + 視窗摘要表 lick_window_summary，

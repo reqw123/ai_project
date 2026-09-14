@@ -10,9 +10,16 @@ M2 範圍（刻意最小化，見下方 M6 更新）：
 M6 更新（bout 邊界狀態機，見 action_gate.py）：事件邊界判斷改委派給
 `ActionGate`——預設 `gap_tolerance_sec`/`min_bout_sec` 都是 0.0，行為
 跟 M2 完全一樣（shadow 模式，呼叫端不傳新參數就沒有變化）；呼叫端傳非零值
-才會啟用「容忍短暫中斷」「丟掉太短的雜訊 bout」。zone hysteresis（同一個
-bout 內部依 zone 是否持續改變切分子事件）是 bout_aggregator.py 的工作，
-這裡還沒做，事件的 zone_l1/zone_l2 仍然是整個 bout 累積時間最長的那個。
+才會啟用「容忍短暫中斷」「丟掉太短的雜訊 bout」。
+
+M6 更新（zone hysteresis，見 bout_aggregator.py，2026-09-14 第二部分）：
+同一個 raw bout 內部依 zone 是否「持續」改變切分子事件的邏輯改委派給
+`ZoneHysteresis`——預設 `zone_switch_min_sec=None`，完全不啟用（shadow，
+`raw_bout` 恆為 `True`，事件的 zone_l1/zone_l2 仍是整個 bout 累積時間最
+長的那個，跟舊行為一模一樣）；呼叫端傳非 None 數值才會啟用「zone 真正
+持續切換時拆成多筆子事件（`raw_bout=False`）」。內容累加器 `_ActiveBout`
+本身也移到 `bout_aggregator.py`（切分邏輯天生要擁有內容累加，兩者密不可
+分，不適合分居兩檔），這裡改成直接匯入使用。
 
 本模組純資料處理：不做 I/O、不匯入 numpy / cv2。由呼叫端（LickAnalyzer）
 每幀 `feed(...)`，事件 / 視窗完成時透過 callback 交給 storage。
@@ -29,116 +36,9 @@ from plugins.lick_stage.analysis_context import (
     ZoneL1,
     canonical_zone,
 )
+from plugins.lick_stage.bout_aggregator import ZoneHysteresis
 
 DEFAULT_WINDOW_SEC = 60.0
-
-
-class _ActiveBout:
-    __slots__ = (
-        "start_ts",
-        "end_ts",
-        "start_frame",
-        "end_frame",
-        "duration_sec",
-        "zone_sec",  # {zone_l1: sec}
-        "zone_l2_sec",  # {(l1,l2): sec}
-        "zone_switch_count",
-        "_last_zone_l1",
-        "action_scores",
-        "pose_qualities",
-        "reason_codes",
-        "assigned_sec",
-    )
-
-    def __init__(self, ts, frame):
-        self.start_ts = ts
-        self.end_ts = ts
-        self.start_frame = frame
-        self.end_frame = frame
-        self.duration_sec = 0.0
-        self.zone_sec = {}
-        self.zone_l2_sec = {}
-        self.zone_switch_count = 0
-        self._last_zone_l1 = None
-        self.action_scores = []
-        self.pose_qualities = []
-        self.reason_codes = []
-        self.assigned_sec = 0.0
-
-    def add(self, ts, frame, dt, l1, l2, action_score, pose_quality, reason_code, assigned):
-        self.end_ts = ts
-        self.end_frame = frame
-        self.duration_sec += dt
-        if assigned:
-            self.assigned_sec += dt
-            self.zone_sec[l1] = self.zone_sec.get(l1, 0.0) + dt
-            key = (l1, l2)
-            self.zone_l2_sec[key] = self.zone_l2_sec.get(key, 0.0) + dt
-            if self._last_zone_l1 is not None and l1 != self._last_zone_l1:
-                self.zone_switch_count += 1
-            self._last_zone_l1 = l1
-        if action_score is not None:
-            self.action_scores.append(float(action_score))
-        if pose_quality is not None:
-            self.pose_qualities.append(float(pose_quality))
-        if reason_code:
-            self.reason_codes.append(reason_code)
-
-    def to_event(self) -> dict:
-        if self.zone_sec:
-            primary_l1 = max(self.zone_sec, key=self.zone_sec.get)
-        else:
-            primary_l1 = ZoneL1.UNKNOWN
-        # primary_l2：在 primary_l1 底下累積時間最長的 l2
-        primary_l2 = None
-        best = -1.0
-        for (l1, l2), sec in self.zone_l2_sec.items():
-            if l1 == primary_l1 and l2 is not None and sec > best:
-                best, primary_l2 = sec, l2
-
-        reason_mode = None
-        if self.reason_codes:
-            reason_mode = _pystats.mode(self.reason_codes)
-
-        n = max(self.duration_sec, 1e-9)
-        return {
-            "start_source_ts": round(self.start_ts, 4),
-            "end_source_ts": round(self.end_ts, 4),
-            "duration_sec": round(self.duration_sec, 4),
-            "start_frame": self.start_frame,
-            "end_frame": self.end_frame,
-            "zone_l1": primary_l1,
-            "zone_l2": primary_l2,
-            "zone_score_mean": (
-                round(_pystats.fmean(self.action_scores), 4)
-                if self.action_scores
-                else None
-            ),
-            "zone_switch_count": self.zone_switch_count,
-            "assigned_ratio": round(self.assigned_sec / n, 4),
-            "action_score_mean": (
-                round(_pystats.fmean(self.action_scores), 4)
-                if self.action_scores
-                else None
-            ),
-            "action_score_min": (
-                round(min(self.action_scores), 4) if self.action_scores else None
-            ),
-            "pose_quality_mean": (
-                round(_pystats.fmean(self.pose_qualities), 4)
-                if self.pose_qualities
-                else None
-            ),
-            "unknown_reason_mode": reason_mode,
-            # M6（2026-09-14）：min_bout / gap merge 已透過 action_gate.py 的
-            # ActionGate 完成，但同一個 bout 內部的 zone hysteresis
-            # （bout_aggregator.py）還沒做——這個事件的 zone_l1/zone_l2 仍然
-            # 只是整個 bout 累積時間最長的那個，還不能反映「同一段裡換了
-            # 部位」這種情況。等 bout_aggregator.py 也做完，這裡才會真的變
-            # False；維持 True 是誠實反映「還沒完全過完 M6」，不是沒接上
-            # ActionGate。
-            "raw_bout": True,
-        }
 
 
 class _Window:
@@ -212,9 +112,16 @@ class EventAggregator:
     短暫中斷、丟掉太短的雜訊 bout），呼叫端要明確傳非零值——通常是
     `config.py` 的 `GAP_TOLERANCE_SEC`/`MIN_BOUT_SEC`。
 
+    `zone_switch_min_sec` 預設 `None`——同樣完全重現舊行為（bout 內部從不
+    切分，`raw_bout` 恆為 `True`）；傳非 None 數值才會啟用 zone hysteresis
+    切分（見 `bout_aggregator.ZoneHysteresis` 開頭的完整說明，含這個參數
+    刻意不用 0.0 當關閉哨兵的理由）。
+
     邊界判斷本身委派給 `action_gate.ActionGate`（見該檔案開頭的完整說明），
-    這裡只負責：gate 說「在 bout 裡」時把內容（zone/動作分數等）累積進
-    `_ActiveBout`，gate 說「bout 關閉」時結算並回呼 `on_event`。"""
+    zone 切分委派給 `bout_aggregator.ZoneHysteresis`；這裡只負責：gate 說
+    「在 bout 裡」時把內容（zone/動作分數等）餵進當前 raw bout 的
+    `ZoneHysteresis`，切分器中途送出子事件或 gate 說「bout 關閉」時結算
+    最後一段，兩者都經由 `on_event` 回呼。"""
 
     def __init__(
         self,
@@ -223,14 +130,16 @@ class EventAggregator:
         period: str = "",
         gap_tolerance_sec: float = 0.0,
         min_bout_sec: float = 0.0,
+        zone_switch_min_sec: Optional[float] = None,
         on_event: Optional[Callable[[dict], None]] = None,
         on_window: Optional[Callable[[dict], None]] = None,
     ):
         self.window_sec = float(window_sec)
         self.period = period
+        self.zone_switch_min_sec = zone_switch_min_sec
         self._on_event = on_event
         self._on_window = on_window
-        self._bout: Optional[_ActiveBout] = None
+        self._segmenter: Optional[ZoneHysteresis] = None
         self._window: Optional[_Window] = None
         self._elapsed = 0.0  # 累積來源時間，用來決定視窗邊界
         self._gate = ActionGate(
@@ -276,7 +185,7 @@ class EventAggregator:
         )
 
         # 只有真的判成 lick 的幀（LICK_ASSIGNED/LICK_UNASSIGNED）才把內容
-        # 累積進 _ActiveBout——gate 的 CONTINUE 條件另外容許 LOW_LICK_CONF
+        # 餵進 ZoneHysteresis——gate 的 CONTINUE 條件另外容許 LOW_LICK_CONF
         # 撐住 bout 不中斷，但那種幀沒有可信的 zone/動作分數，不該進統計
         # （見 action_gate.py 開頭「為什麼 START/CONTINUE 不是兩個信心數值
         # 門檻」的說明）。這個分支跟下面 gate 關閉的分支互斥（gate 只會在
@@ -285,9 +194,11 @@ class EventAggregator:
         if frame_state in FrameState.LICK:
             l1, l2 = canonical_zone(zone_label)
             assigned = frame_state == FrameState.LICK_ASSIGNED
-            if self._bout is None:
-                self._bout = _ActiveBout(ts, frame_idx)
-            self._bout.add(
+            if self._segmenter is None:
+                self._segmenter = ZoneHysteresis(
+                    zone_switch_min_sec=self.zone_switch_min_sec
+                )
+            split_event = self._segmenter.feed(
                 ts,
                 frame_idx,
                 dt,
@@ -298,6 +209,10 @@ class EventAggregator:
                 reason_code,
                 assigned,
             )
+            if split_event is not None:
+                # zone 真正持續切換，切分器提前送出子事件——bout 本身仍在
+                # 開著（gate 沒有關閉），跟下面的 gate 關閉分支不衝突。
+                self._emit_event(split_event)
 
         self._on_gate_transition(was_open, gate_closed)
 
@@ -316,17 +231,26 @@ class EventAggregator:
     # ── 私有 ─────────────────────────────────────────────────────────────
     def _on_gate_transition(self, was_open: bool, gate_closed) -> None:
         """`gate_closed` 是 `ActionGate.feed()`/`finalize()` 的回傳值：非 None
-        代表 gate 判定一個 bout 真正關閉且通過 min_bout 過濾，應該結算並送出
-        事件；`was_open and gate_closed is None` 代表 gate 剛把一個開著的
-        bout 關閉，但太短被丟棄（沒通過 min_bout），對應的 `_ActiveBout`
-        內容要安靜丟掉，不送事件、也不計進視窗的 bout_secs。"""
+        代表 gate 判定一個 bout 真正關閉且通過 min_bout 過濾，應該結算切分器
+        目前累積的最後一段內容並送出事件；`was_open and gate_closed is None`
+        代表 gate 剛把一個開著的 bout 關閉，但太短被丟棄（沒通過 min_bout），
+        對應的 `ZoneHysteresis` 內容要安靜丟掉，不送事件、也不計進視窗的
+        bout_secs（注意：若這段 bout 在關閉前已經觸發過 zone 切分並提前送出
+        過子事件，那些子事件不會被追溯撤回——見 bout_aggregator.py 開頭
+        「呼叫端注意事項」）。"""
         just_closed = was_open and not self._gate.is_open
         if not just_closed:
             return
-        bout, self._bout = self._bout, None
-        if gate_closed is None or bout is None:
+        segmenter, self._segmenter = self._segmenter, None
+        if gate_closed is None or segmenter is None:
             return  # 太短被 gate 丟棄，或 gate 判定的邊界內完全沒有 LICK 內容幀
-        event = bout.to_event()
+        event = segmenter.flush_final()
+        if event is not None:
+            self._emit_event(event)
+
+    def _emit_event(self, event: dict) -> None:
+        """`ZoneHysteresis` 中途切分送出的子事件、與 bout 關閉時的最後一段，
+        都經由這裡統一記錄進視窗的 bout_secs 並回呼 `on_event`。"""
         if self._window is not None:
             self._window.bout_secs.append(event["duration_sec"])
         if self._on_event is not None and event["duration_sec"] > 0.0:
