@@ -49,7 +49,8 @@ class ExtZoneConfig:
     CONF_THRESHOLD = 0.5  # nose / ear / chest / hip / mid-back
     LIMB_CONF_THRESHOLD = 0.10  # knees / paws / tail points
 
-    # ── Zone ids — must match the 7-zone body diagram (1=Head .. 7=Tail) ──
+    # ── Zone ids — must match the 7-zone body diagram (1=Head .. 7=Tail),
+    # plus 8=TORSO_UNSPECIFIED (M5：ventral_sign 證據不足時的誠實回退，見下方)。
     ZONE_NO_TARGET = 0
     ZONE_HEAD = 1
     ZONE_NECK_CHEST = 2
@@ -58,6 +59,16 @@ class ExtZoneConfig:
     ZONE_FORELIMB = 5
     ZONE_HINDLIMB = 6
     ZONE_TAIL = 7
+    # M5：鼻子確實命中軀幹橢圓，但 build_zone_targets() 沒有任何信心足夠的膝蓋
+    # 關鍵點可用來判斷 ventral_sign（哪一側是腹側）——這種情況下 classify_zone()
+    # 不再沿用 ventral_sign 的任意預設值（+1.0）硬猜 ABDOMEN/SIDE_BACK，改回傳
+    # 這個獨立的「軀幹，但無法分辨腹/背」標籤，如實反映幾何證據不足，而不是
+    # 用一個看起來自信、實際上是猜的結果污染統計。
+    ZONE_TORSO_UNSPECIFIED = 8
+    # M5：候選評分最高分與次高分差距小於 AMBIGUITY_MARGIN，無法可靠分辨是哪個
+    # 相鄰區域時的回傳值——跟 lick_stage/contact_regions.py find_nearest_zone()
+    # 的 ZONE_AMBIGUOUS 同一個概念，這裡補齊讓兩個姊妹外掛的候選評分機制一致。
+    ZONE_AMBIGUOUS = 9
 
     ZONE_NAMES = {
         ZONE_NO_TARGET: "NO_TARGET",
@@ -68,7 +79,18 @@ class ExtZoneConfig:
         ZONE_FORELIMB: "FORELIMB",
         ZONE_HINDLIMB: "HINDLIMB",
         ZONE_TAIL: "TAIL",
+        ZONE_TORSO_UNSPECIFIED: "TORSO_UNSPECIFIED",
+        ZONE_AMBIGUOUS: "AMBIGUOUS",
     }
+
+    # ── 候選評分與 AMBIGUOUS（M5，取代 classify_zone() 舊版優先序判定）──────
+    # 鼻子接觸範圍若同時跟兩個相鄰區域都有明顯重疊（例如剛好在軀幹與前肢
+    # 交界處），舊版直接照固定優先序（四肢腳掌圓 > 四肢長條 > 尾巴 > 軀幹）
+    # 選第一個命中的，武斷且沒有反映真正的不確定性。現在改成每個候選算
+    # 正規化分數（1 - 距離/該候選區域特徵尺度），最高分跟次高分差距小於此值
+    # 時回傳 ZONE_AMBIGUOUS，而不是硬選一個。跟 lick_stage 的 AMBIGUITY_MARGIN
+    # 用同一個值，粗略預設值，之後可依實測重新校準。
+    AMBIGUITY_MARGIN = 0.15
 
     # ── Geometry ratios, all relative to body_len = |Hip - Chest| ──────────
     HEAD_RADIUS_RATIO = 0.30

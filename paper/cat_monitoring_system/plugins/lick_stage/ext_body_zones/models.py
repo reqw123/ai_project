@@ -21,9 +21,10 @@ class ZoneStat:
 
 @dataclass
 class ExtZoneResult:
-    """單一影格的完整 7 區身體分區分析結果，含各區累積統計。"""
+    """單一影格的完整身體分區分析結果（7 區 + M5 新增的 TORSO_UNSPECIFIED／
+    AMBIGUOUS），含各區累積統計。"""
 
-    current_zone: int = 0  # 0=NO_TARGET, 1..7 per ExtZoneConfig.ZONE_*
+    current_zone: int = 0  # 0=NO_TARGET, 1..9 per ExtZoneConfig.ZONE_*（8=TORSO_UNSPECIFIED, 9=AMBIGUOUS）
     zone_name: str = "NO_TARGET"
     confidence: float = 0.0
     valid: bool = False
@@ -31,8 +32,9 @@ class ExtZoneResult:
     time_sec: float = 0.0
     hits: int = 0  # cumulative hits for current_zone
     zone_time_sec: float = 0.0  # cumulative time_sec for current_zone
-    # Per-zone breakdown for all 7 zones — {zone_name: ZoneStat}, for the
-    # Node-RED "部位時長統計" table (mirrors plugins/lick_stage's per-zone fields)
+    # Per-zone breakdown for all zones (7 + TORSO_UNSPECIFIED + AMBIGUOUS) —
+    # {zone_name: ZoneStat}, for the Node-RED "部位時長統計" table (mirrors
+    # plugins/lick_stage's per-zone fields)
     zone_breakdown: dict = field(default_factory=dict)
 
     # ── 第一階段 v2 契約欄位（與 v1 欄位並存，見 plugins/lick_stage/models.py）──

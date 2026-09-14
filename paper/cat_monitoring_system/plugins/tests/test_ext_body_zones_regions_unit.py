@@ -13,8 +13,12 @@ import 它一樣會觸發 `plugins/lick_stage/__init__.py` → manager.py → ov
   再退回 bbox fallback）算出 eff_len，所有其餘比例（半徑/半寬）都是 eff_len 的倍數。
   預設測試 fixture 不設 mid_back，故落在「chest_hip」分支，eff_len = body_len = 100
   （不再夾鉗到 300）。
-- classify_zone() 判定優先序：四肢腳掌圓 > 四肢長條 > 尾巴長條 >
-  （頭/胸口判定停用）> 軀幹橢圓（腹側 vs 側背）> NO_TARGET
+- classify_zone()：M5 起改成候選評分制，不再是固定優先序——四肢（腳掌圓/長條
+  取距離較短者）、尾巴長條、軀幹橢圓（腹側 vs 側背，或 ventral_sign_known=False
+  時的 TORSO_UNSPECIFIED——見 build_zone_targets() 的 ventral_sign 說明）各自算
+  正規化分數，取最高分；最高分與次高分差距小於 AMBIGUITY_MARGIN 時回傳
+  AMBIGUOUS。都沒有候選命中才是 NO_TARGET。頭/胸口判定仍然停用（理由見
+  classify_zone() docstring）。
 """
 
 import math
@@ -243,8 +247,12 @@ class TestBuildZoneTargets:
         assert result["head_center"] == pytest.approx(expected)
 
     def test_no_confident_knees_defaults_ventral_sign_positive(self):
+        """+1.0 只是沒有證據時的任意預設值——M5 起還要確認
+        `ventral_sign_known=False`，classify_zone() 才知道不能拿這個值去猜
+        ABDOMEN/SIDE_BACK（見 TestClassifyZone 的 TORSO_UNSPECIFIED 測試）。"""
         result = build_zone_targets(_kpts(), _full_conf())
         assert result["ventral_sign"] == pytest.approx(1.0)
+        assert result["ventral_sign_known"] is False
 
     def test_knee_on_negative_normal_side_gives_positive_ventral_sign(self):
         """body_normal=[-1,0]；膝蓋 x 座標小於 torso_center.x 時，
@@ -253,12 +261,14 @@ class TestBuildZoneTargets:
         conf = _full_conf({_C.KP_FL_KNEE: 1.0})
         result = build_zone_targets(kpts, conf)
         assert result["ventral_sign"] == pytest.approx(1.0)
+        assert result["ventral_sign_known"] is True
 
     def test_knee_on_positive_normal_side_gives_negative_ventral_sign(self):
         kpts = _kpts({_C.KP_FL_KNEE: (10, 50)})
         conf = _full_conf({_C.KP_FL_KNEE: 1.0})
         result = build_zone_targets(kpts, conf)
         assert result["ventral_sign"] == pytest.approx(-1.0)
+        assert result["ventral_sign_known"] is True
 
     def test_confident_limb_pair_produces_one_segment_and_paw(self):
         kpts = _kpts({_C.KP_FL_KNEE: (100, 0), _C.KP_FL_PAW: (100, 100)})
@@ -323,6 +333,12 @@ class TestClassifyZone:
         assert zconf == pytest.approx(1.0)
 
     def test_nose_near_limb_strip_but_outside_paw_circle_gives_forelimb(self):
+        """M5 起，同一個 zone（這裡是 FORELIMB）不管命中的是 paw 圓還是
+        strip 長條，一律用同一個特徵尺度（paw_radius）正規化分數——跟
+        find_nearest_zone() 的 limb_scale 同一套邏輯，取代舊版「paw 用
+        paw_radius、strip 用 limb_strip_hw」各自分母的算法。這裡命中 strip
+        （perp=5.0），分數 = 1 - 5.0/paw_radius(5.0) = 0.0，不是舊版的
+        1 - 5.0/limb_strip_hw(6.0)。"""
         kpts = _kpts({_C.KP_FL_KNEE: (100, 0), _C.KP_FL_PAW: (100, 100)})
         conf = _full_conf({_C.KP_FL_KNEE: 1.0, _C.KP_FL_PAW: 1.0})
         targets = build_zone_targets(kpts, conf)
@@ -332,7 +348,7 @@ class TestClassifyZone:
         assert (zone_id, name) == (_C.ZONE_FORELIMB, "FORELIMB")
         limb_strip_hw = EFF_LEN * _C.LIMB_STRIP_HW_RATIO
         assert limb_strip_hw == pytest.approx(6.0)
-        assert zconf == pytest.approx(1.0 - 5.0 / 6.0)
+        assert zconf == pytest.approx(1.0 - 5.0 / 5.0)
 
     def test_nose_on_tail_strip_gives_tail_when_no_limb_hit(self):
         kpts = _kpts(
@@ -352,19 +368,66 @@ class TestClassifyZone:
         assert tail_hw == pytest.approx(4.5)
         assert zconf == pytest.approx(1.0 - 2.0 / 4.5)
 
+    def _targets_with_ventral_evidence(self):
+        """torso 判定要吃到 ABDOMEN/SIDE_BACK（而不是 M5 新增的
+        TORSO_UNSPECIFIED），前提是 ventral_sign_known=True——用跟
+        test_knee_on_negative_normal_side_gives_positive_ventral_sign 同一組
+        膝蓋覆寫（ventral_sign=+1.0，維持跟舊版預設值相同的判定結果）。"""
+        kpts = _kpts({_C.KP_FL_KNEE: (-10, 50)})
+        conf = _full_conf({_C.KP_FL_KNEE: 1.0})
+        return build_zone_targets(kpts, conf)
+
     def test_nose_on_ventral_side_of_torso_gives_abdomen(self):
         """torso_center=(0,50)（無 mid_back fallback），body_normal=[-1,0]，
-        ventral_sign 預設 +1：鼻子 x<=0 側（v=-rel.x>=0）判定為腹側。"""
-        targets = _base_targets()
+        ventral_sign=+1（有膝蓋證據）：鼻子 x<=0 側（v=-rel.x>=0）判定為腹側。"""
+        targets = self._targets_with_ventral_evidence()
         zone_id, name, zconf = classify_zone((-10, 50), targets)
         assert (zone_id, name) == (_C.ZONE_ABDOMEN, "ABDOMEN")
         assert zconf == pytest.approx(1.0 - math.sqrt((10.0 / 30.0) ** 2))
 
     def test_nose_on_dorsal_side_of_torso_gives_side_back(self):
-        targets = _base_targets()
+        targets = self._targets_with_ventral_evidence()
         zone_id, name, zconf = classify_zone((10, 50), targets)
         assert (zone_id, name) == (_C.ZONE_SIDE_BACK, "SIDE_BACK")
         assert zconf == pytest.approx(1.0 - math.sqrt((10.0 / 30.0) ** 2))
+
+    def test_torso_hit_without_ventral_evidence_gives_torso_unspecified(self):
+        """M5：鼻子確實命中軀幹橢圓，但 _base_targets()（無膝蓋關鍵點）沒有
+        ventral_sign 的真實證據——不該硬猜 ABDOMEN/SIDE_BACK，改回傳
+        TORSO_UNSPECIFIED。同一個鼻子座標，_targets_with_ventral_evidence()
+        版本會判成 ABDOMEN（見上一個測試），差別只在有沒有膝蓋證據。"""
+        targets = _base_targets()
+        assert targets["ventral_sign_known"] is False
+        zone_id, name, zconf = classify_zone((-10, 50), targets)
+        assert (zone_id, name) == (_C.ZONE_TORSO_UNSPECIFIED, "TORSO_UNSPECIFIED")
+        assert zconf == pytest.approx(1.0 - math.sqrt((10.0 / 30.0) ** 2))
+
+    def test_tied_forelimb_and_hindlimb_scores_give_ambiguous(self):
+        """M5：鼻子跟前肢/後肢的 paw 距離完全相等（都是 3px，paw_radius=5px，
+        兩者分數都是 1-3/5=0.4，差距 0 < AMBIGUITY_MARGIN）——候選評分機制
+        不該武斷選其中一個，改回傳 AMBIGUOUS。舊版優先序判定（四肢腳掌圓
+        > 四肢長條）會直接選 FORELIMB（迴圈先跑到），不會偵測到這種對稱情況
+        下的真正不確定性。"""
+        kpts = _kpts(
+            {
+                _C.KP_FL_KNEE: (3, 100),
+                _C.KP_FL_PAW: (3, 0),
+                _C.KP_HL_KNEE: (-3, 100),
+                _C.KP_HL_PAW: (-3, 0),
+            }
+        )
+        conf = _full_conf(
+            {
+                _C.KP_FL_KNEE: 1.0,
+                _C.KP_FL_PAW: 1.0,
+                _C.KP_HL_KNEE: 1.0,
+                _C.KP_HL_PAW: 1.0,
+            }
+        )
+        targets = build_zone_targets(kpts, conf)
+        zone_id, name, zconf = classify_zone((0, 0), targets)
+        assert (zone_id, name) == (_C.ZONE_AMBIGUOUS, "AMBIGUOUS")
+        assert zconf == pytest.approx(0.4)
 
     def test_nose_far_from_everything_gives_no_target(self):
         targets = _base_targets()

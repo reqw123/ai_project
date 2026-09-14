@@ -143,8 +143,14 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
         ventral_sign = (
             1.0 if float(np.dot(avg_knee - torso_center, body_normal)) >= 0.0 else -1.0
         )
+        ventral_sign_known = True
     else:
+        # M5：沒有任何信心足夠的膝蓋關鍵點可用時，+1.0 只是任意預設值，不是
+        # 真的證據——ventral_sign_known=False 讓 classify_zone() 知道這件事，
+        # 命中軀幹橢圓時改回傳 TORSO_UNSPECIFIED，不要拿這個假的預設值去猜
+        # ABDOMEN/SIDE_BACK。
         ventral_sign = 1.0
+        ventral_sign_known = False
 
     torso_ru = max(1e-6, eff_len * _C.TORSO_HALF_LEN_RATIO)
     torso_rv = max(1e-6, eff_len * _C.TORSO_HALF_WIDTH_RATIO)
@@ -189,6 +195,7 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
         "torso_ru": torso_ru,
         "torso_rv": torso_rv,
         "ventral_sign": ventral_sign,
+        "ventral_sign_known": ventral_sign_known,
         "head_center": head_center,
         "head_radius": head_radius,
         "neck_center": chest,
@@ -203,46 +210,62 @@ def build_zone_targets(kpts, kpt_conf) -> Optional[dict]:
 
 def classify_zone(nose_pt, targets: Optional[dict]) -> Tuple[int, str, float]:
     """
-    Test the nose point against the zone targets.
+    Test the nose point against every zone shape, scoring every intersecting
+    candidate instead of returning on the first priority-ordered hit (M5：
+    候選評分 + AMBIGUOUS，取代舊版「四肢腳掌圓 > 四肢長條 > 尾巴 > 軀幹」固定
+    優先序判定——跟 lick_stage/contact_regions.py 的 find_nearest_zone() 同一套
+    設計，讓兩個姊妹外掛的候選評分機制一致）。
 
-    Priority (most specific first): limb paw circles > limb strips >
-    tail strip > head (disabled) > neck/chest (disabled) >
-    torso half (side/back vs abdomen).
+    每個命中候選都換算成正規化分數 ∈ [0,1]（1 - 距離/該候選區域的特徵尺度），
+    分數越接近 1 代表鼻尖越貼近該區域中心/骨架。前肢/後肢的 paw 圓跟 strip
+    長條算同一個 zone，取兩者裡「命中時距離最短」的當該 zone 的候選分數。
+    當最高分跟次高分（不同 zone）差距小於 AMBIGUITY_MARGIN 時，回傳
+    ZONE_AMBIGUOUS 而不是武斷選一個。
 
-    Returns (zone_id, zone_name, confidence).
+    頭部/胸口判定仍然停用（理由見下方），軀幹橢圓命中時可能是 ABDOMEN/
+    SIDE_BACK，或 `targets["ventral_sign_known"]` 為 False 時的
+    TORSO_UNSPECIFIED（見 build_zone_targets() 的說明）。
+
+    Returns (zone_id, zone_name, geometry_score)。
     """
     if targets is None or nose_pt is None:
         return _C.ZONE_NO_TARGET, _C.ZONE_NAMES[_C.ZONE_NO_TARGET], 0.0
 
     pt = np.asarray(nose_pt, dtype=np.float64)
+    candidates = []  # (score, zone_id)
 
+    # Forelimb / hindlimb：paw 圓跟 strip 長條共用同一個 zone_id，兩者裡命中
+    # 時距離最短的當這個 zone 的候選（跟 find_nearest_zone() 的 limb_dist
+    # 同一套邏輯）。特徵尺度統一用 paw_radius 當分母——跟 strip 半寬同一比例
+    # 級數，足夠當正規化分母（見 find_nearest_zone() 的 limb_scale 說明）。
     for group, zone_id in (
         ("FORELIMB", _C.ZONE_FORELIMB),
         ("HINDLIMB", _C.ZONE_HINDLIMB),
     ):
+        best_d = float("inf")
         for paw in targets["limbs"][group]["paws"]:
             hit, d = _point_in_circle(pt, paw, targets["paw_radius"])
-            if hit:
-                conf = max(0.0, min(1.0, 1.0 - d / max(targets["paw_radius"], 1e-6)))
-                return zone_id, _C.ZONE_NAMES[zone_id], conf
-
-    for group, zone_id in (
-        ("FORELIMB", _C.ZONE_FORELIMB),
-        ("HINDLIMB", _C.ZONE_HINDLIMB),
-    ):
+            if hit and d < best_d:
+                best_d = d
         for p0, p1 in targets["limbs"][group]["segments"]:
             hit, perp = _point_on_strip(pt, p0, p1, targets["limb_strip_hw"])
-            if hit:
-                conf = max(
-                    0.0, min(1.0, 1.0 - perp / max(targets["limb_strip_hw"], 1e-6))
-                )
-                return zone_id, _C.ZONE_NAMES[zone_id], conf
+            if hit and perp < best_d:
+                best_d = perp
+        if math.isfinite(best_d):
+            scale = max(targets["paw_radius"], 1e-6)
+            score = max(0.0, min(1.0, 1.0 - best_d / scale))
+            candidates.append((score, zone_id))
 
+    # Tail
+    best_tail_d = float("inf")
     for p0, p1 in targets["tail_segs"]:
         hit, perp = _point_on_strip(pt, p0, p1, targets["tail_strip_hw"])
-        if hit:
-            conf = max(0.0, min(1.0, 1.0 - perp / max(targets["tail_strip_hw"], 1e-6)))
-            return _C.ZONE_TAIL, _C.ZONE_NAMES[_C.ZONE_TAIL], conf
+        if hit and perp < best_tail_d:
+            best_tail_d = perp
+    if math.isfinite(best_tail_d):
+        scale = max(targets["tail_strip_hw"], 1e-6)
+        score = max(0.0, min(1.0, 1.0 - best_tail_d / scale))
+        candidates.append((score, _C.ZONE_TAIL))
 
     # 頭部區域的判定刻意停用：head_center/head_radius 以耳朵中點（或鼻子本身）
     # 為圓心，鼻子幾乎必然落在自己頭部的圓圈內——不管貓有沒有在舔頭部，只要
@@ -261,19 +284,39 @@ def classify_zone(nose_pt, targets: Optional[dict]) -> Tuple[int, str, float]:
     # 讓鼻子落在胸口圓圈內、又不在四肢/尾巴範圍內時改落到下方軀幹橢圓判定
     # （neck_center/neck_radius 仍保留在 targets 內，供未來需要時使用）。
 
+    # Torso ellipse
     rel = pt - targets["torso_center"]
     u = float(np.dot(rel, targets["body_axis_unit"]))
     v = float(np.dot(rel, targets["body_normal"]))
     ru, rv = targets["torso_ru"], targets["torso_rv"]
     norm_d = math.sqrt((u / max(ru, 1e-6)) ** 2 + (v / max(rv, 1e-6)) ** 2)
     if norm_d <= 1.0:
-        conf = max(0.0, min(1.0, 1.0 - norm_d))
-        is_ventral = (v >= 0.0) == (targets["ventral_sign"] >= 0.0)
-        if is_ventral:
-            return _C.ZONE_ABDOMEN, _C.ZONE_NAMES[_C.ZONE_ABDOMEN], conf
-        return _C.ZONE_SIDE_BACK, _C.ZONE_NAMES[_C.ZONE_SIDE_BACK], conf
+        score = max(0.0, min(1.0, 1.0 - norm_d))
+        if not targets.get("ventral_sign_known", True):
+            # M5：鼻子確實碰到軀幹，但沒有膝蓋關鍵點可以判斷哪一側是腹側——
+            # 誠實回傳「軀幹，腹/背未定」，不要拿 ventral_sign 的任意預設值
+            # 硬猜 ABDOMEN 或 SIDE_BACK（見 build_zone_targets() 的說明）。
+            torso_zone_id = _C.ZONE_TORSO_UNSPECIFIED
+        else:
+            is_ventral = (v >= 0.0) == (targets["ventral_sign"] >= 0.0)
+            torso_zone_id = _C.ZONE_ABDOMEN if is_ventral else _C.ZONE_SIDE_BACK
+        candidates.append((score, torso_zone_id))
 
-    return _C.ZONE_NO_TARGET, _C.ZONE_NAMES[_C.ZONE_NO_TARGET], 0.0
+    if not candidates:
+        return _C.ZONE_NO_TARGET, _C.ZONE_NAMES[_C.ZONE_NO_TARGET], 0.0
+
+    # 同一個 zone 可能同時被多個候選命中；每個 zone 只留最高分，才能正確比較
+    # 「不同 zone 之間」是否構成 AMBIGUOUS。
+    best_per_zone: dict = {}
+    for score, zone in candidates:
+        if zone not in best_per_zone or score > best_per_zone[zone]:
+            best_per_zone[zone] = score
+    ranked = sorted(best_per_zone.items(), key=lambda kv: kv[1], reverse=True)
+
+    best_zone, best_score = ranked[0]
+    if len(ranked) >= 2 and (best_score - ranked[1][1]) < _C.AMBIGUITY_MARGIN:
+        return _C.ZONE_AMBIGUOUS, _C.ZONE_NAMES[_C.ZONE_AMBIGUOUS], best_score
+    return best_zone, _C.ZONE_NAMES[best_zone], best_score
 
 
 def _xy(p) -> list:

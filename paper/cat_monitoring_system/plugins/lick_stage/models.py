@@ -30,6 +30,9 @@ class LickResult:
     fr: ZoneStats = field(default_factory=ZoneStats)
     hl: ZoneStats = field(default_factory=ZoneStats)
     hr: ZoneStats = field(default_factory=ZoneStats)
+    # M5：候選評分最高分/次高分差距太小時的結果桶（見
+    # contact_regions.py find_nearest_zone()／config.py AMBIGUITY_MARGIN）。
+    ambiguous: ZoneStats = field(default_factory=ZoneStats)
     face_state: str = "UNKNOWN"
     state_stability: float = 0.0
     valid: bool = False
@@ -41,6 +44,9 @@ class LickResult:
     gaze_fwd: float = float("nan")
     gaze_lat: float = float("nan")
     gaze_angle: float = float("nan")
+    # M5：find_nearest_zone() 回傳的正規化命中分數 ∈ [0,1]，取代舊版單純的
+    # 距離值——見 contact_regions.py find_nearest_zone() 的說明。
+    geometry_score: float = float("nan")
     # Raw geometry for client-side (Node-RED) visualization only — never
     # consumed by the core pipeline itself.
     trap_pts: list = field(default_factory=list)  # [[x,y]*4] or [] when no cat
@@ -84,6 +90,10 @@ class LickResult:
             "FR": self.fr,
             "HL": self.hl,
             "HR": self.hr,
+            # best_zone() 是從 statistics.py 的 _time 字典挑最大值，那份字典
+            # 現在含 AMBIGUOUS（見 config.py _ZONES）——不把它也列進來的話，
+            # best_zone 剛好是 AMBIGUOUS 時 best_pct 會誤判成 None。
+            "AMBIGUOUS": self.ambiguous,
         }
         _best_stat = _zone_map.get(self.best_zone)
 
@@ -96,16 +106,19 @@ class LickResult:
             "fr_time": round(self.fr.time_sec, 2),
             "hl_time": round(self.hl.time_sec, 2),
             "hr_time": round(self.hr.time_sec, 2),
+            "ambiguous_time": round(self.ambiguous.time_sec, 2),
             "body_hits": self.body.hits,
             "fl_hits": self.fl.hits,
             "fr_hits": self.fr.hits,
             "hl_hits": self.hl.hits,
             "hr_hits": self.hr.hits,
+            "ambiguous_hits": self.ambiguous.hits,
             "body_pct": _pct(self.body.time_sec),
             "fl_pct": _pct(self.fl.time_sec),
             "fr_pct": _pct(self.fr.time_sec),
             "hl_pct": _pct(self.hl.time_sec),
             "hr_pct": _pct(self.hr.time_sec),
+            "ambiguous_pct": _pct(self.ambiguous.time_sec),
             "total_lick_time": round(total_time, 2),
             "face_state": self.face_state,
             "state_stability": round(self.state_stability, 3),
@@ -118,6 +131,7 @@ class LickResult:
             "gaze_fwd": _jf(self.gaze_fwd, 3),
             "gaze_lat": _jf(self.gaze_lat, 3),
             "gaze_angle": _jf(self.gaze_angle, 1),
+            "geometry_score": _jf(self.geometry_score, 3),
             # Visualization-only geometry (Node-RED draws this; core never reads it)
             "trap_pts": self.trap_pts,
             "nose_xy": self.nose_xy,
