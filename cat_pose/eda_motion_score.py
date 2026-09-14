@@ -19,6 +19,20 @@ CSV_PATH = "eda_keypoint_jitter.csv"
 SOURCE_VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
 SOURCE_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"
 
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 SOURCE_VIDEO_PATH，
+# 對應 settings_window.py 的「🎬 影片路徑」欄位）。注意：這裡只影響「擷取異常幀影像」，
+# 不影響 CSV_PATH（見上方註解：CSV 是用 eda_motion_anomaly.py 另外產生的）。
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    SOURCE_VIDEO_PATH = _env_test_video
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 SOURCE_MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）。同樣只影響「擷取異常幀影像」；如果
+# 跟產生 CSV_PATH 當時用的模型不一致，畫出來的關鍵點會對不上 CSV 裡的異常分數。
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    SOURCE_MODEL_PATH = _env_yolo_model
+
 # ==================== 檢查檔案是否存在 ====================
 if not os.path.exists(CSV_PATH):
     print(f"ERROR: CSV file not found: {CSV_PATH}")

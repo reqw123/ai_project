@@ -32,6 +32,19 @@ MAX_BODY_SCALE_RATIO = 0.8      # 最大身體尺度比例（避免過近特寫�
 
 # ==================== 檢查檔案是否存在 ====================
 import os
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH，
+# 對應 settings_window.py 的「🎬 影片路徑」欄位）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_PATH = _env_test_video
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    MODEL_PATH = _env_yolo_model
+
 if not os.path.exists(MODEL_PATH):
     print(f"ERROR: Model file not found: {MODEL_PATH}")
     exit(1)

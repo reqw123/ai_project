@@ -30,6 +30,7 @@ import cv2
 import numpy as np
 import time
 import csv
+import os
 from pathlib import Path
 
 from collections import deque
@@ -101,6 +102,12 @@ MODEL_LIST = [
     r"C:\ai_project\yolo_models\v11s_60.pt",   # ⚠ 同上，目前 yolo_models/ 底下找不到
 ]
 
+# 若設定 YOLO_MODEL_PATH 環境變數，優先只使用該單一模型路徑（覆蓋上面的 MODEL_LIST，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    MODEL_LIST = [_env_yolo_model]
+
 # ==================== 影片清單 ====================
 # 來源可同時混用：單一影片檔 or 資料夾（會遞迴掃描影片）
 VIDEO_SOURCES = [
@@ -120,6 +127,12 @@ VIDEO_SOURCES = [
     r"C:\cat_pose\模型測試影片\0_Cat_Ginger_Cat_1280x720.mp4",  # key: k
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\摳圖影片集\6700140_Bicolor_Cat_Bicolor_1920x1080.mp4",  # key: l
 ]
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先只處理該單一影片路徑（覆蓋上面的 VIDEO_SOURCES，
+# 對應 settings_window.py 的「🎬 影片路徑」欄位）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_SOURCES = [_env_test_video]
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".wmv", ".webm"}
 VIDEO_SWITCH_KEY_ORDER = "67890efcvbnmjkl"

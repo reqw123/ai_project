@@ -19,6 +19,7 @@
 """
 
 import hashlib
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -28,6 +29,14 @@ SOURCE_FOLDERS = [
     # 未從命令列帶入資料夾路徑時，預設掃描這裡列出的資料夾，例如：
     r"C:\Users\homec\Downloads\istock",
 ]
+
+# 若設定 TEST_VIDEO_PATH 環境變數且指向資料夾，優先只掃描該資料夾（覆蓋上面的
+# SOURCE_FOLDERS，對應 settings_window.py 的「🎬 影片路徑」欄位）。本腳本要找的是
+# 「重複的影片」，單一影片檔案沒有比對對象，所以只在填的是資料夾路徑時才生效；
+# 填的是單一檔案則安靜忽略，跟沒填一樣。
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video and Path(_env_test_video).is_dir():
+    SOURCE_FOLDERS = [_env_test_video]
 
 SUPPORTED_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".m4v", ".ts", ".webm", ".3gp"}
 

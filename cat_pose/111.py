@@ -1,8 +1,17 @@
+import os
 from pathlib import Path
 import subprocess
 
 INPUT_FOLDER = Path(r"C:\Users\homec\Downloads\24")
-OUTPUT_FOLDER = INPUT_FOLDER / "output_1920x1080"
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該路徑（覆蓋上面寫死的 INPUT_FOLDER，
+# 對應 settings_window.py 的「🎬 影片路徑」欄位）。可為單一影片檔案，或跟
+# INPUT_FOLDER 一樣的資料夾。
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    INPUT_FOLDER = Path(_env_test_video)
+
+OUTPUT_FOLDER = (INPUT_FOLDER if INPUT_FOLDER.is_dir() else INPUT_FOLDER.parent) / "output_1920x1080"
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".m4v"}
 
@@ -54,10 +63,13 @@ def convert_video(video_path: Path, output_path: Path):
 def main():
     OUTPUT_FOLDER.mkdir(exist_ok=True)
 
-    videos = [
-        file for file in INPUT_FOLDER.iterdir()
-        if file.is_file() and file.suffix.lower() in VIDEO_EXTENSIONS
-    ]
+    if INPUT_FOLDER.is_file():
+        videos = [INPUT_FOLDER] if INPUT_FOLDER.suffix.lower() in VIDEO_EXTENSIONS else []
+    else:
+        videos = [
+            file for file in INPUT_FOLDER.iterdir()
+            if file.is_file() and file.suffix.lower() in VIDEO_EXTENSIONS
+        ]
 
     if not videos:
         print("找不到影片檔。")

@@ -5,6 +5,7 @@ Cat Pose Video Annotation Tool - Interactive Editing Version
 Press Space to freeze frame and edit, Press S to save and continue playing
 """
 
+import os
 import sys
 import cv2
 import numpy as np
@@ -289,6 +290,19 @@ def main():
     # ==================== Configuration ====================
     MODEL_PATH = r"C:/ai_project/yolo_models/2222.pt"  # ⚠ 此檔名目前 yolo_models/ 底下已無，僅修正資料夾；執行前請改成實際存在的模型檔名
     VIDEO_PATH = r"C:/cat_pose/test1.mp4"
+
+    # 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH，
+    # 對應 settings_window.py 的「🎬 影片路徑」欄位）
+    _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+    if _env_test_video:
+        VIDEO_PATH = _env_test_video
+
+    # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，
+    # 對應 settings_window.py 的「🧠 模型路徑」欄位）
+    _env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+    if _env_yolo_model:
+        MODEL_PATH = _env_yolo_model
+
     OUTPUT_DIR = r"C:\cat_pose\自動標註工具\auto_capture"
     CLASS_ID = 0
     TOTAL_KPTS = 17

@@ -8,6 +8,7 @@ import numpy as np
 import time
 import csv
 import math
+import os
 
 from constants import (
     WHITE, BLACK, COLOR_HEAD, COLOR_BODY, COLOR_TAIL,
@@ -19,6 +20,19 @@ from constants import (
 # ==================== Configuration ====================
 MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH，
+# 對應 settings_window.py 的「🎬 影片路徑」欄位）
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video:
+    VIDEO_PATH = _env_test_video
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    MODEL_PATH = _env_yolo_model
+
 IMGSZ = 640
 CONF_THRES = 0.50
 KP_CONF_THRES = 0.98
@@ -158,8 +172,7 @@ print("="*70)
 print("Cat Pose Analysis - Fast Version")
 print("="*70)
 
-# 檢查檔案是否存在
-import os
+# 檢查檔案是否存在（os 已在檔案開頭 import 過，這裡不用重複 import）
 if not os.path.exists(MODEL_PATH):
     print(f"ERROR: Model file not found: {MODEL_PATH}")
     exit(1)

@@ -26,6 +26,13 @@ MODEL_PATH = str(_PROJECT_ROOT / "yolo_models" / "yo.pt")  # 修改為你的模�
 IMG_DIR = r"C:/cat_pose/cat_images"       # 修改為你的圖片資料夾
 OUTPUT_DIR = r"C:\cat_pose\自動標註工具\human_labeling"  # 修改為你的輸出資料夾
 
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）；這裡只影響開啟 GUI 時的預設值，
+# 開啟後仍可在畫面上自行更改。
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    MODEL_PATH = _env_yolo_model
+
 # =====================
 # 配置参数
 # =====================

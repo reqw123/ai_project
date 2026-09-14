@@ -23,6 +23,7 @@ import re
 import sys
 import time
 import cv2
+import numpy as np
 from ultralytics import YOLO
 from pathlib import Path
 
@@ -43,9 +44,26 @@ from constants import (
 
 # ==================== 設定 ====================
 MODEL_PATH = r"C:\ai_project\yolo_models\v11s_149.pt"
+
+# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，
+# 對應 settings_window.py 的「🧠 模型路徑」欄位）
+_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
+if _env_yolo_model:
+    MODEL_PATH = _env_yolo_model
+
 VIDEO_DIR = r"C:\Users\homec\Downloads\walk_標記圖片"  # 讀取資料夾下所有影片
-OUTPUT_DIR = r"C:/cat_pose/cat50"
-IMG_NAME_FORMAT = "walk_real-{}.png"
+
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該路徑（覆蓋上面寫死的 VIDEO_DIR，對應
+# settings_window.py 的「🎬 影片路徑」欄位）。填單一檔案 → 只處理那一支影片；
+# 填資料夾 → 整個換成掃描這個資料夾（VIDEO_DIR = 該資料夾）。
+_env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
+if _env_test_video and os.path.isfile(_env_test_video):
+    VIDEO_DIR = None
+elif _env_test_video and os.path.isdir(_env_test_video):
+    VIDEO_DIR = _env_test_video
+
+OUTPUT_DIR = r"C:/cat_pose/cat51"
+IMG_NAME_FORMAT = "lick_real-{}.png"
 TARGET_MODEL_FPS = 30.0
 
 # ==================== 播放 / 跳幀 / 跳轉設定 ====================
@@ -103,7 +121,10 @@ def get_all_videos(folder):
     videos.sort(key=_natural_key)
     return videos
 
-video_list = get_all_videos(VIDEO_DIR)
+if _env_test_video and os.path.isfile(_env_test_video):
+    video_list = [_env_test_video]
+else:
+    video_list = get_all_videos(VIDEO_DIR)
 if not video_list:
     print(f"[Error] No videos found in {VIDEO_DIR}")
     exit(1)
@@ -438,12 +459,75 @@ def draw_result(frame, result):
 
     return disp_frame
 
-def draw_text(img, text, pos, scale, font_scale=0.8, thickness=2):
-    """自适应文字绘制"""
-    font_scale = font_scale * scale
-    thickness = max(1, int(thickness * scale))
-    cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0,0,0), thickness+2, cv2.LINE_AA)
-    cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255,255,255), thickness, cv2.LINE_AA)
+def _draw_hud_line(img, text, x, y, font_scale, thickness):
+    """畫一行黑色描邊＋白字（跟原本 draw_text 的可讀性處理相同），只是現在畫在
+    HUD 色塊上而不是直接疊在影片畫面上——見 compose_with_hud() 的說明。"""
+    cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+    cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+
+# HUD（影片路徑/幀數/儲存數/操作提示）色塊底色：接近純黑但不是純黑，跟視窗其餘
+# 深色 UI 一致；刻意不用純黑（0,0,0）——純黑背景跟黑貓的毛色太接近，色塊邊緣
+# 反而不容易一眼認出「這裡是資訊列、不是影片畫面」。
+HUD_BG = (28, 28, 28)
+
+
+def compose_with_hud(disp_frame, scale, top_lines, bottom_lines):
+    """原本 4 行影片資訊＋2 行操作提示是直接疊在影片畫面左上/左下角，貓咪剛好
+    站在那個角落時，文字會蓋住牠的骨架/輪廓，影響用肉眼判斷姿態/推論品質準不準
+    ——這是這支工具本來的用途（人工核對推論結果、按 S 存標註用的圖）。
+
+    改成上下各加一條「HUD 色塊」，跟影片畫面上下拼接成一張更高的新畫面：文字
+    永遠畫在色塊裡，不管貓咪站在畫面哪個角落，影片內容本身完全不會被文字蓋到。
+    `cv2.namedWindow(..., cv2.WINDOW_AUTOSIZE)` 會自動貼合這張變高的畫面，不用
+    另外處理視窗縮放；進度條是 `cv2.createTrackbar` 建立的原生 HighGUI 元件，
+    跟畫面像素座標無關，也不受影響。
+
+    `top_lines`/`bottom_lines`：[(文字, font_scale, thickness), ...]，由上到下
+    依序排列；`font_scale`/`thickness` 是「未乘上 scale」的原始值（跟原本
+    `draw_text()` 的參數語意相同），這裡會統一乘上 `scale` 才實際拿去畫——
+    呼叫端不用自己重複算一次。每一行的色塊高度用 `cv2.getTextSize()` 實際
+    量測文字本身的高度（含 baseline）決定，不是猜一個固定數字，避免文字被
+    列高裁切。"""
+    h, w = disp_frame.shape[:2]
+    # 版面資訊是輔助用的、次要於影片畫面本身——行距/內距盡量收窄，把畫面盡量
+    # 讓給實際的影片內容，不是喧賓奪主佔掉一大塊。
+    line_gap = int(4 * scale)
+    pad = int(6 * scale)
+    x = int(14 * scale)
+
+    def _scaled(lines):
+        return [(text, fscale * scale, max(1, int(thick * scale))) for text, fscale, thick in lines]
+
+    def _band_height(lines):
+        if not lines:
+            return 0
+        total = pad * 2 + line_gap * (len(lines) - 1)
+        for text, font_scale, thickness in lines:
+            (_tw, th), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+            total += th + baseline
+        return total
+
+    def _draw_band(canvas, lines, y0):
+        y = y0 + pad
+        for text, font_scale, thickness in lines:
+            (_tw, th), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+            y += th
+            _draw_hud_line(canvas, text, x, y, font_scale, thickness)
+            y += baseline + line_gap
+        return y
+
+    top_lines = _scaled(top_lines)
+    bottom_lines = _scaled(bottom_lines)
+
+    top_h = _band_height(top_lines)
+    bottom_h = _band_height(bottom_lines)
+
+    canvas = np.full((top_h + h + bottom_h, w, 3), HUD_BG, dtype=disp_frame.dtype)
+    canvas[top_h:top_h + h, :] = disp_frame
+    _draw_band(canvas, top_lines, 0)
+    _draw_band(canvas, bottom_lines, top_h + h)
+    return canvas
 
 while True:
     if not cap.isOpened():
@@ -480,18 +564,24 @@ while True:
             disp_frame, _disp_h = fit_for_display(draw_result(frame, last_result))
             scale = min(_disp_h / 720.0, 1.0)
             video_info = f"Video: [{video_idx+1}/{len(video_list)}] {os.path.basename(VIDEO_PATH)}"
-            draw_text(disp_frame, video_info, (int(20*scale), int(30*scale)), scale, 0.8, 2)
             _sfps = cur_src_fps()
-            draw_text(disp_frame, f"Frame: {frame_idx+1}/{total_frames}   {fmt_time(frame_idx/_sfps)} / {fmt_time((total_frames-1)/_sfps)}", (int(20*scale), int(60*scale)), scale, 1, 2)
-            draw_text(disp_frame, f"Saved: {save_idx-1}", (int(20*scale), int(95*scale)), scale, 0.8, 2)
-            draw_text(disp_frame, f"Step: {frame_step}   Speed: {playback_speed:g}x", (int(20*scale), int(125*scale)), scale, 0.8, 2)
             mode_str = "Step" if step_mode else "Auto"
             infer_text = f"Infer: target {TARGET_MODEL_FPS:.0f} FPS / every {auto_infer_interval} frame(s)   Speed {playback_speed:g}x"
             help_text = f"Mode: {mode_str}  S=Save  D/A=Frame  Z/X=Step {frame_step}  [ ]=Jump{JUMP_FRAMES}  t=Seek  1/2=Video  -/+=Speed  Space=Switch  Q=Quit"
-            margin = int(24 * scale)
-            y_pos = disp_frame.shape[0] - margin
-            draw_text(disp_frame, infer_text, (int(20*scale), y_pos - int(28*scale)), scale, 0.6, 2)
-            draw_text(disp_frame, help_text, (int(20*scale), y_pos), scale, 0.6, 2)
+            # 資訊列改畫在影片畫面外的 HUD 色塊，不再疊在畫面上蓋住貓咪——見
+            # compose_with_hud() 的說明。
+            disp_frame = compose_with_hud(
+                disp_frame, scale,
+                top_lines=[
+                    (video_info, 0.6, 1),
+                    (f"Frame: {frame_idx+1}/{total_frames}   {fmt_time(frame_idx/_sfps)} / {fmt_time((total_frames-1)/_sfps)}", 0.7, 2),
+                    (f"Saved: {save_idx-1}   Step: {frame_step}   Speed: {playback_speed:g}x", 0.55, 1),
+                ],
+                bottom_lines=[
+                    (infer_text, 0.45, 1),
+                    (help_text, 0.45, 1),
+                ],
+            )
             cv2.imshow(WIN_NAME, disp_frame)
             sync_trackbar(frame_idx)
             # 阻塞等待按鍵，但同時讓進度條拖曳能中斷（拖曳會設定 seek_request）
@@ -707,19 +797,25 @@ while True:
         disp_frame, _disp_h = fit_for_display(draw_result(frame, last_result))
         scale = min(_disp_h / 720.0, 1.0)
         video_info = f"Video: [{video_idx+1}/{len(video_list)}] {os.path.basename(VIDEO_PATH)}"
-        draw_text(disp_frame, video_info, (int(20*scale), int(30*scale)), scale, 0.8, 2)
         _sfps = cur_src_fps()
-        draw_text(disp_frame, f"Frame: {frame_idx+1}/{total_frames}   {fmt_time(frame_idx/_sfps)} / {fmt_time((total_frames-1)/_sfps)}", (int(20*scale), int(60*scale)), scale, 1, 2)
-        draw_text(disp_frame, f"Saved: {save_idx-1}", (int(20*scale), int(95*scale)), scale, 0.8, 2)
         mode_str = "Step" if step_mode else "Auto"
         ff_str = f" +FF{AUTO_FRAME_SKIP}" if AUTO_FRAME_SKIP > 0 else ""
-        draw_text(disp_frame, f"Step: {frame_step}   Speed: {playback_speed:g}x{ff_str}", (int(20*scale), int(125*scale)), scale, 0.8, 2)
         infer_text = f"Infer: target {TARGET_MODEL_FPS:.0f} FPS / every {auto_infer_interval} frame(s)   Speed {playback_speed:g}x{ff_str}"
         help_text = f"Mode: {mode_str}  S=Save  -/+=Speed  .,=FF  [ ]=Jump{JUMP_FRAMES}  t=Seek  1/2=Video  Space=Switch  Q=Quit"
-        margin = int(24 * scale)
-        y_pos = disp_frame.shape[0] - margin
-        draw_text(disp_frame, infer_text, (int(20*scale), y_pos - int(28*scale)), scale, 0.6, 2)
-        draw_text(disp_frame, help_text, (int(20*scale), y_pos), scale, 0.6, 2)
+        # 資訊列改畫在影片畫面外的 HUD 色塊，不再疊在畫面上蓋住貓咪——見
+        # compose_with_hud() 的說明。
+        disp_frame = compose_with_hud(
+            disp_frame, scale,
+            top_lines=[
+                (video_info, 0.6, 1),
+                (f"Frame: {frame_idx+1}/{total_frames}   {fmt_time(frame_idx/_sfps)} / {fmt_time((total_frames-1)/_sfps)}", 0.7, 2),
+                (f"Saved: {save_idx-1}   Step: {frame_step}   Speed: {playback_speed:g}x{ff_str}", 0.55, 1),
+            ],
+            bottom_lines=[
+                (infer_text, 0.45, 1),
+                (help_text, 0.45, 1),
+            ],
+        )
         cv2.imshow(WIN_NAME, disp_frame)
         sync_trackbar(frame_idx)
         frame_idx += 1
