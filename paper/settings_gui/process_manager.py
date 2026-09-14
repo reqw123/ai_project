@@ -22,7 +22,8 @@ import sys
 import threading
 import time
 from pathlib import Path
-from tkinter import messagebox
+
+from settings_gui import dialogs
 
 
 class ProcessManager:
@@ -44,17 +45,17 @@ class ProcessManager:
 
     def start_main(self, main_py_path, cwd):
         if self.is_running:
-            messagebox.showinfo(
-                "啟動 main.py",
+            dialogs.show_info(
+                self.window, "啟動 main.py",
                 f"{self.active_label} 執行中（PID {self.process.pid}），"
                 "請先停止後再啟動 main.py（同一時間只能執行一個）。",
             )
             return
         if not Path(main_py_path).exists():
-            messagebox.showerror("啟動 main.py", f"找不到 main.py：{main_py_path}")
+            dialogs.show_error(self.window, "啟動 main.py", f"找不到 main.py：{main_py_path}")
             return
-        if not messagebox.askyesno(
-            "啟動 main.py",
+        if not dialogs.ask_yesno(
+            self.window, "啟動 main.py",
             "即將啟動 main.py，套用目前 runtime_settings.current.json／環境變數的設定內容。\n\n"
             "若您在下方設定表單中有修改但尚未按「儲存設定」，這些修改不會套用到這次啟動。\n\n"
             "是否繼續？",
@@ -96,7 +97,7 @@ class ProcessManager:
                 popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
             self.process = subprocess.Popen([sys.executable, str(main_py_path)], **popen_kwargs)
         except OSError as e:
-            messagebox.showerror("啟動 main.py", f"啟動失敗：{e}")
+            dialogs.show_error(self.window, "啟動 main.py", f"啟動失敗：{e}")
             return
         self.active_label = "main.py"
         self.active_kind = "main"
@@ -105,8 +106,8 @@ class ProcessManager:
         self.console.append(f"— main.py 已啟動（PID {self.process.pid}） —\n", tag="muted")
         self.console.start_log_reader(self.process, self.active_label)
         self._bring_child_window_to_front(self.process)
-        messagebox.showinfo(
-            "啟動 main.py",
+        dialogs.show_info(
+            self.window, "啟動 main.py",
             f"main.py 已啟動（PID {self.process.pid}）。\n\n"
             "輸出會即時顯示在下方「終端機輸出」面板中。",
         )
@@ -118,14 +119,14 @@ class ProcessManager:
         環境變數原樣塞給子行程。"""
         script_file = Path(script_path)
         if self.is_running:
-            messagebox.showinfo(
-                "執行腳本",
+            dialogs.show_info(
+                self.window, "執行腳本",
                 f"{self.active_label} 執行中（PID {self.process.pid}），"
                 "請先停止後再執行其他腳本（同一時間只能執行一個）。",
             )
             return
-        if not messagebox.askyesno(
-            "執行腳本",
+        if not dialogs.ask_yesno(
+            self.window, "執行腳本",
             f"即將執行：{script_file.name}\n\n完整路徑：{script_path}\n\n"
             "這是一支獨立腳本工具，本視窗不會檢查或修改它內部寫死的路徑/參數，"
             "請自行確認內容符合你要的設定。\n\n是否繼續？",
@@ -155,7 +156,7 @@ class ProcessManager:
                 popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
             self.process = subprocess.Popen([sys.executable, str(script_file)], **popen_kwargs)
         except OSError as e:
-            messagebox.showerror("執行腳本", f"啟動失敗：{e}")
+            dialogs.show_error(self.window, "執行腳本", f"啟動失敗：{e}")
             return
         self.active_label = script_file.name
         self.active_kind = "tool"
@@ -169,7 +170,7 @@ class ProcessManager:
 
     def stop_main(self):
         if self.active_kind != "main" or not self.is_running:
-            messagebox.showinfo("關閉 main.py", "目前沒有偵測到由本視窗啟動、仍在執行中的 main.py。")
+            dialogs.show_info(self.window, "關閉 main.py", "目前沒有偵測到由本視窗啟動、仍在執行中的 main.py。")
             self.on_state_change()
             return
         self.window._process_status_var.set("🖥️ 正在關閉 main.py…")
@@ -177,17 +178,17 @@ class ProcessManager:
         stopped = self.request_shutdown_and_wait()
         self.on_state_change()
         if stopped:
-            messagebox.showinfo("關閉 main.py", "main.py 已確認結束。")
+            dialogs.show_info(self.window, "關閉 main.py", "main.py 已確認結束。")
         else:
-            messagebox.showwarning(
-                "關閉 main.py",
+            dialogs.show_warning(
+                self.window, "關閉 main.py",
                 "已送出關閉信號並嘗試強制結束，但仍無法確認 main.py 已停止，"
                 "請自行檢查工作管理員確認狀態。",
             )
 
     def stop_tool(self):
         if self.active_kind != "tool" or not self.is_running:
-            messagebox.showinfo("停止腳本", "目前沒有偵測到由本視窗啟動、仍在執行中的腳本。")
+            dialogs.show_info(self.window, "停止腳本", "目前沒有偵測到由本視窗啟動、仍在執行中的腳本。")
             self.on_state_change()
             return
         label = self.active_label
@@ -196,10 +197,10 @@ class ProcessManager:
         stopped = self.request_shutdown_and_wait()
         self.on_state_change()
         if stopped:
-            messagebox.showinfo("停止腳本", f"{label} 已確認結束。")
+            dialogs.show_info(self.window, "停止腳本", f"{label} 已確認結束。")
         else:
-            messagebox.showwarning(
-                "停止腳本",
+            dialogs.show_warning(
+                self.window, "停止腳本",
                 f"已送出關閉信號並嘗試強制結束，但仍無法確認 {label} 已停止，"
                 "請自行檢查工作管理員確認狀態。",
             )

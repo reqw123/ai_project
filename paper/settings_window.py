@@ -27,7 +27,7 @@ import webbrowser
 from datetime import datetime
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, font as tkfont, messagebox, ttk
+from tkinter import filedialog, font as tkfont, ttk
 
 _SCRIPT_DIR = Path(__file__).resolve().parent  # paper/，config.py 與 settings_manager.py 所在處
 if str(_SCRIPT_DIR) not in sys.path:
@@ -44,6 +44,7 @@ from settings_manager import FIELD_SCHEMA, TAB_ORDER, _MISSING, _get_nested, _re
 from settings_gui.console_panel import ConsolePanel  # noqa: E402
 from settings_gui.process_manager import ProcessManager  # noqa: E402
 from settings_gui.field_search import FieldSearchBar  # noqa: E402
+from settings_gui import dialogs  # noqa: E402
 from settings_gui import tab_docs_panel  # noqa: E402
 from settings_gui import tool_order as _tool_order  # noqa: E402
 from settings_gui import ui_state as _ui_state  # noqa: E402
@@ -69,12 +70,13 @@ from settings_gui.style import (  # noqa: E402
     SPACE_SM,
     SPACE_MD,
     SPACE_LG,
-    _styled_button,
 )
+from settings_gui.widgets import _styled_button, _styled_badge  # noqa: E402
 
 # ── 視覺樣式：沿用 analytics/manage_baseline_history.py 的同一組常數 ─────────
-# （終端機面板／子行程管理相關的常數與 _styled_button 已搬到 settings_gui/style.py，
-#  上面用 import 拿回來；以下留著的是只有本檔案自己會用到的樣式常數。）
+# （終端機面板／子行程管理相關的常數搬到 settings_gui/style.py、_styled_button／
+#  _styled_badge 搬到 settings_gui/widgets.py，上面用 import 拿回來；以下留著的
+#  是只有本檔案自己會用到的樣式常數。）
 
 _FONT_FAMILY = "Microsoft JhengHei"
 
@@ -89,6 +91,9 @@ COLOR_HINT_FG = "#6b7c8c"
 COLOR_ERROR_FG = "#c0392b"
 COLOR_WARNING_FG = "#b36b00"
 COLOR_SUCCESS_FG = "#1a7a1a"
+
+# 下拉選單（ttk.Combobox）邊框——見 _apply_ttk_style() 的 "TCombobox" 樣式設定。
+COLOR_COMBOBOX_BORDER = "#c3ccd4"
 
 BTN_WARN_BG = "#e67e22"
 BTN_WARN_ACTIVE = "#cf711d"
@@ -360,6 +365,36 @@ class SettingsWindow(tk.Tk):
         )
         style.map("DocsPanel.Horizontal.TScrollbar", background=[("active", "#2e6da4")])
 
+        # 下拉選單（ttk.Combobox，全站只有兩處：獨立腳本工具的腳本選單、分頁裡
+        # "enum" 欄位的選單）——'clam' 佈景一樣預設用 lightcolor/darkcolor 畫立體
+        # 斜角框線（跟上面 Scrollbar 同一個問題），readonly 狀態（enum 欄位用的那顆
+        # 就是 state="readonly"）還會再疊一層佈景內建的灰階變暗。兩個疊在一起，
+        # 不管放在哪個底色的容器裡，看起來都是一個邊框發灰、底色也偏灰的舊式方框。
+        #
+        # 改法跟 Scrollbar 一樣：lightcolor/darkcolor 設成跟底色同一色（斜角消失、
+        # 變成扁平單色細框），readonly/disabled 的 fieldbackground 也明講蓋掉
+        # （不留給佈景預設的灰階去決定）。額外加：focus 時邊框變成主要綠色
+        # （BTN_PRIMARY_BG），讓「目前正在互動的是哪一顆」有明確回饋——原本純
+        # 系統邊框無法表達這件事。下拉箭頭那塊底色用次要藍灰（BTN_SECONDARY_BG），
+        # 跟其餘按鈕的「次要動作」同一色相，看起來像是選單的一部分而不是外掛的
+        # 系統控制項。
+        style.configure(
+            "TCombobox",
+            fieldbackground=COLOR_TAB_BG, background=BTN_SECONDARY_BG,
+            foreground=COLOR_LABEL_FG, arrowcolor="#ffffff",
+            bordercolor=COLOR_COMBOBOX_BORDER, lightcolor=COLOR_TAB_BG, darkcolor=COLOR_TAB_BG,
+            padding=(8, 4), relief="flat", borderwidth=1, arrowsize=14,
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", COLOR_TAB_BG), ("disabled", COLOR_BG_MAIN)],
+            foreground=[("disabled", COLOR_HINT_FG)],
+            bordercolor=[("focus", BTN_PRIMARY_BG), ("!focus", COLOR_COMBOBOX_BORDER)],
+            lightcolor=[("focus", COLOR_TAB_BG), ("!focus", COLOR_TAB_BG)],
+            darkcolor=[("focus", COLOR_TAB_BG), ("!focus", COLOR_TAB_BG)],
+            background=[("active", BTN_SECONDARY_ACTIVE), ("pressed", BTN_SECONDARY_ACTIVE)],
+        )
+
     # ── 版面 ─────────────────────────────────────────────────────────
 
     def _build_header(self):
@@ -545,10 +580,18 @@ class SettingsWindow(tk.Tk):
 
         # 影片路徑覆寫（選填）：填了就在「▶ 執行所選腳本」啟動子行程時，額外塞一個
         # TEST_VIDEO_PATH 環境變數進去（見 _on_start_tool）。只對有讀這個環境變數的
-        # 腳本有效（目前是 1_run_video_inference.py／2_run_dual_model_compare.py／
-        # 1_measure_ear_distance_single_video.py 這三支），其餘腳本會安靜忽略、跟沒填
-        # 一樣——本視窗本來就不檢查每支腳本內部邏輯（見上面「瀏覽...」按鈕旁的提示文字），
-        # 這個欄位延續同一個原則，不對「填了但腳本不支援」的情況另外提示或報錯。
+        # 腳本有效——目前 paper/cat_monitoring_system/tools/ 底下多支腳本，以及
+        # cat_pose/ 底下有寫死影片路徑的腳本（eda_motion_anomaly.py／eda_motion_score.py／
+        # eda_realtime_anomaly_viewer.py／tail_bend_detect.py／video_infer_save.py／
+        # 111.py／dedup_videos.py／自動標註工具/auto_labeling_capture.py 等）都已支援。
+        # 判斷「填的是檔案還是資料夾」不是這個視窗做的——只是把路徑字串原封不動塞進
+        # TEST_VIDEO_PATH，實際檔案/資料夾判斷（os.path.isfile/isdir）在各腳本內部自行
+        # 處理：大多數腳本填檔案／資料夾都認得；dedup_videos.py／
+        # 0_compare_two_models_images.py／0_video_pose_viewer.py 這三支只認資料夾（邏輯上
+        # 需要「一批」東西，單一檔案沒意義，填檔案會安靜忽略）。其餘沒讀這個環境變數的
+        # 腳本會安靜忽略、跟沒填一樣——本視窗本來就不檢查每支
+        # 腳本內部邏輯（見上面「瀏覽...」按鈕旁的提示文字），這個欄位延續同一個原則，
+        # 不對「填了但腳本不支援」的情況另外提示或報錯。
         tool_row_video = tk.Frame(tool_outer, bg=COLOR_HEADER_BG)
         tool_row_video.pack(fill="x", padx=10, pady=(0, 4))
         tk.Label(
@@ -576,6 +619,46 @@ class SettingsWindow(tk.Tk):
             font=self._font_hint, compact=True,
         ).pack(side="left")
 
+        # 模型路徑覆寫（選填）：跟上面「影片路徑」是同一套機制，差別是這裡塞的環境
+        # 變數是 YOLO_MODEL_PATH，用來覆寫腳本裡寫死的 YOLO pose 模型（.pt）路徑
+        # （見 _on_start_tool）。只對有讀這個環境變數的腳本有效——目前
+        # cat_pose/ 底下有寫死 YOLO 模型路徑的腳本（eda_motion_anomaly.py／
+        # eda_motion_score.py／eda_realtime_anomaly_viewer.py／video_infer_save.py／
+        # tail_bend_detect.py／0_compare_two_models_images.py／0_video_pose_viewer.py／
+        # 自動標註工具/auto_labeling_capture.py／自動標註工具/labeling.py），以及
+        # paper/cat_monitoring_system/tools/ 底下同樣有寫死 YOLO 模型路徑的腳本
+        # （1_classify_and_sort_videos.py／1_export_keypoint_timeseries.py／
+        # 1_measure_ear_distance_single_video.py／1_run_video_inference.py／
+        # 1_skeleton_visualizer.py／1_visualize_interpolation.py／
+        # 1_visualize_three_normalizations.py／3_cat_identity_verification_test.py／
+        # run_keypoint_trend_from_videos.py／test_bbox_area_ratio.py／
+        # test_bone_length_stability.py／test_pose_jitter_analysis.py／
+        # eval_model_worst_videos.py／train_data/0_dataset_collect.py）都已支援。
+        # 注意：這裡只覆寫「YOLO pose 偵測模型」，不影響行為辨識用的 ST-GCN 模型
+        # 路徑（STGCN_MODEL_PATH 之類）；test_anomaly_detection.py／
+        # verify_lick_stage_m2.py 讀的是 config.ModelPaths.YOLO_MODEL，走另一套
+        # 官方覆寫機制（CAT_MONITORING_YOLO_MODEL 環境變數），不吃這個欄位；
+        # 2_run_dual_model_compare.py／eval_pose_compare.py／eval_ema_ablation.py
+        # 是刻意比較多個不同模型的工具，也不套用這個欄位。其餘沒讀這個環境變數的
+        # 腳本會安靜忽略、跟沒填一樣，原則同上面的影片路徑欄位。
+        tool_row_model = tk.Frame(tool_outer, bg=COLOR_HEADER_BG)
+        tool_row_model.pack(fill="x", padx=10, pady=(0, 4))
+        tk.Label(
+            tool_row_model, text="🧠 模型路徑（選填）:", bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
+            font=self._font_hint,
+        ).pack(side="left")
+        # 模型路徑：記住上次填的值（settings_gui/ui_state.json，純 UI 便利記憶）
+        self._tool_model_path_var = tk.StringVar(
+            value=_ui_state.get("last_tool_model_path", "")
+        )
+        tk.Entry(
+            tool_row_model, textvariable=self._tool_model_path_var, font=self._font_hint,
+        ).pack(side="left", fill="x", expand=True, padx=(6, 8))
+        _styled_button(
+            tool_row_model, "🧠 選擇模型", self._pick_tool_model_file, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+            font=self._font_hint, compact=True,
+        ).pack(side="left")
+
         # 常駐說明卡片：選定（或篩選/打字剛好完全對到）某支腳本時，這裡會顯示
         # docs/獨立運行腳本索引.md 記錄的功能說明——常忘記腳本名稱或功能時不用切去
         # 開文件對照，選了就看得到。trace_add 綁在 StringVar 上，不管是滑鼠選清單、
@@ -595,8 +678,8 @@ class SettingsWindow(tk.Tk):
         self._tool_desc_icon_var = tk.StringVar(value="💡")
         tk.Label(
             desc_card, textvariable=self._tool_desc_icon_var, bg=COLOR_TOOL_DESC_BG,
-            font=("Segoe UI Emoji", 20),
-        ).pack(side="left", padx=(12, 10), pady=10)
+            font=("Segoe UI Emoji", 14), anchor="center",
+        ).pack(side="left", padx=(12, 10), pady=10, anchor="center")
 
         self._tool_desc_var = tk.StringVar(value="")
         tk.Label(
@@ -793,7 +876,7 @@ class SettingsWindow(tk.Tk):
     def _on_open_tool_order(self):
         """「↕ 排序」按鈕：開排序對話框，存檔後重建下拉選單。"""
         if not self._tool_relnames_ordered:
-            messagebox.showinfo("自訂工具排序", "目前沒有可排序的腳本。")
+            dialogs.show_info(self, "自訂工具排序", "目前沒有可排序的腳本。")
             return
 
         existing = set(self._tool_relnames_ordered)
@@ -802,7 +885,7 @@ class SettingsWindow(tk.Tk):
         def _apply(new_relnames, locked_relnames):
             ok, err = _tool_order.save_order(new_relnames, locked_relnames)
             if not ok:
-                messagebox.showerror("自訂工具排序", f"寫入 tool_order.json 失敗：\n{err}")
+                dialogs.show_error(self, "自訂工具排序", f"寫入 tool_order.json 失敗：\n{err}")
                 return False
             self._reload_tool_scripts()
             return True
@@ -827,12 +910,13 @@ class SettingsWindow(tk.Tk):
             self._tool_script_var.set(last)
 
     def _save_tool_ui_state(self):
-        """把目前的腳本選擇與影片路徑寫進 ui_state.json（純 UI 便利記憶）。"""
+        """把目前的腳本選擇與影片/模型路徑寫進 ui_state.json（純 UI 便利記憶）。"""
         raw = self._tool_script_var.get().strip()
         script_full = self._tool_script_map.get(raw, raw) if raw else ""
         _ui_state.update(
             last_tool_script=script_full or None,
             last_tool_video_path=self._tool_video_path_var.get().strip() or None,
+            last_tool_model_path=self._tool_model_path_var.get().strip() or None,
         )
 
     def _reload_tool_scripts(self):
@@ -857,7 +941,8 @@ class SettingsWindow(tk.Tk):
         還在跑」的情況。"""
         pm = self._process_manager
         if pm.is_running:
-            if not messagebox.askyesno(
+            if not dialogs.ask_yesno(
+                self,
                 "關閉設定視窗",
                 f"{pm.active_label} 目前正在執行中（PID {pm.process.pid}）。\n\n"
                 "關閉本視窗會一併送出關閉信號，避免關掉視窗後失去控制、"
@@ -867,7 +952,8 @@ class SettingsWindow(tk.Tk):
             self._set_process_status(f"⏳  正在關閉 {pm.active_label}…", "stopping")
             self.update_idletasks()
             if not pm.request_shutdown_and_wait():
-                messagebox.showwarning(
+                dialogs.show_warning(
+                    self,
                     "關閉設定視窗",
                     f"{pm.active_label} 似乎沒有在預期時間內結束，請自行檢查工作管理員確認狀態。",
                 )
@@ -914,6 +1000,18 @@ class SettingsWindow(tk.Tk):
         if path:
             self._tool_video_path_var.set(path)
 
+    def _pick_tool_model_file(self):
+        """選 YOLO pose 模型檔（.pt）——跟影片路徑不同，模型路徑目前所有支援的
+        腳本都只吃單一檔案，沒有「選資料夾」的用法，所以只放這一顆按鈕。"""
+        initial_dir = str(_SCRIPT_DIR.parent / "yolo_models")
+        path = filedialog.askopenfilename(
+            title="選擇 YOLO pose 模型檔",
+            initialdir=initial_dir if Path(initial_dir).exists() else str(_SCRIPT_DIR),
+            filetypes=[("模型檔案", "*.pt"), ("所有檔案", "*.*")],
+        )
+        if path:
+            self._tool_model_path_var.set(path)
+
     def _on_open_tool_script_file(self):
         """用文字編輯器開啟目前選定的腳本原始碼——這些獨立工具大多是「先打開改
         檔案開頭寫死的常數（模型路徑、RUN_MODE 之類），再執行」的用法，開啟檔案
@@ -927,12 +1025,12 @@ class SettingsWindow(tk.Tk):
         """
         raw = self._tool_script_var.get().strip()
         if not raw:
-            messagebox.showwarning("開啟檔案", "請先從下拉選單選擇，或按「瀏覽...」挑一個 .py 腳本。")
+            dialogs.show_warning(self, "開啟檔案", "請先從下拉選單選擇，或按「瀏覽...」挑一個 .py 腳本。")
             return
         script_path = self._tool_script_map.get(raw, raw)
         script_file = Path(script_path)
         if not script_file.exists():
-            messagebox.showerror("開啟檔案", f"找不到檔案：\n{script_path}")
+            dialogs.show_error(self, "開啟檔案", f"找不到檔案：\n{script_path}")
             return
         # notepad.exe 用完整路徑而不是靠 PATH 解析裸檔名——實測發現某些啟動環境
         # （例如透過 Anaconda 環境的 python.exe 執行時）PATH 裡不見得含
@@ -943,12 +1041,12 @@ class SettingsWindow(tk.Tk):
         try:
             subprocess.Popen([editor, str(script_file)])
         except OSError as e:
-            messagebox.showerror("開啟檔案", f"開啟失敗：{e}")
+            dialogs.show_error(self, "開啟檔案", f"開啟失敗：{e}")
 
     def _on_start_tool(self):
         raw = self._tool_script_var.get().strip()
         if not raw:
-            messagebox.showwarning("執行腳本", "請先從下拉選單選擇，或按「瀏覽...」挑一個 .py 腳本。")
+            dialogs.show_warning(self, "執行腳本", "請先從下拉選單選擇，或按「瀏覽...」挑一個 .py 腳本。")
             return
         # 下拉選單顯示的是相對路徑（例如 "eval_pose_compare.py"），要透過
         # self._tool_script_map 換回完整路徑；「瀏覽...」或手動輸入的則已經是完整
@@ -956,12 +1054,37 @@ class SettingsWindow(tk.Tk):
         script_path = self._tool_script_map.get(raw, raw)
         script_file = Path(script_path)
         if not script_file.exists():
-            messagebox.showerror("執行腳本", f"找不到檔案：\n{script_path}")
+            dialogs.show_error(self, "執行腳本", f"找不到檔案：\n{script_path}")
             return
         video_path = self._tool_video_path_var.get().strip()
-        extra_env = {"TEST_VIDEO_PATH": video_path} if video_path else None
-        self._process_manager.start_tool(script_file, extra_env=extra_env)
-        # 記住「上次使用的腳本 + 影片路徑」，下次開視窗自動還原
+        model_path = self._tool_model_path_var.get().strip()
+        # 影片/模型路徑大多是手動打字或修改過的，容易打錯字；用「瀏覽...」按鈕選的
+        # 一定存在，但這裡不區分來源，一律檢查。只用 ask_yesno 軟性提醒、不擋執行
+        # ——路徑對不對得看實際接收的腳本是否讀這個環境變數，本視窗不知道，所以
+        # 交給使用者自己判斷要不要照打錯的路徑繼續。
+        if video_path and not Path(video_path).exists():
+            if not dialogs.ask_yesno(
+                self,
+                "執行腳本",
+                f"🎬 影片路徑好像不存在：\n{video_path}\n\n"
+                "如果是手動輸入打錯字，建議取消後修正；仍要照這個路徑執行嗎？",
+            ):
+                return
+        if model_path and not Path(model_path).exists():
+            if not dialogs.ask_yesno(
+                self,
+                "執行腳本",
+                f"🧠 模型路徑好像不存在：\n{model_path}\n\n"
+                "如果是手動輸入打錯字，建議取消後修正；仍要照這個路徑執行嗎？",
+            ):
+                return
+        extra_env = {}
+        if video_path:
+            extra_env["TEST_VIDEO_PATH"] = video_path
+        if model_path:
+            extra_env["YOLO_MODEL_PATH"] = model_path
+        self._process_manager.start_tool(script_file, extra_env=extra_env or None)
+        # 記住「上次使用的腳本 + 影片路徑 + 模型路徑」，下次開視窗自動還原
         self._save_tool_ui_state()
 
     def _on_stop_tool(self):
@@ -1486,8 +1609,12 @@ class SettingsWindow(tk.Tk):
         control = tk.Frame(row, bg=row_bg)
         control.pack(side="left", fill="x", expand=True, padx=(8, 8))
 
+        # 來源標籤（JSON／環境變數／表單暫存／預設值）：小圓角徽章，不是純文字
+        # 硬加方括號充當標籤——見 settings_gui/style.py 的 _StatusBadge。
         badge_var = tk.StringVar(value="")
-        badge = tk.Label(row, textvariable=badge_var, font=self._font_hint, padx=6, pady=2)
+        badge = _styled_badge(
+            row, badge_var, bg=BADGE_DEFAULT_BG, fg=BADGE_DEFAULT_FG, font=self._font_hint,
+        )
         badge.pack(side="right", anchor="n")
 
         info = {
@@ -1670,14 +1797,6 @@ class SettingsWindow(tk.Tk):
                     command=lambda: info["apply_video_mode"](),
                 ).pack(side="left", padx=(0, 12))
 
-            sub_row = tk.Frame(control, bg=row_bg)
-            sub_row.pack(side="top", fill="x", pady=(4, 0))
-
-            file_row = tk.Frame(sub_row, bg=row_bg)
-            tk.Entry(file_row, textvariable=path_var, font=self._font_label).pack(
-                side="left", fill="x", expand=True
-            )
-
             def _browse_video(v=path_var):
                 path = filedialog.askopenfilename(
                     title="選擇影片檔案",
@@ -1689,10 +1808,23 @@ class SettingsWindow(tk.Tk):
                 if path:
                     v.set(path)
 
-            _styled_button(
-                file_row, "瀏覽...", _browse_video, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+            # 「瀏覽...」原本跟輸入框放在下面那排（sub_row/file_row），三個模式的
+            # Radiobutton 佔掉整個上面那排之後，看起來就像被擠到下一行——改成放在
+            # mode_row 尾端，跟同一列最右邊的來源徽章（JSON／環境變數…）對齊在同一
+            # 行。只有選到「本機影片檔案」模式才有意義，所以不在這裡直接 pack，
+            # 交給 _apply_video_mode() 依目前模式顯示/隱藏（見下面）。
+            browse_btn = _styled_button(
+                mode_row, "瀏覽...", _browse_video, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
                 font=self._font_hint, compact=True,
-            ).pack(side="left", padx=(SPACE_SM, 0))
+            )
+
+            sub_row = tk.Frame(control, bg=row_bg)
+            sub_row.pack(side="top", fill="x", pady=(4, 0))
+
+            file_row = tk.Frame(sub_row, bg=row_bg)
+            tk.Entry(file_row, textvariable=path_var, font=self._font_label).pack(
+                side="left", fill="x", expand=True
+            )
 
             camera_row = tk.Frame(sub_row, bg=row_bg)
             tk.Label(camera_row, text="攝影機索引：", bg=row_bg, fg=COLOR_LABEL_FG, font=self._font_hint).pack(side="left")
@@ -1716,6 +1848,10 @@ class SettingsWindow(tk.Tk):
                 for r in (file_row, camera_row, url_row):
                     r.pack_forget()
                 {"file": file_row, "camera": camera_row, "url": url_row}[mode_var.get()].pack(fill="x")
+                if mode_var.get() == "file":
+                    browse_btn.pack(side="left", padx=(SPACE_MD, 0))
+                else:
+                    browse_btn.pack_forget()
                 _refresh_video_hint()
 
             hint_var = tk.StringVar(value="")
@@ -1919,22 +2055,22 @@ class SettingsWindow(tk.Tk):
         badge_var = info["badge_var"]
         badge_widget = info["badge_widget"]
         if source == "env":
-            badge_var.set("[環境變數]")
+            badge_var.set("環境變數")
             badge_widget.config(bg=BADGE_ENV_BG, fg=BADGE_ENV_FG)
             info["env_note_var"].set(
                 f"⚠ 此欄位目前受環境變數 {field['env_var']} 控制；儲存 JSON 不會立即生效，"
                 "需先取消該環境變數才會改用 runtime_settings.current.json 的值。"
             )
         elif source == "json":
-            badge_var.set("[JSON]")
+            badge_var.set("JSON")
             badge_widget.config(bg=BADGE_JSON_BG, fg=BADGE_JSON_FG)
             info["env_note_var"].set("")
         elif source == "form":
-            badge_var.set("[表單暫存，尚未儲存]")
+            badge_var.set("表單暫存，尚未儲存")
             badge_widget.config(bg=BADGE_FORM_BG, fg=BADGE_FORM_FG)
             info["env_note_var"].set("")
         else:
-            badge_var.set("[預設值]")
+            badge_var.set("預設值")
             badge_widget.config(bg=BADGE_DEFAULT_BG, fg=BADGE_DEFAULT_FG)
             info["env_note_var"].set("")
 
@@ -2048,26 +2184,27 @@ class SettingsWindow(tk.Tk):
         settings_manager.reload_runtime_settings()
         self._populate_from_effective_state()
         self._refresh_top_info()
-        messagebox.showinfo("載入目前設定", "已重新讀取環境變數／runtime_settings.current.json／內建預設值。")
+        dialogs.show_info(self, "載入目前設定", "已重新讀取環境變數／runtime_settings.current.json／內建預設值。")
 
     def _on_save(self):
         data, errors = self._collect_form_data()
         if errors:
-            messagebox.showerror("儲存設定", "以下欄位輸入格式有誤，請修正後再試：\n\n" + "\n".join(errors))
+            dialogs.show_error(self, "儲存設定", "以下欄位輸入格式有誤，請修正後再試：\n\n" + "\n".join(errors))
             return
         ok, errs, warnings = settings_manager.save_runtime_settings(data)
         if not ok:
-            messagebox.showerror("儲存設定", "驗證未通過，設定未儲存：\n\n" + "\n".join(errs))
+            dialogs.show_error(self, "儲存設定", "驗證未通過，設定未儲存：\n\n" + "\n".join(errs))
             return
         msg = "設定已儲存；重新啟動主程式後生效。"
         if warnings:
             msg += "\n\n提醒：\n" + "\n".join(warnings)
-        messagebox.showinfo("儲存設定", msg)
+        dialogs.show_info(self, "儲存設定", msg)
         self._refresh_top_info()
         self._populate_from_effective_state()
 
     def _on_restore_defaults(self):
-        if not messagebox.askyesno(
+        if not dialogs.ask_yesno(
+            self,
             "還原 GUI 預設值",
             "將表單所有可管理欄位還原為內建預設值（不含 ST-GCN 訓練設定，本來就不在此設定視窗管理），"
             "是否繼續？\n\n此動作僅套用到表單，仍需按「儲存設定」才會寫入 runtime_settings.current.json。",
@@ -2075,15 +2212,15 @@ class SettingsWindow(tk.Tk):
             return
         defaults = settings_manager.restore_defaults()
         if not defaults:
-            messagebox.showerror("還原 GUI 預設值", "default_runtime_settings.json 讀取失敗或內容為空。")
+            dialogs.show_error(self, "還原 GUI 預設值", "default_runtime_settings.json 讀取失敗或內容為空。")
             return
         self._populate_form(defaults, source_label="form")
-        messagebox.showinfo("還原 GUI 預設值", "已載入 GUI 預設值到表單，請按「儲存設定」以正式套用。")
+        dialogs.show_info(self, "還原 GUI 預設值", "已載入 GUI 預設值到表單，請按「儲存設定」以正式套用。")
 
     def _on_export(self):
         data, errors = self._collect_form_data()
         if errors:
-            messagebox.showerror("匯出設定", "以下欄位輸入格式有誤，請修正後再試：\n\n" + "\n".join(errors))
+            dialogs.show_error(self, "匯出設定", "以下欄位輸入格式有誤，請修正後再試：\n\n" + "\n".join(errors))
             return
         # 預設檔名帶上「匯出當下」的時間戳記（YYYYMMDD_HHMMSS，跟專案裡
         # eval_results/ 底下既有的時間戳記資料夾同一種格式，不用另外發明新格式）
@@ -2099,12 +2236,12 @@ class SettingsWindow(tk.Tk):
             return
         ok, errs, warnings = settings_manager.export_settings(data, path)
         if not ok:
-            messagebox.showerror("匯出設定", "驗證未通過，未匯出：\n\n" + "\n".join(errs))
+            dialogs.show_error(self, "匯出設定", "驗證未通過，未匯出：\n\n" + "\n".join(errs))
             return
         msg = f"已匯出到：\n{path}"
         if warnings:
             msg += "\n\n提醒：\n" + "\n".join(warnings)
-        messagebox.showinfo("匯出設定", msg)
+        dialogs.show_info(self, "匯出設定", msg)
 
     def _on_import(self):
         path = filedialog.askopenfilename(title="匯入設定", filetypes=[("JSON", "*.json")])
@@ -2112,16 +2249,16 @@ class SettingsWindow(tk.Tk):
             return
         ok, data, errors, warnings = settings_manager.import_settings(path)
         if errors:
-            messagebox.showerror("匯入設定", "檔案驗證失敗，未套用：\n\n" + "\n".join(str(e) for e in errors))
+            dialogs.show_error(self, "匯入設定", "檔案驗證失敗，未套用：\n\n" + "\n".join(str(e) for e in errors))
             return
         current, _ = self._collect_form_data()
         changes = settings_manager.diff_settings(current, data)
         if not changes:
-            messagebox.showinfo("匯入設定", "與目前表單內容相同，沒有變更。")
+            dialogs.show_info(self, "匯入設定", "與目前表單內容相同，沒有變更。")
             return
         if self._show_diff_dialog(changes):
             self._populate_form(data, source_label="form")
-            messagebox.showinfo("匯入設定", "已套用到表單，請按「儲存設定」以正式寫入 runtime_settings.current.json。")
+            dialogs.show_info(self, "匯入設定", "已套用到表單，請按「儲存設定」以正式寫入 runtime_settings.current.json。")
 
     def _show_diff_dialog(self, changes) -> bool:
         dialog = tk.Toplevel(self)

@@ -31,8 +31,8 @@ from settings_gui.style import (
     SPACE_MD,
     SPACE_SM,
     SPACE_XS,
-    _styled_button,
 )
+from settings_gui.widgets import _styled_button
 
 _ORDER_PATH = Path(__file__).resolve().parent / "tool_order.json"
 

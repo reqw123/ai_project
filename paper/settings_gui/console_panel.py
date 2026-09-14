@@ -51,8 +51,8 @@ from settings_gui.style import (
     CONSOLE_MIN_FONT_SIZE,
     CONSOLE_MIN_HEIGHT,
     SPACE_SM,
-    _styled_button,
 )
+from settings_gui.widgets import _styled_button
 
 
 class ConsolePanel:

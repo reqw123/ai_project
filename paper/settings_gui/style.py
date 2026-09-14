@@ -1,21 +1,29 @@
-"""`settings_window.py` 與 `settings_gui` 底下各模組共用的樣式常數／小工具。
+"""`settings_window.py` 與 `settings_gui` 底下各模組共用的樣式常數——純資料，
+不含任何 widget 實作。
 
 只搬了「其他 settings_gui 模組也會用到」的那一小撮常數過來（標題列配色、終端機
-配色、按鈕配色、終端機尺寸與字級參數、說明卡片配色、間距比例），加上
-`_styled_button()`——其餘只有 `settings_window.py` 自己用到的樣式常數（分頁代表色、
-徽章配色、布林旗標配色等）仍留在 `settings_window.py` 裡，沒有必要搬。
+配色、按鈕配色、終端機尺寸與字級參數、說明卡片配色、間距比例）；其餘只有
+`settings_window.py` 自己用到的樣式常數（分頁代表色、徽章配色、布林旗標配色等）
+仍留在 `settings_window.py` 裡，沒有必要搬。
 
 **2026-08 版面美化**：按鈕顏色從原本 4 組（主要綠／次要藍灰／警告橘／中性灰）簡化
 成 3 組——原本的「次要」跟「中性」語意上都是「不是主要也不是警告」，合併成一組
 `BTN_SECONDARY_*`（沿用原本次要色的藍灰色調，比純灰更有辨識度、也更貼近整體深藍
 色系的標題列）；`settings_window.py` 原本各自獨立定義的 `BTN_NEUTRAL_*` 已移除，
 所有原本用中性灰的按鈕改用這裡的 `BTN_SECONDARY_*`。同時新增間距比例常數
-（4 的倍數）跟 `_styled_button()` 的 `outline`/`compact` 兩個選項，取代原本「有的
-按鈕用預設 padding、有的手動 `.config(pady=4)` 覆寫」這種各自為政的做法。
-"""
+（4 的倍數），取代原本「有的按鈕用預設 padding、有的手動 `.config(pady=4)` 覆寫」
+這種各自為政的做法。
 
-import tkinter as tk
-import unicodedata
+**2026-09 拆分 widgets.py**：`_PillButton`／`_StatusBadge`（自製圓角按鈕/徽章
+Canvas widget）跟 `_styled_button`／`_styled_badge`（它們的產生器函式）原本寫在
+這裡，但這支檔案的定位是「共用樣式常數」——純資料，不該混進兩個完整的自製 widget
+實作（曾經佔掉六成以上的行數）。全部搬到 `settings_gui/widgets.py`，理由跟
+「一支檔案負責一個 widget」的專案慣例一致（`console_panel.py`／`dialogs.py`／
+`image_popup.py`／`tool_order.py` 都是這樣）；`widgets.py` 仍然從這裡 import
+顏色/間距常數，不重複定義。同時刪掉了 `_display_width()`——搜過整個 `paper/`
+樹，除了它自己的定義以外沒有任何呼叫點（`tab_docs_panel.py` 裡只剩一句「以前用
+過、後來換成 `font.measure()`」的說明性註解），是重構後留下的死碼。
+"""
 
 # ── 標題列配色（settings_window.py 的標題列／流程列，跟終端機面板的標題列共用同一組）──
 COLOR_HEADER_BG = "#2c3e50"
@@ -82,46 +90,3 @@ COLOR_TOOL_DESC_BG = "#eaf4fc"
 COLOR_TOOL_DESC_BORDER = "#aed6f1"
 COLOR_TOOL_DESC_ACCENT = "#1b4f72"  # 卡片左側色條
 COLOR_TOOL_DESC_FG = "#1b2631"  # 深色文字，淡藍底上要維持可讀性
-
-
-def _display_width(text: str) -> int:
-    """算字串的「顯示寬度」（全形/中文字元算 2 個半形字寬，其餘算 1）——用在等寬
-    字型的清單裡要用空白對齊多欄內容時，len() 對中文字元會低估實際佔用的寬度；
-    也用來估算 tk.Entry 的 `width=`（字元數單位，基準是拉丁字元寬度）該給多少，
-    中文字元佔用的實際像素寬度大約是拉丁字元的兩倍，用這個函式換算比直接用
-    len() 準確。"""
-    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
-
-
-def _styled_button(parent, text, command, bg, active_bg, fg="#ffffff", font=None,
-                    outline=False, compact=False):
-    """通用按鈕產生器。
-
-    - `outline=True`：畫成「幽靈按鈕」——底色跟 `parent` 背景融為一體、只有邊框跟
-      文字用 `bg` 這個顏色（`active_bg` 這時候不會用到）。給整排按鈕裡「最不重要」
-      的收尾動作用（取消、關閉），不用為了再降一級重要性又發明一個新色相，靠
-      「有沒有實心填色」這個更輕的視覺差異就夠分辨了。
-    - `compact=True`：內距改用較小的間距（`SPACE_SM`/`SPACE_XS`），給空間較擠的
-      地方用（例如緊貼在輸入框旁邊的「瀏覽...」按鈕），跟一般按鈕
-      （`SPACE_MD`/`SPACE_SM`）拉開一個明確的兩級尺寸系統，不再各自寫死數字。
-
-    實心按鈕（`outline=False`，多數情況）用 `relief="raised"` + `bd=2` 做出立體感
-    （亮邊在左上、暗邊在右下，按下去時 Tk 會自動反過來變凹陷，有按壓回饋）——
-    Tkinter 沒有真的陰影可以畫，這是這個工具箱能做到「有立體感」最直接的方式。
-    outline 按鈕維持純邊框、不加浮凸，因為它本來就是刻意做得比較「輕」的次要
-    按鈕，浮凸感會跟它「不重要」的視覺定位互相矛盾。
-    """
-    padx = SPACE_SM if compact else SPACE_MD
-    pady = SPACE_XS if compact else SPACE_SM
-    if outline:
-        return tk.Button(
-            parent, text=text, command=command, bg=parent.cget("bg"), fg=bg,
-            activebackground=_GHOST_HOVER_BG, activeforeground=bg,
-            relief="solid", bd=1, highlightthickness=0,
-            font=font or ("Microsoft JhengHei", 12, "bold"), padx=padx, pady=pady, cursor="hand2",
-        )
-    return tk.Button(
-        parent, text=text, command=command, bg=bg, fg=fg,
-        activebackground=active_bg, activeforeground=fg, relief="raised", bd=2,
-        font=font or ("Microsoft JhengHei", 12, "bold"), padx=padx, pady=pady, cursor="hand2",
-    )

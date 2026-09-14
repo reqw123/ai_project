@@ -36,7 +36,8 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, ImageTk
 
-from settings_gui.style import BTN_SECONDARY_ACTIVE, BTN_SECONDARY_BG, _styled_button
+from settings_gui.style import BTN_SECONDARY_ACTIVE, BTN_SECONDARY_BG
+from settings_gui.widgets import _styled_button
 
 _ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 _MIN_POPUP_SIZE = (520, 420)  # 容器還沒被畫出來、量到的寬高是 0/1 時的保底大小
