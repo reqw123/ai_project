@@ -35,6 +35,13 @@ class LickStagePlugin:
                              骨長品質分數，純轉送給事件聚合器；未給時等同
                              未啟用（None）。kpts 也預期已經是同一個共用
                              PoseFilter 平滑過的結果（見 analyzer.py::_handle_cat）。
+        ext_zone_name / ext_zone_confidence — M6（2026-09-15）：同一幀
+                             ext_body_zones 的分類結果（由 frame_processor.py
+                             讀該外掛的 last_zone_name/last_confidence 轉傳過
+                             來），純轉送給事件聚合器當 bout 補充欄位
+                             （ext_zone_mode/ext_zone_l1_mode/
+                             ext_zone_confidence_mean），完全不影響本外掛
+                             自己的 zone/frame_state 判斷。
       全部省略時退回舊行為（wall-clock 計時、kpts 有值 ⟺ 通過 lick gate），
       現有呼叫端不受影響。
     • Any exception raised inside update() is caught and logged at DEBUG
@@ -159,6 +166,8 @@ class LickStagePlugin:
         track_id=None,
         session_id=None,
         pose_quality=None,
+        ext_zone_name=None,
+        ext_zone_confidence=None,
     ) -> None:
         """Fail-safe entry point. Never raises."""
         try:
@@ -210,6 +219,8 @@ class LickStagePlugin:
                 session_id=session_id or self._session_id,
                 discontinuity=discontinuity,
                 pose_quality=pose_quality,
+                ext_zone_name=ext_zone_name,
+                ext_zone_confidence=ext_zone_confidence,
             )
 
             if self._publisher is not None:

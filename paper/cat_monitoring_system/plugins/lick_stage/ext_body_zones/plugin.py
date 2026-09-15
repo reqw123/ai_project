@@ -22,6 +22,7 @@ plugin.close() on every registered plugin without reading a return value.
 
 import logging
 import time
+from typing import Optional
 
 from plugins.lick_stage.analysis_context import FrameState, ReasonCode, SourceClock
 
@@ -67,6 +68,13 @@ class ExtBodyZonePlugin:
         self._prev_zone = _C.ZONE_NO_TARGET
         self._last_log_t = -1e9
         self._last_geo_t = -1e9
+
+        # M6：這幀最新的分類結果，供 frame_processor.py 讀取後轉餵給
+        # lick_stage（見該檔案 _notify_plugins() 的融合邏輯）——本模組本身
+        # 完全不知道、也不依賴 lick_stage 的存在，純粹是被動公開狀態讓
+        # 呼叫端自己決定要不要用，維持零依賴（見檔案開頭 docstring）。
+        self.last_zone_name: str = _C.ZONE_NAMES[_C.ZONE_NO_TARGET]
+        self.last_confidence: Optional[float] = None
 
         self._csv = None
         self._mqtt = None
@@ -200,6 +208,8 @@ class ExtBodyZonePlugin:
         if not cp:
             self._no_cat_sec += accum_dt
             self._prev_zone = _C.ZONE_NO_TARGET
+            self.last_zone_name = _C.ZONE_NAMES[_C.ZONE_NO_TARGET]
+            self.last_confidence = None
             # 說明書 M2 才把「事件表 / 視窗表」接上；M1 shadow 模式下 CSV/MQTT
             # 的輸出節奏維持舊行為（只在舔毛幀寫），非舔毛幀只更新內部分母。
             return
@@ -208,11 +218,15 @@ class ExtBodyZonePlugin:
 
         if not il:
             self._prev_zone = _C.ZONE_NO_TARGET
+            self.last_zone_name = _C.ZONE_NAMES[_C.ZONE_NO_TARGET]
+            self.last_confidence = None
             return
 
         if kpts is None or kpt_conf is None:
             # 舔毛但無姿態
             self._prev_zone = _C.ZONE_NO_TARGET
+            self.last_zone_name = _C.ZONE_NAMES[_C.ZONE_NO_TARGET]
+            self.last_confidence = None
             self._stgcn_lick_sec += accum_dt
             self._unassigned_lick_sec += accum_dt
             self._emit(
@@ -228,6 +242,8 @@ class ExtBodyZonePlugin:
         targets = build_zone_targets(kpts, kpt_conf)
         nose_pt = nose_pt_override if nose_pt_override is not None else kpts[_C.KP_NOSE]
         zone_id, zone_name, confidence = classify_zone(nose_pt, targets)
+        self.last_zone_name = zone_name
+        self.last_confidence = confidence
 
         self._stgcn_lick_sec += accum_dt
         if zone_id != _C.ZONE_NO_TARGET:

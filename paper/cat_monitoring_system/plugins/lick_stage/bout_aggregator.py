@@ -61,9 +61,10 @@ aggregator.py` 沒收到明確數值就完全不建立切分邏輯。
 from __future__ import annotations
 
 import statistics as _pystats
+from collections import Counter
 from typing import Optional
 
-from plugins.lick_stage.analysis_context import ZoneL1
+from plugins.lick_stage.analysis_context import ZoneL1, canonical_ext_zone
 
 
 class _ActiveBout:
@@ -84,6 +85,8 @@ class _ActiveBout:
         "pose_qualities",
         "reason_codes",
         "assigned_sec",
+        "ext_zone_counter",
+        "ext_confidences",
     )
 
     def __init__(self, ts, frame):
@@ -100,8 +103,24 @@ class _ActiveBout:
         self.pose_qualities = []
         self.reason_codes = []
         self.assigned_sec = 0.0
+        self.ext_zone_counter = Counter()
+        self.ext_confidences = []
 
-    def add(self, ts, frame, dt, l1, l2, action_score, pose_quality, reason_code, assigned):
+    def add(
+        self,
+        ts,
+        frame,
+        dt,
+        l1,
+        l2,
+        action_score,
+        pose_quality,
+        reason_code,
+        assigned,
+        *,
+        ext_zone_name=None,
+        ext_zone_confidence=None,
+    ):
         self.end_ts = ts
         self.end_frame = frame
         self.duration_sec += dt
@@ -119,6 +138,16 @@ class _ActiveBout:
             self.pose_qualities.append(float(pose_quality))
         if reason_code:
             self.reason_codes.append(reason_code)
+        # M6：ext_body_zones 補充欄位——刻意不看 `assigned`（那是 lick_stage
+        # 自己的幾何命中結果，跟 ext_body_zones 是完全獨立的判定），也不看
+        # ext 那邊自己的 hit/no-hit：呼叫端（analyzer.py）只在 ext 真的給出
+        # 具體 zone 名稱（非 NO_TARGET）時才傳非 None，見 manager.py／
+        # analyzer.py 的說明；`AMBIGUOUS` 本身是有意義的信號（「ext 也覺得
+        # 不確定」），刻意保留計入眾數統計，不特別排除。
+        if ext_zone_name is not None:
+            self.ext_zone_counter[ext_zone_name] += 1
+        if ext_zone_confidence is not None:
+            self.ext_confidences.append(float(ext_zone_confidence))
 
     def to_event(self, raw_bout: bool = True) -> dict:
         if self.zone_sec:
@@ -135,6 +164,18 @@ class _ActiveBout:
         reason_mode = None
         if self.reason_codes:
             reason_mode = _pystats.mode(self.reason_codes)
+
+        # M6：ext_body_zones 融合——眾數（出現次數最多的原始 ext zone 名稱）
+        # 而不是像 lick_stage 自己的 zone_l1 那樣用「累積秒數最長」，因為
+        # ext_zone_counter 只逐幀計次（沒有像 zone_sec 那樣乘 dt），兩者
+        # 統計口徑本來就不同，沒有必要為了統一口徑而改動任何一邊既有的
+        # 計算方式（lick_stage 自己的 zone_l1 用秒數是刻意的既有設計，
+        # 這裡新增的補充欄位沒有義務套用同一種口徑）。
+        ext_zone_mode = None
+        ext_zone_l1_mode = None
+        if self.ext_zone_counter:
+            ext_zone_mode = self.ext_zone_counter.most_common(1)[0][0]
+            ext_zone_l1_mode = canonical_ext_zone(ext_zone_mode)
 
         n = max(self.duration_sec, 1e-9)
         return {
@@ -166,6 +207,19 @@ class _ActiveBout:
                 else None
             ),
             "unknown_reason_mode": reason_mode,
+            # M6（2026-09-15，ext_body_zones 融合）：ext_body_zones 逐幀分類
+            # 結果的補充欄位，純粹是額外資訊，不影響上面任何既有欄位的計算，
+            # 也完全不影響這個 bout 是否被切分（zone hysteresis 只吃
+            # lick_stage 自己的 zone_l1，見 `feed()`）。`None` 代表整段 bout
+            # 期間呼叫端從未收到 ext_body_zones 的具體分類（例如該外掛沒有
+            # 註冊、或整段都是 NO_TARGET）。
+            "ext_zone_mode": ext_zone_mode,
+            "ext_zone_l1_mode": ext_zone_l1_mode,
+            "ext_zone_confidence_mean": (
+                round(_pystats.fmean(self.ext_confidences), 4)
+                if self.ext_confidences
+                else None
+            ),
             # M6（2026-09-14 第二部分）：raw_bout=True 代表這筆事件對應
             # 「整個」raw action-gate bout，沒有被 zone hysteresis 切分過
             # （zone_switch_min_sec 未啟用，或啟用了但這段 bout 裡 zone
@@ -197,7 +251,19 @@ class ZoneHysteresis:
         self._split_count = 0
 
     def feed(
-        self, ts, frame_idx, dt, l1, l2, action_score, pose_quality, reason_code, assigned
+        self,
+        ts,
+        frame_idx,
+        dt,
+        l1,
+        l2,
+        action_score,
+        pose_quality,
+        reason_code,
+        assigned,
+        *,
+        ext_zone_name=None,
+        ext_zone_confidence=None,
     ) -> Optional[dict]:
         if self._active is None:
             self._active = _ActiveBout(ts, frame_idx)
@@ -230,7 +296,10 @@ class ZoneHysteresis:
                 self._streak_zone = None
                 self._streak_sec = 0.0
 
-        self._active.add(ts, frame_idx, dt, l1, l2, action_score, pose_quality, reason_code, assigned)
+        self._active.add(
+            ts, frame_idx, dt, l1, l2, action_score, pose_quality, reason_code, assigned,
+            ext_zone_name=ext_zone_name, ext_zone_confidence=ext_zone_confidence,
+        )
         return finished
 
     def flush_final(self) -> Optional[dict]:

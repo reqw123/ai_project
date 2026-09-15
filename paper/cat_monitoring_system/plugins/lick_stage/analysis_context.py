@@ -198,12 +198,21 @@ def derive_frame_state(
 
 
 class ZoneL1:
-    """統一部位本體的上層類別（說明書「統一部位本體」）。"""
+    """統一部位本體的上層類別（說明書「統一部位本體」）。
+
+    `HEAD` 只會由 `canonical_ext_zone()`（`ext_body_zones` 的 9 個 zone
+    映射，見下方）產生——`lick_stage` 自己的 `canonical_zone()` 永遠不會
+    回傳 `HEAD`（鼻部接觸梯形從鼻子往外延伸，天生無法命中貓咪自己的頭），
+    是 M6 融合 ext_body_zones 才新增的類別，不影響既有 `canonical_zone()`
+    呼叫端（`bout_aggregator.py` 的 zone hysteresis 只吃 `canonical_zone()`
+    的輸出驅動切分邏輯，不吃 `canonical_ext_zone()`，見該檔案模組說明）。
+    """
 
     TORSO = "TORSO"
     FORELIMB = "FORELIMB"
     HINDLIMB = "HINDLIMB"
     TAIL = "TAIL"
+    HEAD = "HEAD"
     UNKNOWN = "UNKNOWN"
 
 
@@ -226,6 +235,49 @@ def canonical_zone(raw_label) -> tuple[str, Optional[str]]:
     （例如 TORSO 的左右 / 腹背由第二階段 ext 幾何補上）。
     """
     return _LICKSTAGE_ZONE_MAP.get(str(raw_label), (ZoneL1.UNKNOWN, None))
+
+
+# ext_body_zones 的 9 個 zone 名稱（`ext_body_zones/config.py` 的
+# `ExtZoneConfig.ZONE_NAMES`）→ `ZoneL1`。刻意不在這裡 import
+# `ExtZoneConfig`（`ext_body_zones` 是零依賴的獨立姊妹插件，見該模組
+# docstring「Independent of plugins/lick_stage/config.py」；反過來
+# `analysis_context.py` 也不該對它建立 import 依賴），改用字串常值——
+# `ext_body_zones/config.py` 若改了這些名稱，這裡要跟著手動同步（跟
+# `canonical_zone()` 的 `_LICKSTAGE_ZONE_MAP` 用同一種「用字串對照、不
+# import 對方模組」的既有慣例一致）。
+# NECK_CHEST/SIDE_BACK/ABDOMEN/TORSO_UNSPECIFIED 全部併入 TORSO：
+# 這幾個都是軀幹次分區，`ZoneL1` 這一層只要粗粒度的軀幹類別即可，細節
+# 保留在 `ext_zone_mode`（見 bout_aggregator.py 的 `to_event()`）裡的
+# 原始 ext 標籤，不會遺失。
+# 附註：`ext_body_zones/regions.py::classify_zone()` 目前刻意停用 HEAD／
+# NECK_CHEST 判定本身（鼻子天生緊貼自己頭部/胸口，命中不代表真的在舔那裡，
+# 見該函式內的說明），所以這兩個 key 實務上永遠不會被 `classify_zone()`
+# 觸發——這裡先補齊映射純粹是面向未來（那天判定重新啟用時這裡不用跟著
+# 改），不代表目前系統會產生 `ZoneL1.HEAD`。
+_EXT_ZONE_MAP = {
+    "HEAD": ZoneL1.HEAD,
+    "NECK_CHEST": ZoneL1.TORSO,
+    "SIDE_BACK": ZoneL1.TORSO,
+    "ABDOMEN": ZoneL1.TORSO,
+    "TORSO_UNSPECIFIED": ZoneL1.TORSO,
+    "FORELIMB": ZoneL1.FORELIMB,
+    "HINDLIMB": ZoneL1.HINDLIMB,
+    "TAIL": ZoneL1.TAIL,
+}
+
+
+def canonical_ext_zone(raw_ext_label) -> str:
+    """把 `ext_body_zones` 的原始 zone 名稱（`ZONE_NAMES` 的 value，例如
+    `"ABDOMEN"`）映射成 `ZoneL1`。`None`／`"NO_TARGET"`／`"AMBIGUOUS"`／
+    未知字串一律回傳 `ZoneL1.UNKNOWN`（跟 `canonical_zone()` 對
+    `NO_TARGET` 的既有處理一致；`AMBIGUOUS` 語意上就是「無法可靠分辨」，
+    歸類到任何一個具體 zone 都不誠實，所以也算 `UNKNOWN`，不是新發明的
+    特例）。這個函式只用來產生**補充**欄位（`bout_aggregator.py` 的
+    `ext_zone_l1_mode`），不會影響 `bout_aggregator.py` 既有的 zone
+    hysteresis 切分邏輯——那個邏輯只吃 `canonical_zone()` 的輸出，見
+    `bout_aggregator.py` 模組開頭說明與 M6 融合的設計決定。
+    """
+    return _EXT_ZONE_MAP.get(str(raw_ext_label), ZoneL1.UNKNOWN)
 
 
 def stable_config_hash(payload) -> str:

@@ -63,6 +63,24 @@ except Exception:
     _LickConfig = None
     _PoseFilter = None
 
+# M6（2026-09-15，ext_body_zones 統一 ontology 融合）：_notify_plugins() 要
+# 把 ext_body_zones 的逐幀分類結果讀出來、轉餵給 lick_stage 的事件聚合器當
+# 補充欄位（見該方法內的說明）——這一步需要認得這兩個具體的外掛類別，跟
+# M4 的 PoseFilter（對所有外掛一視同仁）不同，是刻意的、有目的性的耦合，
+# 僅限於 frame_processor.py 這個組裝層，兩個外掛彼此的程式碼本身仍然零
+# 依賴（ExtBodyZonePlugin 不 import LickStagePlugin，反之亦然）。同樣獨立
+# import guard，任一個/兩個都不存在時這段融合邏輯自動停用，不影響其餘功能。
+try:
+    from plugins.lick_stage.manager import LickStagePlugin as _LickStagePlugin
+    from plugins.lick_stage.ext_body_zones.plugin import (
+        ExtBodyZonePlugin as _ExtBodyZonePlugin,
+    )
+    from plugins.lick_stage.ext_body_zones.config import ExtZoneConfig as _ExtZoneConfig
+except Exception:
+    _LickStagePlugin = None
+    _ExtBodyZonePlugin = None
+    _ExtZoneConfig = None
+
 
 class _LatestFrameGrabber:
     """背景執行緒持續讀取 cv2.VideoCapture，只保留最新一幀。
@@ -798,27 +816,78 @@ class FrameProcessor:
                 except Exception:
                     pass
 
+        base_kwargs = dict(
+            source_timestamp=source_ts,
+            frame_idx=self.frame_idx,
+            cat_present=cat_present,
+            is_lick=is_lick,
+            lick_confidence=lick_confidence,
+            session_id=self._plugin_session_id,
+            pose_quality=pose_quality,
+        )
+
+        # M6（統一 ontology 融合）：ext_body_zones 的分類結果要在 lick_stage
+        # 的 update() 之前先算好，才能當補充欄位一起餵過去（見下方）。用
+        # isinstance 找出（若有）已註冊的 ext_body_zones 實例，不依賴
+        # self._plugins 的註冊順序——不同呼叫端的註冊順序不保證一致（例如
+        # tools/verify_lick_stage_m2.py 先註冊 lick_stage 再註冊
+        # ext_body_zones）。ext_body_zones 本身完全不知道、也不依賴
+        # lick_stage 的存在，這裡的耦合僅限於 frame_processor.py 這個組裝層
+        # （見檔案開頭 import guard 的說明）。
+        ext_zone_name = None
+        ext_zone_confidence = None
+        ext_plugin = None
+        if _ExtBodyZonePlugin is not None:
+            for _plugin in self._plugins:
+                if isinstance(_plugin, _ExtBodyZonePlugin):
+                    ext_plugin = _plugin
+                    break
+        if ext_plugin is not None:
+            self._call_plugin_update(ext_plugin, feed_kpts, feed_conf, base_kwargs)
+            _name = getattr(ext_plugin, "last_zone_name", None)
+            _no_target = (
+                _ExtZoneConfig.ZONE_NAMES[_ExtZoneConfig.ZONE_NO_TARGET]
+                if _ExtZoneConfig is not None
+                else "NO_TARGET"
+            )
+            if _name is not None and _name != _no_target:
+                # 只有 ext_body_zones 真的給出具體 zone 時才當成補充欄位轉
+                # 餵給 lick_stage；NO_TARGET（沒有分類結果）跟「完全沒有
+                # ext_body_zones 這個外掛」在這裡是同一種語意——都是 None，
+                # 呼叫端（bout_aggregator.py）已經是「None 就不計入」的既有
+                # 慣例（跟 pose_quality/action_score 一致）。confidence 在
+                # NO_TARGET 時是哨兵值 0.0（見 regions.py::classify_zone()），
+                # 不是真正的信心值，一併捨棄，避免拉低 ext_zone_confidence_mean。
+                ext_zone_name = _name
+                ext_zone_confidence = getattr(ext_plugin, "last_confidence", None)
+
         for _plugin in self._plugins:
-            try:
-                _plugin.update(
-                    feed_kpts,
-                    feed_conf,
-                    source_timestamp=source_ts,
-                    frame_idx=self.frame_idx,
-                    cat_present=cat_present,
-                    is_lick=is_lick,
-                    lick_confidence=lick_confidence,
-                    session_id=self._plugin_session_id,
-                    pose_quality=pose_quality,
+            if _plugin is ext_plugin:
+                continue  # 上面已經呼叫過
+            kwargs = base_kwargs
+            if _LickStagePlugin is not None and isinstance(_plugin, _LickStagePlugin):
+                kwargs = dict(
+                    base_kwargs,
+                    ext_zone_name=ext_zone_name,
+                    ext_zone_confidence=ext_zone_confidence,
                 )
-            except TypeError:
-                # 舊版外掛只接受 update(kpts, kpt_conf) —— 退回舊呼叫方式
-                try:
-                    _plugin.update(feed_kpts, feed_conf)
-                except Exception:
-                    pass
+            self._call_plugin_update(_plugin, feed_kpts, feed_conf, kwargs)
+
+    @staticmethod
+    def _call_plugin_update(plugin, feed_kpts, feed_conf, kwargs) -> None:
+        """單一外掛的 fail-safe update() 呼叫，含舊版兩參數呼叫的退回路徑
+        （從 _notify_plugins() 抽出，M6 融合後要對兩個具體外掛分別組不同
+        的 kwargs，原本的單一迴圈不夠用，見呼叫端）。"""
+        try:
+            plugin.update(feed_kpts, feed_conf, **kwargs)
+        except TypeError:
+            # 舊版外掛只接受 update(kpts, kpt_conf) —— 退回舊呼叫方式
+            try:
+                plugin.update(feed_kpts, feed_conf)
             except Exception:
                 pass
+        except Exception:
+            pass
 
     def _draw_identity_badge(self, frame, bbox, is_target, match_key, match_dist):
         """身分驗證結果的獨立視覺提示，跟 Visualizer.draw() 完全分開畫。

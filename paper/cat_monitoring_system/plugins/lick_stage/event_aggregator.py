@@ -159,6 +159,8 @@ class EventAggregator:
         pose_quality=None,
         reason_code=None,
         discontinuity: bool = False,
+        ext_zone_name=None,
+        ext_zone_confidence=None,
     ) -> None:
         if discontinuity:
             # 時間不連續：結算開放中的 bout（不跨斷點），視窗計時也不前進
@@ -208,6 +210,8 @@ class EventAggregator:
                 pose_quality,
                 reason_code,
                 assigned,
+                ext_zone_name=ext_zone_name,
+                ext_zone_confidence=ext_zone_confidence,
             )
             if split_event is not None:
                 # zone 真正持續切換，切分器提前送出子事件——bout 本身仍在

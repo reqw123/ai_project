@@ -215,3 +215,97 @@ class TestEventAggregatorIntegration:
         agg.finalize()
         assert len(windows) == 1
         assert windows[0]["bout_count"] == 2
+
+
+class TestExtZoneFusion:
+    """M6（2026-09-15）：ext_body_zones 融合——`ZoneHysteresis.feed()`/
+    `_ActiveBout` 的 ext_zone_name/ext_zone_confidence 補充欄位，純累加/
+    眾數統計，完全不影響切分邏輯本身（見 bout_aggregator.py 模組開頭「M6
+    融合的設計決定」與 to_event() 的說明）。"""
+
+    def test_ext_zone_absent_gives_none_fields(self):
+        """完全沒有傳 ext_zone_name（呼叫端沒有註冊 ext_body_zones，或
+        frame_processor 判定該幀是 NO_TARGET）：事件的三個補充欄位都是
+        None，不是 0 或空字串——跟 pose_quality_mean 等既有欄位的
+        「None＝尚不可得」慣例一致。"""
+        seg = ZoneHysteresis(zone_switch_min_sec=None)
+        _feed_zone(seg, ZoneL1.FORELIMB, 10)
+        ev = seg.flush_final()
+        assert ev["ext_zone_mode"] is None
+        assert ev["ext_zone_l1_mode"] is None
+        assert ev["ext_zone_confidence_mean"] is None
+
+    def test_ext_zone_mode_is_most_frequent_raw_label(self):
+        """眾數統計：ABDOMEN 出現次數比 FORELIMB 多，mode 應該是 ABDOMEN，
+        且 ext_zone_l1_mode 正確映射成 TORSO（canonical_ext_zone()）。"""
+        seg = ZoneHysteresis(zone_switch_min_sec=None)
+        for i in range(7):
+            seg.feed(
+                i * _DT, i, _DT, ZoneL1.FORELIMB, None, None, None, None, True,
+                ext_zone_name="ABDOMEN", ext_zone_confidence=0.8,
+            )
+        for i in range(7, 10):
+            seg.feed(
+                i * _DT, i, _DT, ZoneL1.FORELIMB, None, None, None, None, True,
+                ext_zone_name="FORELIMB", ext_zone_confidence=0.9,
+            )
+        ev = seg.flush_final()
+        assert ev["ext_zone_mode"] == "ABDOMEN"
+        assert ev["ext_zone_l1_mode"] == ZoneL1.TORSO
+
+    def test_ext_zone_confidence_mean_averages_only_reported_frames(self):
+        seg = ZoneHysteresis(zone_switch_min_sec=None)
+        for i, conf in enumerate([0.5, 0.7, 0.9]):
+            seg.feed(
+                i * _DT, i, _DT, ZoneL1.FORELIMB, None, None, None, None, True,
+                ext_zone_name="FORELIMB", ext_zone_confidence=conf,
+            )
+        ev = seg.flush_final()
+        assert ev["ext_zone_confidence_mean"] == pytest.approx(0.7)
+
+    def test_ext_zone_does_not_affect_lick_stage_own_zone_switch_count(self):
+        """ext_zone 只是補充欄位，不會影響 lick_stage 自己的 zone_l1 判斷
+        或 zone_switch_count——即使每幀的 ext_zone_name 都在變，只要
+        lick_stage 自己的 l1 沒變，zone_switch_count 仍是 0。"""
+        seg = ZoneHysteresis(zone_switch_min_sec=None)
+        ext_labels = ["ABDOMEN", "SIDE_BACK", "FORELIMB", "TAIL"]
+        for i in range(20):
+            seg.feed(
+                i * _DT, i, _DT, ZoneL1.HINDLIMB, None, None, None, None, True,
+                ext_zone_name=ext_labels[i % len(ext_labels)], ext_zone_confidence=0.6,
+            )
+        ev = seg.flush_final()
+        assert ev["zone_switch_count"] == 0
+        assert ev["zone_l1"] == ZoneL1.HINDLIMB
+
+    def test_ext_zone_accumulates_even_when_lick_stage_unassigned(self):
+        """ext_zone 補充欄位不看 lick_stage 自己的 assigned 旗標——即使
+        lick_stage 這幀是 NO_REGION_HIT（unassigned），ext_body_zones 的
+        分類結果仍然照樣計入（兩邊是獨立的幾何判定，見模組說明）。"""
+        seg = ZoneHysteresis(zone_switch_min_sec=None)
+        for i in range(5):
+            seg.feed(
+                i * _DT, i, _DT, ZoneL1.UNKNOWN, None, None, None, None, False,
+                ext_zone_name="ABDOMEN", ext_zone_confidence=0.7,
+            )
+        ev = seg.flush_final()
+        assert ev["ext_zone_mode"] == "ABDOMEN"
+        assert ev["ext_zone_confidence_mean"] == pytest.approx(0.7)
+
+    def test_event_aggregator_feed_threads_ext_zone_through(self):
+        """端到端：EventAggregator.feed() 的 ext_zone_name/ext_zone_confidence
+        引數真的一路傳到最終事件 dict（不是只有 ZoneHysteresis 單元本身
+        接受這兩個參數，呼叫鏈的上一層 EventAggregator.feed() 也要接得住）。"""
+        events = []
+        agg = EventAggregator(zone_switch_min_sec=None, on_event=events.append)
+        for i in range(5):
+            agg.feed(
+                source_ts=i * _DT, frame_idx=i, dt_sec=_DT,
+                frame_state=FrameState.LICK_ASSIGNED, zone_label="FL",
+                ext_zone_name="FORELIMB", ext_zone_confidence=0.85,
+            )
+        agg.finalize()
+        assert len(events) == 1
+        assert events[0]["ext_zone_mode"] == "FORELIMB"
+        assert events[0]["ext_zone_l1_mode"] == ZoneL1.FORELIMB
+        assert events[0]["ext_zone_confidence_mean"] == pytest.approx(0.85)

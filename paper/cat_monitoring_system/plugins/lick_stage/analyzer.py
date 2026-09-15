@@ -108,6 +108,8 @@ class LickAnalyzer:
         session_id: str = "",
         discontinuity: bool = False,
         pose_quality: Optional[float] = None,
+        ext_zone_name: Optional[str] = None,
+        ext_zone_confidence: Optional[float] = None,
     ) -> LickResult:
         """分析單一影格的舔舐區域與臉部朝向，回傳本幀分析結果。
 
@@ -121,6 +123,14 @@ class LickAnalyzer:
         未接上共用 PoseFilter 或該幀尚無法計算，純轉送給事件聚合器，這裡
         不做任何判斷。kpts 本身也預期已經是共用 PoseFilter 平滑過的結果——
         本方法自 M4 第二階段起不再自行對 kpts 做 EMA（見 _handle_cat()）。
+
+        ext_zone_name/ext_zone_confidence：M6（2026-09-15）由呼叫端
+        （frame_processor.py，經 manager.py 轉傳）提供的 ext_body_zones
+        同一幀分類結果，純轉送給事件聚合器當補充欄位（`bout_aggregator.py`
+        的 `ext_zone_mode`/`ext_zone_l1_mode`/`ext_zone_confidence_mean`），
+        完全不參與這裡任何幾何/zone 判斷邏輯——ext_body_zones 是否有註冊、
+        分類結果是什麼，都不影響 `_handle_cat()` 算出來的 `zone_label`/
+        `frame_state`。
         """
         if cat_present is None:
             cat_present = kpts is not None and kpt_conf is not None
@@ -170,6 +180,8 @@ class LickAnalyzer:
                 pose_quality=pose_quality,
                 reason_code=result.reason_code,
                 discontinuity=discontinuity,
+                ext_zone_name=ext_zone_name,
+                ext_zone_confidence=ext_zone_confidence,
             )
         except Exception:
             pass

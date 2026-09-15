@@ -47,6 +47,10 @@ def _make_fake_processor(pose_filter):
 
     fake._current_source_timestamp = types.MethodType(_current_source_timestamp, fake)
     fake._ensure_plugin_sessions = types.MethodType(_ensure_plugin_sessions, fake)
+    # _call_plugin_update 是 staticmethod，直接把底層函式掛到 fake 物件上
+    # 即可（SimpleNamespace 不是真正的 FrameProcessor 實例，不會自動繼承
+    # 類別方法；staticmethod 呼叫沒有 self 綁定問題，直接指派函式參照即可）。
+    fake._call_plugin_update = fp.FrameProcessor._call_plugin_update
     return fake
 
 

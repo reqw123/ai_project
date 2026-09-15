@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS lick_events (
     assigned_ratio     REAL,
     pose_quality_mean  REAL,
     unknown_reason_mode TEXT,
+    ext_zone_mode       TEXT,
+    ext_zone_l1_mode    TEXT,
+    ext_zone_confidence_mean REAL,
     raw_bout           INTEGER,
     model_version      TEXT,
     config_hash        TEXT,
@@ -114,7 +117,10 @@ _EVENT_COLS = [
     "period", "start_source_ts", "end_source_ts", "duration_sec", "start_frame",
     "end_frame", "action", "action_score_mean", "action_score_min", "zone_l1",
     "zone_l2", "zone_score_mean", "zone_switch_count", "assigned_ratio",
-    "pose_quality_mean", "unknown_reason_mode", "raw_bout", "model_version",
+    "pose_quality_mean", "unknown_reason_mode",
+    # M6（2026-09-15，ext_body_zones 融合）：見 bout_aggregator.py::to_event()
+    "ext_zone_mode", "ext_zone_l1_mode", "ext_zone_confidence_mean",
+    "raw_bout", "model_version",
     "config_hash", "topology_version", "code_commit",
 ]
 
