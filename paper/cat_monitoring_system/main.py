@@ -195,6 +195,23 @@ def run_server_mode():
         threading.Thread(
             target=send_ip_to_nodered, args=(ip, node_red_url), daemon=True
         ).start()
+        # lick_stage/ext_body_zones 兩個 Node-RED tab 的即時影像串流小工具
+        # 靠獨立的一支「上線通知」端點才知道去哪裡抓串流畫面，過去 main.py
+        # 只通知主控台那一支端點，導致這兩個 tab 的畫面一直是空的——跟主
+        # 端點一樣用同一支 send_ip_to_nodered()（含重試），plugin 本身就算
+        # 被整個移除也不影響這裡（沒有 import 依賴，純粹是多 POST 一次；
+        # Node-RED 那邊沒開對應 tab 的話這個背景執行緒最後就是重試 10 次
+        # 後放棄，不影響主流程）。
+        try:
+            from plugins.lick_stage.config import LickConfig as _LickConfig
+
+            threading.Thread(
+                target=send_ip_to_nodered,
+                args=(ip, _LickConfig.NODERED_ONLINE_URL),
+                daemon=True,
+            ).start()
+        except ImportError:
+            pass
     else:
         print("⚠ 無法取得有效 IP，跳過 Node-RED 上線通知")
 
