@@ -39,28 +39,6 @@
         "hidden": false
     },
     {
-        "id": "dcca388fe152f327",
-        "type": "ui_group",
-        "name": "即時影像串流",
-        "tab": "lk_uitab",
-        "order": 4,
-        "disp": true,
-        "width": "18",
-        "collapse": false,
-        "className": ""
-    },
-    {
-        "id": "f3c6df7e53089313",
-        "type": "ui_group",
-        "name": "即時影像串流",
-        "tab": "c0d35d5fc4a475ca",
-        "order": 1,
-        "disp": true,
-        "width": "16",
-        "collapse": false,
-        "className": ""
-    },
-    {
         "id": "lk_g1",
         "type": "ui_group",
         "name": "耳距與朝向",
@@ -112,27 +90,6 @@
         "x": 560,
         "y": 140,
         "wires": []
-    },
-    {
-        "id": "15f4ed81a61ec8a6",
-        "type": "ui_template",
-        "z": "3db78eedd7f47c95",
-        "group": "f3c6df7e53089313",
-        "name": "影像串流（含切換按鈕）",
-        "order": 1,
-        "width": "0",
-        "height": "9",
-        "format": "<style>\n.sv-wrap{height:100%;display:flex;flex-direction:column;background:#060a0f;border-radius:10px;overflow:hidden;}\n.sv-bar{height:42px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;background:linear-gradient(135deg,rgba(0,14,8,.96),rgba(2,20,12,.96));border-bottom:1px solid rgba(0,255,136,.12);}\n.sv-dot{width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0;transition:background .4s,box-shadow .4s;}\n.sv-label{flex:1;font-size:11px;font-weight:700;color:rgba(0,255,136,.72);letter-spacing:.6px;}\n.sv-ib{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.18);color:#fff;transition:all .18s;flex-shrink:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-size:16px;}\n.sv-ib:hover{background:rgba(0,255,136,.22);border-color:rgba(0,255,136,.6);transform:scale(1.1);}\n.sv-ib.sv-dis{opacity:.28;cursor:default;pointer-events:none;}\n.sv-ib.sv-on{background:rgba(0,255,136,.18)!important;color:#00ff88!important;border-color:rgba(0,255,136,.42)!important;}\n.sv-ib.sv-vc{background:rgba(66,165,245,.07);border-color:rgba(66,165,245,.22);}\n.sv-ib.sv-vc:not(.sv-dis):hover{background:rgba(66,165,245,.25);border-color:rgba(66,165,245,.7);transform:scale(1.1);}\n.sv-ib.sv-vc.sv-flash{background:rgba(66,165,245,.45)!important;border-color:#42a5f5!important;}\n.sv-body{flex:1;position:relative;background:#000;min-height:0;overflow:hidden;}\n.sv-offline{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.22);font-size:12px;pointer-events:none;}\n.sv-off-ico{font-size:36px;opacity:.28;}\n.sv-rh{position:absolute;z-index:10001;display:none;}\n.sv-wrap.sv-floating .sv-rh{display:block;}\n.sv-rh-n{top:0;left:10px;right:10px;height:7px;cursor:n-resize;}\n.sv-rh-s{bottom:0;left:10px;right:10px;height:7px;cursor:s-resize;}\n.sv-rh-w{left:0;top:10px;bottom:10px;width:7px;cursor:w-resize;}\n.sv-rh-e{right:0;top:10px;bottom:10px;width:7px;cursor:e-resize;}\n.sv-rh-nw{top:0;left:0;width:12px;height:12px;cursor:nw-resize;}\n.sv-rh-ne{top:0;right:0;width:12px;height:12px;cursor:ne-resize;}\n.sv-rh-sw{bottom:0;left:0;width:12px;height:12px;cursor:sw-resize;}\n.sv-rh-se{bottom:0;right:0;width:12px;height:12px;cursor:se-resize;}\n</style>\n<div class=\"sv-wrap\" id=\"ebzsv_wrap\">\n  <div class=\"sv-rh sv-rh-n\" data-dir=\"n\"></div>\n  <div class=\"sv-rh sv-rh-s\" data-dir=\"s\"></div>\n  <div class=\"sv-rh sv-rh-w\" data-dir=\"w\"></div>\n  <div class=\"sv-rh sv-rh-e\" data-dir=\"e\"></div>\n  <div class=\"sv-rh sv-rh-nw\" data-dir=\"nw\"></div>\n  <div class=\"sv-rh sv-rh-ne\" data-dir=\"ne\"></div>\n  <div class=\"sv-rh sv-rh-sw\" data-dir=\"sw\"></div>\n  <div class=\"sv-rh sv-rh-se\" data-dir=\"se\"></div>\n  <div class=\"sv-bar\">\n    <div class=\"sv-dot\" id=\"ebzsv_dot\"></div>\n    <span class=\"sv-label\">📷 BODY ZONE CAM</span>\n    <div class=\"sv-ib sv-vc sv-dis\" id=\"ebzsv_btn_prev\" title=\"上一支影片\">⏮</div>\n    <div class=\"sv-ib sv-vc sv-dis\" id=\"ebzsv_btn_next\" title=\"下一支影片\">⏭</div>\n    <div class=\"sv-ib\" id=\"ebzsv_btn_play\" title=\"啟動串流\">▶</div>\n    <div class=\"sv-ib\" id=\"ebzsv_btn_float\" title=\"浮動視窗\">⧉</div>\n  </div>\n  <div class=\"sv-body\" id=\"ebzsv_body\">\n    <div class=\"sv-offline\" id=\"ebzsv_offline\">\n      <div class=\"sv-off-ico\">📹</div>\n      <div id=\"ebzsv_status\">按下 ▶ 啟動串流</div>\n    </div>\n  </div>\n</div>\n<script>\n(function(scope){\n  var _url='',_baseUrl='',_stream=false,_powered=false,_svTimer=null,_retryTimer=null;\n  var PFX='ebzsv';\n  function g(id){return document.getElementById(PFX+'_'+id);}\n\n  function videoControl(action){\n    if(!_baseUrl)return;\n    var btn=action==='prev'?g('btn_prev'):g('btn_next');\n    if(btn){btn.classList.add('sv-flash');setTimeout(function(){btn.classList.remove('sv-flash');},200);}\n    fetch(_baseUrl+'/video_control',{\n      method:'POST',\n      headers:{'Content-Type':'application/json'},\n      body:JSON.stringify({action:action})\n    }).catch(function(){});\n  }\n\n  function svOn(){\n    if(!_url||_stream)return;\n    _stream=true;\n    if(_retryTimer){clearTimeout(_retryTimer);_retryTimer=null;}\n    var body=g('body'),off=g('offline'),dot=g('dot'),btn=g('btn_play');\n    if(!body)return;\n    if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    var old=body.querySelector('img.sv-img');if(old)body.removeChild(old);\n    var img=document.createElement('img');\n    img.className='sv-img';\n    img.style.cssText='width:100%;height:100%;object-fit:contain;display:block;opacity:0;transition:opacity .3s;pointer-events:none;';\n    img.onload=function(){\n      this.style.opacity=1;\n      if(off)off.style.display='none';\n      if(dot){dot.style.background='#00ff88';dot.style.boxShadow='0 0 6px #00ff88';}\n      if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    };\n    img.onerror=function(){\n      if(!_powered)return;\n      svOff(true);\n      var st=g('status');if(st)st.textContent='串流中斷，3秒後重試...';\n      _retryTimer=setTimeout(function(){if(_powered&&!_stream)svOn();},3000);\n    };\n    if(off)off.style.display='none';\n    body.insertBefore(img,off);\n    img.src=_url;\n    if(btn){btn.textContent='⏹';btn.title='停止串流';btn.classList.add('sv-on');}\n    _svTimer=setTimeout(function(){\n      var ci=body&&body.querySelector('img.sv-img');\n      if(ci&&!ci.naturalWidth){\n        if(!_powered)return;\n        svOff(true);\n        var st=g('status');if(st)st.textContent='連線逾時，3秒後重試...';\n        _retryTimer=setTimeout(function(){if(_powered&&!_stream)svOn();},3000);\n      }\n    },10000);\n  }\n\n  function svOff(internal){\n    _stream=false;\n    if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    var body=g('body'),off=g('offline'),dot=g('dot'),btn=g('btn_play');\n    var old=body&&body.querySelector('img.sv-img');if(old)body.removeChild(old);\n    if(off)off.style.display='flex';\n    if(dot){dot.style.background=_url?'#f5a623':'#444';dot.style.boxShadow=_url?'0 0 4px rgba(245,166,35,.5)':'none';}\n    if(!internal){\n      _powered=false;\n      if(_retryTimer){clearTimeout(_retryTimer);_retryTimer=null;}\n      if(btn){btn.textContent='▶';btn.title='啟動串流';btn.classList.remove('sv-on');}\n      var st=g('status');if(st)st.textContent='按下 ▶ 啟動串流';\n    }\n  }\n\n  var _btn=g('btn_play');\n  if(_btn&&!_btn._bound){\n    _btn._bound=true;\n    _btn.addEventListener('click',function(e){\n      e.stopPropagation();\n      if(_powered){\n        svOff(false);\n      }else{\n        _powered=true;\n        if(_url){svOn();}else{\n          var st=g('status'),dot=g('dot'),btn=g('btn_play');\n          if(st)st.textContent='等待串流服務器...';\n          if(dot){dot.style.background='#aaa';dot.style.boxShadow='0 0 4px rgba(170,170,170,.4)';}\n          if(btn){btn.textContent='⏹';btn.title='停止串流';btn.classList.add('sv-on');}\n        }\n      }\n    });\n  }\n\n  function urlReady(url){\n    _url=url;\n    var m=url.match(/^(https?:\\/\\/[^\\/]+)/);\n    if(m)_baseUrl=m[1];\n    var dot=g('dot');\n    if(dot&&!_stream){dot.style.background='#f5a623';dot.style.boxShadow='0 0 4px rgba(245,166,35,.5)';}\n    var prev=g('btn_prev'),next=g('btn_next');\n    if(prev&&!prev._bound){prev._bound=true;prev.classList.remove('sv-dis');prev.addEventListener('click',function(e){e.stopPropagation();videoControl('prev');});}\n    if(next&&!next._bound){next._bound=true;next.classList.remove('sv-dis');next.addEventListener('click',function(e){e.stopPropagation();videoControl('next');});}\n    if(_powered&&!_stream)svOn();\n  }\n\n  var _floating=false,_origCS='';\n  function _dragBar(e){\n    var wrap=document.getElementById('ebzsv_wrap');\n    if(!wrap||!_floating)return;\n    var r=wrap.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,sl=r.left,st=r.top;\n    function mv(e){wrap.style.left=(sl+e.clientX-sx)+'px';wrap.style.top=(st+e.clientY-sy)+'px';}\n    function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}\n    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);e.preventDefault();\n  }\n  function _startResize(e,dir){\n    var wrap=document.getElementById('ebzsv_wrap');\n    if(!wrap||!_floating)return;\n    e.preventDefault();e.stopPropagation();\n    var r=wrap.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,oL=r.left,oT=r.top,oW=r.width,oH=r.height,minW=240,minH=160;\n    function mv(e){\n      var dx=e.clientX-sx,dy=e.clientY-sy,l=oL,t=oT,w=oW,h=oH;\n      if(dir.indexOf('e')>=0)w=Math.max(minW,oW+dx);\n      if(dir.indexOf('s')>=0)h=Math.max(minH,oH+dy);\n      if(dir.indexOf('w')>=0){w=Math.max(minW,oW-dx);if(w>minW)l=oL+dx;}\n      if(dir.indexOf('n')>=0){h=Math.max(minH,oH-dy);if(h>minH)t=oT+dy;}\n      wrap.style.left=l+'px';wrap.style.top=t+'px';wrap.style.width=w+'px';wrap.style.height=h+'px';\n    }\n    function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}\n    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);\n  }\n  function toggleFloat(){\n    var wrap=document.getElementById('ebzsv_wrap');\n    var bar=wrap&&wrap.querySelector('.sv-bar');\n    var btn=g('btn_float');\n    if(!wrap)return;\n    if(!_floating){\n      _floating=true;\n      _origCS=wrap.getAttribute('style')||'';\n      var r=wrap.getBoundingClientRect();\n      wrap.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;z-index:9999;border-radius:10px;box-shadow:0 12px 48px rgba(0,0,0,.85);overflow:hidden;min-width:240px;min-height:160px;';\n      wrap.classList.add('sv-floating');\n      if(bar){bar.style.cursor='move';bar.addEventListener('mousedown',_dragBar);}\n      if(btn){btn.textContent='⊞';btn.title='返回原位';btn.classList.add('sv-on');}\n    }else{\n      _floating=false;\n      if(bar){bar.style.cursor='';bar.removeEventListener('mousedown',_dragBar);}\n      wrap.classList.remove('sv-floating');\n      wrap.setAttribute('style',_origCS);\n      if(btn){btn.textContent='⧉';btn.title='浮動視窗';btn.classList.remove('sv-on');}\n    }\n  }\n  var floatBtn=g('btn_float');\n  if(floatBtn)floatBtn.addEventListener('click',function(e){e.stopPropagation();toggleFloat();});\n  [].forEach.call(document.querySelectorAll('#ebzsv_wrap .sv-rh'),function(rh){\n    rh.addEventListener('mousedown',function(e){_startResize(e,this.getAttribute('data-dir'));});\n  });\n\n  scope.$watch('msg',function(msg){\n    if(!msg)return;\n    var ip=(msg.payload&&msg.payload.ip)?msg.payload.ip:null;\n    var url='';\n    if(ip){url='http://'+ip+':5000/stream';}\n    else if(msg.stream_url){url=msg.stream_url;}\n    if(!url||url===_url)return;\n    urlReady(url);\n  });\n})(scope);\n</script>",
-        "storeOutMessages": false,
-        "fwdInMessages": true,
-        "resendOnRefresh": true,
-        "templateScope": "local",
-        "className": "",
-        "x": 620,
-        "y": 400,
-        "wires": [
-            []
-        ]
     },
     {
         "id": "1606214d090ad72e",
@@ -214,31 +171,6 @@
         ]
     },
     {
-        "id": "74e7fef6cd71a88b",
-        "type": "inject",
-        "z": "3db78eedd7f47c95",
-        "name": "啟動時恢復串流",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": true,
-        "onceDelay": 2,
-        "topic": "",
-        "payload": "{}",
-        "payloadType": "json",
-        "x": 150,
-        "y": 400,
-        "wires": [
-            [
-                "8aa27a0b1c298147"
-            ]
-        ]
-    },
-    {
         "id": "7a258a70a3a920ff",
         "type": "ui_template",
         "z": "3db78eedd7f47c95",
@@ -289,26 +221,6 @@
         "y": 100,
         "wires": [
             []
-        ]
-    },
-    {
-        "id": "8aa27a0b1c298147",
-        "type": "function",
-        "z": "3db78eedd7f47c95",
-        "name": "從持久化context恢復串流",
-        "func": "let ip = null;\ntry {\n    ip = global.get(\"gfile\").get('lick_python_ip') || global.get('lick_python_ip') || null;\n} catch (e) {\n    ip = global.get('lick_python_ip') || null;\n}\nif (!ip) return null;\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
-        "outputs": 1,
-        "timeout": "",
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 380,
-        "y": 400,
-        "wires": [
-            [
-                "15f4ed81a61ec8a6"
-            ]
         ]
     },
     {
@@ -478,17 +390,6 @@
         "wires": []
     },
     {
-        "id": "5b95dc3eca6c9f52",
-        "type": "http response",
-        "z": "741ff6e2a00d7d0f",
-        "name": "200 OK",
-        "statusCode": "200",
-        "headers": {},
-        "x": 760,
-        "y": 780,
-        "wires": []
-    },
-    {
         "id": "5e1246d1e15da4f1",
         "type": "json",
         "z": "741ff6e2a00d7d0f",
@@ -578,26 +479,6 @@
         "wires": []
     },
     {
-        "id": "7324825cbf51fe98",
-        "type": "function",
-        "z": "741ff6e2a00d7d0f",
-        "name": "從持久化context恢復串流",
-        "func": "let ip = null;\ntry {\n    ip = global.get(\"gfile\").get('lick_python_ip') || global.get('lick_python_ip') || null;\n} catch (e) {\n    ip = global.get('lick_python_ip') || null;\n}\nif (!ip) return null;\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
-        "outputs": 1,
-        "timeout": "",
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 830,
-        "y": 620,
-        "wires": [
-            [
-                "95f2f9a96d37d1f0"
-            ]
-        ]
-    },
-    {
         "id": "7c5b2147f411f4dc",
         "type": "ui_template",
         "z": "741ff6e2a00d7d0f",
@@ -651,64 +532,6 @@
         ]
     },
     {
-        "id": "95f2f9a96d37d1f0",
-        "type": "ui_template",
-        "z": "741ff6e2a00d7d0f",
-        "group": "dcca388fe152f327",
-        "name": "影像串流（含切換按鈕）",
-        "order": 1,
-        "width": "0",
-        "height": "9",
-        "format": "<style>\n.sv-wrap{height:100%;display:flex;flex-direction:column;background:#060a0f;border-radius:10px;overflow:hidden;}\n.sv-bar{height:42px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;background:linear-gradient(135deg,rgba(0,14,8,.96),rgba(2,20,12,.96));border-bottom:1px solid rgba(0,255,136,.12);}\n.sv-dot{width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0;transition:background .4s,box-shadow .4s;}\n.sv-label{flex:1;font-size:11px;font-weight:700;color:rgba(0,255,136,.72);letter-spacing:.6px;}\n.sv-ib{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.18);color:#fff;transition:all .18s;flex-shrink:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-size:16px;}\n.sv-ib:hover{background:rgba(0,255,136,.22);border-color:rgba(0,255,136,.6);transform:scale(1.1);}\n.sv-ib.sv-dis{opacity:.28;cursor:default;pointer-events:none;}\n.sv-ib.sv-on{background:rgba(0,255,136,.18)!important;color:#00ff88!important;border-color:rgba(0,255,136,.42)!important;}\n.sv-ib.sv-vc{background:rgba(66,165,245,.07);border-color:rgba(66,165,245,.22);}\n.sv-ib.sv-vc:not(.sv-dis):hover{background:rgba(66,165,245,.25);border-color:rgba(66,165,245,.7);transform:scale(1.1);}\n.sv-ib.sv-vc.sv-flash{background:rgba(66,165,245,.45)!important;border-color:#42a5f5!important;}\n.sv-body{flex:1;position:relative;background:#000;min-height:0;overflow:hidden;}\n.sv-offline{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.22);font-size:12px;pointer-events:none;}\n.sv-off-ico{font-size:36px;opacity:.28;}\n.sv-rh{position:absolute;z-index:10001;display:none;}\n.sv-wrap.sv-floating .sv-rh{display:block;}\n.sv-rh-n{top:0;left:10px;right:10px;height:7px;cursor:n-resize;}\n.sv-rh-s{bottom:0;left:10px;right:10px;height:7px;cursor:s-resize;}\n.sv-rh-w{left:0;top:10px;bottom:10px;width:7px;cursor:w-resize;}\n.sv-rh-e{right:0;top:10px;bottom:10px;width:7px;cursor:e-resize;}\n.sv-rh-nw{top:0;left:0;width:12px;height:12px;cursor:nw-resize;}\n.sv-rh-ne{top:0;right:0;width:12px;height:12px;cursor:ne-resize;}\n.sv-rh-sw{bottom:0;left:0;width:12px;height:12px;cursor:sw-resize;}\n.sv-rh-se{bottom:0;right:0;width:12px;height:12px;cursor:se-resize;}\n</style>\n<div class=\"sv-wrap\" id=\"lksv_wrap\">\n  <div class=\"sv-rh sv-rh-n\" data-dir=\"n\"></div>\n  <div class=\"sv-rh sv-rh-s\" data-dir=\"s\"></div>\n  <div class=\"sv-rh sv-rh-w\" data-dir=\"w\"></div>\n  <div class=\"sv-rh sv-rh-e\" data-dir=\"e\"></div>\n  <div class=\"sv-rh sv-rh-nw\" data-dir=\"nw\"></div>\n  <div class=\"sv-rh sv-rh-ne\" data-dir=\"ne\"></div>\n  <div class=\"sv-rh sv-rh-sw\" data-dir=\"sw\"></div>\n  <div class=\"sv-rh sv-rh-se\" data-dir=\"se\"></div>\n  <div class=\"sv-bar\">\n    <div class=\"sv-dot\" id=\"lksv_dot\"></div>\n    <span class=\"sv-label\">📷 LICK ANALYSIS CAM</span>\n    <div class=\"sv-ib sv-vc sv-dis\" id=\"lksv_btn_prev\" title=\"上一支影片\">⏮</div>\n    <div class=\"sv-ib sv-vc sv-dis\" id=\"lksv_btn_next\" title=\"下一支影片\">⏭</div>\n    <div class=\"sv-ib\" id=\"lksv_btn_play\" title=\"啟動串流\">▶</div>\n    <div class=\"sv-ib\" id=\"lksv_btn_float\" title=\"浮動視窗\">⧉</div>\n  </div>\n  <div class=\"sv-body\" id=\"lksv_body\">\n    <div class=\"sv-offline\" id=\"lksv_offline\">\n      <div class=\"sv-off-ico\">📹</div>\n      <div id=\"lksv_status\">按下 ▶ 啟動串流</div>\n    </div>\n  </div>\n</div>\n<script>\n(function(scope){\n  var _url='',_baseUrl='',_stream=false,_powered=false,_svTimer=null,_retryTimer=null;\n  var PFX='lksv';\n  function g(id){return document.getElementById(PFX+'_'+id);}\n\n  function videoControl(action){\n    if(!_baseUrl)return;\n    var btn=action==='prev'?g('btn_prev'):g('btn_next');\n    if(btn){btn.classList.add('sv-flash');setTimeout(function(){btn.classList.remove('sv-flash');},200);}\n    fetch(_baseUrl+'/video_control',{\n      method:'POST',\n      headers:{'Content-Type':'application/json'},\n      body:JSON.stringify({action:action})\n    }).catch(function(){});\n  }\n\n  function svOn(){\n    if(!_url||_stream)return;\n    _stream=true;\n    if(_retryTimer){clearTimeout(_retryTimer);_retryTimer=null;}\n    var body=g('body'),off=g('offline'),dot=g('dot'),btn=g('btn_play');\n    if(!body)return;\n    if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    var old=body.querySelector('img.sv-img');if(old)body.removeChild(old);\n    var img=document.createElement('img');\n    img.className='sv-img';\n    img.style.cssText='width:100%;height:100%;object-fit:contain;display:block;opacity:0;transition:opacity .3s;pointer-events:none;';\n    img.onload=function(){\n      this.style.opacity=1;\n      if(off)off.style.display='none';\n      if(dot){dot.style.background='#00ff88';dot.style.boxShadow='0 0 6px #00ff88';}\n      if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    };\n    img.onerror=function(){\n      if(!_powered)return;\n      svOff(true);\n      var st=g('status');if(st)st.textContent='串流中斷，3秒後重試...';\n      _retryTimer=setTimeout(function(){if(_powered&&!_stream)svOn();},3000);\n    };\n    if(off)off.style.display='none';\n    body.insertBefore(img,off);\n    img.src=_url;\n    if(btn){btn.textContent='⏹';btn.title='停止串流';btn.classList.add('sv-on');}\n    _svTimer=setTimeout(function(){\n      var ci=body&&body.querySelector('img.sv-img');\n      if(ci&&!ci.naturalWidth){\n        if(!_powered)return;\n        svOff(true);\n        var st=g('status');if(st)st.textContent='連線逾時，3秒後重試...';\n        _retryTimer=setTimeout(function(){if(_powered&&!_stream)svOn();},3000);\n      }\n    },10000);\n  }\n\n  function svOff(internal){\n    _stream=false;\n    if(_svTimer){clearTimeout(_svTimer);_svTimer=null;}\n    var body=g('body'),off=g('offline'),dot=g('dot'),btn=g('btn_play');\n    var old=body&&body.querySelector('img.sv-img');if(old)body.removeChild(old);\n    if(off)off.style.display='flex';\n    if(dot){dot.style.background=_url?'#f5a623':'#444';dot.style.boxShadow=_url?'0 0 4px rgba(245,166,35,.5)':'none';}\n    if(!internal){\n      _powered=false;\n      if(_retryTimer){clearTimeout(_retryTimer);_retryTimer=null;}\n      if(btn){btn.textContent='▶';btn.title='啟動串流';btn.classList.remove('sv-on');}\n      var st=g('status');if(st)st.textContent='按下 ▶ 啟動串流';\n    }\n  }\n\n  var _btn=g('btn_play');\n  if(_btn&&!_btn._bound){\n    _btn._bound=true;\n    _btn.addEventListener('click',function(e){\n      e.stopPropagation();\n      if(_powered){\n        svOff(false);\n      }else{\n        _powered=true;\n        if(_url){svOn();}else{\n          var st=g('status'),dot=g('dot'),btn=g('btn_play');\n          if(st)st.textContent='等待串流服務器...';\n          if(dot){dot.style.background='#aaa';dot.style.boxShadow='0 0 4px rgba(170,170,170,.4)';}\n          if(btn){btn.textContent='⏹';btn.title='停止串流';btn.classList.add('sv-on');}\n        }\n      }\n    });\n  }\n\n  function urlReady(url){\n    _url=url;\n    var m=url.match(/^(https?:\\/\\/[^\\/]+)/);\n    if(m)_baseUrl=m[1];\n    var dot=g('dot');\n    if(dot&&!_stream){dot.style.background='#f5a623';dot.style.boxShadow='0 0 4px rgba(245,166,35,.5)';}\n    var prev=g('btn_prev'),next=g('btn_next');\n    if(prev&&!prev._bound){prev._bound=true;prev.classList.remove('sv-dis');prev.addEventListener('click',function(e){e.stopPropagation();videoControl('prev');});}\n    if(next&&!next._bound){next._bound=true;next.classList.remove('sv-dis');next.addEventListener('click',function(e){e.stopPropagation();videoControl('next');});}\n    if(_powered&&!_stream)svOn();\n  }\n\n  var _floating=false,_origCS='';\n  function _dragBar(e){\n    var wrap=document.getElementById('lksv_wrap');\n    if(!wrap||!_floating)return;\n    var r=wrap.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,sl=r.left,st=r.top;\n    function mv(e){wrap.style.left=(sl+e.clientX-sx)+'px';wrap.style.top=(st+e.clientY-sy)+'px';}\n    function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}\n    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);e.preventDefault();\n  }\n  function _startResize(e,dir){\n    var wrap=document.getElementById('lksv_wrap');\n    if(!wrap||!_floating)return;\n    e.preventDefault();e.stopPropagation();\n    var r=wrap.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,oL=r.left,oT=r.top,oW=r.width,oH=r.height,minW=240,minH=160;\n    function mv(e){\n      var dx=e.clientX-sx,dy=e.clientY-sy,l=oL,t=oT,w=oW,h=oH;\n      if(dir.indexOf('e')>=0)w=Math.max(minW,oW+dx);\n      if(dir.indexOf('s')>=0)h=Math.max(minH,oH+dy);\n      if(dir.indexOf('w')>=0){w=Math.max(minW,oW-dx);if(w>minW)l=oL+dx;}\n      if(dir.indexOf('n')>=0){h=Math.max(minH,oH-dy);if(h>minH)t=oT+dy;}\n      wrap.style.left=l+'px';wrap.style.top=t+'px';wrap.style.width=w+'px';wrap.style.height=h+'px';\n    }\n    function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}\n    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);\n  }\n  function toggleFloat(){\n    var wrap=document.getElementById('lksv_wrap');\n    var bar=wrap&&wrap.querySelector('.sv-bar');\n    var btn=g('btn_float');\n    if(!wrap)return;\n    if(!_floating){\n      _floating=true;\n      _origCS=wrap.getAttribute('style')||'';\n      var r=wrap.getBoundingClientRect();\n      wrap.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;z-index:9999;border-radius:10px;box-shadow:0 12px 48px rgba(0,0,0,.85);overflow:hidden;min-width:240px;min-height:160px;';\n      wrap.classList.add('sv-floating');\n      if(bar){bar.style.cursor='move';bar.addEventListener('mousedown',_dragBar);}\n      if(btn){btn.textContent='⊞';btn.title='返回原位';btn.classList.add('sv-on');}\n    }else{\n      _floating=false;\n      if(bar){bar.style.cursor='';bar.removeEventListener('mousedown',_dragBar);}\n      wrap.classList.remove('sv-floating');\n      wrap.setAttribute('style',_origCS);\n      if(btn){btn.textContent='⧉';btn.title='浮動視窗';btn.classList.remove('sv-on');}\n    }\n  }\n  var floatBtn=g('btn_float');\n  if(floatBtn)floatBtn.addEventListener('click',function(e){e.stopPropagation();toggleFloat();});\n  [].forEach.call(document.querySelectorAll('#lksv_wrap .sv-rh'),function(rh){\n    rh.addEventListener('mousedown',function(e){_startResize(e,this.getAttribute('data-dir'));});\n  });\n\n  scope.$watch('msg',function(msg){\n    if(!msg)return;\n    var ip=(msg.payload&&msg.payload.ip)?msg.payload.ip:null;\n    var url='';\n    if(ip){url='http://'+ip+':5000/stream';}\n    else if(msg.stream_url){url=msg.stream_url;}\n    if(!url||url===_url)return;\n    urlReady(url);\n  });\n})(scope);\n</script>",
-        "storeOutMessages": false,
-        "fwdInMessages": true,
-        "resendOnRefresh": true,
-        "templateScope": "local",
-        "className": "",
-        "x": 1190,
-        "y": 680,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "966e3d3bf7492b3f",
-        "type": "json",
-        "z": "741ff6e2a00d7d0f",
-        "name": "",
-        "property": "payload",
-        "action": "obj",
-        "pretty": false,
-        "x": 330,
-        "y": 720,
-        "wires": [
-            [
-                "9a671c193cda955a"
-            ]
-        ]
-    },
-    {
-        "id": "9a671c193cda955a",
-        "type": "function",
-        "z": "741ff6e2a00d7d0f",
-        "name": "build_lick_stream_response",
-        "func": "let ip = null;\ntry {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"gfile\").get('lick_python_ip') || global.get('lick_python_ip') || null);\n} catch (e) {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get('lick_python_ip') || null);\n}\nif (ip) {\n    try {\n        global.get(\"gfile\").set('lick_python_ip', ip);\n    } catch (e) {\n        global.set('lick_python_ip', ip);\n    }\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = ip ? `http://${ip}:5000/stream` : '';\nnode.warn('lick_python_online received IP: ' + (ip || 'null'));\nreturn msg;",
-        "outputs": 1,
-        "timeout": "",
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 540,
-        "y": 720,
-        "wires": [
-            [
-                "5b95dc3eca6c9f52",
-                "95f2f9a96d37d1f0"
-            ]
-        ]
-    },
-    {
         "id": "a3a675337622c82e",
         "type": "ui_template",
         "z": "741ff6e2a00d7d0f",
@@ -730,31 +553,6 @@
         ]
     },
     {
-        "id": "ab8bee42b1f4a12f",
-        "type": "inject",
-        "z": "741ff6e2a00d7d0f",
-        "name": "啟動時恢復串流",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": true,
-        "onceDelay": 2,
-        "topic": "",
-        "payload": "{}",
-        "payloadType": "json",
-        "x": 620,
-        "y": 600,
-        "wires": [
-            [
-                "7324825cbf51fe98"
-            ]
-        ]
-    },
-    {
         "id": "b21d27e59c1fbbd3",
         "type": "link out",
         "z": "741ff6e2a00d7d0f",
@@ -765,23 +563,6 @@
         "x": 720,
         "y": 100,
         "wires": []
-    },
-    {
-        "id": "bea82e653f19eccb",
-        "type": "http in",
-        "z": "741ff6e2a00d7d0f",
-        "name": "lick_python_online",
-        "url": "/lick_python_online",
-        "method": "post",
-        "upload": false,
-        "skipBodyParsing": false,
-        "x": 130,
-        "y": 720,
-        "wires": [
-            [
-                "966e3d3bf7492b3f"
-            ]
-        ]
     },
     {
         "id": "f5a004d10a2a01d7",

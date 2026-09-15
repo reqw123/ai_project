@@ -266,16 +266,3 @@ class LickConfig:
     # 等 Node-RED 回應，跟主流程「值得等」的推送語意不同，故不共用同一個
     # 設定值，但一樣開放獨立覆寫。
     NODERED_TIMEOUT = _env_float("CAT_MONITORING_LICK_NODERED_TIMEOUT", 0.3)
-
-    # ── Node-RED「Python 上線通知」端點（2026-09-16 補上）───────────────
-    # lick_stage/ext_body_zones 兩個 Node-RED tab 的即時影像串流小工具都是
-    # 靠這支端點取得 Python 端目前的 IP 才知道去哪裡抓串流畫面；兩個 tab
-    # 恰好共用同一個 global 變數（lick_python_ip），所以只需要通知這一個
-    # 端點就能同時餵飽兩個 tab，不用各自一份。過去只有一次性診斷腳本
-    # tools/1_measure_ear_distance_single_video.py 會呼叫它，main.py 的
-    # 正式啟動流程從沒呼叫過，導致這兩個 tab 的畫面永遠是空的——不是這次
-    # 才弄壞的既有落差，見 main.py::run_server_mode() 補上的通知呼叫。
-    NODERED_ONLINE_URL = _env_str(
-        "CAT_MONITORING_LICK_NODERED_ONLINE_URL",
-        f"http://{_NodeRedConfig.HOST}:{_NodeRedConfig.PORT}/lick_python_online",
-    )
