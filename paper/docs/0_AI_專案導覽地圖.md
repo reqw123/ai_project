@@ -280,6 +280,13 @@ Node-RED flow 檔案全部位於 `paper/`（**不在** `cat_monitoring_system/` 
 - **接收**：`/lick_zone_result`、`/lick_python_online`、`/ext_zone_result`
 - **對外呼叫**：無（純接收端，不主動呼叫外部服務）
 - 這支 flow 對應 `plugins/lick_stage/config.py` 的 `NODERED_URL`（預設 `http://127.0.0.1:1880/lick_zone_result`）
+- **2026-09-15 新增**：`/lick_zone_result`／`/ext_zone_result` 兩個 tab 各自新增
+  「先驗證再回應」（JSON Schema 型驗證，核心欄位缺失/型別錯直接回 400）與
+  ONLINE/STALE/OFFLINE 新鮮度判定（`global` context + dashboard 狀態面板）。
+  部署/除錯過程記錄在
+  `cat_monitoring_system/plugins/lick_stage/舔拭行為二階段分析模組說明.md`
+  「Node-RED M3 部署與除錯記錄」章節，含一次讓 Node-RED process 整個當掉的
+  subflow 坑，改動前務必先讀。
 
 > 📌 **本節結論**：4 個 flow 各司其職，`貓咪主控.json`／`cat_health_v3_flow.json` 並行運作互不依賴，`lick_stage2_nodered.json` 純接收插件資料，`GPT 健康報告.json` 目前停用。
 
