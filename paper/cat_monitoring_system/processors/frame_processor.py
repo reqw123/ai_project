@@ -50,6 +50,19 @@ try:
 except Exception:
     _IdentityVerifier = None
 
+# M4：舔毛/身體分區外掛共用的姿態平滑＋骨長品質模組（plugins/lick_stage/
+# pose_filter.py）。獨立模組，import 失敗時整套機制自動停用（_PoseFilter
+# 保持 None，_notify_plugins() 退回舊行為：不做平滑、直接傳 raw kpts、
+# pose_quality 恆為 None），跟 lick_stage 外掛本身「可以整個被刪除」的既有
+# 原則一致——這裡多一層獨立 import guard，即使只刪除 plugins/lick_stage/
+# 也不會讓 FrameProcessor 啟動失敗。
+try:
+    from plugins.lick_stage.config import LickConfig as _LickConfig
+    from plugins.lick_stage.pose_filter import PoseFilter as _PoseFilter
+except Exception:
+    _LickConfig = None
+    _PoseFilter = None
+
 
 class _LatestFrameGrabber:
     """背景執行緒持續讀取 cv2.VideoCapture，只保留最新一幀。
@@ -322,6 +335,30 @@ class FrameProcessor:
         self.kp_ema_alpha = kp_ema_alpha
         self._ema_kpts = None
         self._plugins: list = list(plugins) if plugins else []
+        # M4：舔毛/身體分區外掛共用的姿態濾波器——取代 lick_stage/analyzer.py
+        # 自己的樸素 EMA，讓兩個外掛吃同一份平滑後的關鍵點與骨長品質分數
+        # （見 _notify_plugins()）。跟上面 self._ema_kpts（overlay 顯示/異常
+        # 偵測用）完全獨立，互不影響。hold_decay_frames 用「秒數 ×
+        # 本次來源實際 fps」換算，維持跟 GAP_TOLERANCE_SEC 等既有設定一樣
+        # 以秒為單位思考、但套用在以幀為單位運作的濾波器上。
+        self._pose_filter = None
+        if _PoseFilter is not None and _LickConfig is not None:
+            try:
+                _hold_decay_frames = max(
+                    0,
+                    round(
+                        _LickConfig.POSE_FILTER_HOLD_DECAY_SEC
+                        * self._plugin_source_fps
+                    ),
+                )
+                self._pose_filter = _PoseFilter(
+                    alpha=_LickConfig.POSE_FILTER_ALPHA,
+                    min_conf=_LickConfig.POSE_FILTER_MIN_CONF,
+                    hold_decay_frames=_hold_decay_frames,
+                    bone_pairs=EAR_DISTANCE_SKELETON_EDGES,
+                )
+            except Exception:
+                self._pose_filter = None
         # 保存上次推論結果，非推論幀沿用，避免標籤閃爍
         self._last_behavior_id = LOW_CONF_ID
         self._last_confidence = 0.0
@@ -738,6 +775,29 @@ class FrameProcessor:
         source_ts = self._current_source_timestamp()
         feed_kpts = kpts if is_lick else None
         feed_conf = kpt_conf if is_lick else None
+
+        # M4：共用 PoseFilter 一次算出平滑後的關鍵點＋骨長品質，兩個外掛
+        # 吃同一份結果。feed_kpts 為 None（NO_CAT/NOT_LICK/lick 但無姿態）時
+        # 呼叫 reset()，跟 lick_stage/analyzer.py 既有的
+        # _reset_transient_state() 在同一組條件下清空跨幀平滑狀態，維持
+        # 兩邊政策一致（見 analyzer.py 該函式的說明）。
+        pose_quality = None
+        if self._pose_filter is not None:
+            if feed_kpts is None:
+                self._pose_filter.reset()
+            else:
+                try:
+                    pose_frame = self._pose_filter.update(
+                        feed_kpts,
+                        feed_conf,
+                        frame_idx=self.frame_idx,
+                        source_timestamp=source_ts,
+                    )
+                    feed_kpts = pose_frame.smoothed_kpts
+                    pose_quality = pose_frame.quality
+                except Exception:
+                    pass
+
         for _plugin in self._plugins:
             try:
                 _plugin.update(
@@ -749,6 +809,7 @@ class FrameProcessor:
                     is_lick=is_lick,
                     lick_confidence=lick_confidence,
                     session_id=self._plugin_session_id,
+                    pose_quality=pose_quality,
                 )
             except TypeError:
                 # 舊版外掛只接受 update(kpts, kpt_conf) —— 退回舊呼叫方式

@@ -46,7 +46,6 @@ class LickAnalyzer:
         self._events = self._events_factory()
         self._stats = LickStatistics()
         self._state_history = deque(maxlen=_C.STATE_SMOOTH_WINDOW)
-        self._ema_kpts: Optional[np.ndarray] = None
         # 上一幀「已穩定」的方向向量，供翻轉感知 EMA 使用。
         # trap_dir 的「候選值」由 trap_dir_from_perp() 從穩定後的 trap_perp
         # 決定性推導（不再依賴容易被雜訊干擾的 body_center 判斷）；trap_perp
@@ -75,7 +74,6 @@ class LickAnalyzer:
         self._events = self._events_factory()
         self._stats = LickStatistics()
         self._state_history.clear()
-        self._ema_kpts = None
         self._prev_trap_perp = None
         self._prev_trap_dir = None
         self._trap_perp_flip_streak = 0
@@ -109,6 +107,7 @@ class LickAnalyzer:
         source_timestamp=None,
         session_id: str = "",
         discontinuity: bool = False,
+        pose_quality: Optional[float] = None,
     ) -> LickResult:
         """分析單一影格的舔舐區域與臉部朝向，回傳本幀分析結果。
 
@@ -116,6 +115,12 @@ class LickAnalyzer:
         elapsed_sec, dt_sec)，語意是「kpts 有值 ⟺ 已通過 ST-GCN lick gate」。
         新呼叫端（FrameProcessor 第一階段改動後）額外傳 cat_present / is_lick
         等契約欄位，讓 NO_CAT 與 NOT_LICK 可被區分（說明書「狀態與原因碼重構」）。
+
+        pose_quality：M4 由共用 PoseFilter（frame_processor.py 建構、經
+        LickStagePlugin.update() 傳入）提供的骨長品質分數，`None` 代表呼叫端
+        未接上共用 PoseFilter 或該幀尚無法計算，純轉送給事件聚合器，這裡
+        不做任何判斷。kpts 本身也預期已經是共用 PoseFilter 平滑過的結果——
+        本方法自 M4 第二階段起不再自行對 kpts 做 EMA（見 _handle_cat()）。
         """
         if cat_present is None:
             cat_present = kpts is not None and kpt_conf is not None
@@ -162,7 +167,7 @@ class LickAnalyzer:
                 frame_state=result.frame_state,
                 zone_label=result.current_zone,
                 action_score=lick_confidence,
-                pose_quality=None,  # M4 由共用 PoseFrame 提供
+                pose_quality=pose_quality,
                 reason_code=result.reason_code,
                 discontinuity=discontinuity,
             )
@@ -177,9 +182,11 @@ class LickAnalyzer:
 
         「貓離開畫面」與「非舔毛」都走這條路：兩者都不該讓陳舊姿態繼續拉動
         下一段真正的舔毛判定（說明書「update：track 切換不得沿用前一隻貓的
-        狀態」的同一種考量）。
+        狀態」的同一種考量）。M4 接線後關鍵點平滑狀態由呼叫端的共用
+        PoseFilter 持有，這裡不再需要清空自己的 EMA；frame_processor.py 的
+        _notify_plugins() 在同樣的時機點呼叫 PoseFilter.reset()，維持跟這裡
+        一致的重置政策。
         """
-        self._ema_kpts = None
         self._prev_trap_perp = None
         self._prev_trap_dir = None
         self._trap_perp_flip_streak = 0
@@ -387,18 +394,13 @@ class LickAnalyzer:
     ) -> LickResult:
         _nan = float("nan")
 
-        # Optional keypoint EMA (default alpha=1.0 = bypass)
-        if _C.EMA_ALPHA < 1.0 - 1e-9:
-            if self._ema_kpts is None:
-                self._ema_kpts = np.asarray(kpts, dtype=np.float64).copy()
-            else:
-                self._ema_kpts = (
-                    _C.EMA_ALPHA * np.asarray(kpts, dtype=np.float64)
-                    + (1.0 - _C.EMA_ALPHA) * self._ema_kpts
-                )
-            smooth_kpts = self._ema_kpts
-        else:
-            smooth_kpts = kpts
+        # M4 第二階段：關鍵點平滑已由呼叫端的共用 PoseFilter（見
+        # frame_processor.py）完成，這裡收到的 kpts 視為已平滑，不再自己套
+        # 一層 EMA（避免跟共用 PoseFilter 的 alpha 疊加變成雙重平滑）。直接
+        # 呼叫 analyze()（未經共用 PoseFilter，例如測試/獨立工具）的呼叫端
+        # 會拿到未平滑的原始關鍵點，跟共用 PoseFilter 停用時（alpha>=1.0）
+        # 的行為一致。
+        smooth_kpts = np.asarray(kpts, dtype=np.float64)
 
         dist_px, dist_norm, valid, _body_scale, body_ear_ratio = compute_ear_distance(
             smooth_kpts, kpt_conf

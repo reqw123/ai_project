@@ -137,7 +137,28 @@ class LickConfig:
     # ── 關鍵點 EMA 平滑（1.0 = 不平滑，直接使用原始值） ─────────────────
     # 只影響本 plugin 內部的接觸判定/overlay 穩定度，與 ST-GCN 推論用的
     # kp_ema_alpha（frame_processor 傳入的是 raw_kpts）完全independent。
+    # M4 第二階段接線後，這個值不再由 analyzer.py 自己套用（見
+    # analyzer.py::_handle_cat 的說明）——改由 frame_processor.py 建構的共用
+    # PoseFilter 套用同一個 alpha，analyzer.py 收到的 kpts 已經是平滑過的。
     EMA_ALPHA = 0.4  # 指數移動平均係數；調低可平滑抖動，但會增加延遲
+
+    # ── M4：共用 PoseFilter 參數（frame_processor.py 建構共用實例時使用，
+    # 見該檔案 __init__ 與 _notify_plugins()）──────────────────────────────
+    # alpha 沿用上面既有的 EMA_ALPHA，維持現行平滑強度不變，只是從「樸素
+    # EMA」升級成「信心值感知 EMA」（見 pose_filter.py）。
+    POSE_FILTER_ALPHA = EMA_ALPHA
+    # min_conf 借用本檔既有 LIMB_CONF_THRESHOLD（0.10，本檔目前最寬鬆的
+    # 關鍵點可信度下限），全域套用在所有 17 個關鍵點——粗略起手值，這是
+    # 全新啟用的機制（analyzer.py 舊版樸素 EMA 沒有這一層），之後應依真實
+    # 影片觀察 hold-decay 實際觸發頻率再重新校準，不同關鍵點（鼻子/耳朵 vs.
+    # 四肢）目前共用同一個門檻，尚未分開處理。
+    POSE_FILTER_MIN_CONF = LIMB_CONF_THRESHOLD
+    # hold_decay_frames 用「秒數 × 呼叫端實際 source_fps」換算（frame_processor.py
+    # 換算），這裡先定秒數；跟 GAP_TOLERANCE_SEC 同樣取「短暫遮蔽/漏偵測」
+    # 的典型時間量級（0.5 秒），但這是接住「同一批關鍵點連續低信心」的獨立
+    # 門檻，語意跟 bout 邊界的 GAP_TOLERANCE_SEC 不同，刻意不共用同一個常數。
+    # 粗略起手值，之後可依實測重新校準。
+    POSE_FILTER_HOLD_DECAY_SEC = 0.5
 
     # ── 鼻子接觸梯形方向向量穩定化（解決貓側躺/頭部縮短時梯形抖動亂轉）──
     # trap_perp（耳線方向）對雜訊極敏感（耳間距短時尤其明顯），用「翻轉感知

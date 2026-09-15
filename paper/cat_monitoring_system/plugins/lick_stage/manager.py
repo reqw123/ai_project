@@ -31,6 +31,10 @@ class LickStagePlugin:
         is_lick          — ST-GCN 當幀是否判定為 lick。
         lick_confidence  — ST-GCN lick 信心值。
         track_id / session_id — 追蹤與 Session 身份。
+        pose_quality      — M4：共用 PoseFilter（frame_processor.py）算出的
+                             骨長品質分數，純轉送給事件聚合器；未給時等同
+                             未啟用（None）。kpts 也預期已經是同一個共用
+                             PoseFilter 平滑過的結果（見 analyzer.py::_handle_cat）。
       全部省略時退回舊行為（wall-clock 計時、kpts 有值 ⟺ 通過 lick gate），
       現有呼叫端不受影響。
     • Any exception raised inside update() is caught and logged at DEBUG
@@ -154,6 +158,7 @@ class LickStagePlugin:
         lick_confidence=None,
         track_id=None,
         session_id=None,
+        pose_quality=None,
     ) -> None:
         """Fail-safe entry point. Never raises."""
         try:
@@ -204,6 +209,7 @@ class LickStagePlugin:
                 source_timestamp=source_timestamp,
                 session_id=session_id or self._session_id,
                 discontinuity=discontinuity,
+                pose_quality=pose_quality,
             )
 
             if self._publisher is not None:

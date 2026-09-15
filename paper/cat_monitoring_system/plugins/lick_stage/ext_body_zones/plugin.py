@@ -114,8 +114,17 @@ class ExtBodyZonePlugin:
         lick_confidence=None,
         track_id=None,
         session_id=None,
+        pose_quality=None,
     ) -> None:
-        """Fail-safe 進入點，符合 FrameProcessor 既有的 plugin 呼叫慣例。"""
+        """Fail-safe 進入點，符合 FrameProcessor 既有的 plugin 呼叫慣例。
+
+        pose_quality：M4 共用 PoseFilter（frame_processor.py）算出的骨長
+        品質分數。本外掛目前不使用，僅接受此參數避免呼叫端新增此 keyword
+        後在 TypeError 分支整組退化成舊版兩參數呼叫（連 source_timestamp/
+        session_id 等既有契約參數都會一併遺失）。kpts 也預期已經是同一個
+        共用 PoseFilter 平滑過的結果（本外掛過去完全不做平滑，直接吃
+        raw kpts；M4 接線後改吃平滑後的座標）。
+        """
         try:
             self._run(
                 kpts,
