@@ -202,6 +202,16 @@ class ConsolePanel:
             bg=COLOR_CONSOLE_BG, fg=COLOR_CONSOLE_MUTED_FG, font=self.window._font_hint,
         ).pack(side="left", padx=(8, 0))
 
+        # 點終端機輸出區任何地方（不是只有輸入框本身）都自動把焦點轉到輸入框，
+        # 不用特地瞄準那一小條 Entry 才能打字——但要保留「反白複製訊息」這件事：
+        # 用 ButtonRelease（手放開的當下，drag 動作已經結束）判斷這次點擊有沒有
+        # 產生選取範圍，有的話代表使用者是要反白複製，不搶焦點；純點擊（沒有
+        # 拖出選取範圍）才轉移焦點。綁在 body／text_frame（背景空白區）跟 text
+        # 本身，不綁 toolbar／header／grip——toolbar 上的核取方塊/按鈕、
+        # header/grip 的拖拉調整高度都是各自獨立的既有互動，不該被這裡搶走。
+        for widget in (body, text_frame, self.text):
+            widget.bind("<ButtonRelease-1>", self._on_terminal_click_focus_input)
+
         self.append(
             "（尚未啟動任何程式；按上方「▶ 啟動 main.py」或選好腳本後按「▶ 執行所選腳本」，輸出會即時顯示在這裡）\n",
             tag="muted",
@@ -461,6 +471,20 @@ class ConsolePanel:
         的 ProcessManager.send_stdin 提供——這個 class 完全不碰 subprocess 物件，
         只負責畫面跟呼叫這個 callback。"""
         self._stdin_handler = handler
+
+    def _on_terminal_click_focus_input(self, _event):
+        """點終端機輸出區（不是輸入框本身）之後，把焦點轉到輸入框，見 _build()
+        裡綁定這個函式的說明。用 ButtonRelease 而非 ButtonPress：要等放開滑鼠、
+        這次點擊有沒有拖出選取範圍已經確定，才能判斷這是「想打字」還是「想反白
+        複製」——ButtonPress 當下選取範圍還沒形成，沒辦法分辨。"""
+        try:
+            if self.text.tag_ranges("sel"):
+                return  # 有反白選取範圍：使用者在複製訊息，不搶焦點
+        except tk.TclError:
+            pass
+        if str(self.stdin_entry["state"]) == "disabled":
+            return  # 沒有行程在跑，輸入框本來就停用，搶了焦點也打不了字
+        self.stdin_entry.focus_set()
 
     def set_input_enabled(self, enabled):
         state = "normal" if enabled else "disabled"
