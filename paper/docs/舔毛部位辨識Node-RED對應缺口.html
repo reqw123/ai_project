@@ -1,0 +1,430 @@
+<!doctype html>
+<title>Node-RED 對應缺口</title>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root {
+    --bg: #f5f7f5;
+    --surface: #ffffff;
+    --surface-sunken: #eef2f0;
+    --ink: #16211f;
+    --ink-muted: #55716c;
+    --ink-faint: #8aa19d;
+    --border: #dbe4e0;
+    --accent-1: #1f6f6b;      /* teal · 已送到 Node-RED 但沒被使用 */
+    --accent-1-soft: #e2f0ee;
+    --accent-1-ink: #0f4c49;
+    --accent-2: #b0701f;      /* amber · 完全沒有對應 */
+    --accent-2-soft: #f7ecd9;
+    --accent-2-ink: #7a4c11;
+    --pri-high: #b4342b;
+    --pri-high-soft: #fbe7e4;
+    --pri-mid: #9a7a1f;
+    --pri-mid-soft: #f6efdb;
+    --pri-low: #4a6a67;
+    --pri-low-soft: #e6eeec;
+    --rule: #c9d6d2;
+    --code-bg: #eef2f0;
+    --code-ink: #2c433f;
+    --shadow: 0 1px 2px rgba(15, 40, 37, 0.06), 0 8px 24px -12px rgba(15, 40, 37, 0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101615;
+      --surface: #171f1e;
+      --surface-sunken: #1d2725;
+      --ink: #eaf2f0;
+      --ink-muted: #93aca7;
+      --ink-faint: #5f7c77;
+      --border: #263230;
+      --accent-1: #4fbdb6;
+      --accent-1-soft: rgba(79, 189, 182, 0.13);
+      --accent-1-ink: #a9e6e1;
+      --accent-2: #e3a559;
+      --accent-2-soft: rgba(227, 165, 89, 0.14);
+      --accent-2-ink: #f2c992;
+      --pri-high: #e08178;
+      --pri-high-soft: rgba(224, 129, 120, 0.15);
+      --pri-mid: #d9bb6b;
+      --pri-mid-soft: rgba(217, 187, 107, 0.14);
+      --pri-low: #8fa6a2;
+      --pri-low-soft: rgba(143, 166, 162, 0.13);
+      --rule: #2b3735;
+      --code-bg: #1c2624;
+      --code-ink: #b9d3ce;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #101615;
+    --surface: #171f1e;
+    --surface-sunken: #1d2725;
+    --ink: #eaf2f0;
+    --ink-muted: #93aca7;
+    --ink-faint: #5f7c77;
+    --border: #263230;
+    --accent-1: #4fbdb6;
+    --accent-1-soft: rgba(79, 189, 182, 0.13);
+    --accent-1-ink: #a9e6e1;
+    --accent-2: #e3a559;
+    --accent-2-soft: rgba(227, 165, 89, 0.14);
+    --accent-2-ink: #f2c992;
+    --pri-high: #e08178;
+    --pri-high-soft: rgba(224, 129, 120, 0.15);
+    --pri-mid: #d9bb6b;
+    --pri-mid-soft: rgba(217, 187, 107, 0.14);
+    --pri-low: #8fa6a2;
+    --pri-low-soft: rgba(143, 166, 162, 0.13);
+    --rule: #2b3735;
+    --code-bg: #1c2624;
+    --code-ink: #b9d3ce;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+
+  body {
+    font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    line-height: 1.75;
+    padding-inline: max(20px, env(safe-area-inset-left, 0px));
+    padding-block: calc(48px + env(safe-area-inset-top, 0px)) calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .page { max-width: 800px; margin-inline: auto; display: flex; flex-direction: column; gap: 44px; }
+
+  header.hero {
+    display: flex; flex-direction: column; gap: 16px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--rule);
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent-2);
+  }
+
+  h1 {
+    font-family: "Noto Serif TC", serif; font-weight: 700;
+    font-size: clamp(26px, 5vw, 34px); line-height: 1.35; margin: 0;
+    text-wrap: balance; letter-spacing: 0.01em;
+  }
+
+  .hero-lede { max-width: 64ch; color: var(--ink-muted); font-size: 15px; }
+
+  .companion {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--ink-faint);
+    padding: 7px 12px; border: 1px dashed var(--border); border-radius: 8px;
+    width: fit-content;
+  }
+  .companion code {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+    color: var(--ink-muted); background: var(--code-bg);
+    padding: 1px 6px; border-radius: 4px;
+  }
+
+  /* legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 13px; color: var(--ink-muted); }
+  .legend-item { display: flex; align-items: center; gap: 7px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  /* ── Gap card ───────────────────────────────────────── */
+  .gaps { display: flex; flex-direction: column; gap: 20px; }
+
+  .gap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+    padding: 24px 26px; display: flex; flex-direction: column; gap: 16px;
+  }
+
+  .gap-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+
+  .gap-title-row { display: flex; align-items: center; gap: 12px; }
+
+  .badge {
+    font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 13px;
+    padding: 4px 10px; border-radius: 7px;
+    background: var(--surface-sunken); color: var(--ink-muted);
+    border: 1px solid var(--border);
+  }
+
+  .gap h2 {
+    font-family: "Noto Serif TC", serif; font-size: 18px; font-weight: 600; margin: 0;
+  }
+
+  .priority {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.06em; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  .priority[data-p="high"] { background: var(--pri-high-soft); color: var(--pri-high); }
+  .priority[data-p="mid"]  { background: var(--pri-mid-soft);  color: var(--pri-mid); }
+  .priority[data-p="low"]  { background: var(--pri-low-soft);  color: var(--pri-low); }
+
+  .gap-status {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12.5px; font-weight: 600; width: fit-content;
+  }
+  .gap-status .dot { width: 9px; height: 9px; border-radius: 3px; }
+  .gap-status[data-kind="unread"] { color: var(--accent-1-ink); }
+  .gap-status[data-kind="unread"] .dot { background: var(--accent-1); }
+  .gap-status[data-kind="missing"] { color: var(--accent-2-ink); }
+  .gap-status[data-kind="missing"] .dot { background: var(--accent-2); }
+
+  .gap p { margin: 0; max-width: 68ch; color: var(--ink); }
+
+  .field-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .field-chip {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    background: var(--code-bg); color: var(--code-ink);
+    padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border);
+  }
+
+  .loc-block { display: flex; flex-direction: column; gap: 8px; }
+  .loc-label {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  .loc-list { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; }
+  .loc-list li { font-size: 13.5px; color: var(--ink-muted); }
+  .loc-list code {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px;
+    color: var(--code-ink); background: var(--code-bg);
+    padding: 1px 6px; border-radius: 4px;
+  }
+
+  /* ── Priority plan ──────────────────────────────────── */
+  .plan {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+    padding: 26px 28px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .plan h2 {
+    font-family: "Noto Serif TC", serif; font-size: 19px; font-weight: 600; margin: 0;
+  }
+  .plan ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .plan li { font-size: 14.5px; }
+  .plan li b { font-weight: 700; }
+  .plan li .why { color: var(--ink-muted); font-size: 13.5px; }
+
+  footer {
+    border-top: 1px solid var(--rule); padding-top: 24px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  footer .footer-label {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  footer p { margin: 0; max-width: 62ch; color: var(--ink-muted); font-size: 14px; }
+
+  @media (max-width: 480px) {
+    .gap, .plan { padding: 18px 16px; }
+    .page { gap: 36px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="hero">
+    <div class="eyebrow">貓咪行為辨識系統 · 舔毛部位辨識模組</div>
+    <h1>Node-RED 對應缺口盤點</h1>
+    <p class="hero-lede">
+      M1–M6 逐項盤點：Python 端算出來的東西，哪些真的有出現在 Node-RED 儀表板上、
+      哪些送了沒人讀、哪些從頭到尾就沒送過。供實作補齊時直接對照用，含確切欄位名稱與
+      程式位置。
+    </p>
+    <div class="companion">
+      需求/功能導向的版本 → <code>paper/docs/舔毛部位辨識工程紀要.html</code>
+    </div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:var(--accent-1)"></span>已送到 Node-RED，但沒有節點讀取/顯示</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--accent-2)"></span>從未送到 Node-RED（只留在 Python 端）</span>
+    </div>
+  </header>
+
+  <section class="gaps">
+
+    <article class="gap">
+      <div class="gap-head">
+        <div class="gap-title-row">
+          <span class="badge">M1</span>
+          <h2>時間與狀態一致性</h2>
+        </div>
+        <span class="priority" data-p="mid">中優先</span>
+      </div>
+      <span class="gap-status" data-kind="unread"><span class="dot"></span>送了沒人讀</span>
+      <p>
+        五種互斥狀態（<code class="field-chip" style="display:inline">FrameState</code>）與來源時間契約欄位都在
+        payload 裡，但兩個 tab 的處理邏輯都沒有組進最終輸出，儀表板上完全看不出貓咪
+        目前處於哪一種狀態。
+      </p>
+      <div class="field-row">
+        <span class="field-chip">frame_state</span>
+        <span class="field-chip">reason_code</span>
+        <span class="field-chip">schema_version</span>
+        <span class="field-chip">session_id</span>
+        <span class="field-chip">source_timestamp</span>
+      </div>
+      <div class="loc-block">
+        <span class="loc-label">位置</span>
+        <ul class="loc-list">
+          <li>Python 端來源：<code>plugins/lick_stage/models.py::LickResult.to_payload()</code>、<code>ext_body_zones/models.py::ExtZoneResult.to_payload()</code></li>
+          <li>Node-RED：<code>node-red-flows/lick_stage2_nodered.json</code>「舔舐部位分析器」function 組輸出時沒放進這些欄位；「7區域資料處理」function 把整包 payload 原樣傳下去了，但「7區域統計面板」ui_template 的 render() 沒有讀取</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="gap">
+      <div class="gap-head">
+        <div class="gap-title-row">
+          <span class="badge">M2</span>
+          <h2>事件與統計留存</h2>
+        </div>
+        <span class="priority" data-p="low">低優先（工程量大）</span>
+      </div>
+      <span class="gap-status" data-kind="missing"><span class="dot"></span>從未送到 Node-RED</span>
+      <p>
+        整個「事件」層級（一筆舔毛事件的開始/結束時間、持續多久、哪個部位）完全沒有
+        推送機制，只寫進 SQLite／CSV。Node-RED 端沒有對應的接收端點，這份資料它從來
+        沒收過。
+      </p>
+      <div class="field-row">
+        <span class="field-chip">start_source_ts</span>
+        <span class="field-chip">end_source_ts</span>
+        <span class="field-chip">duration_sec</span>
+        <span class="field-chip">zone_l1</span>
+        <span class="field-chip">zone_l2</span>
+      </div>
+      <div class="loc-block">
+        <span class="loc-label">位置</span>
+        <ul class="loc-list">
+          <li>Python 端來源：<code>plugins/lick_stage/bout_aggregator.py::_ActiveBout.to_event()</code></li>
+          <li>唯一去處：<code>on_event</code> callback → <code>plugins/lick_stage/storage.py::LickStorage.write_event()</code>（SQLite <code>lick_events</code> 表 + CSV），沒有接到 <code>NodeRedPublisher</code></li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="gap">
+      <div class="gap-head">
+        <div class="gap-title-row">
+          <span class="badge">M4</span>
+          <h2>姿態座標平滑統一</h2>
+        </div>
+        <span class="priority" data-p="low">低優先</span>
+      </div>
+      <span class="gap-status" data-kind="missing"><span class="dot"></span>從未送到 Node-RED</span>
+      <p>
+        骨長品質分數只在「事件」層級用到（見 M6 的 <code style="font-family:'IBM Plex Mono',monospace">pose_quality_mean</code>），
+        從來沒有加進逐幀送給 Node-RED 的 payload——逐幀顯示這個分數意義也不大，比較
+        適合等事件層級的推送機制做好後，以「這段事件的平均值」一起帶出去。
+      </p>
+      <div class="field-row">
+        <span class="field-chip">pose_quality</span>
+      </div>
+      <div class="loc-block">
+        <span class="loc-label">位置</span>
+        <ul class="loc-list">
+          <li>Python 端來源：<code>processors/frame_processor.py::_notify_plugins()</code> 算出、經 <code>analyzer.py::analyze()</code> 的 <code>pose_quality</code> 引數往下傳，<code>LickResult.to_payload()</code>（逐幀給 Node-RED 那份）完全沒有這個欄位</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="gap">
+      <div class="gap-head">
+        <div class="gap-title-row">
+          <span class="badge">M5</span>
+          <h2>身體尺寸估算與不確定性</h2>
+        </div>
+        <span class="priority" data-p="high">高優先（最快補齊）</span>
+      </div>
+      <span class="gap-status" data-kind="unread"><span class="dot"></span>送了沒人讀 / 沒有對應卡片</span>
+      <p>
+        候選命中分數有送但沒讀取；「模稜兩可」統計也有送，但部位時長面板只有五張既有
+        卡片，沒有幫這個新判定開一張——使用者在儀表板上完全看不到這項新功能算出來的
+        結果。兩個既有欄位，補一張卡片就能接上，投報率最高。
+      </p>
+      <div class="field-row">
+        <span class="field-chip">geometry_score</span>
+        <span class="field-chip">ambiguous_time</span>
+        <span class="field-chip">ambiguous_hits</span>
+        <span class="field-chip">ambiguous_pct</span>
+      </div>
+      <div class="loc-block">
+        <span class="loc-label">位置</span>
+        <ul class="loc-list">
+          <li>Python 端來源：<code>LickResult.to_payload()</code>（<code>models.py</code>）</li>
+          <li>Node-RED：「舔舐部位分析器」function 沒有讀取 <code>geometry_score</code>；「P2 部位時長統計」ui_template 的 <code>ZONE_LIST</code> 陣列只有 <code>BODY/FL/FR/HL/HR</code> 五項，沒有 <code>AMBIGUOUS</code></li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="gap">
+      <div class="gap-head">
+        <div class="gap-title-row">
+          <span class="badge">M6</span>
+          <h2>事件邊界判定與跨模組驗證</h2>
+        </div>
+        <span class="priority" data-p="low">低優先（跟 M2 一起處理）</span>
+      </div>
+      <span class="gap-status" data-kind="missing"><span class="dot"></span>從未送到 Node-RED</span>
+      <p>
+        換部位次數、bout 有沒有被切分過，以及這次新做的「兩套判定邏輯互相驗證」結果，
+        全部是事件層級欄位，跟 M2 同樣的缺口——只進資料庫，沒有推送機制。
+      </p>
+      <div class="field-row">
+        <span class="field-chip">zone_switch_count</span>
+        <span class="field-chip">raw_bout</span>
+        <span class="field-chip">ext_zone_mode</span>
+        <span class="field-chip">ext_zone_l1_mode</span>
+        <span class="field-chip">ext_zone_confidence_mean</span>
+      </div>
+      <div class="loc-block">
+        <span class="loc-label">位置</span>
+        <ul class="loc-list">
+          <li>Python 端來源：<code>plugins/lick_stage/bout_aggregator.py::_ActiveBout.to_event()</code>（跟 M2 同一個字典）</li>
+        </ul>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="plan">
+    <h2>建議處理順序</h2>
+    <ol>
+      <li>
+        <b>M5：補「模稜兩可」卡片＋顯示 geometry_score</b>
+        <div class="why">兩個既有欄位已經在 payload 裡，只差 Node-RED 端補一張卡片跟兩行讀取，工程量最小、使用者感受最直接。</div>
+      </li>
+      <li>
+        <b>M1：把 frame_state／reason_code 顯示出來</b>
+        <div class="why">同樣是欄位已經在 payload 裡，差在 Node-RED 端沒組進輸出；補上之後使用者才看得出「現在貓咪是哪一種狀態」，而不是只有部位統計。</div>
+      </li>
+      <li>
+        <b>M2 + M6：設計事件層級的推送機制</b>
+        <div class="why">工程量最大——需要決定新端點的 schema、推送時機（bout 關閉時 vs. 定期批次）、跟現有逐幀 payload 的關係，建議獨立排一次任務，不要跟前兩項混在一起做。</div>
+      </li>
+      <li>
+        <b>M4：pose_quality 等 M2/M6 做完後一起帶出去</b>
+        <div class="why">這個分數本質上是「事件」層級的統計量（平均值），沒有獨立處理的必要，跟著事件推送機制一起接上即可。</div>
+      </li>
+    </ol>
+  </section>
+
+  <footer>
+    <span class="footer-label">備註</span>
+    <p>
+      本文件基於 2026-09-16 對話盤點結果整理，對應程式版本見
+      <code style="font-family:'IBM Plex Mono',monospace;background:var(--code-bg);padding:1px 6px;border-radius:4px;">node-red-flows/lick_stage2_nodered.json</code>
+      當時的內容。Node-RED 端程式碼日後若調整，這份盤點需要重新核對是否仍然成立。
+    </p>
+  </footer>
+
+</div>
