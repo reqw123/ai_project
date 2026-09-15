@@ -1,0 +1,468 @@
+<!doctype html>
+<title>舔毛部位辨識工程紀要</title>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root {
+    --bg: #f5f7f5;
+    --surface: #ffffff;
+    --surface-sunken: #eef2f0;
+    --ink: #16211f;
+    --ink-muted: #55716c;
+    --ink-faint: #8aa19d;
+    --border: #dbe4e0;
+    --accent-1: #1f6f6b;      /* phase 1 · 資料可信度 */
+    --accent-1-soft: #e2f0ee;
+    --accent-1-ink: #0f4c49;
+    --accent-2: #b0701f;      /* phase 2 · 演算法 */
+    --accent-2-soft: #f7ecd9;
+    --accent-2-ink: #7a4c11;
+    --rule: #c9d6d2;
+    --shadow: 0 1px 2px rgba(15, 40, 37, 0.06), 0 8px 24px -12px rgba(15, 40, 37, 0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101615;
+      --surface: #171f1e;
+      --surface-sunken: #1d2725;
+      --ink: #eaf2f0;
+      --ink-muted: #93aca7;
+      --ink-faint: #5f7c77;
+      --border: #263230;
+      --accent-1: #4fbdb6;
+      --accent-1-soft: rgba(79, 189, 182, 0.13);
+      --accent-1-ink: #a9e6e1;
+      --accent-2: #e3a559;
+      --accent-2-soft: rgba(227, 165, 89, 0.14);
+      --accent-2-ink: #f2c992;
+      --rule: #2b3735;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #101615;
+    --surface: #171f1e;
+    --surface-sunken: #1d2725;
+    --ink: #eaf2f0;
+    --ink-muted: #93aca7;
+    --ink-faint: #5f7c77;
+    --border: #263230;
+    --accent-1: #4fbdb6;
+    --accent-1-soft: rgba(79, 189, 182, 0.13);
+    --accent-1-ink: #a9e6e1;
+    --accent-2: #e3a559;
+    --accent-2-soft: rgba(227, 165, 89, 0.14);
+    --accent-2-ink: #f2c992;
+    --rule: #2b3735;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  body {
+    font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    line-height: 1.75;
+    padding-inline: max(20px, env(safe-area-inset-left, 0px));
+    padding-block: calc(48px + env(safe-area-inset-top, 0px)) calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .page {
+    max-width: 760px;
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header.hero {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-1);
+  }
+
+  h1 {
+    font-family: "Noto Serif TC", "Microsoft JhengHei", serif;
+    font-weight: 700;
+    font-size: clamp(28px, 5vw, 38px);
+    line-height: 1.35;
+    margin: 0;
+    text-wrap: balance;
+    letter-spacing: 0.01em;
+  }
+
+  .hero-lede {
+    max-width: 62ch;
+    color: var(--ink-muted);
+    font-size: 15.5px;
+  }
+
+  .status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .status-chip {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--ink-muted);
+    background: var(--surface);
+    text-decoration: none;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .status-chip[data-phase="1"] { border-color: color-mix(in srgb, var(--accent-1) 35%, var(--border)); color: var(--accent-1-ink); }
+  .status-chip[data-phase="2"] { border-color: color-mix(in srgb, var(--accent-2) 35%, var(--border)); color: var(--accent-2-ink); }
+  .status-chip:hover { border-color: currentColor; }
+
+  /* ── Phase section ──────────────────────────────────── */
+  .phase {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .phase-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .phase-head .tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 3px 9px;
+    border-radius: 5px;
+  }
+  .phase[data-phase="1"] .tag { background: var(--accent-1-soft); color: var(--accent-1-ink); }
+  .phase[data-phase="2"] .tag { background: var(--accent-2-soft); color: var(--accent-2-ink); }
+
+  .phase-head h2 {
+    font-family: "Noto Serif TC", serif;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .phase-head .phase-note {
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+
+  /* ── Milestone card ─────────────────────────────────── */
+  .milestone {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 26px 28px;
+    scroll-margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .milestone-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .badge {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 14px;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    color: var(--surface);
+  }
+  .phase[data-phase="1"] .badge { background: var(--accent-1); }
+  .phase[data-phase="2"] .badge { background: var(--accent-2); }
+
+  .milestone-head h3 {
+    font-family: "Noto Serif TC", serif;
+    font-size: 18.5px;
+    font-weight: 600;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .block { display: flex; flex-direction: column; gap: 6px; }
+
+  .block-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .block p {
+    margin: 0;
+    max-width: 66ch;
+    color: var(--ink);
+  }
+  .block.req p { color: var(--ink-muted); }
+
+  .block ul {
+    margin: 0;
+    padding-left: 1.15em;
+    max-width: 66ch;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .block.req ul li { color: var(--ink-muted); }
+  .block li::marker { color: var(--ink-faint); }
+
+  /* ── Footer ─────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  footer .footer-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  footer p {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--ink-muted);
+    font-size: 14.5px;
+  }
+
+  footer .paw {
+    color: var(--ink-faint);
+    font-size: 13px;
+  }
+
+  @media (max-width: 480px) {
+    .milestone { padding: 20px 18px; }
+    .page { gap: 44px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="hero">
+    <div class="eyebrow">貓咪行為辨識系統 · 舔毛部位辨識模組</div>
+    <h1>工程進度紀要：需求與功能</h1>
+    <p class="hero-lede">
+      這份模組依循一份三階段工程說明書開發：第一階段確保資料本身可信，第二階段
+      把可信的資料變成準確的判定。以下逐項說明每個開發階段要解決的問題，以及
+      因此新增的功能——不涉及程式實作方式。
+    </p>
+    <nav class="status-row" aria-label="階段捷徑">
+      <a class="status-chip" data-phase="1" href="#m1">M1</a>
+      <a class="status-chip" data-phase="1" href="#m2">M2</a>
+      <a class="status-chip" data-phase="1" href="#m3">M3</a>
+      <a class="status-chip" data-phase="2" href="#m4">M4</a>
+      <a class="status-chip" data-phase="2" href="#m5">M5</a>
+      <a class="status-chip" data-phase="2" href="#m6">M6</a>
+    </nav>
+  </header>
+
+  <section class="phase" data-phase="1">
+    <div class="phase-head">
+      <span class="tag">第一階段</span>
+      <h2>資料可信度</h2>
+      <span class="phase-note">讓每一幀資料本身站得住腳，是後面所有判定的地基</span>
+    </div>
+
+    <article class="milestone" id="m1">
+      <div class="milestone-head">
+        <span class="badge">M1</span>
+        <h3>時間與狀態一致性</h3>
+      </div>
+      <div class="block req">
+        <span class="block-label">需求</span>
+        <p>
+          系統要準確掌握「這一幀對應影片裡的哪一秒」，並清楚分辨畫面裡沒有貓、
+          有貓但沒在舔、有貓在舔卻抓不到部位這幾種不同情況——舊版全部混在一起
+          計算，看不出差異。
+        </p>
+      </div>
+      <div class="block cap">
+        <span class="block-label">功能</span>
+        <p>
+          不論用多快或多慢的速度處理同一支影片，算出來的舔毛總秒數都會一致；
+          系統也能明確分辨貓咪當下所處的狀態，不再籠統地當成「沒有資料」。
+        </p>
+      </div>
+    </article>
+
+    <article class="milestone" id="m2">
+      <div class="milestone-head">
+        <span class="badge">M2</span>
+        <h3>事件與統計留存</h3>
+      </div>
+      <div class="block req">
+        <span class="block-label">需求</span>
+        <p>
+          逐幀的判定結果本身沒有意義，需要整理成一段一段的「事件」（幾點幾分
+          開始、舔了多久、舔哪個部位），並且要能存下來供之後查閱，而不是畫面
+          上閃過就沒了。
+        </p>
+      </div>
+      <div class="block cap">
+        <span class="block-label">功能</span>
+        <p>
+          系統會自動把連續的舔毛動作整理成事件紀錄，並定期產出統計摘要；兩者
+          都可以存進資料庫、匯出成 CSV，供事後分析或寫論文使用。
+        </p>
+      </div>
+    </article>
+
+    <article class="milestone" id="m3">
+      <div class="milestone-head">
+        <span class="badge">M3</span>
+        <h3>傳輸穩定性與即時監看</h3>
+      </div>
+      <div class="block req">
+        <span class="block-label">需求</span>
+        <p>
+          分析結果要穩定送到監控儀表板，不能因為網路一時塞住就拖慢整個分析
+          程式；儀表板收到資料也該先確認格式沒問題再處理，並讓人一眼看出
+          「現在資料是不是還在正常送達」。
+        </p>
+      </div>
+      <div class="block cap">
+        <span class="block-label">功能</span>
+        <ul>
+          <li>資料傳輸改成「只送最新的，來不及送的舊資料直接捨棄」，不會塞車拖慢主程式</li>
+          <li>儀表板收到格式有誤的資料會直接拒絕，不會誤用壞資料</li>
+          <li>新增「資料來源目前正常／延遲／離線」的即時燈號，一眼看出來源是否還活著</li>
+        </ul>
+      </div>
+    </article>
+  </section>
+
+  <section class="phase" data-phase="2">
+    <div class="phase-head">
+      <span class="tag">第二階段</span>
+      <h2>演算法</h2>
+      <span class="phase-note">把可信的資料，變成準確、可互相驗證的部位判定</span>
+    </div>
+
+    <article class="milestone" id="m4">
+      <div class="milestone-head">
+        <span class="badge">M4</span>
+        <h3>姿態座標平滑統一</h3>
+      </div>
+      <div class="block req">
+        <span class="block-label">需求</span>
+        <p>
+          攝影機抓到的關鍵點座標本身會抖動，兩套獨立的部位判定邏輯各自用不同、
+          比較陽春的方式處理抖動，沒有統一標準，結果也不一致。
+        </p>
+      </div>
+      <div class="block cap">
+        <span class="block-label">功能</span>
+        <p>
+          兩套邏輯現在共用同一套平滑處理，並新增「信心值太低時暫時凍結、不隨
+          雜訊亂跳」與「用骨架長度是否穩定評估這一幀姿態品質」兩項能力，判定
+          結果更穩定可靠。
+        </p>
+      </div>
+    </article>
+
+    <article class="milestone" id="m5">
+      <div class="milestone-head">
+        <span class="badge">M5</span>
+        <h3>身體尺寸估算與不確定性</h3>
+      </div>
+      <div class="block req">
+        <span class="block-label">需求</span>
+        <p>
+          貓咪蜷曲理毛（相當常見的姿勢）時，舊版估算身體尺寸的方式會嚴重
+          失準，連帶讓部位判定範圍算錯；鼻子剛好卡在兩個部位交界時，舊版也
+          只會武斷選一個，沒有反映真正的不確定性。
+        </p>
+      </div>
+      <div class="block cap">
+        <span class="block-label">功能</span>
+        <p>
+          改良身體尺寸估算方式後，蜷曲理毛情境下的判定準確率明顯提升（有測試
+          影片數據佐證）；新增「模稜兩可」判定，真的分不清部位時會誠實回報
+          「無法判斷」，不會硬猜答案污染統計。
+        </p>
+      </div>
+    </article>
+
+    <article class="milestone" id="m6">
+      <div class="milestone-head">
+        <span class="badge">M6</span>
+        <h3>事件邊界判定與跨模組驗證</h3>
+      </div>
+      <div class="block req">
+        <span class="block-label">需求</span>
+        <ul>
+          <li>舔毛過程中偶爾停頓一兩秒（例如換個姿勢），舊版會誤判成「這次舔完了」，切成一堆零碎的小事件；太短太零星的誤判也沒有被濾掉</li>
+          <li>同一次舔毛如果真的換了部位（先舔前腳、再換舔後腳），舊版整筆事件只回報「時間最長的那個部位」，看不出中途換過部位</li>
+          <li>系統裡有兩套獨立的部位判定邏輯（一套判斷 5 個粗略部位、一套判斷 9 個更細部位），彼此互不參照，沒辦法互相驗證準不準</li>
+        </ul>
+      </div>
+      <div class="block cap">
+        <span class="block-label">功能</span>
+        <ul>
+          <li>能分辨「短暫停頓」跟「真的結束」，太短太零星的雜訊也會被濾掉、不列入正式紀錄</li>
+          <li>能偵測「舔毛過程中真的換部位」，並把換部位這件事拆成兩筆獨立事件分別記錄</li>
+          <li>兩套部位判定邏輯現在會互相參照，每筆事件會多一份「另一套邏輯怎麼看」的佐證資訊，可互相驗證、提高可信度</li>
+        </ul>
+      </div>
+    </article>
+  </section>
+
+  <footer>
+    <span class="footer-label">現況</span>
+    <p>
+      以上六項是三階段工程說明書第一階段（資料可信度）與第二階段（演算法）的
+      全部內容，目前皆已完成。第三階段（論文實驗：雙人標註、消融實驗、異常
+      分析等）由使用者並行進行中，不在本文件範圍內。
+    </p>
+    <span class="paw">🐾</span>
+  </footer>
+
+</div>
