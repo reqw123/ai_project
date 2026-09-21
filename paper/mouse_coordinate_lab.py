@@ -37,7 +37,9 @@
         重複間隔與完成後等待；滑鼠只移動一次，只有點擊或按鍵會重複。
     16. 支援純快捷鍵、整段文字輸入、事件啟用/停用/排序/複製，以及逐筆失敗策略。
     17. 執行前 3 秒安全倒數；流程可用 JSON 儲存、載入並自動備份，執行結果
-        與錯誤會持久保存，也可匯出為 JSON。
+        與錯誤會持久保存，也可匯出為 JSON。啟動時自動讀取預設流程 JSON
+        （預設為程式同資料夾的 mouse_flow_default.json，可用「自動採用預設流程」
+        按鈕改選路徑並持久保存），找不到只會提示，不影響使用。
 
 快捷鍵一覽：
     F8  = 記錄目前滑鼠座標
@@ -91,6 +93,24 @@ COLORS = {
     "teal": "#0F766E",
     "secondary": "#475569",
 }
+
+WORKFLOW_FORMAT = "MouseFlowStudio"
+WORKFLOW_VERSION = 4
+
+
+class WorkflowFormatError(ValueError):
+    """流程 JSON 格式不符；problems 為完整問題清單，summary 為單行摘要。"""
+
+    MAX_LISTED = 8
+
+    def __init__(self, problems):
+        self.problems = list(problems)
+        listed = self.problems[:self.MAX_LISTED]
+        detail = "\n".join(f"・{problem}" for problem in listed)
+        if len(self.problems) > len(listed):
+            detail += f"\n…另有 {len(self.problems) - len(listed)} 項問題"
+        self.summary = f"格式不符（共 {len(self.problems)} 項問題）：{self.problems[0]}"
+        super().__init__(f"流程檔案格式不符，已阻擋匯入：\n{detail}")
 
 
 class RoundedButton(tk.Canvas):
@@ -220,11 +240,13 @@ class MouseCoordinateLab:
         self.autosave_suspended = False
         self.app_data_dir = self._resolve_app_data_dir()
         self.autosave_path = self.app_data_dir / "mouse_flow_autosave.json"
+        self.settings_path = self.app_data_dir / "mouse_flow_settings.json"
+        self.default_workflow_path = self._load_default_workflow_setting()
         self.execution_log_path = self.app_data_dir / "execution_history.jsonl"
 
         self._build_ui()
         self._load_recent_execution_logs()
-        self._load_autosave_on_startup()
+        self._load_default_workflow_on_startup()
         self._update_current_position()
         self._update_schedule_countdown()
         self._update_window_schedule_display()
@@ -360,23 +382,18 @@ class MouseCoordinateLab:
         workflow_buttons = tk.Frame(workflow_card)
         workflow_buttons.pack(fill="x")
 
-        btn_save_workflow = RoundedButton(
-            workflow_buttons, text="儲存流程 JSON", command=self.save_workflow,
-            bg=COLORS["primary"], height=40
-        )
-        btn_save_workflow.pack(side="left", fill="x", expand=True, padx=(0, 4))
-
-        btn_load_workflow = RoundedButton(
-            workflow_buttons, text="載入流程 JSON", command=self.load_workflow,
-            bg=COLORS["teal"], height=40
-        )
-        btn_load_workflow.pack(side="left", fill="x", expand=True, padx=4)
-
-        btn_restore_autosave = RoundedButton(
-            workflow_buttons, text="還原自動備份", command=self.restore_autosave,
-            bg=COLORS["secondary"], height=40
-        )
-        btn_restore_autosave.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        workflow_button_specs = [
+            ("儲存流程 JSON", self.save_workflow, COLORS["primary"]),
+            ("載入流程 JSON", self.load_workflow, COLORS["teal"]),
+            ("還原自動備份", self.restore_autosave, COLORS["secondary"]),
+            ("自動採用預設流程", self.choose_default_workflow, COLORS["warning"]),
+        ]
+        for column, (label, handler, color) in enumerate(workflow_button_specs):
+            # uniform 讓四欄等寬，固定間距讓四顆按鈕大小與對齊一致
+            workflow_buttons.columnconfigure(column, weight=1, uniform="workflow_buttons")
+            RoundedButton(
+                workflow_buttons, text=label, command=handler, bg=color, width=100, height=40
+            ).grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 4, 0 if column == 3 else 4))
 
         self.label_autosave_status = tk.Label(
             workflow_card,
@@ -384,6 +401,14 @@ class MouseCoordinateLab:
             fg=COLORS["muted"], justify="left", font=("Microsoft JhengHei", 9)
         )
         self.label_autosave_status.pack(anchor="w", pady=(6, 0))
+
+        self.label_default_flow_status = tk.Label(
+            workflow_card,
+            text=f"預設流程：{self.default_workflow_path}",
+            fg=COLORS["muted"], justify="left", wraplength=760,
+            font=("Microsoft JhengHei", 9)
+        )
+        self.label_default_flow_status.pack(anchor="w", pady=(2, 0))
 
         frame_pos = tk.LabelFrame(self.main_frame, text="1  即時滑鼠座標", padx=12, pady=12)
         frame_pos.pack(fill="x", padx=18, pady=6)
@@ -2470,6 +2495,117 @@ playpause  nexttrack  prevtrack
             return None
         return {"type": "text", "text": text_value, "move_duration": 0.0, **common}
 
+    @staticmethod
+    def _validate_workflow_data(data):
+        """嚴格檢查流程 JSON 結構，不符合就丟出 WorkflowFormatError，不做任何修正。"""
+        problems = []
+
+        def is_number(value):
+            return isinstance(value, (int, float)) and not isinstance(value, bool) \
+                and value == value and value not in (float("inf"), float("-inf"))
+
+        def is_integer(value):
+            return (isinstance(value, int) and not isinstance(value, bool)) or \
+                (isinstance(value, float) and is_number(value) and value.is_integer())
+
+        def check_number(where, item, key, minimum=0.0, required=False, integer=False):
+            if key not in item:
+                if required:
+                    problems.append(f"{where} 缺少必要欄位「{key}」")
+                return
+            value = item[key]
+            ok = is_integer(value) if integer else is_number(value)
+            if not ok:
+                problems.append(f"{where} 的「{key}」必須是{'整數' if integer else '數字'}（目前：{value!r}）")
+            elif value < minimum:
+                problems.append(f"{where} 的「{key}」不可小於 {minimum:g}（目前：{value!r}）")
+
+        def check_choice(where, item, key, choices):
+            if key in item and item[key] not in choices:
+                problems.append(f"{where} 的「{key}」必須是 {'/'.join(sorted(choices))} 其中之一（目前：{item[key]!r}）")
+
+        if not isinstance(data, dict):
+            raise WorkflowFormatError(["JSON 根節點必須是物件（{ }）"])
+
+        if data.get("format") != WORKFLOW_FORMAT:
+            problems.append(f"「format」必須是 \"{WORKFLOW_FORMAT}\"（目前：{data.get('format')!r}），這不是本程式儲存的流程檔")
+        version = data.get("version")
+        if not is_integer(version) or not 1 <= version <= WORKFLOW_VERSION:
+            problems.append(f"「version」必須是 1～{WORKFLOW_VERSION} 的整數（目前：{version!r}）")
+
+        events = data.get("events")
+        if not isinstance(events, list):
+            problems.append("「events」必須是陣列（清單）")
+            events = []
+
+        for number, event in enumerate(events, start=1):
+            where = f"events[{number}]"
+            if not isinstance(event, dict):
+                problems.append(f"{where} 必須是物件")
+                continue
+            event_type = event.get("type")
+            if event_type not in {"point", "rapid_click", "key", "text"}:
+                problems.append(f"{where} 的「type」必須是 point/rapid_click/key/text 其中之一（目前：{event_type!r}）")
+                continue
+            where = f"{where}（{event_type}）"
+
+            if "enabled" in event and not isinstance(event["enabled"], bool):
+                problems.append(f"{where} 的「enabled」必須是 true 或 false")
+            check_choice(where, event, "failure_policy", {"stop", "skip", "retry"})
+            for key in ("action_delay", "repeat_interval", "after_wait", "move_duration"):
+                check_number(where, event, key)
+            for key in ("repeat_count", "retry_count"):
+                check_number(where, event, key, minimum=1, integer=True)
+
+            if event_type == "point":
+                check_number(where, event, "x", minimum=-100000, required=True, integer=True)
+                check_number(where, event, "y", minimum=-100000, required=True, integer=True)
+                check_choice(where, event, "click_type", {"left", "right", "none"})
+                if event.get("key") is not None and not isinstance(event["key"], str):
+                    problems.append(f"{where} 的「key」必須是文字或 null")
+            elif event_type == "rapid_click":
+                check_number(where, event, "rate", minimum=0.001, required=True)
+                check_number(where, event, "count", minimum=1, required=True, integer=True)
+                check_choice(where, event, "button_type", {"left", "right"})
+            elif event_type == "key":
+                if not isinstance(event.get("key"), str) or not event["key"].strip():
+                    problems.append(f"{where} 的「key」必須是非空白文字")
+            else:
+                if not isinstance(event.get("text"), str) or not event["text"]:
+                    problems.append(f"{where} 的「text」必須是非空文字")
+
+        tasks = data.get("scheduled_tasks", [])
+        if not isinstance(tasks, list):
+            problems.append("「scheduled_tasks」必須是陣列（清單）")
+            tasks = []
+        for number, task in enumerate(tasks, start=1):
+            where = f"scheduled_tasks[{number}]"
+            if not isinstance(task, dict):
+                problems.append(f"{where} 必須是物件")
+                continue
+            target = task.get("target_dt")
+            try:
+                if not isinstance(target, str):
+                    raise ValueError
+                datetime.fromisoformat(target)
+            except ValueError:
+                problems.append(f"{where} 的「target_dt」必須是 ISO 日期時間文字（目前：{target!r}）")
+            check_number(where, task, "repeat_count", minimum=1, required=True, integer=True)
+            check_number(where, task, "interval", required=True)
+
+        if "settings" in data and not isinstance(data["settings"], dict):
+            problems.append("「settings」必須是物件")
+
+        if problems:
+            raise WorkflowFormatError(problems)
+
+    def _read_workflow_file(self, path):
+        """讀取並驗證流程檔，回傳可安全套用的資料；失敗時丟出 OSError/ValueError 系列例外。"""
+        with Path(path).open("r", encoding="utf-8-sig") as file:
+            data = json.load(file)
+        self._validate_workflow_data(data)
+        return data
+
     def _create_workflow_payload(self):
         scheduled_tasks = [
             {
@@ -2498,8 +2634,8 @@ playpause  nexttrack  prevtrack
             pass
 
         return {
-            "format": "MouseFlowStudio",
-            "version": 4, 
+            "format": WORKFLOW_FORMAT,
+            "version": WORKFLOW_VERSION,
             "saved_at": datetime.now().isoformat(timespec="seconds"),
             "events": copy.deepcopy(self.recorded_points),
             "scheduled_tasks": scheduled_tasks,
@@ -2590,10 +2726,9 @@ playpause  nexttrack  prevtrack
 
         return len(normalized_events), len(scheduled_tasks)
 
-    def _load_workflow_path(self, path, show_message=True):
+    def _load_workflow_path(self, path, show_message=True, autosave=True):
         path = Path(path)
-        with path.open("r", encoding="utf-8") as file:
-            data = json.load(file)
+        data = self._read_workflow_file(path)
 
         self.autosave_suspended = True
         try:
@@ -2603,7 +2738,8 @@ playpause  nexttrack  prevtrack
 
         self._set_status(f"已載入流程：{event_count} 個事件、{task_count} 個排程任務")
         self._add_execution_log("info", f"載入流程檔案：{path.name}（{event_count} 個事件）")
-        self._autosave_workflow("載入流程")
+        if autosave:
+            self._autosave_workflow("載入流程")
         if show_message:
             messagebox.showinfo("載入完成", f"已載入 {event_count} 個事件與 {task_count} 個排程任務。")
 
@@ -2653,15 +2789,83 @@ playpause  nexttrack  prevtrack
             except tk.TclError:
                 pass
 
-    def _load_autosave_on_startup(self):
-        if not self.autosave_path.exists():
+    def _load_default_workflow_setting(self):
+        fallback = Path(__file__).resolve().parent / "mouse_flow_default.json"
+        try:
+            with self.settings_path.open("r", encoding="utf-8") as file:
+                saved = json.load(file).get("default_workflow_path")
+            if isinstance(saved, str) and saved.strip():
+                return Path(saved)
+        except (OSError, json.JSONDecodeError, AttributeError):
+            pass
+        return fallback
+
+    def _save_default_workflow_setting(self, path):
+        try:
+            settings = {}
+            try:
+                with self.settings_path.open("r", encoding="utf-8") as file:
+                    loaded = json.load(file)
+                if isinstance(loaded, dict):
+                    settings = loaded
+            except (OSError, json.JSONDecodeError):
+                pass
+            settings["default_workflow_path"] = str(path)
+            self._write_json_atomic(self.settings_path, settings)
+            return True
+        except (OSError, TypeError, ValueError) as error:
+            self._add_execution_log("error", f"預設流程路徑儲存失敗：{error}")
+            return False
+
+    def choose_default_workflow(self):
+        current = self.default_workflow_path
+        path = filedialog.askopenfilename(
+            title="選擇啟動時自動採用的預設流程 JSON",
+            initialdir=str(current.parent) if current.parent.is_dir() else None,
+            initialfile=current.name,
+            filetypes=[("Mouse Flow JSON", "*.json"), ("所有檔案", "*.*")],
+        )
+        if not path:
+            return
+
+        try:
+            self._read_workflow_file(path)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("無法採用為預設流程", f"{Path(path).name} 不符合流程格式，未變更預設路徑。\n\n{error}")
+            self._add_execution_log("error", f"拒絕採用預設流程（{Path(path).name}）：{getattr(error, 'summary', error)}")
+            return
+
+        self.default_workflow_path = Path(path)
+        saved = self._save_default_workflow_setting(self.default_workflow_path)
+        self._add_execution_log("info", f"預設流程路徑已設定：{path}")
+
+        if self.is_playing:
+            self.label_default_flow_status.config(
+                text=f"預設流程已設為：{path}（流程執行中，下次啟動才會載入）", fg=COLORS["muted"]
+            )
+        else:
+            self._load_default_workflow_on_startup(autosave=True)
+        if not saved:
+            messagebox.showwarning("提示", "預設流程路徑無法寫入設定檔，下次啟動可能不會沿用。")
+
+    def _load_default_workflow_on_startup(self, autosave=False):
+        path = self.default_workflow_path
+        if not path.is_file():
+            message = f"找不到預設流程檔（{path}），請自行匯入 JSON 或規劃新流程"
+            self.label_default_flow_status.config(text=f"⚠ {message}", fg=COLORS["warning"])
+            self._add_execution_log("warning", message)
             return
         try:
-            self._load_workflow_path(self.autosave_path, show_message=False)
-            self.label_autosave_status.config(text="自動備份：已恢復上次工作內容")
+            # 啟動時不覆寫自動備份，讓「還原自動備份」仍能取回上次的工作內容
+            self._load_workflow_path(path, show_message=False, autosave=autosave)
+            self.label_default_flow_status.config(
+                text=f"已載入預設流程：{path}", fg=COLORS["muted"]
+            )
         except (OSError, json.JSONDecodeError, ValueError) as error:
-            self.label_autosave_status.config(text=f"自動備份無法恢復：{error}")
-            self._add_execution_log("error", f"自動備份恢復失敗：{error}")
+            reason = getattr(error, "summary", error)
+            message = f"預設流程檔未載入（{path.name}）：{reason}。請自行匯入 JSON 或規劃新流程"
+            self.label_default_flow_status.config(text=f"⚠ {message}", fg=COLORS["warning"])
+            self._add_execution_log("error", message)
 
     def restore_autosave(self):
         if self.is_playing:
