@@ -459,6 +459,17 @@ def find_last_readable_frame(from_idx, max_back=END_PROBE_MAX_BACK):
             return i, fr
     return None
 
+def correct_total_frames(real_total):
+    """檔案標示的總幀數（CAP_PROP_FRAME_COUNT）跟實際讀到的不一樣時，以實際為準，並同步進度條範圍。
+    只在差距不大（2×END_PROBE_MAX_BACK 幀內）時才修正，避免中途解碼失敗就把總幀數砍掉一大截。"""
+    global total_frames
+    if real_total != total_frames and abs(total_frames - real_total) <= 2 * END_PROBE_MAX_BACK:
+        total_frames = real_total
+        try:
+            cv2.setTrackbarMax(TRACKBAR_NAME, WIN_NAME, max(1, total_frames - 1))
+        except cv2.error:
+            pass
+
 def resize_window_to_video():
     """WINDOW_AUTOSIZE：視窗自動貼合縮小後的畫面，無需手動調整。"""
     pass
@@ -678,12 +689,8 @@ while True:
                     if real_last is not None:
                         frame_idx, frame = real_last
                         ret = True
-                        total_frames = frame_idx + 1  # 以實際讀到的為準，之後 A/D、進度條範圍都跟著正確
-                        try:
-                            cv2.setTrackbarMax(TRACKBAR_NAME, WIN_NAME, max(1, total_frames - 1))
-                        except cv2.error:
-                            pass
-                        print(f"[End] 已到影片最後一幀（檔案標示的總幀數偏多，已修正為 {total_frames} 幀）")
+                        correct_total_frames(frame_idx + 1)  # 以實際讀到的為準，之後 A/D、進度條範圍都跟著正確
+                        print(f"[End] 已到影片最後一幀（檔案標示的總幀數不準，已修正為 {total_frames} 幀）")
                 if not ret:
                     frame_idx = 0
                     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -918,11 +925,26 @@ while True:
         if not ret:
             # 影片播完：不自動切下一部、也不結束程式，停在這部影片的最後一幀（改成 Step 模式）。
             # 之後可以 A／[ 往回看、S 存圖、1／2 換片、Space 回 Auto（會馬上又停回最後一幀）、ESC 離開。
-            if last_shown_frame is not None and last_shown_video == video_idx:
+            have_shown = last_shown_frame is not None and last_shown_video == video_idx
+            end_frame = None
+            if have_shown and last_shown_idx == frame_idx - 1:
+                # 剛顯示的就是最後一幀（順序播放讀不到下一幀 → frame_idx 之前的幀都存在）
+                end_frame = (last_shown_idx, last_shown_frame)
+            else:
+                # 倍速／快轉用 grab 跳過幀，最後顯示的不一定是真正的最後一幀：往回找真正讀得到的最後一幀
+                end_frame = find_last_readable_frame(frame_idx)
+            if end_frame is not None:
+                frame_idx, _end_img = end_frame
+                correct_total_frames(frame_idx + 1)  # 讀不到下一幀就是真的到尾了，總幀數以此為準
+                cached_frame = _end_img.copy()
+                last_result = infer(cached_frame)    # 用最後一幀重新推論一次，骨架與畫面一致
+                last_infer_frame_idx = frame_idx     # 逐幀模式看到相同 frame_idx 就直接用快取，不再去讀影片
+            elif have_shown:
+                # 找不到更後面的幀（例如跳轉到遠超過實際結尾的位置）：停在最近顯示過的那一幀
                 frame_idx = last_shown_idx
                 cached_frame = last_shown_frame.copy()
-                last_result = infer(cached_frame)  # 用最後一幀重新推論一次，骨架與畫面一致
-                last_infer_frame_idx = frame_idx   # 逐幀模式看到相同 frame_idx 就直接用快取，不再去讀影片
+                last_result = infer(cached_frame)
+                last_infer_frame_idx = frame_idx
             else:
                 # 這部影片一幀都沒顯示過（例如一開始就跳到影片尾端之後）：交給逐幀模式讀最後一幀
                 frame_idx = max(0, total_frames - 1)

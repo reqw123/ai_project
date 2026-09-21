@@ -489,11 +489,9 @@ def test_detail_text_is_collapsed_until_toggled(tk_root, state_path):
     def script(dlg, entries, spinboxes, buttons):
         card = _cards(dlg)[0]
         assert not card.detail.winfo_manager()           # 預設收起（詳細說明很長，會把視窗撐得很高）
-        card.toggle.event_generate("<Button-1>")
-        dlg.update()
+        _click_toggle(dlg, card)
         assert card.detail.winfo_manager() and card.detail.content() == extra_env.FIELDS[0]["hint"]
-        card.toggle.event_generate("<Button-1>")
-        dlg.update()
+        _click_toggle(dlg, card)
         assert not card.detail.winfo_manager()
         buttons["取消"]._command()
 
@@ -517,10 +515,23 @@ def _stepper_cards(dlg):
     return [c for c in _cards(dlg) if any(isinstance(w, extra_env._Stepper) for w in _walk(c))]
 
 
+def _click_toggle(dlg, card):
+    """點「ⓘ 詳細說明」。剛開的對話框還沒取得焦點時，第一個合成的滑鼠事件可能被吞掉（測試偶發失敗的原因），
+    所以先要焦點，並在狀態沒變時重送（最多 5 次）；真人操作的滑鼠事件不受影響。"""
+    before = card._detail_open
+    dlg.focus_force()
+    dlg.update()
+    for _ in range(5):
+        card.toggle.event_generate("<Button-1>")
+        dlg.update()
+        dlg.update()
+        if card._detail_open != before:
+            return
+    raise AssertionError("點了 5 次「詳細說明」都沒反應")
+
+
 def _open_detail(dlg, card):
-    card.toggle.event_generate("<Button-1>")
-    dlg.update()
-    dlg.update()
+    _click_toggle(dlg, card)
 
 
 def test_long_detail_gets_a_scrollbar_and_keeps_all_text(tk_root, state_path):
