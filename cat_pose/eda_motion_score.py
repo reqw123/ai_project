@@ -157,33 +157,33 @@ if abnormal_count > 0:
     print("=" * 80)
     print("ABNORMAL FRAMES DETAILS")
     print("=" * 80)
-   
+    
     ab_frames = frame_scores[frame_scores["abnormal"]].sort_values("score", ascending=False)
-   
+    
     for idx, row in ab_frames.iterrows():
         frame_num = int(row["frame"])
         score = row["score"]
-       
+        
         # 取得該幀的所有關鍵點資料
         frame_data = df[df["frame"] == frame_num].copy()
-       
+        
         # 根據是否有進階功能使用不同的分數計算
         if use_advanced_features:
             frame_data["score"] = frame_data["conf"] * (frame_data["ema_disp"] + ACCEL_WEIGHT * np.abs(frame_data["accel"]))
         else:
             frame_data["score"] = frame_data["conf"] * frame_data["norm_disp"]
-           
+            
         frame_data = frame_data.sort_values("score", ascending=False)
-       
+        
         print(f"\nFrame {frame_num}: Score = {score:.4f} (×{score/thres:.2f} threshold)")
-       
+        
         if use_advanced_features:
             frame_body_scale = frame_data['body_scale'].iloc[0]
             frame_max_accel = frame_data['accel'].abs().max()
             print(f"  Body scale: {frame_body_scale:.1f} px, Max accel: {frame_max_accel:.2f} px/frame\u00b2")
-       
+        
         print(f"  Top 3 problematic keypoints:")
-       
+        
         for i, (_, kpt) in enumerate(frame_data.head(3).iterrows(), 1):
             kpt_id = int(kpt["kpt_id"])
             kpt_conf = kpt["conf"]
@@ -191,10 +191,10 @@ if abnormal_count > 0:
             kpt_norm = kpt["norm_disp"]
             kpt_ema = kpt["ema_disp"]
             kpt_score = kpt["score"]
-           
+            
             if use_advanced_features:
                 kpt_accel = kpt["accel"]
-           
+            
             # 關鍵點名稱 (Cat pose 17 keypoints)
             kpt_names = [
                         "nose", "left_ear_tip", "right_ear_tip",
@@ -205,31 +205,31 @@ if abnormal_count > 0:
                         "right_hind_knee", "right_hind_paw",
                         "tail_base", "tail_mid", "tail_tip"
                         ]
-           
+            
             kpt_name = kpt_names[kpt_id] if kpt_id < len(kpt_names) else f"kpt_{kpt_id}"
-           
+            
             if use_advanced_features:
                 print(f"    #{i} [{kpt_name:15s}] conf={kpt_conf:.3f}, disp={kpt_disp:6.1f}px, "
                       f"norm={kpt_norm:.4f}, ema={kpt_ema:.4f}, accel={kpt_accel:6.1f}, score={kpt_score:.4f}")
             else:
                 print(f"    #{i} [{kpt_name:15s}] conf={kpt_conf:.3f}, disp={kpt_disp:6.1f}px, "
                       f"norm={kpt_norm:.4f}, score={kpt_score:.4f}")
-   
+    
     print("\n" + "=" * 80)
     print()
-   
+    
     # ==================== 提取異常幀影像 ====================
     print("Extracting abnormal frame images with keypoint ranking...")
     import cv2
     import os
     from matplotlib import cm
     from matplotlib.colors import Normalize
-   
+    
     # 影片/模型路徑統一在檔案開頭的 SOURCE_VIDEO_PATH/SOURCE_MODEL_PATH 設定，
     # 確保跟產生 CSV_PATH 時用的來源一致（見上方參數區註解）
     VIDEO_PATH = SOURCE_VIDEO_PATH
     OUTPUT_DIR = "abnormal_frames"
-   
+    
     # 關鍵點名稱
     kpt_names = [
                 "nose", "left_ear_tip", "right_ear_tip",
@@ -240,13 +240,13 @@ if abnormal_count > 0:
                 "right_hind_knee", "right_hind_paw",
                 "tail_base", "tail_mid", "tail_tip"
                 ]
-   
+    
     if not os.path.exists(VIDEO_PATH):
         print(f"Warning: Video file not found: {VIDEO_PATH}")
         print("Skipping frame extraction.")
     else:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-       
+        
         cap = cv2.VideoCapture(VIDEO_PATH)
         if not cap.isOpened():
             print("Error: Cannot open video")
@@ -262,46 +262,46 @@ if abnormal_count > 0:
             else:
                 has_model = False
                 print("Warning: Model not found, will save raw frames only")
-           
+            
             # 準備顏色映射（紅->橙->黃）
             norm_frame = Normalize(vmin=ab_frames["score"].min(), vmax=ab_frames["score"].max())
             cmap_frame = plt.colormaps['YlOrRd']  # 黃->橙->紅
-           
+            
             for rank, (idx, row) in enumerate(ab_frames.iterrows(), 1):
                 frame_num = int(row["frame"])
                 score = row["score"]
-               
+                
                 # 獲取該幀的關鍵點資料並排序
                 frame_data = df[df["frame"] == frame_num].copy()
                 if use_advanced_features:
                     frame_data["kpt_score"] = frame_data["conf"] * (frame_data["ema_disp"] + ACCEL_WEIGHT * np.abs(frame_data["accel"]))
                 else:
                     frame_data["kpt_score"] = frame_data["conf"] * frame_data["norm_disp"]
-               
+                
                 frame_data = frame_data.sort_values("kpt_score", ascending=False)
-               
+                
                 # 計算顏色（BGR格式給OpenCV用）
                 color_rgb = cmap_frame(norm_frame(score))[:3]
                 color_bgr = tuple([int(c * 255) for c in reversed(color_rgb)])
-               
+                
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
                 ret, frame = cap.read()
-               
+                
                 if ret:
                     h, w = frame.shape[:2]
-                   
+                    
                     # 添加彩色邊框（根據異常程度）
                     border_thickness = 15
                     cv2.rectangle(frame, (0, 0), (w, h), color_bgr, border_thickness)
-                   
+                    
                     # 如果有模型，繪製關鍵點
                     if has_model:
                         result = model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, conf=YOLO_CONF_THRESHOLD, quantize=16, verbose=False)[0]
-                       
+                        
                         if result.keypoints is not None and len(result.keypoints.xy) > 0:
                             kpts = result.keypoints.xy[0].cpu().numpy()
                             kpt_conf = result.keypoints.conf[0].cpu().numpy()
-                           
+                            
                             # 繪製骨架（淡色）
                             skeleton = [
                                 (0,1), (0,2), (1,2),  # 頭部
@@ -310,66 +310,66 @@ if abnormal_count > 0:
                                 (5,10), (10,11), (5,12), (12,13),  # 後肢
                                 (5,14), (14,15), (15,16)  # 尾巴
                             ]
-                           
+                            
                             for a, b in skeleton:
                                 if kpt_conf[a] > 0.5 and kpt_conf[b] > 0.5:
                                     pt1 = tuple(kpts[a].astype(int))
                                     pt2 = tuple(kpts[b].astype(int))
                                     cv2.line(frame, pt1, pt2, (180, 180, 180), 2)
-                           
+                            
                             # 準備關鍵點異常分數的顏色映射
                             top_kpts = frame_data.head(5)  # 取前5個最異常的關鍵點
                             if len(top_kpts) > 0:
-                                norm_kpt = Normalize(vmin=top_kpts["kpt_score"].min(),
+                                norm_kpt = Normalize(vmin=top_kpts["kpt_score"].min(), 
                                                     vmax=top_kpts["kpt_score"].max())
                                 cmap_kpt = plt.colormaps['Reds']  # 白->粉->紅
-                               
+                                
                                 # 先繪製所有普通關鍵點（灰色小點）
                                 for i, (x, y) in enumerate(kpts):
                                     if kpt_conf[i] > 0.5:
                                         cv2.circle(frame, (int(x), int(y)), 4, (150, 150, 150), -1)
-                               
+                                
                                 # 繪製 Top 5 異常關鍵點（大點+標註）
                                 for kpt_rank, (_, kpt_row) in enumerate(top_kpts.iterrows(), 1):
                                     kpt_id = int(kpt_row["kpt_id"])
                                     kpt_score_val = kpt_row["kpt_score"]
-                                   
+                                    
                                     if kpt_id < len(kpts) and kpt_conf[kpt_id] > 0.5:
                                         x, y = kpts[kpt_id]
                                         x, y = int(x), int(y)
-                                       
+                                        
                                         # 計算顏色
                                         color_rgb_kpt = cmap_kpt(norm_kpt(kpt_score_val))[:3]
                                         color_bgr_kpt = tuple([int(c * 255) for c in reversed(color_rgb_kpt)])
-                                       
+                                        
                                         # 繪製大圓點
                                         cv2.circle(frame, (x, y), 12, color_bgr_kpt, -1)
                                         cv2.circle(frame, (x, y), 12, (0, 0, 0), 2)
-                                       
+                                        
                                         # 繪製排名數字（明顯呈現：白色輪廓 + 黑色粗字）
                                         rank_text = str(kpt_rank)
                                         cv2.putText(frame, rank_text, (x-6, y+6),
                                                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 4)
                                         cv2.putText(frame, rank_text, (x-6, y+6),
                                                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 2)
-                                       
+                                        
                                         # 繪製關鍵點名稱標籤
                                         kpt_name = kpt_names[kpt_id]
                                         label = f"{kpt_name}"
-                                       
+                                        
                                         # 計算文字大小
                                         (text_w, text_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                                       
+                                        
                                         # 繪製半透明深色背景
                                         label_x = x + 15
                                         label_y = y - 5
                                         overlay = frame.copy()
-                                        cv2.rectangle(overlay,
+                                        cv2.rectangle(overlay, 
                                                      (label_x - 2, label_y - text_h - 4),
                                                      (label_x + text_w + 6, label_y + 4),
                                                      (0, 0, 0), -1)
                                         cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
-                                       
+                                        
                                         # 繪製白色文字 + 黑色輪廓
                                         # 黑色輪廓
                                         cv2.putText(frame, label, (label_x + 2, label_y),
@@ -377,13 +377,13 @@ if abnormal_count > 0:
                                         # 白色字
                                         cv2.putText(frame, label, (label_x + 2, label_y),
                                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                   
+                    
                     # 添加大標題背景（半透明黑色）
                     title_bg_height = 80
                     overlay = frame.copy()
                     cv2.rectangle(overlay, (0, 0), (w, title_bg_height), (0, 0, 0), -1)
                     cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
-                   
+                    
                     # 添加幀排名數字（大字體，左上角）- 白色字 + 黑色輪廓
                     rank_text = f"#{rank}"
                     # 黑色輪廓
@@ -392,7 +392,7 @@ if abnormal_count > 0:
                     # 白色字
                     cv2.putText(frame, rank_text, (20, 55),
                                cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 255, 255), 3)
-                   
+                    
                     # 添加詳細資訊（右上角）- 白色字 + 黑色輪廓
                     info_text = f"Frame {frame_num} | Score: {score:.4f}"
                     # 黑色輪廓
@@ -401,7 +401,7 @@ if abnormal_count > 0:
                     # 白色字
                     cv2.putText(frame, info_text, (w - 450, 35),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-                   
+                    
                     # 添加異常等級標籤 - 彩色字 + 黑色輪廓
                     if score > thres * 2:
                         level = "CRITICAL"
@@ -412,19 +412,19 @@ if abnormal_count > 0:
                     else:
                         level = "MODERATE"
                         level_color = (0, 255, 255)  # 黃
-                   
+                    
                     # 黑色輪廓
                     cv2.putText(frame, level, (w - 450, 65),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)
                     # 彩色字
                     cv2.putText(frame, level, (w - 450, 65),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, level_color, 2)
-                   
+                    
                     # 儲存影像（檔名包含排名）
                     output_path = os.path.join(OUTPUT_DIR, f"rank_{rank:02d}_frame_{frame_num:04d}_score_{score:.3f}.jpg")
                     cv2.imwrite(output_path, frame)
                     print(f"  Saved: Rank #{rank} - Frame {frame_num} with top 5 keypoint annotations")
-           
+            
             cap.release()
             print(f"\nAll {len(ab_frames)} abnormal frames saved to: {OUTPUT_DIR}/")
             print("Images show:")
@@ -444,35 +444,35 @@ if len(ab_frames) > 0:
     # 使用顏色映射：從深紅（高異常）到橙黃（低異常）
     from matplotlib import cm
     from matplotlib.colors import Normalize
-   
+    
     # 正規化分數到 0-1 範圍
     norm = Normalize(vmin=ab_frames["score"].min(), vmax=ab_frames["score"].max())
     cmap = plt.colormaps['YlOrRd_r']  # 反轉色圖：紅->橙->黃
-   
+    
     # 繪製每個異常幀並標註
     for rank, (idx, row) in enumerate(ab_frames.iterrows(), 1):
         frame_num = row["frame"]
         score = row["score"]
         color = cmap(norm(score))
-       
+        
         # 繪製大點
-        plt.scatter(frame_num, score, color=color, s=200,
+        plt.scatter(frame_num, score, color=color, s=200, 
                    edgecolors='black', linewidth=2, zorder=10)
-       
+        
         # 標註數字
-        plt.text(frame_num, score + 0.02, str(rank),
+        plt.text(frame_num, score + 0.02, str(rank), 
                 ha='center', va='bottom', fontsize=12, fontweight='bold',
-                color='black', bbox=dict(boxstyle='round,pad=0.3',
+                color='black', bbox=dict(boxstyle='round,pad=0.3', 
                 facecolor='white', edgecolor='black', alpha=0.8))
-   
+    
     # 添加顏色條
     sm = cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     cbar = plt.colorbar(sm, ax=plt.gca(), pad=0.02)
     cbar.set_label('Abnormality Score', rotation=270, labelpad=20)
-   
+    
     # 圖例中不顯示 scatter，改用文字說明
-    plt.plot([], [], 'o', color='red', markersize=10,
+    plt.plot([], [], 'o', color='red', markersize=10, 
             markeredgecolor='black', markeredgewidth=1.5,
             label=f'Abnormal ({len(ab_frames)} frames)')
 

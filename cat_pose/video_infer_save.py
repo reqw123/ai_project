@@ -43,7 +43,7 @@ from constants import (
 )
 
 # ==================== 設定 ====================
-MODEL_PATH = r"C:\ai_project\yolo_models\v11s_149.pt"
+MODEL_PATH = r"C:\ai_project\yolo_models\v11s_150.pt"
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -62,8 +62,8 @@ if _env_test_video and os.path.isfile(_env_test_video):
 elif _env_test_video and os.path.isdir(_env_test_video):
     VIDEO_DIR = _env_test_video
 
-OUTPUT_DIR = r"C:/cat_pose/cat51"
-IMG_NAME_FORMAT = "lick_real-{}.png"
+OUTPUT_DIR = r"C:/cat_pose/cat53"
+IMG_NAME_FORMAT = "lick_real3-{}.png"
 TARGET_MODEL_FPS = 30.0
 
 # ==================== 播放 / 跳幀 / 跳轉設定 ====================
@@ -249,6 +249,9 @@ last_result = None  # 保存最後一次推論結果，避免閃爍
 last_infer_frame_idx = -1  # 記錄上次推論的 frame_idx，避免重複推論
 cached_frame = None  # 快取當前 frame（step 模式用）
 last_frame_auto = None  # auto 模式保存最後一幀原始畫質（供 S 鍵儲存）
+last_shown_frame = None  # 最近一次顯示的原始畫面（Auto／Step 都記），影片播完時用來停在最後一幀
+last_shown_idx = 0       # 上面那一幀的 frame_idx
+last_shown_video = -1    # 上面那一幀屬於哪一部影片（video_idx），換片後就不會誤用舊影片的畫面
 frame_step = 1  # 每次移動的幀數（Z 增加，X 減少）
 playback_speed = DEFAULT_PLAYBACK_SPEED  # Auto 模式倍速（1~5 鍵切換）
 pending_key = 255       # 節流等待期間收到的按鍵，暫存到下一輪處理（255 = 無）
@@ -441,6 +444,20 @@ def prompt_seek():
         tgt = max(0, tgt)
     print(f"[Seek] → 第 {tgt} 幀（約 {tgt / src_fps:.2f}s）")
     return tgt
+
+END_PROBE_MAX_BACK = 60  # 讀不到幀且離標示的結尾在這個幀數內，才當成「總幀數偏多」處理
+
+def find_last_readable_frame(from_idx, max_back=END_PROBE_MAX_BACK):
+    """從 from_idx 往前一幀一幀找最近讀得到的幀，回傳 (幀號, 畫面)；找不到回傳 None。"""
+    for back in range(1, max_back + 1):
+        i = from_idx - back
+        if i < 0:
+            break
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        ok, fr = cap.read()
+        if ok:
+            return i, fr
+    return None
 
 def resize_window_to_video():
     """WINDOW_AUTOSIZE：視窗自動貼合縮小後的畫面，無需手動調整。"""
@@ -654,6 +671,19 @@ while True:
                 # 如果需要大量標註，建議先用 ffmpeg 將影片轉為 image sequence
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                 ret, frame = cap.read()
+                if not ret and total_frames - frame_idx <= END_PROBE_MAX_BACK:
+                    # 讀不到、又接近影片標示的結尾：多半是檔案的總幀數 metadata 比實際多（VFR／錄影軟體常見），
+                    # 往回找真正的最後一幀並停在那，不要繞回第 0 幀
+                    real_last = find_last_readable_frame(frame_idx)
+                    if real_last is not None:
+                        frame_idx, frame = real_last
+                        ret = True
+                        total_frames = frame_idx + 1  # 以實際讀到的為準，之後 A/D、進度條範圍都跟著正確
+                        try:
+                            cv2.setTrackbarMax(TRACKBAR_NAME, WIN_NAME, max(1, total_frames - 1))
+                        except cv2.error:
+                            pass
+                        print(f"[End] 已到影片最後一幀（檔案標示的總幀數偏多，已修正為 {total_frames} 幀）")
                 if not ret:
                     frame_idx = 0
                     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -667,6 +697,7 @@ while True:
                 # frame_idx 未改變，直接使用快取的 frame 和 result
                 frame = cached_frame
             
+            last_shown_frame, last_shown_idx, last_shown_video = frame, frame_idx, video_idx  # 自動模式播完時要停在這一幀
             # 畫標註 → 依原比例等比縮小到 720/1080 內（保存時仍用 cached_frame 原始畫質）
             disp_frame, _disp_h = fit_for_display(draw_result(frame, last_result))
             scale = min(_disp_h / 720.0, 1.0)
@@ -782,6 +813,10 @@ while True:
                 save_idx += 1
             elif key == 32:  # Space
                 step_mode = not step_mode
+                if not step_mode:
+                    # 逐幀模式讀完 frame_idx 後，影片讀取位置已在 frame_idx+1；不校正的話自動模式讀到的是
+                    # frame_idx+1 這一幀，卻標成 frame_idx（畫面與幀號差 1，播到最後時停住的幀號也會差 1）
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                 print(f"[Mode] Space → {'Step' if step_mode else 'Auto'}")
                 print_mode()
                 break
@@ -881,19 +916,23 @@ while True:
         # ---- 讀取與推論 ----
         ret, frame = cap.read()
         if not ret:
-            # 自動切換到下一部影片
-            if video_idx < len(video_list) - 1:
-                video_idx += 1
-                open_video(video_idx)          # 內部已依 SEEK_FRAME 設好 frame_idx 與位置
-                resize_window_to_video()
-                print_mode()
-                last_result = None
-                last_frame_auto = None
-                continue
+            # 影片播完：不自動切下一部、也不結束程式，停在這部影片的最後一幀（改成 Step 模式）。
+            # 之後可以 A／[ 往回看、S 存圖、1／2 換片、Space 回 Auto（會馬上又停回最後一幀）、ESC 離開。
+            if last_shown_frame is not None and last_shown_video == video_idx:
+                frame_idx = last_shown_idx
+                cached_frame = last_shown_frame.copy()
+                last_result = infer(cached_frame)  # 用最後一幀重新推論一次，骨架與畫面一致
+                last_infer_frame_idx = frame_idx   # 逐幀模式看到相同 frame_idx 就直接用快取，不再去讀影片
             else:
-                # 已經是最後一部影片，結束
-                break
+                # 這部影片一幀都沒顯示過（例如一開始就跳到影片尾端之後）：交給逐幀模式讀最後一幀
+                frame_idx = max(0, total_frames - 1)
+                last_infer_frame_idx = -1
+            step_mode = True
+            print(f"[End] 影片播放完畢，停在最後一幀（{frame_idx+1}/{total_frames}）："
+                  f"A／[ 往回看  S 存圖  1／2 換片  ESC 離開")
+            continue
         last_frame_auto = frame  # 保留原始畫質供 S 鍵儲存
+        last_shown_frame, last_shown_idx, last_shown_video = frame, frame_idx, video_idx  # 播完時要停在這一幀
         # 抽幀（快轉 / >=2x 倍速）時每一顯示幀都推論；否則照 auto_infer_interval
         do_infer = (AUTO_FRAME_SKIP > 0) or (playback_speed >= 2.0) or (frame_idx % auto_infer_interval == 0)
         if do_infer:

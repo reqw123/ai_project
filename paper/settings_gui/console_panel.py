@@ -572,8 +572,13 @@ class ConsolePanel:
             current = None  # focus_get 遇到 ttk 彈出視窗（下拉清單）等特殊 widget 會丟 KeyError
         if current is self.stdin_entry:
             return  # 已經在輸入框
-        if current is not None and current.winfo_toplevel() is self.window and not self._focus_is_startup_default(current):
-            return  # 使用者已經點了本視窗別的控制項，尊重他的選擇
+        if current is not None and not (
+            current.winfo_toplevel() is self.window and self._focus_is_startup_default(current)
+        ):
+            # 使用者已經點了本視窗別的控制項，或正在操作別的視窗（例如剛開的「額外設定」對話框）：尊重他，不搶。
+            # 只有焦點被別的程式（例如腳本剛跳出的預覽視窗）拿走（focus_get 為 None）、
+            # 或還停在按下啟動鈕後的預設位置時才搶回輸入框。
+            return
         self.focus_input(force=True)
 
     def _focus_is_startup_default(self, widget):
