@@ -75,6 +75,7 @@ class ProcessManager:
             child_env = os.environ.copy()
             child_env["PYTHONIOENCODING"] = "utf-8"
             child_env["PYTHONUTF8"] = "1"
+            child_env["PYTHONUNBUFFERED"] = "1"  # 理由同 start_tool：pipe 預設區塊緩衝，面板才不會延遲顯示
             popen_kwargs = {
                 "cwd": str(cwd),
                 "env": child_env,
@@ -139,6 +140,9 @@ class ProcessManager:
             child_env = os.environ.copy()
             child_env["PYTHONIOENCODING"] = "utf-8"
             child_env["PYTHONUTF8"] = "1"
+            # stdout 是 pipe 時 Python 預設做區塊緩衝（約 8KB），print() 要等緩衝區滿或行程結束
+            # 才會送到終端機面板；強制不緩衝，面板才能跟腳本實際輸出同步（例如切換影片的當下）。
+            child_env["PYTHONUNBUFFERED"] = "1"
             if extra_env:
                 child_env.update(extra_env)
             popen_kwargs = {

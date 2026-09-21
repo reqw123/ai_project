@@ -7,14 +7,17 @@
 - `apply_order()`：有列到的腳本照 json 裡的順序排在最前面；其餘沒列到的
   （之後新增、還沒排過的）一律接在後面、依相對路徑字串排序。json 裡列到但實際
   檔案已不存在的項目會自動略過，不需要手動清理。
+- 備註：物件格式多一個 `"notes": {"相對路徑": "簡短備註"}`，給每支腳本一句 ≤ NOTE_MAX_LEN 字的
+  提醒（會顯示在下拉選單、每列名稱後面）。路徑改名後舊備註就對不上（跟順序同樣以相對路徑為 key）。
 - `open_dialog()`：彈一個用 ↑/↓ 調整順序的小視窗，每列右側顯示目前位置的流水號，
-  可對個別項目「上鎖」（鎖定的項目位置固定、不能移動、其他項目也不能跨越它）。
-  按「儲存並套用」時回呼 `on_apply(new_relnames, locked_relnames)`，由呼叫端
+  可對個別項目「上鎖」（鎖定的項目位置固定、不能移動、其他項目也不能跨越它），
+  清單下方的「備註」輸入框編輯目前選取那支腳本的備註（Enter＝儲存並跳到下一支）。
+  按「儲存並套用」時回呼 `on_apply(new_relnames, locked_relnames, notes)`，由呼叫端
   （settings_window.py）負責存檔＋重建下拉選單。
 
 這是純 GUI 顯示偏好，不是 main.py 的執行期設定，所以獨立成一個檔案，不塞進
 runtime_settings.current.json。刪掉 tool_order.json（或在對話框裡按「依檔名排序」
-且沒有任何鎖定再儲存）＝回到「全部依檔名排序」，之後新增的腳本也會自動照檔名融入。
+且沒有任何鎖定、沒有任何備註再儲存）＝回到「全部依檔名排序」，之後新增的腳本也會自動照檔名融入。
 """
 
 import json
@@ -35,6 +38,9 @@ from settings_gui.style import (
 from settings_gui.widgets import _styled_button
 
 _ORDER_PATH = Path(__file__).resolve().parent / "tool_order.json"
+
+NOTE_MAX_LEN = 12          # 備註字數上限（設計上只是「簡單造詞提醒」，約 10 字以內）
+NOTE_SEP = "  ── "        # 下拉選單裡「名稱」與「備註」之間的分隔符
 
 _DIALOG_BG = "#f4f6f8"
 _LISTBOX_BG = "#eaf4fc"          # 跟 settings_window 下拉清單同一個淡藍底
@@ -82,20 +88,56 @@ def load_locked():
     return _clean_list(_read_raw().get("locked", []))
 
 
-def save_order(relnames, locked=None):
-    """把順序（與鎖定清單）寫回 tool_order.json；回傳 (ok, error_message)。
-    兩者都空 → 直接刪掉檔案，回到「全部依檔名排序」的預設狀態。"""
+def _clean_notes(value):
+    """{相對路徑: 備註} → 清掉非字串、空白備註，路徑統一成 "/"、備註去頭尾空白。"""
+    if not isinstance(value, dict):
+        return {}
+    out = {}
+    for k, v in value.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            continue
+        key = k.replace("\\", "/").strip()
+        note = v.strip()
+        if key and note:
+            out[key] = note
+    return out
+
+
+def load_notes():
+    """回傳 {相對路徑: 備註}；讀不到或格式不對回傳 {}。"""
+    return _clean_notes(_read_raw().get("notes", {}))
+
+
+def with_note(text, note):
+    """下拉選單顯示用：`#05  名稱` + 分隔符 + 備註；沒有備註就原樣回傳。"""
+    return f"{text}{NOTE_SEP}{note}" if note else text
+
+
+def strip_note(text):
+    """with_note() 的反向：去掉備註，只留 `#05  名稱`（選定後輸入框、路徑查找用的 key）。"""
+    return text.split(NOTE_SEP, 1)[0]
+
+
+def save_order(relnames, locked=None, notes=None):
+    """把順序、鎖定清單與備註寫回 tool_order.json；回傳 (ok, error_message)。
+    三者都空 → 直接刪掉檔案，回到「全部依檔名排序」的預設狀態。
+    notes 是「完整」的 {相對路徑: 備註}（包含目前不在清單裡的腳本的舊備註，由呼叫端原樣帶著）。"""
     order = list(relnames)
     locked = sorted(set(locked or []) & set(order))
-    if not order and not locked:
+    notes = _clean_notes(notes or {})
+    if not order and not locked and not notes:
         try:
             _ORDER_PATH.unlink(missing_ok=True)
             return True, None
         except OSError as e:
             return False, str(e)
-    payload = {"order": order}
+    payload = {}
+    if order or not notes:
+        payload["order"] = order
     if locked:
         payload["locked"] = locked
+    if notes:
+        payload["notes"] = notes
     try:
         _ORDER_PATH.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -113,17 +155,21 @@ def apply_order(items):
     return sorted(items, key=lambda it: (rank.get(it[0], len(order)), it[0]))
 
 
-def open_dialog(parent, current_relnames, on_apply, locked_relnames=None):
+def open_dialog(parent, current_relnames, on_apply, locked_relnames=None, notes_seed=None):
     """彈出排序小視窗。
 
     current_relnames：目前生效的順序（relname 清單，通常來自 apply_order 的結果）。
     locked_relnames：初始鎖定的 relname（沒有就 None）。
-    on_apply(new_relnames, locked_relnames)：按「儲存並套用」時呼叫；若調整後的順序
-        剛好等於純檔名排序、又沒有任何鎖定，會傳入 ([], [])（呼叫端據此刪掉 json）。
+    notes_seed：目前已存的備註 {relname: 備註}（沒有就 None）。可能含有「目前不在清單裡」的腳本
+        （例如檔案暫時被搬走）的舊備註，對話框原封不動帶著、儲存時一起回傳，不會被悄悄丟掉。
+    on_apply(new_relnames, locked_relnames, notes)：按「儲存並套用」時呼叫；若調整後的順序
+        剛好等於純檔名排序、又沒有任何鎖定，new_relnames／locked_relnames 會傳入 []、[]
+        （呼叫端據此決定要不要刪掉 json——備註還在就不能刪）。
         回傳 False 代表失敗，對話框留著讓使用者重試；其餘（True/None）視為成功並關閉。
     """
     order = list(current_relnames)
     locked = set(locked_relnames or []) & set(order)
+    notes = dict(notes_seed or {})
     if not order:
         messagebox.showinfo("自訂工具排序", "目前沒有可排序的腳本。", parent=parent)
         return
@@ -142,7 +188,9 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None):
         text="用 ↑ / ↓ 調整「🧩 獨立腳本工具」下拉選單的顯示順序（也可按 Alt+↑ / Alt+↓）。\n"
              "每列最左邊是目前位置的流水號。鎖定的項目（琥珀色）位置固定、不能移動，"
              "其他項目也不能跨越它——先解鎖才能調整。\n"
-             "沒排到的腳本會自動接在最後、依檔名排序；之後新增的腳本也一樣。",
+             "沒排到的腳本會自動接在最後、依檔名排序；之後新增的腳本也一樣。\n"
+             f"下方「備註」可替選取的腳本寫一句簡短提醒（{NOTE_MAX_LEN} 字內），會顯示在下拉選單、"
+             "名稱後面；在備註欄按 Enter 會儲存並跳到下一支。",
         bg=_DIALOG_BG, fg=_TEXT_FG, font=("Microsoft JhengHei", 10),
         justify="left", anchor="w",
     ).pack(fill="x", padx=SPACE_MD, pady=(SPACE_MD, SPACE_SM))
@@ -154,7 +202,7 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None):
         body, selectmode="browse", activestyle="none", font=lb_font,
         bg=_LISTBOX_BG, fg=_TEXT_FG,
         selectbackground=_LISTBOX_SEL_BG, selectforeground="#ffffff",
-        width=64, height=22, highlightthickness=1, relief="solid", bd=1,
+        width=76, height=20, highlightthickness=1, relief="solid", bd=1,
         exportselection=False,
     )
     lb.pack(side="left", fill="both", expand=True)
@@ -167,7 +215,7 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None):
 
     def _fmt(relname, pos):
         # 流水號放最左邊固定欄：中英混合檔名在 Tk listbox 裡靠補空白對不齊右側流水號。
-        return f"#{pos:02d}  {relname}"
+        return with_note(f"#{pos:02d}  {relname}", notes.get(relname, ""))
 
     def _current_relname():
         cur = lb.curselection()
@@ -178,11 +226,7 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None):
         lb.delete(0, "end")
         for idx, r in enumerate(order, start=1):
             lb.insert("end", _fmt(r, idx))
-            if r in locked:
-                lb.itemconfig(
-                    idx - 1, background=_LOCKED_BG, foreground=_LOCKED_FG,
-                    selectbackground=_LOCKED_SEL_BG, selectforeground="#ffffff",
-                )
+            _style_locked_row(idx - 1)
         if sel in order:
             k = order.index(sel)
             lb.selection_set(k)
@@ -191,7 +235,22 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None):
         elif order:
             lb.selection_set(0)
             lb.activate(0)
-        _update_lock_btn()
+        _on_selection_changed()
+
+    def _style_locked_row(k):
+        if order[k] in locked:
+            lb.itemconfig(
+                k, background=_LOCKED_BG, foreground=_LOCKED_FG,
+                selectbackground=_LOCKED_SEL_BG, selectforeground="#ffffff",
+            )
+
+    def _refresh_row(k):
+        """只重畫第 k 列（編輯備註時每打一個字都會呼叫，不要整個清單重建）。"""
+        lb.delete(k)
+        lb.insert(k, _fmt(order[k], k + 1))
+        _style_locked_row(k)
+        lb.selection_set(k)
+        lb.activate(k)
 
     def _try_move(step, silent=False):
         r = _current_relname()
@@ -273,12 +332,91 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None):
         r = _current_relname()
         lock_btn.config(text="🔓 解鎖" if r in locked else "🔒 鎖定")
 
+    def _on_selection_changed(*_):
+        _update_lock_btn()
+        _load_note_into_entry()
+
     # <<ListboxSelect>> 是主要事件；再補滑鼠放開／方向鍵放開，避免某些平台上
     # 用方向鍵移動選取時按鈕文字沒跟著更新。
     for _seq in ("<<ListboxSelect>>", "<ButtonRelease-1>", "<KeyRelease-Up>", "<KeyRelease-Down>"):
-        lb.bind(_seq, _update_lock_btn, add="+")
+        lb.bind(_seq, _on_selection_changed, add="+")
     dlg.bind("<Alt-Up>", lambda _e: _move(-1))
     dlg.bind("<Alt-Down>", lambda _e: _move(1))
+
+    # ── 備註輸入列：編輯目前選取那支腳本的備註 ──
+    note_row = tk.Frame(dlg, bg=_DIALOG_BG)
+    note_row.pack(fill="x", padx=SPACE_MD, pady=(0, SPACE_SM))
+    tk.Label(
+        note_row, text="備註：", bg=_DIALOG_BG, fg=_TEXT_FG, font=("Microsoft JhengHei", 11, "bold"),
+    ).pack(side="left")
+    note_var = tk.StringVar()
+    note_entry = tk.Entry(note_row, textvariable=note_var, font=("Microsoft JhengHei", 12), relief="solid", bd=1)
+    note_entry.pack(side="left", fill="x", expand=True, padx=(SPACE_XS, SPACE_SM), ipady=3)
+    note_count = tk.Label(note_row, text=f"0/{NOTE_MAX_LEN}", bg=_DIALOG_BG, fg=_LOCKED_FG, font=("Consolas", 10))
+    note_count.pack(side="left")
+    tk.Label(
+        note_row, text="  Enter＝儲存並跳下一支　↑/↓＝換列", bg=_DIALOG_BG, fg=_LOCKED_FG,
+        font=("Microsoft JhengHei", 9),
+    ).pack(side="left")
+
+    _loading = [False]  # 程式自己更新輸入框內容時（換列、截斷），不要當成使用者編輯
+
+    def _set_note_var(text):
+        _loading[0] = True
+        try:
+            note_var.set(text)
+        finally:
+            _loading[0] = False
+        note_count.config(text=f"{len(text)}/{NOTE_MAX_LEN}")
+
+    def _load_note_into_entry():
+        r = _current_relname()
+        _set_note_var(notes.get(r, "") if r else "")
+
+    def _on_note_edit(*_):
+        if _loading[0]:
+            return
+        r = _current_relname()
+        if r is None:
+            return
+        text = note_var.get()
+        if len(text) > NOTE_MAX_LEN:
+            text = text[:NOTE_MAX_LEN]
+            _set_note_var(text)
+        note_count.config(text=f"{len(text)}/{NOTE_MAX_LEN}")
+        if text.strip():
+            notes[r] = text.strip()
+        else:
+            notes.pop(r, None)
+        _refresh_row(order.index(r))
+
+    note_var.trace_add("write", _on_note_edit)
+
+    def _select_index(k):
+        k = max(0, min(k, len(order) - 1))
+        lb.selection_clear(0, "end")
+        lb.selection_set(k)
+        lb.activate(k)
+        lb.see(k)
+        _on_selection_changed()
+
+    def _current_index():
+        cur = lb.curselection()
+        return cur[0] if cur else 0
+
+    def _note_go(step):
+        _select_index(_current_index() + step)
+        note_entry.focus_set()
+        note_entry.select_range(0, "end")
+        return "break"
+
+    note_entry.bind("<Return>", lambda _e: _note_go(1))
+    note_entry.bind("<Down>", lambda _e: _note_go(1))
+    note_entry.bind("<Up>", lambda _e: _note_go(-1))
+    # Tk 會把「多按了修飾鍵」的事件也配對給沒帶修飾鍵的綁定：不明確綁 Alt+↑/↓，Alt+↓ 會被上面的
+    # <Down> 吃掉（回傳 "break" 連視窗層級的「移動順序」綁定都收不到）。Alt 版更具體，會優先生效。
+    note_entry.bind("<Alt-Up>", lambda _e: _move(-1))
+    note_entry.bind("<Alt-Down>", lambda _e: _move(1))
 
     bar = tk.Frame(dlg, bg=_DIALOG_BG)
     bar.pack(fill="x", padx=SPACE_MD, pady=(0, SPACE_MD))
@@ -288,9 +426,9 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None):
 
     def _save(_e=None):
         if order == sorted(order) and not locked:
-            result = on_apply([], [])
+            result = on_apply([], [], dict(notes))
         else:
-            result = on_apply(list(order), sorted(locked))
+            result = on_apply(list(order), sorted(locked), dict(notes))
         if result is not False:
             dlg.destroy()
 

@@ -116,6 +116,13 @@ class ConsolePanel:
             header, text="🖥️ 終端機輸出（main.py／獨立腳本工具共用；可拖拉頂端調整高度）",
             bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG, font=self.window._font_label_bold, anchor="w",
         ).pack(side="left", padx=(0, 10), pady=6)
+        # 收合時輸出區看不到，光有輸入框卻不知道腳本在問什麼（例如「輸入模式 (1/2):」）等於盲打；
+        # 所以收合時在標題列右側顯示「最後一行輸出」的預覽，展開時隱藏。
+        self._preview_var = tk.StringVar(value="")
+        self._preview_label = tk.Label(
+            header, textvariable=self._preview_var, bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
+            font=self.window._font_hint, anchor="w",
+        )
 
         # 工具列 + Text 輸出區包成一個子容器，收合時整包 pack_forget()，
         # 展開時整包用 before/after 對齊 grip／header 之間的正確順序重新插回。
@@ -177,8 +184,12 @@ class ConsolePanel:
         # （例如某些工具腳本開場問「請選擇執行模式 1/2」），行程會停在那裡等，光看
         # 輸出面板完全看不出來、也沒地方能回應——這一列讓使用者能直接把文字送進
         # 子行程的 stdin。沒有行程在跑時停用，避免誤按送出目標不存在的輸入。
-        input_row = tk.Frame(body, bg=COLOR_CONSOLE_BG)
-        input_row.pack(fill="x", padx=8, pady=(0, 8))
+        # 輸入列直接掛在 container（parent）底部、不放進 body：收合時 body 會整包 pack_forget()，
+        # 輸入列如果在裡面就跟著消失，使用者得先展開才能回應 input()。掛在 container 底下、
+        # 用 side="bottom" + before=body 固定在 body 下方，展開／收合都一直看得到、打得了字。
+        input_row = tk.Frame(parent, bg=COLOR_CONSOLE_BG)
+        input_row.pack(fill="x", padx=8, pady=(0, 8), side="bottom", before=body)
+        self._input_row = input_row
         tk.Label(
             input_row, text="輸入：", bg=COLOR_CONSOLE_BG, fg=COLOR_CONSOLE_FG,
             font=("Consolas", 10, "bold"),
@@ -198,7 +209,7 @@ class ConsolePanel:
         self.send_stdin_btn.config(state="disabled")
         self.send_stdin_btn.pack(side="left")
         tk.Label(
-            input_row, text="（沒有行程在跑時停用；main.py／腳本停在等待輸入時，在這裡打字後按 Enter 或「傳送」）",
+            input_row, text="（沒有行程在跑時停用；main.py／腳本停在等待輸入時，在這裡打字後按 Enter 或「傳送」；面板收合時也能輸入）",
             bg=COLOR_CONSOLE_BG, fg=COLOR_CONSOLE_MUTED_FG, font=self.window._font_hint,
         ).pack(side="left", padx=(8, 0))
 
@@ -307,13 +318,23 @@ class ConsolePanel:
             self._expanded_height = self.container.winfo_height()
             self._grip.pack_forget()
             self._body.pack_forget()
-            self.place(CONSOLE_COLLAPSED_HEIGHT)
+            self._preview_label.pack(side="left", fill="x", expand=True, padx=(0, 10))
+            self.window.update_idletasks()
+            self.place(self._collapsed_height())
             self._toggle_btn.config(text="▲")
         else:
+            self._preview_label.pack_forget()
             self._grip.pack(fill="x", side="top", before=self._header)
             self._body.pack(fill="both", expand=True, side="top")
             self.place(self._expanded_height)
             self._toggle_btn.config(text="▼")
+
+    def _collapsed_height(self):
+        """收合後的面板高度＝標題列＋輸入列（含它底下 8px 邊距）。輸入列在收合時仍要看得到，
+        所以不能再只留標題那一條線。標題列用實際需求高度（比 CONSOLE_COLLAPSED_HEIGHT 大時以實際為準，
+        例如標題列右側多了「最後一行輸出」預覽、字型放大後），否則輸入列下緣會被裁掉。"""
+        header_h = max(CONSOLE_COLLAPSED_HEIGHT, self._header.winfo_reqheight())
+        return header_h + self._input_row.winfo_reqheight() + 8
 
     # ── 輸出內容 ─────────────────────────────────────────────────────
 
@@ -332,6 +353,10 @@ class ConsolePanel:
         if text:
             self._last_output_monotonic = time.monotonic()
             self._last_chunk_ends_newline = text.endswith("\n")
+            for line in reversed(text.splitlines()):
+                if line.strip():
+                    self._preview_var.set(line.strip()[:150])  # 收合時標題列顯示的「最後一行輸出」
+                    break
 
     def clear(self):
         self.text.configure(state="normal")
@@ -450,18 +475,45 @@ class ConsolePanel:
         self._log_reader_thread = threading.Thread(target=_reader, daemon=True)
         self._log_reader_thread.start()
 
+    # 單次 tick 最多取出的 chunk 數、以及單次最多顯示幾行。
+    # 以前是「一個 chunk 呼叫一次 append()」（每次都要插入文字、數行數、捲動），每 tick 只處理
+    # 500 個 chunk；子行程如果無限迴圈狂噴訊息（例如影片路徑無效卻一直重試），佇列積壓的速度遠超過
+    # 這裡消化的速度——按「停止」把行程殺掉之後，面板還要花幾十秒甚至更久才把積壓的舊訊息播完，
+    # 看起來就像「停了還在輸出」。現在改成：一個 tick 把佇列裡現有的 chunk 全部取出、合併成一次
+    # append()，而且只顯示最後 MAX_LINES_PER_TICK 行（面板本來就只保留最後幾千行，更早的顯示了也
+    # 會馬上被砍掉），積壓瞬間清空。
+    _DRAIN_MAX_CHUNKS_PER_TICK = 20000
+    _DRAIN_MAX_LINES_PER_TICK = 2000
+
+    def _flush_pending_text(self, pending):
+        if not pending:
+            return
+        text = "".join(pending)
+        pending.clear()
+        lines = text.split("\n")
+        if len(lines) > self._DRAIN_MAX_LINES_PER_TICK:
+            dropped = len(lines) - self._DRAIN_MAX_LINES_PER_TICK
+            text = f"…（輸出速度太快，略過 {dropped} 行較舊的訊息）…\n" + "\n".join(
+                lines[-self._DRAIN_MAX_LINES_PER_TICK:]
+            )
+        self.append(text)
+
     def _drain_log_queue(self):
+        pending = []
         drained = 0
         try:
-            while drained < 500:  # 單次 tick 最多處理 500 個 chunk，避免瞬間大量輸出卡住 GUI 主執行緒
+            while drained < self._DRAIN_MAX_CHUNKS_PER_TICK:
                 chunk = self.log_queue.get_nowait()
+                drained += 1
                 if chunk is None:
+                    # 行程結束訊號：先把它結束前的輸出顯示完，再印「已結束」，順序不能亂
+                    self._flush_pending_text(pending)
                     self.append(f"\n— {self._reader_label} 行程已結束 —\n", tag="muted")
                 else:
-                    self.append(chunk)
-                drained += 1
+                    pending.append(chunk)
         except queue.Empty:
             pass
+        self._flush_pending_text(pending)
         self.window.after(80, self._drain_log_queue)
 
     # ── stdin 輸入 ───────────────────────────────────────────────────

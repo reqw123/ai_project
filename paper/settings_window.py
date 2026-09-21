@@ -40,7 +40,9 @@ _MAIN_PY_PATH = _SCRIPT_DIR / "cat_monitoring_system" / "main.py"
 
 import config  # noqa: E402
 import settings_manager  # noqa: E402
-from settings_manager import FIELD_SCHEMA, TAB_ORDER, _MISSING, _get_nested, _redact, _set_nested  # noqa: E402
+from settings_manager import (  # noqa: E402
+    FIELD_GROUPS, FIELD_SCHEMA, TAB_ORDER, _MISSING, _get_nested, _redact, _set_nested, display_label,
+)
 from settings_gui.console_panel import ConsolePanel  # noqa: E402
 from settings_gui.process_manager import ProcessManager  # noqa: E402
 from settings_gui.field_search import FieldSearchBar  # noqa: E402
@@ -48,6 +50,7 @@ from settings_gui import dialogs  # noqa: E402
 from settings_gui import tab_docs_panel  # noqa: E402
 from settings_gui import tool_order as _tool_order  # noqa: E402
 from settings_gui import ui_state as _ui_state  # noqa: E402
+from settings_gui import extra_env as _extra_env  # noqa: E402
 from settings_gui.style import (  # noqa: E402
     BTN_PRIMARY_BG,
     BTN_PRIMARY_ACTIVE,
@@ -79,6 +82,10 @@ from settings_gui.widgets import _styled_button, _styled_badge  # noqa: E402
 #  是只有本檔案自己會用到的樣式常數。）
 
 _FONT_FAMILY = "Microsoft JhengHei"
+
+# 「影像來源」URL 模式的預設值：這台 ESP32-CAM 固定在 192.168.0.120，串流在 81 埠。
+# 只是表單初始值；設定檔／環境變數裡已有 URL 時會被 _set_field_value() 覆蓋掉。
+DEFAULT_ESP32CAM_URL = "http://192.168.0.120:81/stream"
 
 COLOR_BG_MAIN = "#eef2f6"
 COLOR_HEADER_SUB_FG = "#b7c4cf"
@@ -246,6 +253,9 @@ class SettingsWindow(tk.Tk):
         self._font_banner = tkfont.Font(family=_FONT_FAMILY, size=16, weight="bold")
         self._font_tabbtn = tkfont.Font(family=_FONT_FAMILY, size=13, weight="bold")
         self._font_link = tkfont.Font(family=_FONT_FAMILY, size=11, underline=True)
+        # 欄位列的標籤欄像素寬（見 _build_field_row）：維持原本 30 個 '0' 的寬度，只是
+        # 改成固定像素、不再隨字型變動。
+        self._label_col_px = self._font_label.measure("0") * 30
 
         # 每個 json_key -> {"var":..., "widget":..., "badge_var":..., "field":..., ...}
         self._field_widgets = {}
@@ -437,7 +447,7 @@ class SettingsWindow(tk.Tk):
         """main.py 啟動／關閉／縮小本視窗——放在標題正下方、永遠可見（不用捲動就找得到），
         對應「專案規模大、常常找不到 main.py 入口」的痛點：設定存好後直接在這裡啟動，
         不用再去檔案總管或終端機找路徑。第二排是「獨立腳本工具」：下拉選單列出
-        cat_monitoring_system/tools/ 底下的 .py，也可以「瀏覽...」選任意 .py（例如
+        tools/ 底下的 .py，也可以「瀏覽...」選任意 .py（例如
         專案裡其他資料夾的除錯/評估腳本），跟 main.py 共用同一套啟動/關閉/終端機輸出
         機制、同一時間只能跑一個（見 __init__ 裡 self._process_manager 的說明）。"""
         bar = tk.Frame(self, bg=COLOR_HEADER_BG)
@@ -511,7 +521,8 @@ class SettingsWindow(tk.Tk):
         self._restore_last_tool_selection()  # 還原上次選的腳本（見 ui_state.json）
         combo = ttk.Combobox(
             tool_row2, textvariable=self._tool_script_var,
-            values=list(self._tool_script_map.keys()), font=self._tool_listbox_font, height=16,
+            values=self._tool_combo_values(self._tool_script_map.keys()),
+            font=self._tool_listbox_font, height=16,
         )
         combo.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=2)
         # option_add 對 ttk combobox 的 popdown listbox 不一定生效（要在 popdown 建立
@@ -569,18 +580,27 @@ class SettingsWindow(tk.Tk):
                 # 搜尋範圍不只比對檔名，也比對 self._tool_script_desc_map 的功能說明
                 # 文字——記不住確切檔名、只記得「大概是做什麼的」時一樣找得到（例如
                 # 打「比較」能找到 eval_pose_compare.py，即使檔名本身沒有這兩個字）。
-                combo["values"] = [
+                combo["values"] = self._tool_combo_values([
                     n for n in all_display_names
-                    if typed in n.lower() or typed in self._tool_script_desc_map.get(n, "").lower()
-                ]
+                    if typed in n.lower()
+                    or typed in self._tool_script_desc_map.get(n, "").lower()
+                    or typed in self._tool_note_by_display.get(n, "").lower()
+                ])
             else:
-                combo["values"] = all_display_names
+                combo["values"] = self._tool_combo_values(all_display_names)
 
         combo.bind("<KeyRelease>", _refresh_tool_combo_filter)
 
+        # 清單裡每列是「#NN  名稱 ── 備註」，選定後輸入框只留「#NN  名稱」：這個字串同時是
+        # _tool_script_map（→ 完整路徑）、還原上次選擇、啟動腳本用的 key，不能帶備註。
+        def _on_tool_combo_selected(_event=None):
+            self._tool_script_var.set(_tool_order.strip_note(self._tool_script_var.get()))
+
+        combo.bind("<<ComboboxSelected>>", _on_tool_combo_selected)
+
         # 影片路徑覆寫（選填）：填了就在「▶ 執行所選腳本」啟動子行程時，額外塞一個
         # TEST_VIDEO_PATH 環境變數進去（見 _on_start_tool）。只對有讀這個環境變數的
-        # 腳本有效——目前 paper/cat_monitoring_system/tools/ 底下多支腳本，以及
+        # 腳本有效——目前 paper/tools/ 底下多支腳本，以及
         # cat_pose/ 底下有寫死影片路徑的腳本（eda_motion_anomaly.py／eda_motion_score.py／
         # eda_realtime_anomaly_viewer.py／tail_bend_detect.py／video_infer_save.py／
         # 111.py／dedup_videos.py／自動標註工具/auto_labeling_capture.py 等）都已支援。
@@ -626,7 +646,7 @@ class SettingsWindow(tk.Tk):
         # eda_motion_score.py／eda_realtime_anomaly_viewer.py／video_infer_save.py／
         # tail_bend_detect.py／0_compare_two_models_images.py／0_video_pose_viewer.py／
         # 自動標註工具/auto_labeling_capture.py／自動標註工具/labeling.py），以及
-        # paper/cat_monitoring_system/tools/ 底下同樣有寫死 YOLO 模型路徑的腳本
+        # paper/tools/ 底下同樣有寫死 YOLO 模型路徑的腳本
         # （1_classify_and_sort_videos.py／1_export_keypoint_timeseries.py／
         # 1_measure_ear_distance_single_video.py／1_run_video_inference.py／
         # 1_skeleton_visualizer.py／1_visualize_interpolation.py／
@@ -698,7 +718,7 @@ class SettingsWindow(tk.Tk):
             # 部分符合（檔名或功能說明含有目前打的字）就顯示「符合幾支＋預覽名稱」，
             # 讓使用者不用手動展開清單也能立刻看到搜尋有沒有效果；真的一支都不符合
             # 才顯示找不到。
-            raw = self._tool_script_var.get()
+            raw = _tool_order.strip_note(self._tool_script_var.get())
             desc = self._tool_script_desc_map.get(raw)
             if desc:
                 self._tool_desc_icon_var.set("📖")
@@ -713,7 +733,9 @@ class SettingsWindow(tk.Tk):
             typed = stripped.lower()
             matches = [
                 n for n in all_display_names
-                if typed in n.lower() or typed in self._tool_script_desc_map.get(n, "").lower()
+                if typed in n.lower()
+                or typed in self._tool_script_desc_map.get(n, "").lower()
+                or typed in self._tool_note_by_display.get(n, "").lower()
             ]
             if matches:
                 self._tool_desc_icon_var.set("🔍")
@@ -734,7 +756,7 @@ class SettingsWindow(tk.Tk):
         _on_tool_script_var_change()
 
         def _focus_tool_combo_search(_event=None):
-            combo["values"] = all_display_names
+            combo["values"] = self._tool_combo_values(all_display_names)
             combo.focus_set()
             combo.delete(0, "end")
             return "break"
@@ -746,6 +768,16 @@ class SettingsWindow(tk.Tk):
             font=self._font_label, compact=True,
         )
         order_btn.pack(side="left", padx=(0, SPACE_SM))
+        # 額外設定：集中管理要額外塞給獨立腳本的環境變數（目前有預覽視窗解析度 720p／1080p），
+        # 有設定時按鈕文字會帶摘要，避免「忘了自己覆寫過」。清單與型別見 settings_gui/extra_env.py。
+        # 按鈕寬度在建立時就依文字定死（_PillButton 之後 config(text=) 不會重算寬度），所以先用「最長的
+        # 可能文字」建立、再換成目前的文字，摘要變長（例如「（1080p）」）時才不會被裁掉。
+        self._extra_env_btn = _styled_button(
+            tool_row2, self._extra_env_button_text(widest=True), self._on_open_extra_env,
+            BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE, font=self._font_label, compact=True,
+        )
+        self._extra_env_btn.config(text=self._extra_env_button_text())
+        self._extra_env_btn.pack(side="left", padx=(0, SPACE_SM))
         browse_btn = _styled_button(
             tool_row2, "瀏覽...", self._on_browse_tool_script, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
             font=self._font_label, compact=True,
@@ -769,9 +801,10 @@ class SettingsWindow(tk.Tk):
 
         tk.Label(
             tool_outer,
-            text="下拉選單只列出 cat_monitoring_system/tools/ 底下的腳本（子資料夾顯示成「資料夾名/檔名.py」）；"
-            "「↕ 排序」可自訂顯示順序（存到 settings_gui/tool_order.json），沒排到的自動接在最後依檔名排序。"
-            "其他位置的腳本（例如 cat_pose/ 底下）用「瀏覽...」選取。"
+            text="下拉選單只列出 tools/ 底下的腳本（子資料夾顯示成「資料夾名/檔名.py」）；"
+            "「↕ 排序」可自訂顯示順序並替每支腳本寫一句簡短備註（存到 settings_gui/tool_order.json），"
+            "備註會顯示在下拉選單的名稱後面；沒排到的自動接在最後依檔名排序。"
+            "其他位置的腳本（例如 cat_pose/ 底下）用「瀏覽...」選取（對話框預設從 cat_pose/ 開始）。"
             "這些獨立工具大多需要先打開改寫死在檔案開頭的路徑/參數再執行，"
             "「開啟檔案」用 VS Code（找不到的話退回記事本）開啟目前選定腳本的原始碼。",
             bg=COLOR_HEADER_BG, fg=COLOR_HEADER_SUB_FG, font=self._font_hint,
@@ -784,7 +817,7 @@ class SettingsWindow(tk.Tk):
         self.iconify()
 
     def _discover_tool_scripts(self):
-        """掃 cat_monitoring_system/tools/ 底下（含子資料夾，例如 train_data/）所有 .py，
+        """掃 tools/ 底下（含子資料夾，例如 train_data/）所有 .py，
         回傳 {顯示名稱: 完整路徑} 給下拉選單用——顯示名稱用「相對於 tools/ 的路徑」
         （例如 "eval_pose_compare.py"、"train_data/0_dataset_collect.py"），比起完整
         絕對路徑短很多，才看得清楚選的是哪一支；「瀏覽...」則可另外選這個清單以外的
@@ -795,11 +828,12 @@ class SettingsWindow(tk.Tk):
         放右邊、靠補空白對齊，但中英混合檔名在 Tk listbox 裡沒辦法對齊到像素，改放
         左邊固定欄才每列都對齊。）"""
         self._tool_script_desc_map = {}  # 顯示名稱（含流水號）→ 功能說明，給常駐說明列／Ctrl+F 用
+        self._tool_note_by_display = {}  # 顯示名稱（含流水號）→ 使用者在排序視窗寫的簡短備註
         self._tool_relnames_ordered = []  # 目前生效的腳本順序（relname 清單），給排序對話框用
         # 一定要在下面 tools_dir 不存在時的早退之前設好：_on_tool_script_var_change()
         # 在 _build_process_bar() 尾端會無條件呼叫一次，若 tools_dir 剛好讀不到（例如
         # 資料夾正在被同步/搬移）就會早退不往下跑，這個屬性沒設到就直接 AttributeError。
-        tools_dir = _SCRIPT_DIR / "cat_monitoring_system" / "tools"
+        tools_dir = _SCRIPT_DIR / "tools"
         if not tools_dir.exists():
             return {}
         # 排除底線開頭的檔名（例如 _smoothing_eval_common.py）——這是 Python 慣例的
@@ -823,15 +857,24 @@ class SettingsWindow(tk.Tk):
         # 對到「半個空白」的誤差，中文檔名那幾列的 `#` 就會看得出偏掉（使用者兩次回報）。
         # 改成流水號在最左邊，每列都從第 0 欄起算，永遠對齊。
         plain_descriptions = self._load_tool_script_descriptions()  # {相對路徑: 功能說明}
+        notes = _tool_order.load_notes()  # {相對路徑: 簡短備註}
         mapping = {}
         for idx, (name, p) in enumerate(zip(names, paths), start=1):
             display = f"#{idx:02d}  {name}"
             mapping[display] = str(p)
             self._tool_script_desc_map[display] = plain_descriptions.get(name, "")
+            self._tool_note_by_display[display] = notes.get(name, "")
         return mapping
 
+    def _tool_combo_values(self, display_names):
+        """下拉選單實際顯示的每一列：「#NN  名稱」後面接「 ── 備註」（沒備註就只有名稱）。"""
+        return [
+            _tool_order.with_note(n, self._tool_note_by_display.get(n, ""))
+            for n in display_names
+        ]
+
     def _load_tool_script_descriptions(self):
-        """解析 docs/獨立運行腳本索引.md 裡「5. paper/cat_monitoring_system/tools/」
+        """解析 docs/獨立運行腳本索引.md 裡「5. paper/tools/」
         與「6. .../train_data/」兩節的表格，取出每支腳本的「功能」欄位文字，回傳
         {相對於 tools/ 的路徑: 功能說明}——這份文件本來就是這個專案既有、持續維護
         的腳本索引，不重新生成一份新的說明，直接沿用。表格格式是
@@ -863,15 +906,28 @@ class SettingsWindow(tk.Tk):
         # 就是章節開頭，抓到完全不對的範圍，導致整份說明解析失敗（此教訓來自實際
         # 踩過一次：文件裡新增的格式規範說明段落引用了標題全文，行首錨定修好前，
         # 27 支腳本的說明一次全部消失）。
-        sec5 = re.search(r"^## 5\. paper/cat_monitoring_system/tools/.*?(?=^## \d|\Z)", text, re.S | re.M)
+        sec5 = re.search(r"^## 5\. paper/tools/.*?(?=^## \d|\Z)", text, re.S | re.M)
         if sec5:
             _parse_section(sec5.group(0))
         sec6 = re.search(
-            r"^## 6\. paper/cat_monitoring_system/tools/train_data/.*?(?=^## \d|\Z)", text, re.S | re.M
+            r"^## 6\. paper/tools/train_data/.*?(?=^## \d|\Z)", text, re.S | re.M
         )
         if sec6:
             _parse_section(sec6.group(0), prefix="train_data/")
         return descriptions
+
+    def _extra_env_button_text(self, widest=False):
+        summary = "1080p" if widest else _extra_env.summary()
+        return f"⚙ 額外設定（{summary}）" if summary else "⚙ 額外設定"
+
+    def _on_open_extra_env(self):
+        """「⚙ 額外設定」按鈕：開設定視窗，存檔後更新按鈕上的摘要文字。"""
+        _extra_env.open_dialog(self, on_change=self._refresh_extra_env_button)
+
+    def _refresh_extra_env_button(self):
+        btn = getattr(self, "_extra_env_btn", None)
+        if btn is not None:
+            btn.config(text=self._extra_env_button_text())
 
     def _on_open_tool_order(self):
         """「↕ 排序」按鈕：開排序對話框，存檔後重建下拉選單。"""
@@ -882,15 +938,17 @@ class SettingsWindow(tk.Tk):
         existing = set(self._tool_relnames_ordered)
         locked_seed = [r for r in _tool_order.load_locked() if r in existing]
 
-        def _apply(new_relnames, locked_relnames):
-            ok, err = _tool_order.save_order(new_relnames, locked_relnames)
+        def _apply(new_relnames, locked_relnames, notes):
+            ok, err = _tool_order.save_order(new_relnames, locked_relnames, notes)
             if not ok:
                 dialogs.show_error(self, "自訂工具排序", f"寫入 tool_order.json 失敗：\n{err}")
                 return False
             self._reload_tool_scripts()
             return True
 
-        _tool_order.open_dialog(self, self._tool_relnames_ordered, _apply, locked_seed)
+        _tool_order.open_dialog(
+            self, self._tool_relnames_ordered, _apply, locked_seed, notes_seed=_tool_order.load_notes(),
+        )
 
     def _restore_last_tool_selection(self):
         """視窗開啟時，把「上次使用的獨立腳本」還原到下拉選單（見 ui_state.json）。
@@ -927,7 +985,7 @@ class SettingsWindow(tk.Tk):
         prev_path = self._tool_script_map.get(self._tool_script_var.get())
         self._tool_script_map = self._discover_tool_scripts()
         self._tool_all_display_names[:] = list(self._tool_script_map.keys())
-        self._tool_combo["values"] = self._tool_all_display_names
+        self._tool_combo["values"] = self._tool_combo_values(self._tool_all_display_names)
         if prev_path:
             for disp, pth in self._tool_script_map.items():
                 if pth == prev_path:
@@ -970,10 +1028,13 @@ class SettingsWindow(tk.Tk):
         self._process_manager.stop_main()
 
     def _on_browse_tool_script(self):
-        initial_dir = str(_SCRIPT_DIR / "cat_monitoring_system" / "tools")
+        # 「瀏覽...」是用來選「下拉選單清單以外」的腳本（清單裡已經有 tools/ 底下全部的腳本），
+        # 主要就是 cat_pose/ 那批獨立工具，所以預設從 cat_pose/ 開始；找不到才退回 tools/、再退回 paper/。
+        candidates = [_SCRIPT_DIR.parent / "cat_pose", _SCRIPT_DIR / "tools", _SCRIPT_DIR]
+        initial_dir = next((str(d) for d in candidates if d.exists()), str(_SCRIPT_DIR))
         path = filedialog.askopenfilename(
             title="選擇要執行的 Python 腳本",
-            initialdir=initial_dir if Path(initial_dir).exists() else str(_SCRIPT_DIR),
+            initialdir=initial_dir,
             filetypes=[("Python 腳本", "*.py"), ("所有檔案", "*.*")],
         )
         if path:
@@ -1083,7 +1144,16 @@ class SettingsWindow(tk.Tk):
             extra_env["TEST_VIDEO_PATH"] = video_path
         if model_path:
             extra_env["YOLO_MODEL_PATH"] = model_path
-        self._process_manager.start_tool(script_file, extra_env=extra_env or None)
+        # 「⚙ 額外設定」裡設定的環境變數（例如 DISPLAY_RESOLUTION）；名稱跟上面兩個不會重疊
+        extra_env.update(_extra_env.collect_for_launch())
+        pm = self._process_manager
+        was_running = pm.is_running
+        pm.start_tool(script_file, extra_env=extra_env or None)
+        if not was_running and pm.is_running:
+            note = _extra_env.describe_for_launch()
+            console = getattr(self, "_console_panel", None)
+            if note and console is not None:
+                console.append(f"（{note}）\n", tag="muted")  # 讓使用者看得到這次有覆寫什麼
         # 記住「上次使用的腳本 + 影片路徑 + 模型路徑」，下次開視窗自動還原
         self._save_tool_ui_state()
 
@@ -1408,7 +1478,13 @@ class SettingsWindow(tk.Tk):
                 font=self._font_banner, anchor="w",
             ).pack(fill="x", padx=14, pady=8)
 
+            # 同一分頁內「連續」的同群組欄位，只在第一個欄位前面畫一次群組標題。
+            previous_group = None
             for field in fields_by_tab.get(tab_name, []):
+                group = field.get("group")
+                if group and group != previous_group:
+                    self._build_group_header(left_col, group, accent)
+                previous_group = group
                 self._build_field_row(left_col, field, accent)
             if tab_name == "ST-GCN 推論":
                 tk.Label(
@@ -1584,6 +1660,22 @@ class SettingsWindow(tk.Tk):
 
     # ── 欄位列渲染 ────────────────────────────────────────────────────
 
+    def _build_group_header(self, parent, group, accent):
+        """欄位群組小標題：分頁代表色的粗體標題＋色線，選填一行灰字說明（FIELD_GROUPS）。"""
+        meta = FIELD_GROUPS.get(group, {"title": group, "hint": None})
+        header = tk.Frame(parent, bg=COLOR_TAB_BG)
+        header.pack(fill="x", padx=14, pady=(16, 0))
+        tk.Label(
+            header, text=meta["title"], bg=COLOR_TAB_BG, fg=accent,
+            font=self._font_label_bold, anchor="w",
+        ).pack(fill="x")
+        tk.Frame(header, bg=accent, height=2).pack(fill="x", pady=(2, 0))
+        if meta.get("hint"):
+            tk.Label(
+                header, text=meta["hint"], bg=COLOR_TAB_BG, fg=COLOR_HINT_FG,
+                font=self._font_hint, anchor="w", justify="left", wraplength=750,
+            ).pack(fill="x", pady=(4, 0))
+
     def _build_field_row(self, parent, field, accent=COLOR_HEADER_BG):
         key = field["json_key"]
         vt = field["value_type"]
@@ -1600,14 +1692,24 @@ class SettingsWindow(tk.Tk):
         row = tk.Frame(container, bg=row_bg)
         row.pack(side="left", fill="both", expand=True, padx=(10, 14))
 
+        # 標籤欄用 grid 的固定像素寬（minsize），所有列一致，控制項（輸入框／開關）
+        # 因此一定從同一個 x 開始。原本用 Label(width=30) 是「字元數」單位：換算成像素
+        # 取決於該 Label 的字型，布林列用粗體、'0' 較寬，標籤欄就比其他列寬約 30px，
+        # 開關比別列的輸入框偏右；而且沒設 wraplength，超出寬度的長標籤（例如 ESP32-CAM
+        # 那幾項）只會被截掉，看不到後半段。改成 wraplength 自動換行，標籤要幾行就
+        # 幾行，控制項貼齊列頂端（sticky "n"），對齊標籤第一行。
+        # wraplength 比欄寬小一點：Label 實際寬度 = 文字寬 + 2×padx，若剛好等於欄寬，
+        # 撐出 minsize 的列會比別列寬幾像素，又對不齊。
+        row.columnconfigure(0, minsize=self._label_col_px)
+        row.columnconfigure(1, weight=1)
         tk.Label(
-            row, text=field["label"], bg=row_bg, fg=COLOR_LABEL_FG,
+            row, text=display_label(field), bg=row_bg, fg=COLOR_LABEL_FG,
             font=self._font_label_bold if vt == "bool" else self._font_label,
-            anchor="nw", justify="left", width=30,
-        ).pack(side="left", anchor="n")
+            anchor="nw", justify="left", wraplength=self._label_col_px - 8,
+        ).grid(row=0, column=0, sticky="nw")
 
         control = tk.Frame(row, bg=row_bg)
-        control.pack(side="left", fill="x", expand=True, padx=(8, 8))
+        control.grid(row=0, column=1, sticky="new", padx=(8, 8))
 
         # 來源標籤（JSON／環境變數／表單暫存／預設值）：小圓角徽章，不是純文字
         # 硬加方括號充當標籤——見 settings_gui/style.py 的 _StatusBadge。
@@ -1615,7 +1717,7 @@ class SettingsWindow(tk.Tk):
         badge = _styled_badge(
             row, badge_var, bg=BADGE_DEFAULT_BG, fg=BADGE_DEFAULT_FG, font=self._font_hint,
         )
-        badge.pack(side="right", anchor="n")
+        badge.grid(row=0, column=2, sticky="ne")
 
         info = {
             "field": field, "badge_var": badge_var, "badge_widget": badge,
@@ -1784,18 +1886,7 @@ class SettingsWindow(tk.Tk):
             mode_var = tk.StringVar(value="file")
             path_var = tk.StringVar()
             camera_var = tk.StringVar(value="0")
-            url_var = tk.StringVar()
-
-            mode_row = tk.Frame(control, bg=row_bg)
-            mode_row.pack(side="top", fill="x")
-            for mode_value, mode_label in (
-                ("file", "📁 本機影片檔案"), ("camera", "📷 攝影機索引"), ("url", "🌐 RTSP/HTTP 串流網址"),
-            ):
-                tk.Radiobutton(
-                    mode_row, text=mode_label, variable=mode_var, value=mode_value,
-                    bg=row_bg, activebackground=row_bg, font=self._font_hint,
-                    command=lambda: info["apply_video_mode"](),
-                ).pack(side="left", padx=(0, 12))
+            url_var = tk.StringVar(value=DEFAULT_ESP32CAM_URL)
 
             def _browse_video(v=path_var):
                 path = filedialog.askopenfilename(
@@ -1808,15 +1899,48 @@ class SettingsWindow(tk.Tk):
                 if path:
                     v.set(path)
 
-            # 「瀏覽...」原本跟輸入框放在下面那排（sub_row/file_row），三個模式的
-            # Radiobutton 佔掉整個上面那排之後，看起來就像被擠到下一行——改成放在
-            # mode_row 尾端，跟同一列最右邊的來源徽章（JSON／環境變數…）對齊在同一
-            # 行。只有選到「本機影片檔案」模式才有意義，所以不在這裡直接 pack，
-            # 交給 _apply_video_mode() 依目前模式顯示/隱藏（見下面）。
+            mode_row = tk.Frame(control, bg=row_bg)
+            mode_row.pack(side="top", fill="x")
+
+            # 「瀏覽...」固定貼在模式列最右邊（先 pack side="right" 佔位），右邊界跟上面
+            # 「YOLO／ST-GCN 模型檔案」那幾列的「瀏覽...」同在控制欄最右側，x 對齊；位置
+            # 不受三個選項寬度影響，切換模式也不會 pack/pack_forget 跳動——非「本機影片
+            # 檔案」模式只是 disabled（灰掉），不消失。
             browse_btn = _styled_button(
                 mode_row, "瀏覽...", _browse_video, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
                 font=self._font_hint, compact=True,
             )
+            browse_btn.pack(side="right")
+
+            # 圖示（emoji）跟文字拆成兩個 Label：emoji 由 Segoe UI Emoji 字型繪製，跟中文字型
+            # 的基線／行高不同，塞在同一個 Radiobutton 文字裡會整個偏下。各自獨立 Label 之後，
+            # pack 預設會讓兩者垂直置中在同一列，圖示就對齊文字的視覺中心。點圖示／文字也
+            # 要能切換模式（Radiobutton 本身只剩圓點）。
+            def _select_mode(value):
+                mode_var.set(value)
+                info["apply_video_mode"]()
+
+            for mode_value, mode_icon, mode_label in (
+                ("file", "📁", "本機影片檔案"), ("camera", "📷", "攝影機索引"),
+                ("url", "🌐", "串流網址"),
+            ):
+                opt = tk.Frame(mode_row, bg=row_bg)
+                opt.pack(side="left", padx=(0, 6))
+                tk.Radiobutton(
+                    opt, text="", variable=mode_var, value=mode_value,
+                    bg=row_bg, activebackground=row_bg, font=self._font_hint,
+                    padx=0, pady=0, command=lambda: info["apply_video_mode"](),
+                ).pack(side="left")
+                icon_lbl = tk.Label(
+                    opt, text=mode_icon, bg=row_bg, font=("Segoe UI Emoji", 10), padx=0, pady=0,
+                )
+                icon_lbl.pack(side="left", anchor="center")
+                text_lbl = tk.Label(
+                    opt, text=mode_label, bg=row_bg, font=self._font_hint, padx=0, pady=0,
+                )
+                text_lbl.pack(side="left", anchor="center", padx=(2, 0))
+                for w in (icon_lbl, text_lbl):
+                    w.bind("<Button-1>", lambda _e, v=mode_value: _select_mode(v))
 
             sub_row = tk.Frame(control, bg=row_bg)
             sub_row.pack(side="top", fill="x", pady=(4, 0))
@@ -1848,10 +1972,7 @@ class SettingsWindow(tk.Tk):
                 for r in (file_row, camera_row, url_row):
                     r.pack_forget()
                 {"file": file_row, "camera": camera_row, "url": url_row}[mode_var.get()].pack(fill="x")
-                if mode_var.get() == "file":
-                    browse_btn.pack(side="left", padx=(SPACE_MD, 0))
-                else:
-                    browse_btn.pack_forget()
+                browse_btn.config(state="normal" if mode_var.get() == "file" else "disabled")
                 _refresh_video_hint()
 
             hint_var = tk.StringVar(value="")
@@ -1865,18 +1986,35 @@ class SettingsWindow(tk.Tk):
                     hint_var.set(f"將以攝影機索引 {camera_var.get() or 0} 啟動（cv2.VideoCapture({camera_var.get() or 0})）")
                 else:
                     hint_var.set(
-                        "例：rtsp://使用者:密碼@192.168.0.192:554/stream1（IP Cam/RTSP）　或　"
-                        "http://192.168.0.50:81/stream（ESP32-CAM 等 MJPEG 串流）"
+                        f"例：{DEFAULT_ESP32CAM_URL}（ESP32-CAM MJPEG 串流）\n"
+                        "　　rtsp://使用者:密碼@192.168.0.192:554/stream1（IP Cam/RTSP）"
                     )
 
             info["apply_video_mode"] = _apply_video_mode
             camera_var.trace_add("write", _refresh_video_hint)
             _apply_video_mode()
 
-            tk.Label(
-                parent, textvariable=hint_var, bg=COLOR_TAB_BG, fg=COLOR_HINT_FG,
-                font=self._font_hint, anchor="w", justify="left", wraplength=750,
-            ).pack(fill="x", padx=14, pady=(2, 0))
+            # 範例網址要能用滑鼠選取複製，Label 做不到，改用唯讀 Text：外觀壓成跟
+            # Label 一樣（同底色、無邊框），state="disabled" 擋掉打字但仍可反白＋
+            # Ctrl+C；disabled 的 Text 點擊不會自己取得焦點，所以補一個點擊 focus_set，
+            # 否則反白了按 Ctrl+C 也複製不到。內容隨 hint_var 更新（先解鎖再鎖回去）。
+            hint_text = tk.Text(
+                parent, bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
+                relief="flat", borderwidth=0, highlightthickness=0, wrap="word",
+                height=1, cursor="xterm", state="disabled",
+            )
+            hint_text.pack(fill="x", padx=14, pady=(2, 0))
+            hint_text.bind("<Button-1>", lambda _e: hint_text.focus_set())
+
+            def _sync_hint_text(*_a):
+                content = hint_var.get()
+                hint_text.config(state="normal", height=content.count("\n") + 1)
+                hint_text.delete("1.0", "end")
+                hint_text.insert("1.0", content)
+                hint_text.config(state="disabled")
+
+            hint_var.trace_add("write", _sync_hint_text)
+            _sync_hint_text()
         elif vt == "size":
             enabled_var = tk.BooleanVar()
             width_var = tk.StringVar()

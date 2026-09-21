@@ -170,6 +170,17 @@ class TestValidateSettings:
         ok, _, _ = sm.validate_settings({"flask": {"jpeg_quality": quality}})
         assert ok is False
 
+    @pytest.mark.parametrize("quality", [-1, 10, 12, 30])
+    def test_valid_esp32cam_quality_passes(self, quality):
+        # -1 = 不調整（哨兵值）；10–30 是韌體實際接受的範圍
+        ok, _, _ = sm.validate_settings({"esp32cam": {"quality": quality}})
+        assert ok is True
+
+    @pytest.mark.parametrize("quality", [0, 9, 31, 63, -2, True, "12"])
+    def test_invalid_esp32cam_quality_fails(self, quality):
+        ok, _, _ = sm.validate_settings({"esp32cam": {"quality": quality}})
+        assert ok is False
+
     @pytest.mark.parametrize("value", [0.0, 0.5, 1.0])
     def test_unit_interval_boundaries_pass(self, value):
         ok, _, _ = sm.validate_settings({"yolo": {"confidence_threshold": value}})
@@ -449,3 +460,59 @@ class TestDefaultRuntimeSettingsConsistency:
             elif expected != actual:
                 mismatches.append((key, expected, actual))
         assert mismatches == [], f"config.py 硬編碼預設值與 default_runtime_settings.json 不一致：{mismatches}"
+
+
+# ============================================================================
+# 欄位群組（FIELD_GROUPS / display_label）：GUI 用群組標題取代重複的標籤前綴
+# ============================================================================
+class TestFieldGroups:
+    def test_display_label_strips_group_prefix(self):
+        field = {"label": "ESP32-CAM 目標寬度（640=VGA）", "group": "ESP32-CAM"}
+        assert sm.display_label(field) == "目標寬度（640=VGA）"
+
+    def test_display_label_without_group_is_unchanged(self):
+        assert sm.display_label({"label": "ESP32-CAM 目標寬度"}) == "ESP32-CAM 目標寬度"
+
+    def test_display_label_when_label_does_not_start_with_group_is_unchanged(self):
+        # 「日誌目錄」屬於「輸出位置」群組但標籤本身沒有那個前綴：維持完整標籤
+        assert sm.display_label({"label": "日誌目錄", "group": "輸出位置"}) == "日誌目錄"
+
+    def test_display_label_never_returns_empty(self):
+        # 標籤就等於群組名：拿掉前綴會變空字串，必須退回完整標籤
+        assert sm.display_label({"label": "ESP32-CAM", "group": "ESP32-CAM"}) == "ESP32-CAM"
+
+    def test_display_label_does_not_mutate_schema_label(self):
+        # 搜尋與驗證錯誤訊息用的是完整標籤，display_label 只能算出顯示字串
+        field = next(f for f in sm.FIELD_SCHEMA if f["json_key"] == "esp32cam.target_width")
+        sm.display_label(field)
+        assert field["label"].startswith("ESP32-CAM ")
+
+    def test_every_group_key_is_defined(self):
+        used = {f["group"] for f in sm.FIELD_SCHEMA if f.get("group")}
+        assert used <= set(sm.FIELD_GROUPS), f"schema 用到但 FIELD_GROUPS 沒定義：{used - set(sm.FIELD_GROUPS)}"
+
+    def test_group_members_are_contiguous_within_each_tab(self):
+        # GUI 只在「連續」同群組欄位的第一個前面畫一次標題；被別的欄位隔開就會出現兩次標題
+        seen_closed = {}
+        for tab in sm.TAB_ORDER:
+            closed = set()
+            previous = None
+            for f in (f for f in sm.FIELD_SCHEMA if f["tab"] == tab):
+                group = f.get("group")
+                if group != previous and previous is not None:
+                    closed.add(previous)
+                assert group is None or group not in closed, f"{tab}：群組 {group!r} 被其他欄位隔開"
+                previous = group
+            seen_closed[tab] = closed
+
+    def test_esp32cam_fields_all_grouped_and_prefix_stripped(self):
+        fields = [f for f in sm.FIELD_SCHEMA if f["json_key"].startswith("esp32cam.")]
+        assert fields, "找不到 esp32cam.* 欄位"
+        for f in fields:
+            assert f.get("group") == "ESP32-CAM", f["json_key"]
+            assert not sm.display_label(f).startswith("ESP32-CAM"), f["json_key"]
+
+    def test_group_hint_is_str_or_none(self):
+        for name, meta in sm.FIELD_GROUPS.items():
+            assert isinstance(meta["title"], str) and meta["title"], name
+            assert meta["hint"] is None or isinstance(meta["hint"], str), name

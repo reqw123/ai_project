@@ -1,7 +1,7 @@
 # ST-GCN 模型設計全技術分析
 
 更新日期：2026-06-03
-來源檔案：`cat_monitoring_system/models/stgcn_model.py`、`cat_monitoring_system/tools/0_train_gcn.py`
+來源檔案：`cat_monitoring_system/models/stgcn_model.py`、`tools/0_train_gcn.py`
 
 本文件完整列出本專案 ST-GCN 採用的所有技術設計，依模型架構、特徵工程、前處理管線、訓練策略、資料增強、推論策略六大類整理，並說明每項設計的實作位置與設計動機。
 

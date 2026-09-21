@@ -128,6 +128,7 @@ def attach_popup_button(parent, window, tab_name):
         # （按鈕文字恢復、state 清空），不然按鈕會停在「關閉圖片」卻沒有視窗
         # 可以真的關，下次點擊會誤判成「還開著」而什麼事都不做。
         top.protocol("WM_DELETE_WINDOW", _on_close)
+        top.bind("<Escape>", lambda _e: _on_close())
 
         # 圖片依比例縮放塞進整個彈跳視窗（扣一點邊界），置中顯示；視窗留白處
         # 用跟圖片背景接近的深色，不會突兀。

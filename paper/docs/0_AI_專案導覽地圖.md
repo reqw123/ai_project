@@ -160,7 +160,7 @@
   - `midback_offset_ratio`：MidBack 偏離 Chest-Hip 虛擬中點的距離比例，超過解剖合理性上限視為可疑。
   - `midback_angle`：Chest-MidBack-Hip 夾角（取窗口最後一幀），太接近 180 度（幾乎共線）或太小（過尖）都視為可疑。
   - `body_axis_score_jitter`：身體主軸比例分數在窗口內的振幅，振幅過大代表骨架偵測反覆跳動、不穩定。
-- **移植來源**：邏輯移植自 `cat_monitoring_system/tools/test_bone_length_stability.py`（模式2/GUI 視覺偵測）——那支腳本仍保留、持續用來肉眼校準門檻，跟這裡的正式整合版本共用同一套公式。
+- **移植來源**：邏輯移植自 `tools/test_bone_length_stability.py`（模式2/GUI 視覺偵測）——那支腳本仍保留、持續用來肉眼校準門檻，跟這裡的正式整合版本共用同一套公式。
 - **兩層開關**（刻意分開管理，保持低耦合）：
   - 總開關：`config.py` 的 `SQAConfig.ENABLE_SQA_DUAL_JUDGMENT`（**目前預設 `True`**——門檻值目前僅用少量影片校準過，套用前建議先用 `tools/test_bone_length_stability.py` 或 GUI 模式肉眼比對覆蓋規則是否合理）。
   - 個別指標開關：模組內的 `ENABLE_MIDBACK_OFFSET_CHECK`/`ENABLE_MIDBACK_ANGLE_CHECK`/`ENABLE_SCORE_JITTER_CHECK`，不在 `config.py` 設定。
@@ -185,26 +185,26 @@
 
 這些腳本**不會**被 `main.py` 啟動的 Flask 服務呼叫，是研究方法（訓練、消融實驗、資料收集）用的獨立工具：
 
-2026-07 已把這批腳本全部搬進 `cat_monitoring_system/tools/`（核心模組資料夾底下不再混雜非模組腳本），下表路徑已同步更新：
+2026-07 已把這批腳本全部搬進 `cat_monitoring_system/tools/`（核心模組資料夾底下不再混雜非模組腳本）；2026-09-20 再整個資料夾上移到 `paper/tools/`（與 `cat_monitoring_system/` 同層），下表路徑已同步更新：
 
 | 路徑 | 用途 |
 |---|---|
-| `cat_monitoring_system/tools/0_train_gcn.py` | ST-GCN 訓練腳本主體 |
-| `cat_monitoring_system/tools/train_data/0_dataset_collect.py` | 骨架資料集收集與手動標注工具，共 7 種模式（1~5 為訓練資料，6~7 為 2026-08-11 新增的獨立測試集標註/檢視工具，輸出到獨立的 `TEST_OUTPUT_FOLDER`，不會混進訓練用 `skeletons/`） |
-| `cat_monitoring_system/tools/eval_ema_ablation.py` | 不同 KP EMA alpha 消融實驗評估 |
-| `cat_monitoring_system/tools/eval_gcn_compare.py` / `eval_pose_compare.py` / `eval_model_worst_videos.py` | 模型評估腳本（GCN 模型評估、姿態模型評估、最差表現影片挑選）—— 2026-07 由 `eval_gcn_model.py`/`eval_pose_models.py` 改名而來 |
-| `cat_monitoring_system/tools/eval_class_source_distribution.py` | 檢查各行為類別的訓練樣本是否過度集中於少數影片/場景（過擬合假象排查） |
-| `cat_monitoring_system/tools/eval_lighting_distribution.py`（2026-08-11 新增） | 抽樣訓練影片幾幀算 HSV V channel 均值當亮度代理指標，統計各行為類別的光照分布、記錄快照供之後比對；實測發現訓練資料幾乎不含低光照場景（501支僅1.2%落在「很暗」區間） |
-| `cat_monitoring_system/tools/2_run_dual_model_compare.py` | 即時視覺化並排比較兩個模型的推論結果（疊圖顯示），跟 `eval_gcn_compare.py`（數字/統計量比較）用途不同、互補 |
-| `cat_monitoring_system/tools/3_cat_identity_verification_test.py` | 貓咪個體身分辨識測試腳本 |
-| `cat_monitoring_system/tools/test_bone_length_stability.py` | 骨架穩定度診斷/校準工具（骨段長度一致性、脊椎中點偏移/角度、Body Axis score jitter 等指標的離線分析與正常基線建立，`processors/skeleton_quality_assessment.py` 的邏輯即由此腳本的模式 2 移植而來） |
-| `cat_monitoring_system/tools/1_run_video_inference.py` | 單支影片離線推論 |
-| `cat_monitoring_system/tools/1_skeleton_visualizer.py` | 骨架視覺化腳本 |
-| `cat_monitoring_system/tools/1_visualize_three_normalizations.py` | 互動式 Demo：對照 flip_normalize / orientation_normalize / normalize_skeleton_coords 三種正規化步驟的視覺效果 |
-| `cat_monitoring_system/tools/1_visualize_interpolation.py` | 視覺化 `interpolate_missing()` 補點前後的差異 |
-| `cat_monitoring_system/tools/run_keypoint_trend_from_videos.py` | 直接對原始影片重新推論，檢視單一行為類別各關鍵點動作幅度與跨影片趨勢（不依賴既有訓練資料集） |
-| `cat_monitoring_system/tools/1_export_keypoint_timeseries.py` / `1_measure_ear_distance_single_video.py` / `test_pose_jitter_analysis.py` / `test_anomaly_detection.py` / `1_visualize_activity_score.py` | 各類量測/除錯用的獨立分析腳本 |
-| `cat_monitoring_system/tools/1_classify_and_sort_videos.py` / `1_heic_av_png.py` / `1_多重命名.py` / `1_自動抓取.py` / `影片拼接.py` | 資料整理/格式轉換/爬蟲/影片合併類雜項工具，與核心 pipeline 無程式碼依賴（`1_自動抓取.py` 2026-07 已由 `plugins/lick_stage/` 移入此資料夾，不再是 plugin 專屬工具） |
+| `tools/0_train_gcn.py` | ST-GCN 訓練腳本主體 |
+| `tools/train_data/0_dataset_collect.py` | 骨架資料集收集與手動標注工具，共 7 種模式（1~5 為訓練資料，6~7 為 2026-08-11 新增的獨立測試集標註/檢視工具，輸出到獨立的 `TEST_OUTPUT_FOLDER`，不會混進訓練用 `skeletons/`） |
+| `tools/eval_ema_ablation.py` | 不同 KP EMA alpha 消融實驗評估 |
+| `tools/eval_gcn_compare.py` / `eval_pose_compare.py` / `eval_model_worst_videos.py` | 模型評估腳本（GCN 模型評估、姿態模型評估、最差表現影片挑選）—— 2026-07 由 `eval_gcn_model.py`/`eval_pose_models.py` 改名而來 |
+| `tools/eval_class_source_distribution.py` | 檢查各行為類別的訓練樣本是否過度集中於少數影片/場景（過擬合假象排查） |
+| `tools/eval_lighting_distribution.py`（2026-08-11 新增） | 抽樣訓練影片幾幀算 HSV V channel 均值當亮度代理指標，統計各行為類別的光照分布、記錄快照供之後比對；實測發現訓練資料幾乎不含低光照場景（501支僅1.2%落在「很暗」區間） |
+| `tools/2_run_dual_model_compare.py` | 即時視覺化並排比較兩個模型的推論結果（疊圖顯示），跟 `eval_gcn_compare.py`（數字/統計量比較）用途不同、互補 |
+| `tools/3_cat_identity_verification_test.py` | 貓咪個體身分辨識測試腳本 |
+| `tools/test_bone_length_stability.py` | 骨架穩定度診斷/校準工具（骨段長度一致性、脊椎中點偏移/角度、Body Axis score jitter 等指標的離線分析與正常基線建立，`processors/skeleton_quality_assessment.py` 的邏輯即由此腳本的模式 2 移植而來） |
+| `tools/1_run_video_inference.py` | 單支影片離線推論 |
+| `tools/1_skeleton_visualizer.py` | 骨架視覺化腳本 |
+| `tools/1_visualize_three_normalizations.py` | 互動式 Demo：對照 flip_normalize / orientation_normalize / normalize_skeleton_coords 三種正規化步驟的視覺效果 |
+| `tools/1_visualize_interpolation.py` | 視覺化 `interpolate_missing()` 補點前後的差異 |
+| `tools/run_keypoint_trend_from_videos.py` | 直接對原始影片重新推論，檢視單一行為類別各關鍵點動作幅度與跨影片趨勢（不依賴既有訓練資料集） |
+| `tools/1_export_keypoint_timeseries.py` / `1_measure_ear_distance_single_video.py` / `test_pose_jitter_analysis.py` / `test_anomaly_detection.py` / `1_visualize_activity_score.py` | 各類量測/除錯用的獨立分析腳本 |
+| `tools/1_classify_and_sort_videos.py` / `1_collect_class_videos.py`（多資料夾同類影片聚集，GUI 選路徑） / `1_heic_av_png.py` / `1_多重命名.py` / `1_自動抓取.py` / `影片拼接.py` | 資料整理/格式轉換/爬蟲/影片合併類雜項工具，與核心 pipeline 無程式碼依賴（`1_自動抓取.py` 2026-07 已由 `plugins/lick_stage/` 移入此資料夾，不再是 plugin 專屬工具） |
 
 > [!WARNING]
 > 🚨 `run_keypoint_verification.bat` 呼叫的 `1_check_keypoint_importance.py` 目前已不存在於專案中（僅剩 `__pycache__` 殘留的 `.pyc`），此 `.bat` 目前已失效、待清理或補回對應腳本。

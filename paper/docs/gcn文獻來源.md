@@ -2,7 +2,7 @@
 ## 貓咪行為辨識系統 — 採用 / 未採用技術 × 文獻溯源
 
 更新日期：2026-06-30  
-對應實作：`cat_monitoring_system/models/stgcn_model.py`、`cat_monitoring_system/stgcn_config.yaml`、`cat_monitoring_system/tools/0_train_gcn.py`
+對應實作：`cat_monitoring_system/models/stgcn_model.py`、`cat_monitoring_system/stgcn_config.yaml`、`tools/0_train_gcn.py`
 
 ---
 
