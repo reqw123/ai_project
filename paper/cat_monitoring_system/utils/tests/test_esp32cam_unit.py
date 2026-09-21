@@ -10,7 +10,16 @@ Unit Test：utils/esp32cam.py 的純函式（framesize 換算、控制端點推�
 
 import pytest
 
-from utils.esp32cam import _control_base_url, framesize_value_for
+from utils import esp32cam
+from utils.esp32cam import (
+    _control_base_url,
+    _parse_device_resolutions,
+    configure_stream,
+    framesize_value_for,
+)
+
+# Arduino-ESP32 3.x 客製韌體實機 /status 回報的 resolutions（2026-09-20 實測）
+_DEVICE_STATUS = {"resolutions": {"qvga": 6, "vga": 10, "svga": 11}}
 
 
 # ============================================================================
@@ -20,11 +29,11 @@ class TestFramesizeValueFor:
     @pytest.mark.parametrize(
         "width,height,expected_val",
         [
-            (640, 480, 8),      # VGA 完全相符
-            (800, 600, 9),      # SVGA 完全相符
-            (320, 240, 5),      # QVGA 完全相符
-            (1280, 720, 11),    # HD 完全相符
-            (1600, 1200, 13),   # UXGA 完全相符
+            (640, 480, 10),     # VGA 完全相符（新版 esp32-camera 編號）
+            (800, 600, 11),     # SVGA 完全相符
+            (320, 240, 6),      # QVGA 完全相符
+            (1280, 720, 13),    # HD 完全相符
+            (1600, 1200, 15),   # UXGA 完全相符
         ],
     )
     def test_exact_match(self, width, height, expected_val):
@@ -34,11 +43,95 @@ class TestFramesizeValueFor:
     def test_non_standard_size_rounds_down_not_up(self):
         # 700x500 沒有完全相符的標準尺寸，應退回「寬高都不超過」的最大者 = VGA
         w, h, val = framesize_value_for(700, 500)
-        assert (w, h, val) == (640, 480, 8)
+        assert (w, h, val) == (640, 480, 10)
 
     def test_smaller_than_every_standard_size_returns_smallest(self):
         w, h, val = framesize_value_for(50, 50)
         assert (w, h, val) == (96, 96, 0)
+
+    def test_explicit_table_overrides_builtin_numbering(self):
+        # 舊版 esp32-camera 編號（VGA=8）：傳入自訂表時必須照表走，不能用內建的新版編號
+        legacy = [(320, 240, 5), (640, 480, 8), (800, 600, 9)]
+        assert framesize_value_for(640, 480, legacy) == (640, 480, 8)
+
+    def test_device_table_only_offers_sizes_the_device_reports(self):
+        table = _parse_device_resolutions(_DEVICE_STATUS)
+        # 目標比裝置支援的最大尺寸還大 -> 退回最大的可用尺寸 SVGA，而不是編出一個裝置不認得的編號
+        assert framesize_value_for(1280, 720, table) == (800, 600, 11)
+        # 目標比最小的還小 -> 最小的可用尺寸 QVGA
+        assert framesize_value_for(100, 100, table) == (320, 240, 6)
+
+
+# ============================================================================
+# _parse_device_resolutions()
+# ============================================================================
+class TestParseDeviceResolutions:
+    def test_parses_reported_numbering(self):
+        assert sorted(_parse_device_resolutions(_DEVICE_STATUS)) == [
+            (320, 240, 6), (640, 480, 10), (800, 600, 11),
+        ]
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            None,
+            [],
+            {},
+            {"framesize": 10},                      # 原廠 CameraWebServer：沒有 resolutions
+            {"resolutions": "vga"},
+            {"resolutions": {}},
+            {"resolutions": {"vga": "10"}},         # 非整數不採用
+            {"resolutions": {"vga": True}},         # bool 不能被當成編號 1
+        ],
+    )
+    def test_unusable_status_returns_none(self, status):
+        assert _parse_device_resolutions(status) is None
+
+    def test_partial_report_keeps_valid_entries(self):
+        table = _parse_device_resolutions({"resolutions": {"vga": 10, "svga": "x"}})
+        assert table == [(640, 480, 10)]
+
+
+# ============================================================================
+# configure_stream()：只驗證「實際送出去的 framesize 編號」，網路呼叫用 monkeypatch 取代
+# ============================================================================
+class TestConfigureStreamSendsCorrectNumber:
+    URL = "http://192.168.0.120:81/stream"
+
+    def _capture_requests(self, monkeypatch, device_table):
+        sent = []
+        monkeypatch.setattr(esp32cam, "_device_framesize_table", lambda base, timeout: device_table)
+        monkeypatch.setattr(esp32cam, "_http_get", lambda url, timeout: sent.append(url) or 200)
+        return sent
+
+    def test_uses_device_reported_number(self, monkeypatch):
+        sent = self._capture_requests(monkeypatch, _parse_device_resolutions(_DEVICE_STATUS))
+        ok, detail = configure_stream(self.URL, 640, 480)
+        assert ok
+        assert sent == ["http://192.168.0.120:80/control?var=framesize&val=10"]
+        assert "裝置回報" in detail
+
+    def test_falls_back_to_builtin_table_when_device_gives_none(self, monkeypatch):
+        sent = self._capture_requests(monkeypatch, None)
+        ok, detail = configure_stream(self.URL, 640, 480)
+        assert ok
+        assert sent == ["http://192.168.0.120:80/control?var=framesize&val=10"]
+        assert "內建對照表" in detail
+
+    def test_legacy_device_numbering_is_respected(self, monkeypatch):
+        # 舊版韌體自報 VGA=8：不能被內建新版編號（10）蓋掉
+        legacy_status = {"resolutions": {"qvga": 5, "vga": 8, "svga": 9}}
+        sent = self._capture_requests(monkeypatch, _parse_device_resolutions(legacy_status))
+        configure_stream(self.URL, 640, 480)
+        assert sent == ["http://192.168.0.120:80/control?var=framesize&val=8"]
+
+    def test_quality_sent_only_when_non_negative(self, monkeypatch):
+        sent = self._capture_requests(monkeypatch, None)
+        configure_stream(self.URL, 640, 480, quality=-1)
+        assert len(sent) == 1
+        sent.clear()
+        configure_stream(self.URL, 640, 480, quality=12)
+        assert sent[-1].endswith("?var=quality&val=12")
 
 
 # ============================================================================

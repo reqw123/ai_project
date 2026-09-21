@@ -361,7 +361,8 @@ class ESP32CamConfig:
         _runtime_default("esp32cam.control_port", 80, value_type=int),
     )
 
-    # JPEG 壓縮品質（10–63，數字越大檔越小、越省頻寬、畫質越差）。
+    # JPEG 壓縮品質（10–30，數字越大檔越小、越省頻寬、畫質越差；韌體只接受這個範圍，
+    # 超出會回 400）。
     # 設為負值代表不調整、沿用韌體現值。
     QUALITY = _env_int(
         "CAT_MONITORING_ESP32CAM_QUALITY",
@@ -1018,7 +1019,7 @@ class CatIdentityConfig:
         "CAT_MONITORING_TARGET_CAT_PROFILE_PATH",
         _runtime_default(
             "cat_identity.target_cat_profile_path",
-            r"C:\ai_project\paper\cat_monitoring_system\tools\cat_profile_cat_a.json",
+            r"C:\ai_project\paper\tools\cat_profile_cat_a.json",
             value_type=str,
         ),
     )
@@ -1028,7 +1029,7 @@ class CatIdentityConfig:
         "CAT_MONITORING_OTHER_CAT_PROFILE_PATH",
         _runtime_default(
             "cat_identity.other_cat_profile_path",
-            r"C:\ai_project\paper\cat_monitoring_system\tools\cat_profile_cat_b.json",
+            r"C:\ai_project\paper\tools\cat_profile_cat_b.json",
             value_type=str,
         ),
     )

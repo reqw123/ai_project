@@ -33,7 +33,7 @@ import yt_dlp
 
 # ==================== 基本設定 ====================
 DOWNLOAD_DIR = r"C:\CatDataset\YouTube"
-CHANNEL_URL = "https://www.youtube.com/@ImpressedCatVideo/videos"
+CHANNEL_URL = "https://www.youtube.com/@ImpressedCatVideo/videos"  #https://www.youtube.com/@ImpressedCatVideo/videos
 FFMPEG = r"C:\ffmpeg\bin"
 
 # 遇到限流（429 / rate-limited / try again later）時等待秒數，等完會無限重試直到解除
@@ -43,7 +43,7 @@ RATE_LIMIT_WAIT = 3600
 MAX_RETRIES_PER_VIDEO = 10
 
 # 每下載這麼多支影片，自動休息一段時間，降低被 YouTube 封鎖的風險
-BATCH_SIZE = 50
+BATCH_SIZE = 1
 BATCH_REST_SECONDS = 300  # 5 分鐘
 
 # ── 增量掃描視窗設定（①追新影片用，全自動不用管） ──────────────────────────
@@ -58,8 +58,8 @@ MAX_SCAN_WINDOW      = 2000
 # 1-based、含頭尾，依頻道新→舊排序算第幾支。例如這次 1~100，下次要換下一批
 # 就自己改成 101~200，以此類推——不需要另外設「最大處理數量」，區間大小
 # （BACKFILL_END - BACKFILL_START + 1）本身就決定了這次會處理幾支。
-BACKFILL_START = 80
-BACKFILL_END   = 150
+BACKFILL_START = 1
+BACKFILL_END   = 3
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
@@ -68,6 +68,7 @@ CSV_PATH        = os.path.join(DOWNLOAD_DIR, "video_list.csv")
 FAILED_PATH     = os.path.join(DOWNLOAD_DIR, "failed.txt")
 LOG_PATH        = os.path.join(DOWNLOAD_DIR, "download.log")
 CHECKPOINT_PATH = os.path.join(DOWNLOAD_DIR, "last_checkpoint.json")
+COOKIES_PATH    = os.path.join(DOWNLOAD_DIR, "cookies.txt")
 
 RATE_LIMIT_SIGNS = ("rate-limited", "try again later", "429", "this content isn't available")
 
@@ -230,9 +231,9 @@ def load_archived_ids() -> set:
 
 # ==================== yt-dlp 下載選項 ====================
 def build_opts_for_video() -> dict:
-    """單支影片下載用的 opts。Cookies 為可選，不在此啟用；若之後要開啟
-    cookiesfrombrowser，因為整個下載呼叫都包在 try/except 裡，
-    取不到 cookies 也只會被視為單支影片失敗、重試，不會中止整批程式。"""
+    """單支影片下載用的 opts。cookiefile 找不到檔案或內容失效時，因為整個
+    下載呼叫都包在 try/except 裡，只會被視為單支影片失敗、重試，不會中止
+    整批程式。"""
     return {
         # 最高畫質：YouTube 提供到哪個解析度（1080p/1440p/2160p/4320p）就抓到哪
         "format": "bestvideo+bestaudio/best",
@@ -268,7 +269,15 @@ def build_opts_for_video() -> dict:
             "AppleWebKit/537.36 Chrome/137.0 Safari/537.36"
         ),
 
-        # "cookiesfrombrowser": ("chrome",),  # 可選：若 Chrome 有登入 YouTube 可減少部分限制
+        # 遇到「Sign in to confirm you're not a bot」需要登入態 cookies。實測
+        # cookiesfrombrowser=("chrome",) 在這台機器上不穩定（DPAPI 解密失敗 /
+        # 無法複製 Chrome cookie 資料庫，疑似防毒鎖檔或 Chrome App-Bound
+        # Encryption 導致），且腳本是長時間無人值守執行，每次都重新從「正在
+        # 跑的 Chrome」複製 cookies 本來就脆弱，改用固定的 cookies.txt 檔案：
+        # 用瀏覽器擴充功能（如 "Get cookies.txt LOCALLY"）在已登入 YouTube 的
+        # 分頁匯出一次，存成 COOKIES_PATH。cookies 過期（通常數週~數月）後
+        # 重新匯出覆蓋即可。檔案不存在時 yt-dlp 會直接報錯，等同未登入狀態。
+        "cookiefile": COOKIES_PATH,
 
         "js_runtimes": {"node": {}},  # 值必須是設定 dict（可為空 {}），傳 None 會在
                                        # YoutubeDL._js_runtimes 內部呼叫 config.get('path')

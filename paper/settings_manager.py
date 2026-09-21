@@ -46,6 +46,22 @@ BACKUP_SETTINGS_PATH = _PAPER_DIR / "runtime_settings.previous.json"
 #   validate   驗證規則 tag（見 _VALIDATORS）
 #   choices    僅 value_type == "enum" 使用
 #   browse_filter 僅 file 型別使用，(說明文字, 副檔名 pattern)
+#   group      選填，指到 FIELD_GROUPS 的鍵。同一分頁內「連續」的同群組欄位，GUI 會在
+#              最前面畫一個群組小標題，並把欄位標籤開頭與群組同名的前綴拿掉（見
+#              display_label()）；label 本身不變，搜尋與驗證錯誤訊息仍用完整標籤。
+FIELD_GROUPS = {
+    "ESP32-CAM": {
+        "title": "📷 ESP32-CAM 串流設定",
+        # 刻意不在中文句子裡夾空白：Tk 的 Label 只在空白處換行，夾了空白會讓後面一長串
+        # 中文整段被推到下一行，第一行只剩短短一句。
+        "hint": (
+            "只有影像來源是ESP32-CAM的http(s)串流時才會用到：開串流前先對相機韌體送控制請求，"
+            "調整解析度與畫質；送不出去只會顯示警告，不影響開串流。"
+        ),
+    },
+    "輸出位置": {"title": "📁 輸出位置", "hint": None},
+}
+
 FIELD_SCHEMA = [
     # ── 模型與輸入來源 ────────────────────────────────────────────────
     {
@@ -70,47 +86,53 @@ FIELD_SCHEMA = [
         "json_key": "esp32cam.auto_framesize", "env_var": "CAT_MONITORING_ESP32CAM_AUTO_FRAMESIZE",
         "attr": ("ESP32CamConfig", "AUTO_FRAMESIZE"), "tab": "模型與輸入來源",
         "label": "ESP32-CAM 自動調整輸出解析度（開串流前送 framesize 控制請求）",
-        "value_type": "bool", "validate": "bool",
+        "value_type": "bool", "validate": "bool", "group": "ESP32-CAM",
     },
     {
         "json_key": "esp32cam.target_width", "env_var": "CAT_MONITORING_ESP32CAM_WIDTH",
         "attr": ("ESP32CamConfig", "TARGET_WIDTH"), "tab": "模型與輸入來源",
         "label": "ESP32-CAM 目標寬度（換算成最接近的 framesize，640=VGA）",
-        "value_type": "int", "validate": "positive_int",
+        "value_type": "int", "validate": "positive_int", "group": "ESP32-CAM",
     },
     {
         "json_key": "esp32cam.target_height", "env_var": "CAT_MONITORING_ESP32CAM_HEIGHT",
         "attr": ("ESP32CamConfig", "TARGET_HEIGHT"), "tab": "模型與輸入來源",
         "label": "ESP32-CAM 目標高度（480 搭配寬 640 = VGA）",
-        "value_type": "int", "validate": "positive_int",
+        "value_type": "int", "validate": "positive_int", "group": "ESP32-CAM",
     },
     {
         "json_key": "esp32cam.control_port", "env_var": "CAT_MONITORING_ESP32CAM_CONTROL_PORT",
         "attr": ("ESP32CamConfig", "CONTROL_PORT"), "tab": "模型與輸入來源",
         "label": "ESP32-CAM 控制端口（CameraWebServer 預設 80，串流在 81）",
-        "value_type": "int", "validate": "port",
+        "value_type": "int", "validate": "port", "group": "ESP32-CAM",
     },
     {
         "json_key": "esp32cam.quality", "env_var": "CAT_MONITORING_ESP32CAM_QUALITY",
         "attr": ("ESP32CamConfig", "QUALITY"), "tab": "模型與輸入來源",
-        "label": "ESP32-CAM JPEG 品質（10–63，越大越省頻寬；-1=不調整）",
-        "value_type": "int", "validate": "int_any",
+        "label": "ESP32-CAM JPEG 品質（-1=不調整）",
+        "hint": (
+            "範圍 10–30，數字越大檔案越小、越省頻寬，但畫質越差；-1 代表不調整"
+            "（沿用相機現值，開機預設為 12）。"
+        ),
+        "value_type": "int", "validate": "esp32cam_quality", "group": "ESP32-CAM",
     },
     {
         "json_key": "esp32cam.control_timeout", "env_var": "CAT_MONITORING_ESP32CAM_CONTROL_TIMEOUT",
         "attr": ("ESP32CamConfig", "CONTROL_TIMEOUT"), "tab": "模型與輸入來源",
         "label": "ESP32-CAM 控制請求逾時（秒）",
-        "value_type": "float", "validate": "positive_float",
+        "value_type": "float", "validate": "positive_float", "group": "ESP32-CAM",
     },
     {
         "json_key": "model_paths.log_dir", "env_var": "CAT_MONITORING_LOG_DIR",
         "attr": ("ModelPaths", "LOG_DIR"), "tab": "模型與輸入來源",
         "label": "日誌目錄", "value_type": "folder", "validate": "output_path",
+        "group": "輸出位置",
     },
     {
         "json_key": "model_paths.output_dir", "env_var": "CAT_MONITORING_OUTPUT_DIR",
         "attr": ("ModelPaths", "OUTPUT_DIR"), "tab": "模型與輸入來源",
         "label": "輸出目錄", "value_type": "folder", "validate": "output_path",
+        "group": "輸出位置",
     },
     # ── YOLO 推論 ────────────────────────────────────────────────────
     {
@@ -449,6 +471,22 @@ TAB_ORDER = [
     "行為追蹤與警報門檻", "貓咪身份驗證", "日誌、CSV、資料庫與輸出路徑", "進階設定",
 ]
 
+
+def display_label(field: dict) -> str:
+    """欄位列實際顯示的標籤。
+
+    欄位有 group、且完整標籤以群組名稱開頭時，拿掉那段前綴（群組小標題已經寫了，
+    例如「ESP32-CAM 目標寬度…」在「ESP32-CAM 串流設定」底下只顯示「目標寬度…」）；
+    拿掉後變空字串或標籤不以群組名開頭就維持完整標籤。
+    """
+    label = field["label"]
+    group = field.get("group")
+    if group and label.startswith(group):
+        stripped = label[len(group):].lstrip(" 　:：-—")
+        if stripped:
+            return stripped
+    return label
+
 # 敏感字串遮蔽：scheme://user:pass@host 型態的憑證，任何要印出來的訊息都先過這裡。
 _CREDENTIAL_RE = re.compile(r"(://[^/@\s:]+:)[^/@\s]+(@)")
 
@@ -699,6 +737,16 @@ def _validate_jpeg_quality(v, label):
     return None
 
 
+def _validate_esp32cam_quality(v, label):
+    # 韌體 controlHandler 只接受 10–30（無 PSRAM 版本是 14–30），超出範圍會回 400；
+    # -1 是本專案的「不調整、沿用韌體現值」哨兵值。
+    if isinstance(v, bool) or not isinstance(v, int):
+        return f"{label}：必須是整數（目前為 {type(v).__name__}）"
+    if v != -1 and not (10 <= v <= 30):
+        return f"{label}：必須是 -1（不調整）或介於 10 到 30 之間（目前為 {v}）"
+    return None
+
+
 _HHMM_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
@@ -805,6 +853,7 @@ _SIMPLE_VALIDATORS = {
     "ema_alpha": _validate_ema_alpha,
     "port": _validate_port,
     "jpeg_quality": _validate_jpeg_quality,
+    "esp32cam_quality": _validate_esp32cam_quality,
     "hhmm": _validate_hhmm,
     "str": _validate_str,
     "bool": _validate_bool,

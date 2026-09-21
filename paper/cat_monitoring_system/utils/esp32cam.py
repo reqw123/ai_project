@@ -12,31 +12,46 @@ framesize 調小同時解掉「解析度過大」與「WiFi 頻寬吃滿 / fps �
 """
 
 import ipaddress
+import json
 import urllib.request
 from urllib.parse import urlsplit, urlunsplit
 
 # ESP32-CAM (esp_camera) framesize_t 列舉 -> 對應像素尺寸。
-# 只列 CameraWebServer 網頁下拉選單會出現、且 OV2640 支援的標準尺寸。
-# 參考 esp32-camera/driver/include/sensor.h。
+# 只列 OV2640 支援的標準尺寸。參考 esp32-camera/driver/include/sensor.h。
+#
+# 注意：列舉編號會隨 esp32-camera 版本改變。Arduino-ESP32 3.x 帶的新版在
+# QQVGA 後面多插了 128X128、在 QVGA 後面多插了 320X320，導致 QVGA 之後的編號
+# 全部往後挪（舊版 QVGA=5/VGA=8/SVGA=9，新版 QVGA=6/VGA=10/SVGA=11）。
+# 編號對不上時韌體會回 400 拒絕，或悄悄切到別的尺寸，所以這張靜態表只是
+# 「問不到裝置時」的備援，預設對應新版；能問到裝置就以 /status 回報的
+# resolutions 為準（見 _device_framesize_table）。
 _FRAMESIZE_TABLE = [
     (96, 96, 0),      # FRAMESIZE_96X96
     (160, 120, 1),    # FRAMESIZE_QQVGA
-    (176, 144, 2),    # FRAMESIZE_QCIF
-    (240, 176, 3),    # FRAMESIZE_HQVGA
-    (240, 240, 4),    # FRAMESIZE_240X240
-    (320, 240, 5),    # FRAMESIZE_QVGA
-    (400, 296, 6),    # FRAMESIZE_CIF
-    (480, 320, 7),    # FRAMESIZE_HVGA
-    (640, 480, 8),    # FRAMESIZE_VGA
-    (800, 600, 9),    # FRAMESIZE_SVGA
-    (1024, 768, 10),  # FRAMESIZE_XGA
-    (1280, 720, 11),  # FRAMESIZE_HD
-    (1280, 1024, 12), # FRAMESIZE_SXGA
-    (1600, 1200, 13), # FRAMESIZE_UXGA
+    (128, 128, 2),    # FRAMESIZE_128X128
+    (176, 144, 3),    # FRAMESIZE_QCIF
+    (240, 176, 4),    # FRAMESIZE_HQVGA
+    (240, 240, 5),    # FRAMESIZE_240X240
+    (320, 240, 6),    # FRAMESIZE_QVGA
+    (320, 320, 7),    # FRAMESIZE_320X320
+    (400, 296, 8),    # FRAMESIZE_CIF
+    (480, 320, 9),    # FRAMESIZE_HVGA
+    (640, 480, 10),   # FRAMESIZE_VGA
+    (800, 600, 11),   # FRAMESIZE_SVGA
+    (1024, 768, 12),  # FRAMESIZE_XGA
+    (1280, 720, 13),  # FRAMESIZE_HD
+    (1280, 1024, 14), # FRAMESIZE_SXGA
+    (1600, 1200, 15), # FRAMESIZE_UXGA
 ]
 
+# 客製韌體 /status 的 "resolutions" 欄位鍵名 -> 像素尺寸。該韌體只接受這三種
+# framesize，編號由裝置自己回報。
+_DEVICE_RESOLUTION_KEYS = {"qvga": (320, 240), "vga": (640, 480), "svga": (800, 600)}
 
-def framesize_value_for(width: int, height: int) -> tuple[int, int, int]:
+
+def framesize_value_for(
+    width: int, height: int, table: list[tuple[int, int, int]] | None = None
+) -> tuple[int, int, int]:
     """把目標 (width, height) 換算成最接近的 ESP32-CAM framesize 列舉值。
 
     規則：
@@ -44,20 +59,39 @@ def framesize_value_for(width: int, height: int) -> tuple[int, int, int]:
     2. 否則取「寬高都不超過目標」的最大標準尺寸（畫面不會比要求的還大）。
     3. 全部都比目標大（目標非常小）-> 取最小的標準尺寸。
 
+    table 為 None 時用內建靜態表；傳入裝置回報的表可避開列舉編號版本差異。
+
     Returns:
         (framesize_width, framesize_height, framesize_enum_value)
     """
-    for w, h, val in _FRAMESIZE_TABLE:
+    if table is None:
+        table = _FRAMESIZE_TABLE
+
+    for w, h, val in table:
         if w == width and h == height:
             return w, h, val
 
-    not_larger = [row for row in _FRAMESIZE_TABLE if row[0] <= width and row[1] <= height]
+    not_larger = [row for row in table if row[0] <= width and row[1] <= height]
     if not_larger:
         w, h, val = max(not_larger, key=lambda row: row[0] * row[1])
         return w, h, val
 
-    w, h, val = min(_FRAMESIZE_TABLE, key=lambda row: row[0] * row[1])
+    w, h, val = min(table, key=lambda row: row[0] * row[1])
     return w, h, val
+
+
+def _parse_device_resolutions(status: object) -> list[tuple[int, int, int]] | None:
+    """從 /status 的 JSON 取出裝置自報的 framesize 對照表；沒有或格式不對回傳 None。"""
+    resolutions = status.get("resolutions") if isinstance(status, dict) else None
+    if not isinstance(resolutions, dict):
+        return None
+    table = []
+    for key, (w, h) in _DEVICE_RESOLUTION_KEYS.items():
+        val = resolutions.get(key)
+        # bool 是 int 的子類別，明確排除，避免 true/false 被當成編號 1/0
+        if isinstance(val, int) and not isinstance(val, bool):
+            table.append((w, h, val))
+    return table or None
 
 
 def _is_lan_host(hostname: str) -> bool:
@@ -101,6 +135,18 @@ def _http_get(url: str, timeout: float) -> int:
         return getattr(resp, "status", None) or resp.getcode()
 
 
+def _device_framesize_table(control_base: str, timeout: float) -> list[tuple[int, int, int]] | None:
+    """向裝置的 /status 查它自己的 framesize 編號；查不到（非客製韌體、逾時、非 JSON）回傳 None。"""
+    status_url = control_base.rsplit("/control", 1)[0] + "/status"
+    try:
+        req = urllib.request.Request(status_url, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (區網固定 http URL)
+            return _parse_device_resolutions(json.load(resp))
+    except Exception:
+        # 這只是「讓編號更準」的加分步驟，失敗就退回靜態表，由後面的控制請求決定成敗
+        return None
+
+
 def configure_stream(
     stream_url: str,
     target_width: int,
@@ -122,10 +168,11 @@ def configure_stream(
     if base is None:
         return False, "串流網址非 http(s) 或無法解析主機，略過 ESP32-CAM 控制"
 
-    fs_w, fs_h, fs_val = framesize_value_for(target_width, target_height)
+    device_table = _device_framesize_table(base, timeout)
+    fs_w, fs_h, fs_val = framesize_value_for(target_width, target_height, device_table)
     try:
         _http_get(f"{base}?var=framesize&val={fs_val}", timeout)
-        detail = f"framesize={fs_val}（{fs_w}x{fs_h}）"
+        detail = f"framesize={fs_val}（{fs_w}x{fs_h}，編號依{'裝置回報' if device_table else '內建對照表'}）"
         if quality is not None and quality >= 0:
             _http_get(f"{base}?var=quality&val={int(quality)}", timeout)
             detail += f"、quality={int(quality)}"

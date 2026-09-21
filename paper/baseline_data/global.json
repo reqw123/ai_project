@@ -1,7 +1,7 @@
 {
   "python_ip": "192.168.0.10",
   "v2_today": {
-    "date": "2026/9/11",
+    "date": "2026/9/21",
     "walk": {
       "count": 0,
       "time": 0
@@ -1583,6 +1583,64 @@
       "low_conf_time": 2567.9,
       "monitoring_seconds": 13966.6,
       "monitoring_hours": 3.88,
+      "stop_ratio": 0.084,
+      "risk": null,
+      "periods": {
+        "00-06": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "06-12": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "12-18": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "18-24": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        }
+      }
+    },
+    {
+      "date": "2026/9/16",
+      "lick_count": 50,
+      "lick_time": 1244.7,
+      "scratch_count": 27,
+      "scratch_time": 247.5,
+      "shake_count": 27,
+      "shake_time": 30.7,
+      "walk_count": 194,
+      "walk_time": 439.5,
+      "stop_count": 80,
+      "stop_time": 180.1,
+      "active_time": 2142.5,
+      "low_conf_count": 356,
+      "low_conf_time": 477,
+      "monitoring_seconds": 2618.3,
+      "monitoring_hours": 0.73,
       "stop_ratio": 0.084,
       "risk": null,
       "periods": {
@@ -16184,9 +16242,9 @@
     }
   ],
   "evt_py_total": 11048,
-  "lick_python_ip": "192.168.0.199",
+  "lick_python_ip": "192.168.0.10",
   "v2_baseline_py": {
-    "computed_at": "2026-09-09T20:26:03.513010",
+    "computed_at": "2026-09-16T00:42:31.130097",
     "confidence": "Medium",
     "count_histories": {
       "lick_count": [

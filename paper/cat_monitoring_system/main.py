@@ -31,6 +31,7 @@ from config import BaselineDashboardConfig, FlaskConfig, NodeRedConfig, RunModeC
 
 from server.flask_app import create_app
 from server.routes import _ensure_processor_started, _pause_processing
+from utils.gui_display import fit_to_window
 from utils.helpers import get_ip
 
 _SCHEDULER_POLL_SECONDS = 20  # 排程檢查間隔；不需要到秒級精準，這個粒度已足夠
@@ -245,9 +246,11 @@ def run_gui_mode():
     # 字元會顯示成亂碼視窗標題，因此這裡固定用英文。
     window_name = "Cat Monitoring (Local GUI)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    # WINDOW_NORMAL 預設視窗尺寸很小，需明確指定大小；畫面內容本身維持
-    # 來源原解析度（_resize_for_gui 只在超過 GUI_MAX_WIDTH/HEIGHT 時才縮小）。
+    # WINDOW_NORMAL 預設視窗尺寸很小，先給一個暫時大小；拿到第一幀後會依畫面比例
+    # 重設（見下方 window_sized）。不能一直固定成 1280×720：視窗比例跟畫面不同時，
+    # cv2 會把畫面拉伸填滿（ESP32-CAM 的 4:3 640×480 放進 16:9 視窗就被拉寬）。
     cv2.resizeWindow(window_name, GUI_MAX_WIDTH, GUI_MAX_HEIGHT)
+    window_sized = False
     print("\n🖥️ 本地 GUI 模式啟動（未啟動 HTTP 伺服器，也不會推送 Node-RED）")
     print(
         "按鍵：q 離開　|　space 播放/暫停　|　暫停時 a/d 前一幀/後一幀　|　z/x 調整跳幀步長"
@@ -267,11 +270,18 @@ def run_gui_mode():
                     continue
                 last_frame, *_ = processor.process(frame)
 
-            cv2.imshow(window_name, _resize_for_gui(last_frame))
+            if not window_sized:
+                # 視窗大小 = 畫面原尺寸（超過 720p 才等比例縮小），比例與畫面一致。
+                fit_h, fit_w = _resize_for_gui(last_frame).shape[:2]
+                cv2.resizeWindow(window_name, fit_w, fit_h)
+                window_sized = True
+
+            # 使用者手動拖曳視窗改變比例時，補黑邊維持畫面比例、不拉伸。
+            cv2.imshow(window_name, fit_to_window(last_frame, window_name))
 
             key = cv2.waitKey(1) & 0xFF
-            if key == ord("q"):
-                print("使用者中斷：q")
+            if key == 27:
+                print("使用者中斷：ESC")
                 break
             elif key == ord(" "):
                 paused = not paused
