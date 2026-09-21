@@ -32,7 +32,8 @@
     13. 時段循環排程：設定開始時間、結束時間與循環間隔，在指定時段內
         每隔 N 分鐘完整播放一次事件清單；支援跨午夜，並可在啟動程式時若已
         位於有效時段內立即執行一次。
-    14. 計時持續執行：以當下為基準，執行指定總分鐘數，每隔 N 分鐘播放一次。
+    14. 計時持續執行：以當下為基準，執行指定總時長，每隔指定時間播放一次；
+        總時長與間隔皆可精確填入「時 / 分 / 秒」，狀態顯示獨立於時段循環排程。
     15. 每筆座標事件各自保存移動時間、動作前等待、點擊/按鍵重複次數、
         重複間隔與完成後等待；滑鼠只移動一次，只有點擊或按鍵會重複。
     16. 支援純快捷鍵、整段文字輸入、事件啟用/停用/排序/複製，以及逐筆失敗策略。
@@ -216,6 +217,9 @@ class RoundedButton(tk.Canvas):
 
 class MouseCoordinateLab:
 
+    # 循環類排程的模式名稱：window = 排程 B，timer = 排程 C
+    CYCLE_LABELS = {"window": "時段循環排程", "timer": "計時排程"}
+
     def __init__(self, root):
         self.root = root
         self.root.title("Mouse Flow Studio｜滑鼠自動化工作台")
@@ -230,11 +234,14 @@ class MouseCoordinateLab:
         self.stop_requested = False
         self.is_scheduling = False
         self.scheduled_tasks = []
-        self.is_window_scheduling = False
-        self.window_start_dt = None
-        self.window_end_dt = None
-        self.window_next_run = None
-        self.window_last_state = "尚未啟動"
+        # 排程 B（時段循環）與排程 C（計時持續）各自擁有獨立的狀態，避免顯示互相混淆
+        self.cycle_states = {
+            mode: {
+                "active": False, "start": None, "end": None,
+                "next_run": None, "run_count": 0, "last_state": "尚未啟動",
+            }
+            for mode in self.CYCLE_LABELS
+        }
         self.execution_logs = []
         self.log_lock = threading.Lock()
         self.autosave_suspended = False
@@ -249,7 +256,7 @@ class MouseCoordinateLab:
         self._load_default_workflow_on_startup()
         self._update_current_position()
         self._update_schedule_countdown()
-        self._update_window_schedule_display()
+        self._update_cycle_schedule_displays()
         self._start_hotkey_listener()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -966,22 +973,48 @@ class MouseCoordinateLab:
         frame_timer_schedule.pack(fill="x", padx=18, pady=6)
         frame_timer_schedule.configure(fg=COLORS["purple"])
 
+        self.label_timer_schedule = tk.Label(
+            frame_timer_schedule,
+            text="計時排程：尚未啟動",
+            font=("Consolas", 11, "bold"), fg=COLORS["purple"],
+            justify="left", anchor="w"
+        )
+        self.label_timer_schedule.pack(fill="x", pady=(0, 8))
+
         frame_timer_inputs = tk.Frame(frame_timer_schedule)
         frame_timer_inputs.pack(fill="x")
-        
-        tk.Label(frame_timer_inputs, text="執行總時長（分鐘）：").grid(row=0, column=0, sticky="w")
-        self.spin_timer_total = tk.Spinbox(frame_timer_inputs, from_=1, to=1440, width=6, font=("Consolas", 11))
-        self.spin_timer_total.insert(0, "60")
-        self.spin_timer_total.grid(row=0, column=1, sticky="w", padx=(0, 15))
 
-        tk.Label(frame_timer_inputs, text="每次間隔（分鐘）：").grid(row=0, column=2, sticky="w")
-        self.spin_timer_interval = tk.Spinbox(frame_timer_inputs, from_=1, to=1440, width=6, font=("Consolas", 11))
-        self.spin_timer_interval.insert(0, "10")
-        self.spin_timer_interval.grid(row=0, column=3, sticky="w")
+        # 時/分/秒欄位：只能輸入最多 2 位數字，單位文字固定為 Label 不可編輯
+        timer_digits_vcmd = (self.root.register(self._validate_hm_digits), "%P")
+
+        def build_hms_row(row, caption, default_h, default_m, default_s):
+            tk.Label(frame_timer_inputs, text=caption).grid(row=row, column=0, sticky="w", pady=3)
+            hms_frame = tk.Frame(frame_timer_inputs, bg=COLORS["card"])
+            hms_frame.grid(row=row, column=1, sticky="w", padx=(8, 0), pady=3)
+            entries = []
+            for unit, default in (("時", default_h), ("分", default_m), ("秒", default_s)):
+                entry = tk.Entry(
+                    hms_frame, width=3, font=("Consolas", 11), justify="center",
+                    validate="key", validatecommand=timer_digits_vcmd
+                )
+                entry.insert(0, default)
+                entry.pack(side="left")
+                tk.Label(hms_frame, text=f" {unit} ", bg=COLORS["card"]).pack(side="left")
+                entries.append(entry)
+            return entries
+
+        self.entry_timer_total_h, self.entry_timer_total_m, self.entry_timer_total_s = build_hms_row(
+            0, "執行總時長：", "01", "00", "00"
+        )
+        self.entry_timer_interval_h, self.entry_timer_interval_m, self.entry_timer_interval_s = build_hms_row(
+            1, "每次間隔：", "00", "10", "00"
+        )
 
         tk.Label(
             frame_timer_schedule,
-            text="啟動後立即開始第一輪，並在總時長內持續每隔 N 分鐘循環執行。",
+            text="時、分、秒皆可填入（分、秒需在 0～59，留空視為 0）。\n"
+                 "啟動後立即開始第一輪，並在總時長內每隔指定時間循環執行；\n"
+                 "每輪開始前會有 3 秒安全倒數，間隔至少 1 秒，總時長需大於 3 秒。",
             fg="#555555", justify="left", font=("Microsoft JhengHei", 9)
         ).pack(anchor="w", pady=(5, 8))
 
@@ -1107,45 +1140,49 @@ class MouseCoordinateLab:
                     )
         self.root.after(500, self._update_schedule_countdown)
 
-    def _update_window_schedule_display(self):
-        if not self.is_window_scheduling:
-            self.label_window_schedule.config(text=f"時段排程：{self.window_last_state}")
-            self.root.after(500, self._update_window_schedule_display)
-            return
+    @staticmethod
+    def _format_hms(total_seconds):
+        total_seconds = max(0, int(total_seconds))
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def _build_cycle_display_text(self, mode):
+        """組出排程 B / C 各自的狀態文字；兩者資料完全獨立，不會互相顯示。"""
+        label = self.CYCLE_LABELS[mode]
+        state = self.cycle_states[mode]
+        if not state["active"]:
+            return f"{label}：{state['last_state']}"
 
         now = datetime.now()
-        start_dt = self.window_start_dt
-        end_dt = self.window_end_dt
-        next_run = self.window_next_run
+        start_dt = state["start"]
+        end_dt = state["end"]
+        next_run = state["next_run"]
+        remain_caption = "時段剩餘" if mode == "window" else "總時長剩餘"
 
         if start_dt is None or end_dt is None:
-            display_text = "時段排程：正在準備..."
-        elif now < start_dt:
-            wait_seconds = max(0, int((start_dt - now).total_seconds()))
-            hours, remainder = divmod(wait_seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            display_text = (
-                f"等待開始：{start_dt.strftime('%Y-%m-%d %H:%M:%S')} "
-                f"（倒數 {hours:02d}:{minutes:02d}:{seconds:02d}）"
+            return f"{label}：正在準備..."
+        if now < start_dt:
+            return (
+                f"{label}：等待開始 {start_dt.strftime('%Y-%m-%d %H:%M:%S')} "
+                f"（倒數 {self._format_hms((start_dt - now).total_seconds())}）"
             )
-        elif now >= end_dt:
-            display_text = "已到達結束時間，正在停止..."
-        elif next_run is None:
-            display_text = f"有效時段內，流程執行中；結束：{end_dt.strftime('%H:%M:%S')}"
-        else:
-            next_seconds = max(0, int((next_run - now).total_seconds()))
-            remaining_seconds = max(0, int((end_dt - now).total_seconds()))
-            next_h, next_remainder = divmod(next_seconds, 3600)
-            next_m, next_s = divmod(next_remainder, 60)
-            end_h, end_remainder = divmod(remaining_seconds, 3600)
-            end_m, end_s = divmod(end_remainder, 60)
-            display_text = (
-                f"下次執行倒數 {next_h:02d}:{next_m:02d}:{next_s:02d}｜"
-                f"時段剩餘 {end_h:02d}:{end_m:02d}:{end_s:02d}"
-            )
+        if now >= end_dt:
+            return f"{label}：已到達結束時間，正在停止..."
 
-        self.label_window_schedule.config(text=display_text)
-        self.root.after(500, self._update_window_schedule_display)
+        remaining = self._format_hms((end_dt - now).total_seconds())
+        done = f"已執行 {state['run_count']} 次"
+        if next_run is None:
+            return f"{label}：流程執行中｜{done}｜{remain_caption} {remaining}"
+        return (
+            f"{label}：下次執行倒數 {self._format_hms((next_run - now).total_seconds())}｜"
+            f"{remain_caption} {remaining}｜{done}"
+        )
+
+    def _update_cycle_schedule_displays(self):
+        self.label_window_schedule.config(text=self._build_cycle_display_text("window"))
+        self.label_timer_schedule.config(text=self._build_cycle_display_text("timer"))
+        self.root.after(500, self._update_cycle_schedule_displays)
 
     def show_key_reference(self):
         window = tk.Toplevel(self.root)
@@ -1260,7 +1297,7 @@ playpause  nexttrack  prevtrack
 
     @staticmethod
     def _validate_hm_digits(proposed_value):
-        """排程 B 時/分欄位的輸入限制：只允許空字串或最多 2 位數字，
+        """排程 B 時/分、排程 C 時/分/秒欄位的輸入限制：只允許空字串或最多 2 位數字，
         擋掉字母、符號與超過 2 位的輸入，"：" 分隔符維持 Label 唯讀。"""
         return proposed_value == "" or (proposed_value.isdigit() and len(proposed_value) <= 2)
 
@@ -1397,6 +1434,10 @@ playpause  nexttrack  prevtrack
         self._autosave_workflow("更新事件")
 
     def record_point(self):
+        if self.is_playing:
+            # F8 是全域快捷鍵，執行中誤按不要跳視窗打斷自動化，只在狀態列提示
+            self._set_status("流程執行中無法記錄新座標，請先按 F10 停止")
+            return
         timing = self._read_event_timing_settings()
         if timing is None:
             return
@@ -1444,6 +1485,9 @@ playpause  nexttrack  prevtrack
         return insert_index
 
     def add_key_only_event(self):
+        if self.is_playing:
+            messagebox.showinfo("提示", "流程執行中無法新增事件，請先停止")
+            return
         key_text = self.entry_key.get().strip()
         if not key_text:
             messagebox.showwarning("提示", "請先在「按鍵／組合鍵」欄位輸入快捷鍵")
@@ -1457,6 +1501,9 @@ playpause  nexttrack  prevtrack
         self._autosave_workflow("新增快捷鍵事件")
 
     def add_text_event(self):
+        if self.is_playing:
+            messagebox.showinfo("提示", "流程執行中無法新增事件，請先停止")
+            return
         text_value = self.text_event_input.get("1.0", "end-1c")
         if not text_value.strip():
             messagebox.showwarning("提示", "請先輸入要寫入目標欄位的文字內容")
@@ -1611,6 +1658,9 @@ playpause  nexttrack  prevtrack
                 self.listbox_points.itemconfig(tk.END, fg="#94A3B8")
 
     def insert_rapid_click_event(self):
+        if self.is_playing:
+            messagebox.showinfo("提示", "流程執行中無法新增事件，請先停止")
+            return
         rate = self.scale_rapid_rate.get()
         try:
             click_count = int(self.spin_rapid_count.get())
@@ -2219,15 +2269,14 @@ playpause  nexttrack  prevtrack
             next_step = int(elapsed // interval_seconds) + 1
             first_run_dt = start_dt + timedelta(seconds=next_step * interval_seconds)
 
-        self.window_start_dt = start_dt
-        self.window_end_dt = end_dt
-        self.window_next_run = first_run_dt
-        self.window_last_state = "等待中"
-        
+        self.cycle_states["window"].update(
+            active=True, start=start_dt, end=end_dt, next_run=first_run_dt,
+            run_count=0, last_state="等待中",
+        )
+
         self.is_playing = True
-        self.is_window_scheduling = True
         self.stop_requested = False
-        
+
         speed = self.scale_speed.get()
         click_delay = self.scale_click_delay.get()
         wait_time = self.scale_wait.get()
@@ -2237,11 +2286,38 @@ playpause  nexttrack  prevtrack
             f"{end_dt.strftime('%Y-%m-%d %H:%M:%S')}，每 {interval_minutes:g} 分鐘執行一次"
         )
         thread = threading.Thread(
-            target=self._window_schedule_worker,
-            args=(first_run_dt, end_dt, interval_seconds, speed, click_delay, wait_time),
+            target=self._cycle_schedule_worker,
+            args=("window", first_run_dt, end_dt, interval_seconds, speed, click_delay, wait_time),
             daemon=True
         )
         thread.start()
+
+    @staticmethod
+    def _read_hms_entries(hour_entry, minute_entry, second_entry):
+        """讀取時/分/秒欄位並換算成總秒數；留空視為 0，格式不合法回傳 None。"""
+        values = []
+        for entry, upper_limit in ((hour_entry, None), (minute_entry, 59), (second_entry, 59)):
+            text = entry.get().strip()
+            if text == "":
+                values.append(0)
+                continue
+            if not text.isdigit():
+                return None
+            number = int(text)
+            if upper_limit is not None and number > upper_limit:
+                return None
+            values.append(number)
+        hours, minutes, seconds = values
+        return hours * 3600 + minutes * 60 + seconds
+
+    @staticmethod
+    def _write_hms_entries(hour_entry, minute_entry, second_entry, total_seconds):
+        total_seconds = max(0, int(total_seconds))
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        for entry, value in ((hour_entry, hours), (minute_entry, minutes), (second_entry, seconds)):
+            entry.delete(0, "end")
+            entry.insert(0, f"{value:02d}")
 
     def start_timer_schedule(self):
         if self.is_playing:
@@ -2251,79 +2327,93 @@ playpause  nexttrack  prevtrack
             messagebox.showwarning("提示", "事件清單是空的，請先新增事件")
             return
 
-        try:
-            total_mins = int(self.spin_timer_total.get())
-            interval_mins = int(self.spin_timer_interval.get())
-            if total_mins <= 0 or interval_mins <= 0:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("錯誤", "時長與間隔必須是大於 0 的整數分鐘")
+        total_seconds = self._read_hms_entries(
+            self.entry_timer_total_h, self.entry_timer_total_m, self.entry_timer_total_s
+        )
+        interval_seconds = self._read_hms_entries(
+            self.entry_timer_interval_h, self.entry_timer_interval_m, self.entry_timer_interval_s
+        )
+        if total_seconds is None or interval_seconds is None:
+            messagebox.showerror("錯誤", "時、分、秒必須是數字，且分與秒需在 0～59 之間")
+            return
+        if interval_seconds < 1:
+            messagebox.showerror("錯誤", "每次間隔至少需要 1 秒")
+            return
+        if total_seconds <= 3:
+            messagebox.showerror("錯誤", "執行總時長需大於 3 秒（每輪開始前有 3 秒安全倒數）")
             return
 
         now = datetime.now()
-        end_dt = now + timedelta(minutes=total_mins)
-        interval_seconds = interval_mins * 60.0
+        end_dt = now + timedelta(seconds=total_seconds)
+        total_text = self._format_hms(total_seconds)
+        interval_text = self._format_hms(interval_seconds)
 
-        self.window_start_dt = now
-        self.window_end_dt = end_dt
-        self.window_next_run = now
-        self.window_last_state = "等待中"
-        
+        self.cycle_states["timer"].update(
+            active=True, start=now, end=end_dt, next_run=now,
+            run_count=0, last_state="等待中",
+        )
+
         self.is_playing = True
-        self.is_window_scheduling = True
         self.stop_requested = False
 
         speed = self.scale_speed.get()
         click_delay = self.scale_click_delay.get()
         wait_time = self.scale_wait.get()
 
-        self._set_status(f"計時排程已啟動：將持續執行 {total_mins} 分鐘，每隔 {interval_mins} 分鐘一次")
+        self._set_status(
+            f"計時排程已啟動：持續執行 {total_text}（至 {end_dt.strftime('%H:%M:%S')}），"
+            f"每隔 {interval_text} 一次"
+        )
+        self._add_execution_log("info", f"計時排程設定：總時長 {total_text}，間隔 {interval_text}")
         thread = threading.Thread(
-            target=self._window_schedule_worker,
-            args=(now, end_dt, interval_seconds, speed, click_delay, wait_time),
+            target=self._cycle_schedule_worker,
+            args=("timer", now, end_dt, float(interval_seconds), speed, click_delay, wait_time),
             daemon=True
         )
         thread.start()
 
-    def _window_schedule_worker(self, first_run_dt, end_dt, interval_seconds, speed, click_delay, wait_time):
+    def _cycle_schedule_worker(self, mode, first_run_dt, end_dt, interval_seconds, speed, click_delay, wait_time):
+        """排程 B（mode="window"）與排程 C（mode="timer"）共用的循環執行核心。"""
+        name = self.CYCLE_LABELS[mode]
+        state = self.cycle_states[mode]
         run_count = 0
         next_run = first_run_dt
         final_state = "已完成"
 
         try:
-            self._add_execution_log("info", f"循環排程開始，結束時間 {end_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+            self._add_execution_log("info", f"{name}開始，結束時間 {end_dt.strftime('%Y-%m-%d %H:%M:%S')}")
             while True:
                 if self.stop_requested:
                     final_state = f"已由使用者停止（已執行 {run_count} 次）"
-                    self._set_status("循環排程已被使用者取消")
+                    self._set_status(f"{name}已被使用者取消")
                     return
 
                 now = datetime.now()
                 if now >= end_dt or next_run >= end_dt:
                     final_state = f"已到達結束時間（共執行 {run_count} 次）"
-                    self._set_status(f"循環排程完成，共執行 {run_count} 次 ✅")
+                    self._set_status(f"{name}完成，共執行 {run_count} 次 ✅")
                     return
 
-                self.window_next_run = next_run
+                state["next_run"] = next_run
                 countdown_start = next_run - timedelta(seconds=3)
                 if now < countdown_start:
                     wait_result = self._interruptible_sleep((countdown_start - now).total_seconds(), deadline=end_dt)
                     if wait_result == "stopped":
                         final_state = f"已由使用者停止（已執行 {run_count} 次）"
-                        self._set_status("循環排程已被使用者取消")
+                        self._set_status(f"{name}已被使用者取消")
                         return
                     if wait_result == "deadline":
                         final_state = f"已到達結束時間（共執行 {run_count} 次）"
-                        self._set_status(f"循環排程完成，共執行 {run_count} 次 ✅")
+                        self._set_status(f"{name}完成，共執行 {run_count} 次 ✅")
                         return
 
                 if datetime.now() >= end_dt:
                     final_state = f"已到達結束時間（共執行 {run_count} 次）"
-                    self._set_status(f"循環排程完成，共執行 {run_count} 次 ✅")
+                    self._set_status(f"{name}完成，共執行 {run_count} 次 ✅")
                     return
 
-                self.window_next_run = None
-                countdown_result = self._run_start_countdown(f"排程第 {run_count + 1} 輪", deadline=end_dt)
+                state["next_run"] = None
+                countdown_result = self._run_start_countdown(f"{name}第 {run_count + 1} 輪", deadline=end_dt)
                 if countdown_result == "stopped":
                     final_state = f"已由使用者停止（已執行 {run_count} 次）"
                     return
@@ -2331,7 +2421,7 @@ playpause  nexttrack  prevtrack
                     final_state = f"倒數期間到達結束時間（共執行 {run_count} 次）"
                     return
 
-                self._set_status(f"循環排程：正在執行第 {run_count + 1} 次完整事件清單")
+                self._set_status(f"{name}：正在執行第 {run_count + 1} 次完整事件清單")
                 result = self._run_trajectory_loop(speed, click_delay, wait_time, deadline=end_dt)
 
                 if result == "stopped":
@@ -2339,16 +2429,17 @@ playpause  nexttrack  prevtrack
                     return
                 if result == "deadline":
                     final_state = f"結束時間到，已中止當次流程（先前完成 {run_count} 次）"
-                    self._set_status("已到達結束時間，循環排程已停止")
+                    self._set_status(f"已到達結束時間，{name}已停止")
                     return
                 if result == "failed":
                     final_state = f"事件失敗，已停止（先前完成 {run_count} 次）"
-                    self._set_status("循環排程因事件失敗而停止")
+                    self._set_status(f"{name}因事件失敗而停止")
                     return
 
                 run_count += 1
-                self._add_execution_log("success", f"循環排程第 {run_count} 輪完成")
-                
+                state["run_count"] = run_count
+                self._add_execution_log("success", f"{name}第 {run_count} 輪完成")
+
                 next_run += timedelta(seconds=interval_seconds)
                 now = datetime.now()
                 while next_run <= now:
@@ -2356,19 +2447,19 @@ playpause  nexttrack  prevtrack
 
         except pyautogui.FailSafeException:
             final_state = f"FAILSAFE 已中止（完成 {run_count} 次）"
-            self._set_status("⚠ 觸發 FAILSAFE 安全機制！循環排程已立即中止")
-            self._add_execution_log("error", "循環排程觸發 FAILSAFE，已立即中止")
+            self._set_status(f"⚠ 觸發 FAILSAFE 安全機制！{name}已立即中止")
+            self._add_execution_log("error", f"{name}觸發 FAILSAFE，已立即中止")
         except Exception as error:
             final_state = f"未預期錯誤（完成 {run_count} 次）"
-            self._set_status(f"循環排程發生錯誤：{error}")
-            self._add_execution_log("error", f"循環排程錯誤：{type(error).__name__}: {error}")
+            self._set_status(f"{name}發生錯誤：{error}")
+            self._add_execution_log("error", f"{name}錯誤：{type(error).__name__}: {error}")
         finally:
-            self.window_last_state = final_state
-            self.window_next_run = None
-            self.is_window_scheduling = False
+            state["last_state"] = final_state
+            state["next_run"] = None
+            state["active"] = False
             self.is_playing = False
             level = "success" if "到達結束時間" in final_state or final_state == "已完成" else "warning"
-            self._add_execution_log("info" if level == "success" else level, f"循環排程結束：{final_state}")
+            self._add_execution_log("info" if level == "success" else level, f"{name}結束：{final_state}")
 
     def _start_hotkey_listener(self):
         self.hotkey_listener = pynput_keyboard.Listener(on_press=self._on_key_press)
@@ -2624,8 +2715,12 @@ playpause  nexttrack  prevtrack
                 "window_end_m": self.entry_end_m.get().strip(),
                 "window_interval_minutes": self.spin_window_interval.get(),
                 "window_run_now": bool(self.window_run_now_var.get()),
-                "timer_total": self.spin_timer_total.get(),
-                "timer_interval": self.spin_timer_interval.get(),
+                "timer_total_h": self.entry_timer_total_h.get().strip(),
+                "timer_total_m": self.entry_timer_total_m.get().strip(),
+                "timer_total_s": self.entry_timer_total_s.get().strip(),
+                "timer_interval_h": self.entry_timer_interval_h.get().strip(),
+                "timer_interval_m": self.entry_timer_interval_m.get().strip(),
+                "timer_interval_s": self.entry_timer_interval_s.get().strip(),
                 "rapid_rate": self.scale_rapid_rate.get(),
                 "rapid_count": self.spin_rapid_count.get(),
                 "rapid_button": self.rapid_click_button_var.get(),
@@ -2708,11 +2803,8 @@ playpause  nexttrack  prevtrack
                 except Exception:
                     pass
 
-            if settings.get("timer_total") is not None:
-                self._replace_spinbox_value(self.spin_timer_total, settings["timer_total"])
-            if settings.get("timer_interval") is not None:
-                self._replace_spinbox_value(self.spin_timer_interval, settings["timer_interval"])
-            
+            self._apply_timer_settings(settings)
+
             if settings.get("window_interval_minutes") is not None:
                 self._replace_spinbox_value(self.spin_window_interval, settings["window_interval_minutes"])
             if settings.get("window_run_now") is not None:
@@ -2725,6 +2817,27 @@ playpause  nexttrack  prevtrack
                 self.rapid_click_button_var.set(settings["rapid_button"])
 
         return len(normalized_events), len(scheduled_tasks)
+
+    def _apply_timer_settings(self, settings):
+        """還原排程 C 的時/分/秒；同時相容舊版以「分鐘」儲存的 timer_total / timer_interval。"""
+        groups = (
+            ("timer_total", (self.entry_timer_total_h, self.entry_timer_total_m, self.entry_timer_total_s)),
+            ("timer_interval", (self.entry_timer_interval_h, self.entry_timer_interval_m, self.entry_timer_interval_s)),
+        )
+        for prefix, entries in groups:
+            keys = [f"{prefix}_h", f"{prefix}_m", f"{prefix}_s"]
+            if any(key in settings for key in keys):
+                for entry, key in zip(entries, keys):
+                    text = str(settings.get(key, "")).strip()
+                    if text.isdigit() and len(text) <= 2:
+                        entry.delete(0, "end")
+                        entry.insert(0, text)
+            elif settings.get(prefix) is not None:
+                try:
+                    legacy_minutes = int(float(settings[prefix]))
+                except (TypeError, ValueError):
+                    continue
+                self._write_hms_entries(*entries, legacy_minutes * 60)
 
     def _load_workflow_path(self, path, show_message=True, autosave=True):
         path = Path(path)
