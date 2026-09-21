@@ -9,6 +9,10 @@ import threading
 import queue
 import keyboard  # pip install keyboard
 
+# constants.py 在上一層 cat_pose/，這支被移進 tello_drone_archive/ 後直接執行找不到它，需把上一層放進 sys.path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from constants import (
     COLOR_HEAD, COLOR_BODY, COLOR_TAIL, COLOR_KPT,
     COLOR_LEFT_FRONT, COLOR_RIGHT_FRONT, COLOR_LEFT_HIND, COLOR_RIGHT_HIND,
@@ -18,7 +22,12 @@ from constants import (
 
 # ==================== 基本設定 ====================
 SPEED = 60          # 飛行速度 (0~100)
-IMGSZ = 640
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[2] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
+IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（paper/config.py 的 YOLOConfig.IMAGE_SIZE）
 CONF_THRES = 0.50
 KP_CONF_THRES = 0.5
 DEVIATION_THRES = 0.60
@@ -288,7 +297,7 @@ def _yolo_worker():
             with _model_lock:
                 # FIX #2：透過 model_holder[0] 存取，確保讀到最新模型
                 res = model_holder[0].predict(frame, imgsz=IMGSZ, conf=CONF_THRES,
-                                              half=True, verbose=False)[0]
+                                              quantize=16, verbose=False)[0]
             with _yolo_result_lock:
                 _yolo_result = res
         except Exception as e:

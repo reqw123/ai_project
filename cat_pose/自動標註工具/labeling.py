@@ -17,6 +17,11 @@ from PIL import Image, ImageDraw, ImageFont
 import cv2
 
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[2] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # =====================
@@ -203,7 +208,7 @@ class PoseAnnotator:
     
     def infer_pose(self):
         """使用YOLOv8推理姿态"""
-        results = self.model.predict(self.original_img, verbose=False)[0]
+        results = self.model.predict(self.original_img, imgsz=_YOLOConfig.IMAGE_SIZE, quantize=16, verbose=False)[0]
         
         # 初始化关键点
         self.keypoints = np.zeros((TOTAL_KPTS, 2), np.float32)
@@ -643,7 +648,7 @@ results = model.train(
         print("\n操作说明:")
         print("  S - 保存当前标注")
         print("  A - 上一张 | D - 下一张")
-        print("  Q - 完成并导出")
+        print("  ESC - 完成并导出")
         print("  0/1/2 - 设置可见性")
         print("  R - 重置视图 | I - 重新推理")
         print("  鼠标: 滚轮缩放 | 右键平移 | 左键移动点")
@@ -655,7 +660,7 @@ results = model.train(
             
             key = cv2.waitKey(20) & 0xFF
             
-            if key == ord('q') or key == 27:
+            if key == 27:
                 response = messagebox.askyesno("确认", 
                                               f"已保存 {self.saved_count} 张图片\n确定要完成标注吗?")
                 if response:

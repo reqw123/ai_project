@@ -7,7 +7,7 @@
 功能：
   1. 將畫面推送到 Node-RED（可透過 ENABLE_NODE_RED 開關）
   2. 點擊視窗左上角按鈕 或按 R 鍵切換本地錄影
-  3. 按 Q 鍵結束程式
+  3. 按 ESC 鍵結束程式
 """
 import cv2
 import time
@@ -261,7 +261,7 @@ def main():
     log_msg(f"本機 IP: {local_ip}", "INFO")
     log_msg(f"Node-RED: {'啟用' if ENABLE_NODE_RED else '停用'} → {NODE_RED_URL}", "INFO")
     log_msg(f"目標 FPS: {TARGET_FPS}  JPEG 品質: {JPEG_QUALITY}%", "INFO")
-    log_msg("操作：[左上角按鈕 / R] 切換錄影  |  [Q] 結束", "INFO")
+    log_msg("操作：[左上角按鈕 / R] 切換錄影  |  [ESC] 結束", "INFO")
     print("=" * 60 + "\n")
 
     # ── 啟動攝影機線程 ──────────────────────────────────────────
@@ -350,7 +350,7 @@ def main():
 
                     cv2.imshow("Camera", disp)
                     key = cv2.waitKey(1) & 0xFF
-                    if key == ord('q'):
+                    if key == 27:
                         break
                     if key == ord('r'):
                         recorder.toggle()

@@ -1,3 +1,8 @@
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -276,7 +281,7 @@ if abnormal_count > 0:
                     
                     # 如果有模型，繪製關鍵點
                     if has_model:
-                        result = model.predict(frame, imgsz=704, conf=0.5, half=True, verbose=False)[0]
+                        result = model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, conf=0.5, quantize=16, verbose=False)[0]
                         
                         if result.keypoints is not None and len(result.keypoints.xy) > 0:
                             kpts = result.keypoints.xy[0].cpu().numpy()

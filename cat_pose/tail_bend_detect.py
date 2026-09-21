@@ -22,7 +22,7 @@ tail_bend_detect.py
   R      = 重播
   1/2/3  = 切換模型
   6~l    = 切換影片（同原腳本）
-  Q      = 結束
+  ESC    = 結束
 """
 
 from ultralytics import YOLO
@@ -49,7 +49,12 @@ TARGET_VIDEO_INDEX = 12          # key j 對應索引（與 VIDEO_KEY_MAP 一致
 AUTO_LOAD_TARGET_VIDEO = ENABLE_VIDEO_LOCK
 
 # ==================== 基本設定 ====================
-IMGSZ          = 640
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
+IMGSZ          = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（paper/config.py 的 YOLOConfig.IMAGE_SIZE）
 CONF_THRES     = 0.50
 KP_CONF_THRES  = 0.5      # 關鍵點信心度門檻
 
@@ -179,7 +184,21 @@ def build_video_key_map(video_count):
     return {keys[i]: i for i in range(usable)}
 
 # ==================== 顏色 ====================
-MAX_W, MAX_H   = 1280, 720
+# 預覽視窗解析度：改這個變數即可（"720p" → 1280x720、"1080p" → 1920x1080）。
+# 注意：這支腳本讀進畫面後就先縮到這個大小（prescale_frame），偵測也是用縮小後的畫面。
+DISPLAY_RESOLUTION = "720p"
+_DISPLAY_RESOLUTION_PRESETS = {
+    "720p": (1280, 720),
+    "1080p": (1920, 1080),
+}
+import os as _os
+_env_resolution = _os.getenv("DISPLAY_RESOLUTION", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫上面的預設；空白＝沿用預設
+if _env_resolution:
+    if _env_resolution in _DISPLAY_RESOLUTION_PRESETS:
+        DISPLAY_RESOLUTION = _env_resolution
+    else:
+        print(f"⚠ 環境變數 DISPLAY_RESOLUTION={_env_resolution!r} 無效（只接受 {list(_DISPLAY_RESOLUTION_PRESETS)}），沿用預設 {DISPLAY_RESOLUTION}")
+DISPLAY_SIZE = _DISPLAY_RESOLUTION_PRESETS[DISPLAY_RESOLUTION]  # 視窗顯示解析度上限（寬, 高）
 COLOR_STRAIGHT    = (0, 220, 0)       # 綠色 → 直
 COLOR_SLIGHT_BEND = (0, 200, 255)     # 黃橘 → 微彎
 COLOR_BENT        = (0, 80, 255)      # 橘紅 → 彎曲
@@ -218,11 +237,11 @@ def draw_pil_text(frame, text, x, y, font, color_bgr):
 
 
 def prescale_frame(frame):
-    """讀入後立即縮放到 MAX_W x MAX_H 以內"""
+    """讀入後立即縮放到 DISPLAY_SIZE 以內"""
     if frame is None:
         return None
     h, w = frame.shape[:2]
-    scale = min(MAX_W / w, MAX_H / h, 1.0)
+    scale = min(DISPLAY_SIZE[0] / w, DISPLAY_SIZE[1] / h, 1.0)
     if scale < 1.0:
         frame = cv2.resize(frame,
                            (int(w * scale), int(h * scale)),
@@ -704,7 +723,7 @@ def draw_status_banner(frame, label, color, angle, model_idx, video_idx,
     # ── 底部操作提示 ────────────────────────────────────
     video_keys = "".join(chr(k) for k in VIDEO_KEY_MAP.keys())
     folder_switch = "  [/] :prev/next" if HAS_FOLDER_SOURCE else ""
-    hint = f"SPACE:play/pause  A/D:frame step  Z/X:adjust step  T:goto  1-3:model{folder_switch}  {video_keys}:video  Q:quit"
+    hint = f"SPACE:play/pause  A/D:frame step  Z/X:adjust step  T:goto  1-3:model{folder_switch}  {video_keys}:video  ESC:quit"
     draw_text_outlined(frame, hint, 8, h - 8, scale=0.38, thickness=1,
                        fg=(160, 160, 160))
 
@@ -909,7 +928,7 @@ while True:
         display,
         imgsz=IMGSZ,
         conf=CONF_THRES,
-        half=True,
+        quantize=16,
         verbose=False,
     )[0]
 
@@ -1101,7 +1120,7 @@ while True:
     raw_key = cv2.waitKeyEx(delay)
     key     = raw_key & 0xFF
 
-    if key == ord("q"):
+    if key == 27:
         break
 
     if HAS_FOLDER_SOURCE and key in (ord("["), ord("]")):

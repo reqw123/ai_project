@@ -30,6 +30,11 @@ import seaborn as sns
 # =====================
 # 配置参数
 # =====================
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[2] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
 TOTAL_KPTS = 17
 CLASS_ID = 0
 CLASS_NAME = "cat"
@@ -204,7 +209,7 @@ class UnsupervisedPoseLabeler:
             
             if frame_idx % sample_rate == 0:
                 # 运行推理
-                results = self.model.predict(frame, verbose=False)[0]
+                results = self.model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, quantize=16, verbose=False)[0]
                 
                 if results.keypoints is not None and len(results.keypoints.xy) > 0:
                     keypoints = results.keypoints.xy[0].cpu().numpy()
@@ -290,7 +295,7 @@ class UnsupervisedPoseLabeler:
             if frame is None:
                 continue
             
-            results = self.model.predict(frame, verbose=False)[0]
+            results = self.model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, quantize=16, verbose=False)[0]
             
             if results.keypoints is not None and len(results.keypoints.xy) > 0:
                 keypoints = results.keypoints.xy[0].cpu().numpy()

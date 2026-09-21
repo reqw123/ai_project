@@ -16,15 +16,20 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # =====================================================
 # ⭐ 模型設定
 # =====================================================
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
 MODELS = {
     "640.1": {
         "path": str(_PROJECT_ROOT / "yolo_models" / "v11s_149.pt"),
-        "imgsz": 640,
+        "imgsz": _YOLOConfig.IMAGE_SIZE,
         # label will be set to the .pt filename below
     },
     "640.2": {
         "path": str(_PROJECT_ROOT / "yolo_models" / "v11s_149.pt"),
-        "imgsz": 640,
+        "imgsz": _YOLOConfig.IMAGE_SIZE,
         # label will be set to the .pt filename below
     }
 }
@@ -66,7 +71,7 @@ if _env_test_video and os.path.isdir(_env_test_video):
 # 壓縮到最長邊 640px，寫進獨立的工作副本快取資料夾（RESIZED_CACHE_DIR），
 # 不動 INPUT_DIR 的原始檔案；後續推論、存檔（compare_output / offset_dataset）
 # 全部沿用這份 640 版本的工作副本。
-RESIZE_MAX_SIDE = 640
+RESIZE_MAX_SIDE = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（paper/config.py 的 YOLOConfig.IMAGE_SIZE）
 
 CONF_THRES = 0.9
 KP_CONF_THRES = 0.8       # 關鍵點信心門檻：低於此值的點不列入偏移比較
@@ -909,6 +914,7 @@ def launch_review_gui(review_records):
         ).pack(side="right")
 
         confirm_window.protocol("WM_DELETE_WINDOW", confirm_window.destroy)
+        confirm_window.bind("<Escape>", lambda _e: confirm_window.destroy())
         confirm_window.focus_set()
 
     previous_button = make_button(
@@ -1072,6 +1078,7 @@ for idx, image_item in enumerate(image_items, start=1):
             results[name] = models[name].predict(
                 infer_img,
                 imgsz=cfg["imgsz"],
+                quantize=16,
                 conf=CONF_THRES,
                 verbose=False,
             )[0]
@@ -1193,6 +1200,7 @@ for idx, image_item in enumerate(image_items, start=1):
         result = models[single_name].predict(
             infer_img,
             imgsz=cfg["imgsz"],
+            quantize=16,
             conf=CONF_THRES,
             verbose=False,
         )[0]

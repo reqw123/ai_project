@@ -12,7 +12,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = str(_PROJECT_ROOT / "yolo_models" / "v11s_128.pt")
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
 
-IMGSZ = 640
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
+IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（paper/config.py 的 YOLOConfig.IMAGE_SIZE）
 CONF_THRES = 0.5
 KP_CONF_THRES = 0.5
 TOTAL_KPTS = 17
@@ -119,7 +124,7 @@ while cap.isOpened() and frame_id < MAX_FRAMES:
         frame,
         imgsz=IMGSZ,
         conf=CONF_THRES,
-        half=True,
+        quantize=16,
         verbose=False
     )[0]
 

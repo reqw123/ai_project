@@ -33,7 +33,28 @@ _env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
 if _env_yolo_model:
     MODEL_PATH = _env_yolo_model
 
-IMGSZ = 640
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
+IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（paper/config.py 的 YOLOConfig.IMAGE_SIZE）
+
+# 預覽視窗解析度：改這個變數即可（"720p" → 1280x720、"1080p" → 1920x1080）。
+# 只決定視窗大小，不影響偵測／推論吃的原始畫面。
+DISPLAY_RESOLUTION = "720p"
+_DISPLAY_RESOLUTION_PRESETS = {
+    "720p": (1280, 720),
+    "1080p": (1920, 1080),
+}
+import os as _os
+_env_resolution = _os.getenv("DISPLAY_RESOLUTION", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫上面的預設；空白＝沿用預設
+if _env_resolution:
+    if _env_resolution in _DISPLAY_RESOLUTION_PRESETS:
+        DISPLAY_RESOLUTION = _env_resolution
+    else:
+        print(f"⚠ 環境變數 DISPLAY_RESOLUTION={_env_resolution!r} 無效（只接受 {list(_DISPLAY_RESOLUTION_PRESETS)}），沿用預設 {DISPLAY_RESOLUTION}")
+DISPLAY_SIZE = _DISPLAY_RESOLUTION_PRESETS[DISPLAY_RESOLUTION]  # 視窗顯示解析度（寬, 高）
 CONF_THRES = 0.50
 KP_CONF_THRES = 0.98
 TOTAL_KPTS = 17
@@ -219,7 +240,7 @@ user_scale_min = 0.2
 user_scale_max = 2.5
 user_scale_step = 0.1
 
-print("\n[RUNNING] Press 'q' to quit, '+' to zoom in, '-' to zoom out\n")
+print("\n[RUNNING] Press ESC to quit, '+' to zoom in, '-' to zoom out\n")
 
 while True:
     ret, frame = cap.read()
@@ -233,7 +254,7 @@ while True:
     disp_frame = frame.copy()
     h0, w0 = disp_frame.shape[:2]
     # 先根據最大視窗自動縮放，再乘以user_scale
-    max_w, max_h = 1280, 720
+    max_w, max_h = DISPLAY_SIZE
     scale = min(max_w / w0, max_h / h0, 1.0) * user_scale
     if scale != 1.0:
         disp_frame = cv2.resize(disp_frame, (int(w0 * scale), int(h0 * scale)), interpolation=cv2.INTER_AREA)
@@ -242,7 +263,7 @@ while True:
         frame,
         imgsz=IMGSZ,
         conf=CONF_THRES,
-        half=True,
+        quantize=16,
         verbose=False,
         device=0
     )[0]
@@ -359,7 +380,7 @@ while True:
 
     cv2.imshow("Cat Pose - Fast Analysis", disp_frame)
     key = cv2.waitKey(1) & 0xFF
-    if key == ord('q'):
+    if key == 27:
         break
     elif key == ord('+') or key == ord('='):
         user_scale = min(user_scale + user_scale_step, user_scale_max)

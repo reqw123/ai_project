@@ -22,6 +22,11 @@ from constants import (
 )
 
 # ==================== Colors（一般用途，不放進共用模組） ====================
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[2] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
 YELLOW = (0, 255, 255)
@@ -233,7 +238,7 @@ class PoseEditor:
                 # Zoom out
                 self.zoom_scale = max(self.zoom_scale / 1.2, 0.5)
             
-            elif key == 27 or key == ord('q') or key == ord('Q'):  # ESC
+            elif key == 27:  # ESC
                 cv2.destroyWindow(win)
                 print(f"[Cancel] Frame {self.frame_idx}")
                 return False
@@ -390,7 +395,7 @@ def main():
             continue
         
         # Auto inference
-        result = model.predict(frame, imgsz=640, conf=0.5, half=False, verbose=False)[0]
+        result = model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, conf=0.5, quantize=16, verbose=False)[0]
         
         # Display frame
         disp_frame = frame.copy()
@@ -425,14 +430,14 @@ def main():
         status_color = RED if paused else GREEN
         cv2.putText(disp_frame, f"Status: {status}", (20, 105), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
-        cv2.putText(disp_frame, "Space=Edit  P=Pause  Arrow=Frame  +/-=Zoom  Q=Quit", (20, 135), 
+        cv2.putText(disp_frame, "Space=Edit  P=Pause  Arrow=Frame  +/-=Zoom  ESC=Quit", (20, 135),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        
+
         cv2.imshow("Cat Pose Annotation", disp_frame)
-        
+
         key = cv2.waitKey(1 if not paused else 30) & 0xFF
-        
-        if key == ord('q') or key == ord('Q'):
+
+        if key == 27:
             print("\n[Exit] Quitting...")
             break
         elif key == ord('p') or key == ord('P'):

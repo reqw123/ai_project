@@ -12,7 +12,12 @@ from constants import (
 )
 
 # ==================== 設定 ====================
-IMGSZ = 640
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
+IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（paper/config.py 的 YOLOConfig.IMAGE_SIZE）
 CONF_THRES = 0.50
 KP_CONF_THRES = 0.50
 DEVIATION_THRES = 0.60
@@ -44,7 +49,7 @@ def run_inference(img_path: str):
         print(f"❌ 無法讀取圖片：{img_path}")
         return None
 
-    results = model(img, conf=CONF_THRES, imgsz=IMGSZ)[0]
+    results = model(img, conf=CONF_THRES, imgsz=IMGSZ, quantize=16)[0]
 
     # 依解析度動態縮放繪圖參數
     h_img, w_img = img.shape[:2]
@@ -126,7 +131,7 @@ def ask_image_path(_tk_root):
 _tk_root = tk.Tk()
 _tk_root.withdraw()
 
-WINDOW_NAME = "Detection Result  [ O ] 開啟新圖片  [ Q / ESC ] 離開"
+WINDOW_NAME = "Detection Result  [ O ] 開啟新圖片  [ ESC ] 離開"
 cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
 current_path = r"C:\Users\homec\Downloads\side-view-cat-walking-field.jpg"
@@ -145,7 +150,7 @@ while True:
 
     key = cv2.waitKey(50) & 0xFF  # 50 ms 輪詢一次
 
-    if key in (ord('q'), ord('Q'), 27):   # Q 或 ESC 離開
+    if key == 27:   # ESC 離開
         break
     elif key in (ord('o'), ord('O')):     # O 開啟檔案選擇器
         new_path = ask_image_path(_tk_root)

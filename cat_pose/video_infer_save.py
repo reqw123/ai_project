@@ -8,14 +8,14 @@ Cat Pose Video Inference & Save Tool
 - 影像命名: walk{i}.png
 
 按鍵（每次按下都會在終端印出訊息）：
-- S 儲存  Space 切換 Step/Auto  Q 離開
+- S 儲存  Space 切換 Step/Auto  ESC 離開
 - Step：D/A 前後一幀（步長 Z/X）
 - 通用：[ ] 往回/往前跳 JUMP_FRAMES 幀   t 終端輸入跳轉（秒數加 s 或幀號）
 - 視窗頂端進度條可拖曳即時 seek
 - 1 / 2（數字列或 numpad，需開 NumLock）上一部 / 下一部影片
 - = 或 + 加大快轉倍率、- 減小（階梯 0.5/1/2/4/8x，單次切換）
 - . / , 在倍率之外額外微調抽幀（快轉）
-- 解析度上限：改開頭 DISPLAY_PRESET（"720" / "1080"）
+- 解析度上限：改開頭 DISPLAY_RESOLUTION（"720p" / "1080p"）
 """
 
 import os
@@ -171,9 +171,14 @@ else:
     PRECISION_KW = {"half": True}
 print(f"[Info] ultralytics {_ULTRA_VER}  precision={PRECISION_KW or 'fp32'}")
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.py 在 paper/ 根目錄
+from config import YOLOConfig as _YOLOConfig
+
 def infer(frame):
     """單張影像推論，回傳第一個 Results。"""
-    return model.predict(frame, imgsz=640, conf=0.5, verbose=False, **PRECISION_KW)[0]
+    return model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, conf=0.5, verbose=False, **PRECISION_KW)[0]
 
 # ========== 儲存日誌 ==========
 saved_log = {}  # 影片路徑: [儲存過的圖片檔名]
@@ -245,12 +250,22 @@ _last_display_ts = 0.0  # 0.5x 節流用的上次顯示時間戳
 
 
 # ==================== 顯示窗口限制 ====================
-# 改這裡切換顯示上限："720" → 不超過 1280x720，"1080" → 不超過 1920x1080。
+# 改 DISPLAY_RESOLUTION 切換顯示上限："720p" → 不超過 1280x720，"1080p" → 不超過 1920x1080。
 # 畫面只依「原始長寬比」等比縮小到這個上限內（只縮不放、不補黑邊、不拉伸），
 # 視窗用 WINDOW_AUTOSIZE 自動貼合縮小後的畫面。
-DISPLAY_PRESET = "720"          # "720" 或 "1080"
-_DISPLAY_PRESET_TABLE = {"720": (1280, 720), "1080": (1920, 1080)}
-MAX_DISPLAY_WIDTH, MAX_DISPLAY_HEIGHT = _DISPLAY_PRESET_TABLE.get(DISPLAY_PRESET, (1920, 1080))
+DISPLAY_RESOLUTION = "1080p"
+_DISPLAY_RESOLUTION_PRESETS = {
+    "720p": (1280, 720),
+    "1080p": (1920, 1080),
+}
+import os as _os
+_env_resolution = _os.getenv("DISPLAY_RESOLUTION", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫上面的預設；空白＝沿用預設
+if _env_resolution:
+    if _env_resolution in _DISPLAY_RESOLUTION_PRESETS:
+        DISPLAY_RESOLUTION = _env_resolution
+    else:
+        print(f"⚠ 環境變數 DISPLAY_RESOLUTION={_env_resolution!r} 無效（只接受 {list(_DISPLAY_RESOLUTION_PRESETS)}），沿用預設 {DISPLAY_RESOLUTION}")
+DISPLAY_SIZE = _DISPLAY_RESOLUTION_PRESETS[DISPLAY_RESOLUTION]  # 視窗顯示解析度上限（寬, 高）
 
 def cur_src_fps():
     """目前影片的有效 FPS（讀不到時退回 TARGET_MODEL_FPS）。"""
@@ -277,11 +292,84 @@ def cycle_speed(direction):
     else:
         print(f"[Speed] 快轉倍率 = {playback_speed:g}x")
 
-def fit_for_display(img):
-    """依原始長寬比等比縮小到不超過 MAX_DISPLAY_WIDTH/HEIGHT（只縮不放、不補黑邊）。
-    回傳 (縮小後畫面, 縮小後高度)。"""
+# 實際使用的顯示上限（寬, 高）＝DISPLAY_SIZE，第一次顯示前會依螢幕工作區校正（見 _fit_cap_to_screen）：
+# 視窗的標題列、邊框、進度條都算在視窗外框裡，畫面直接開到 DISPLAY_SIZE 大會讓視窗底部／右側超出螢幕
+# （1080p 時最明顯：畫面 1080 高 + 外框 100 多像素 > 螢幕高度，下方被裁掉）。
+_display_cap = list(DISPLAY_SIZE)
+_cap_fitted = False
+_hud_extra_h = 0  # compose_with_hud() 在影片畫面上下加的資訊色塊總高度；它是縮小之後才加上去的，要從上限裡預留
+_screen_limited = False  # 螢幕放不下 DISPLAY_SIZE（上限被校正縮小）時才為 True；只有這時才預留 HUD 高度／整張再縮
+
+
+def _fit_cap_to_screen(w, h):
+    """第一次顯示前執行一次：量視窗外框（標題列＋邊框＋進度條）實際佔多少像素，把顯示上限縮到
+    「螢幕工作區（不含工作列）扣掉外框」以內，並把視窗移到工作區左上角。w, h＝這支影片要顯示的畫面原始大小。
+    做法：用「跟實際顯示同寬、但高度很小」的黑圖去量——外框大小跟圖高無關、只跟寬度有關，而且這種小視窗不會被
+    作業系統因為超出螢幕而強制縮小，量得準。Windows 限定；量不到（非 Windows、找不到視窗）就維持原上限。"""
+    global _cap_fitted
+    _cap_fitted = True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        work = wintypes.RECT()
+        user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)  # SPI_GETWORKAREA
+        work_w, work_h = work.right - work.left, work.bottom - work.top
+        probe_h = 300
+        chrome = (16, 100)  # 量不到時的保守起始估計（邊框 16、標題列＋邊框＋進度條約 100）
+        for _ in range(3):  # 外框高度會隨寬度略有變動，最多修正幾次就收斂
+            sc = min(_display_cap[0] / w, _display_cap[1] / h, 1.0)
+            probe_w = max(320, int(round(w * sc)))
+            cv2.imshow(WIN_NAME, np.zeros((probe_h, probe_w, 3), dtype=np.uint8))
+            hwnd = user32.FindWindowW(None, WIN_NAME)
+            if not hwnd:
+                return
+            rect, client = wintypes.RECT(), wintypes.RECT()
+            for _ in range(60):  # 等視窗貼合這張圖（客戶區寬度＝圖寬）才量，量太早會量到預設視窗大小
+                cv2.waitKey(10)
+                user32.GetClientRect(hwnd, ctypes.byref(client))
+                if client.right == probe_w:
+                    break
+            else:
+                break
+            time.sleep(0.25)  # 貼合寬度後進度條列還會再調整一次高度
+            cv2.waitKey(1)
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            new_chrome = ((rect.right - rect.left) - probe_w, (rect.bottom - rect.top) - probe_h)
+            new_cap = (min(DISPLAY_SIZE[0], work_w - new_chrome[0]), min(DISPLAY_SIZE[1], work_h - new_chrome[1]))
+            converged = new_chrome == chrome
+            chrome = new_chrome
+            _display_cap[0], _display_cap[1] = max(320, new_cap[0]), max(240, new_cap[1])
+            if converged:
+                break
+        if _display_cap[0] < DISPLAY_SIZE[0] or _display_cap[1] < DISPLAY_SIZE[1]:
+            global _screen_limited
+            _screen_limited = True
+            cv2.moveWindow(WIN_NAME, work.left, work.top)
+            print(f"[顯示] 視窗外框佔 {chrome[0]}x{chrome[1]}px，為了不超出螢幕，畫面上限自動縮到 {_display_cap[0]}x{_display_cap[1]}")
+    except Exception as e:  # noqa: BLE001 — 校正失敗不影響播放
+        print(f"[顯示] 無法依螢幕校正視窗大小（{e}），維持 {DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]} 上限")
+
+
+def shrink_to_cap(img):
+    """imshow 前的最後一道保險：整張畫面（含 HUD 色塊）超過顯示上限就等比縮小，避免視窗超出螢幕。"""
+    if not _screen_limited:
+        return img
     h, w = img.shape[:2]
-    s = min(MAX_DISPLAY_WIDTH / w, MAX_DISPLAY_HEIGHT / h, 1.0)
+    s = min(_display_cap[0] / w, _display_cap[1] / h, 1.0)
+    if s >= 1.0:
+        return img
+    return cv2.resize(img, (max(1, int(round(w * s))), max(1, int(round(h * s)))), interpolation=cv2.INTER_AREA)
+
+
+def fit_for_display(img):
+    """依原始長寬比等比縮小到不超過 _display_cap（只縮不放、不補黑邊）。
+    回傳 (縮小後畫面, 縮小後高度)。第一次呼叫時會先依螢幕校正 _display_cap。"""
+    h, w = img.shape[:2]
+    if not _cap_fitted:
+        _fit_cap_to_screen(w, h)
+    reserve = _hud_extra_h if _screen_limited else 0  # 螢幕夠大（例如 720p）時維持原本行為，不預留
+    s = min(_display_cap[0] / w, max(240, _display_cap[1] - reserve) / h, 1.0)
     if s >= 1.0:
         return img, h
     nw = max(1, int(round(w * s)))
@@ -368,10 +456,10 @@ def apply_video_switch(initial_key):
         key = cv2.waitKey(30) & 0xFF  # 非阻塞，30ms 內無新鍵則停止收集
     if delta == 0:
         return False
-    new_idx = max(0, min(len(video_list) - 1, video_idx + delta))
+    # 循環播放清單：最後一部按「下一部」跳回第一部，第一部按「上一部」跳到最後一部。
+    new_idx = (video_idx + delta) % len(video_list)
     if new_idx == video_idx:
-        edge = "最後一部" if delta > 0 else "第一部"
-        print(f"[Video] {'+' if delta > 0 else ''}{delta}：已是{edge}影片 ({video_idx+1}/{len(video_list)})")
+        print(f"[Video] {'+' if delta > 0 else ''}{delta}：只有一部影片 ({video_idx+1}/{len(video_list)})")
         return False
     print(f"[Video] {'+' if delta > 0 else ''}{delta} → 影片 {new_idx+1}/{len(video_list)}")
     video_idx = new_idx
@@ -387,14 +475,14 @@ def print_mode():
     mode = "Step" if step_mode else "Auto"
     print(
         f"\n[操作說明] S=儲存影像  Z=增加步長  X=減少步長 (當前步長={frame_step})  "
-        f"1=上一部影片  2=下一部影片  Space=切換模式({mode})  Q=離開\n"
+        f"1=上一部影片  2=下一部影片  Space=切換模式({mode})  ESC=離開\n"
         f"[通用] [ =往回跳 {JUMP_FRAMES} 幀   ] =往前跳 {JUMP_FRAMES} 幀   "
         f"t=輸入跳轉(秒數/幀號)   視窗頂端進度條可拖曳即時 seek\n"
         f"[Step模式] D=下一幀  A=上一幀\n"
         f"[Auto模式] 目標推論FPS={TARGET_MODEL_FPS:.0f}，每 {auto_infer_interval} 幀推論一次   "
         f"= 或 + =加大倍率   - =減小倍率  階梯 {'/'.join(f'{s:g}' for s in SPEED_STEPS)}x (目前 {playback_speed:g}x)   "
         f". =快轉加速   , =快轉減速 (當前額外跳 {AUTO_FRAME_SKIP} 幀/顯示幀)\n"
-        f"[起始幀] SEEK_FRAME={SEEK_FRAME}   [顯示上限] {MAX_DISPLAY_WIDTH}x{MAX_DISPLAY_HEIGHT} (DISPLAY_PRESET={DISPLAY_PRESET}, 依原比例等比縮小)\n"
+        f"[起始幀] SEEK_FRAME={SEEK_FRAME}   [顯示上限] {DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]} (DISPLAY_RESOLUTION={DISPLAY_RESOLUTION}, 依原比例等比縮小)\n"
     )
 
 print_mode()
@@ -410,11 +498,11 @@ BLUE = (255, 0, 0)
 
 
 def draw_styled_skeleton(frame, kpts, kpt_conf, ov, conf_thresh=KP_CONF_THRES):
-    """套用 video.py 的骨架視覺風格。"""
-    line_w = max(1, int(2 * ov))
-    r_outer = max(3, int(4 * ov))
-    r_inner = max(2, int(3 * ov))
-
+    """套用跟貓咪辨識系統一致的骨架視覺風格（見
+    paper/cat_monitoring_system/processors/visualizer.py Visualizer.draw()）：
+    固定 2px 線寬、無反鋸齒，關鍵點為單一 3px 實心圓（無黑色外框），不隨解析度縮放。
+    ov 保留參數位置僅為呼叫端相容，不再影響繪製尺寸。
+    """
     for ei, (a, b) in enumerate(_SKELETON_EDGES):
         if a >= len(kpts) or b >= len(kpts):
             continue
@@ -422,15 +510,14 @@ def draw_styled_skeleton(frame, kpts, kpt_conf, ov, conf_thresh=KP_CONF_THRES):
             pa = (int(kpts[a][0]), int(kpts[a][1]))
             pb = (int(kpts[b][0]), int(kpts[b][1]))
             col = _EDGE_COLORS[ei] if ei < len(_EDGE_COLORS) else (180, 180, 180)
-            cv2.line(frame, pa, pb, col, line_w, cv2.LINE_AA)
+            cv2.line(frame, pa, pb, col, 2)
 
     for i in range(min(17, len(kpts))):
         if float(kpt_conf[i]) <= conf_thresh:
             continue
         cx, cy = int(kpts[i][0]), int(kpts[i][1])
         col = _KP_COLORS[i] if i < len(_KP_COLORS) else (200, 200, 200)
-        cv2.circle(frame, (cx, cy), r_outer, (0, 0, 0), -1)
-        cv2.circle(frame, (cx, cy), r_inner, col, -1)
+        cv2.circle(frame, (cx, cy), 3, col, -1)
 
 # ==================== 绘制函数 ====================
 def draw_result(frame, result):
@@ -527,6 +614,8 @@ def compose_with_hud(disp_frame, scale, top_lines, bottom_lines):
     canvas[top_h:top_h + h, :] = disp_frame
     _draw_band(canvas, top_lines, 0)
     _draw_band(canvas, bottom_lines, top_h + h)
+    global _hud_extra_h
+    _hud_extra_h = top_h + bottom_h  # 之後 fit_for_display() 縮影片畫面時要預留這段高度
     return canvas
 
 while True:
@@ -567,7 +656,7 @@ while True:
             _sfps = cur_src_fps()
             mode_str = "Step" if step_mode else "Auto"
             infer_text = f"Infer: target {TARGET_MODEL_FPS:.0f} FPS / every {auto_infer_interval} frame(s)   Speed {playback_speed:g}x"
-            help_text = f"Mode: {mode_str}  S=Save  D/A=Frame  Z/X=Step {frame_step}  [ ]=Jump{JUMP_FRAMES}  t=Seek  1/2=Video  -/+=Speed  Space=Switch  Q=Quit"
+            help_text = f"Mode: {mode_str}  S=Save  D/A=Frame  Z/X=Step {frame_step}  [ ]=Jump{JUMP_FRAMES}  t=Seek  1/2=Video  -/+=Speed  Space=Switch  ESC=Quit"
             # 資訊列改畫在影片畫面外的 HUD 色塊，不再疊在畫面上蓋住貓咪——見
             # compose_with_hud() 的說明。
             disp_frame = compose_with_hud(
@@ -582,7 +671,7 @@ while True:
                     (help_text, 0.45, 1),
                 ],
             )
-            cv2.imshow(WIN_NAME, disp_frame)
+            cv2.imshow(WIN_NAME, shrink_to_cap(disp_frame))
             sync_trackbar(frame_idx)
             # 阻塞等待按鍵，但同時讓進度條拖曳能中斷（拖曳會設定 seek_request）
             key = 255
@@ -647,7 +736,7 @@ while True:
                     seek_request = tgt
                 else:
                     print("[Seek] 取消跳轉")
-            elif key == ord('q') or key == ord('Q'):
+            elif key == 27:
                 print("[Exit] Quit.")
                 cap.release()
                 cv2.destroyAllWindows()
@@ -715,7 +804,7 @@ while True:
             else:
                 print("[Seek] 取消跳轉")
             continue
-        elif key == ord('q') or key == ord('Q'):
+        elif key == 27:
             print("[Exit] Quit.")
             break
         elif key == ord('s') or key == ord('S'):
@@ -801,7 +890,7 @@ while True:
         mode_str = "Step" if step_mode else "Auto"
         ff_str = f" +FF{AUTO_FRAME_SKIP}" if AUTO_FRAME_SKIP > 0 else ""
         infer_text = f"Infer: target {TARGET_MODEL_FPS:.0f} FPS / every {auto_infer_interval} frame(s)   Speed {playback_speed:g}x{ff_str}"
-        help_text = f"Mode: {mode_str}  S=Save  -/+=Speed  .,=FF  [ ]=Jump{JUMP_FRAMES}  t=Seek  1/2=Video  Space=Switch  Q=Quit"
+        help_text = f"Mode: {mode_str}  S=Save  -/+=Speed  .,=FF  [ ]=Jump{JUMP_FRAMES}  t=Seek  1/2=Video  Space=Switch  ESC=Quit"
         # 資訊列改畫在影片畫面外的 HUD 色塊，不再疊在畫面上蓋住貓咪——見
         # compose_with_hud() 的說明。
         disp_frame = compose_with_hud(
@@ -816,7 +905,7 @@ while True:
                 (help_text, 0.45, 1),
             ],
         )
-        cv2.imshow(WIN_NAME, disp_frame)
+        cv2.imshow(WIN_NAME, shrink_to_cap(disp_frame))
         sync_trackbar(frame_idx)
         frame_idx += 1
 
