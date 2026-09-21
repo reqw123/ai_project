@@ -491,7 +491,7 @@ def test_detail_text_is_collapsed_until_toggled(tk_root, state_path):
         assert not card.detail.winfo_manager()           # 預設收起（詳細說明很長，會把視窗撐得很高）
         card.toggle.event_generate("<Button-1>")
         dlg.update()
-        assert card.detail.winfo_manager() and card.detail.cget("text") == extra_env.FIELDS[0]["hint"]
+        assert card.detail.winfo_manager() and card.detail.content() == extra_env.FIELDS[0]["hint"]
         card.toggle.event_generate("<Button-1>")
         dlg.update()
         assert not card.detail.winfo_manager()
@@ -505,6 +505,100 @@ def test_dialog_height_fits_a_1080p_screen(tk_root, state_path):
     def script(dlg, entries, spinboxes, buttons):
         dlg.update_idletasks()
         assert dlg.winfo_height() <= 880, dlg.winfo_height()
+        buttons["取消"]._command()
+
+    _drive_dialog_widgets(tk_root, script)
+
+
+# ── 詳細說明的滾動容器（文字太長時不被截斷）──────────────────────────
+
+
+def _stepper_cards(dlg):
+    return [c for c in _cards(dlg) if any(isinstance(w, extra_env._Stepper) for w in _walk(c))]
+
+
+def _open_detail(dlg, card):
+    card.toggle.event_generate("<Button-1>")
+    dlg.update()
+    dlg.update()
+
+
+def test_long_detail_gets_a_scrollbar_and_keeps_all_text(tk_root, state_path):
+    def script(dlg, entries, spinboxes, buttons):
+        for card in _stepper_cards(dlg):  # bbox／kp 的說明最長
+            _open_detail(dlg, card)
+            d = card.detail
+            assert d.content() == card.detail.text.get("1.0", "end-1c")
+            assert d.text.cget("state") == "disabled"                     # 唯讀
+            lines = d.text.count("1.0", "end-1c", "displaylines")[0]
+            shown = int(d.text.cget("height"))
+            assert shown <= extra_env._ScrollText.MAX_LINES
+            if lines > extra_env._ScrollText.MAX_LINES:
+                assert d._bar_shown and d.bar.winfo_ismapped()            # 超過就出現捲軸
+            else:
+                assert not d._bar_shown                                   # 沒超過就不多此一舉
+        buttons["取消"]._command()
+
+    _drive_dialog_widgets(tk_root, script)
+
+
+def test_scrolling_reaches_the_end_of_the_text(tk_root, state_path):
+    """最後一句話（cat_pose／自動標註工具那段）必須能捲得到，不是被裁掉。"""
+    def script(dlg, entries, spinboxes, buttons):
+        card = _stepper_cards(dlg)[0]
+        _open_detail(dlg, card)
+        d = card.detail
+        assert d._bar_shown, "這段說明夠長，應該要有捲軸"
+        assert d.text.yview()[0] == 0.0 and d.text.yview()[1] < 1.0     # 一開始只看到前面
+        for _ in range(50):
+            d.text.event_generate("<MouseWheel>", delta=-120)
+            dlg.update()
+        assert d.text.yview()[1] == 1.0                                 # 滾到底
+        assert d.text.bbox("end-2c") is not None                        # 最後一個字元真的在可視範圍內
+        buttons["取消"]._command()
+
+    _drive_dialog_widgets(tk_root, script)
+
+
+def test_short_detail_needs_no_scrollbar_and_shrinks_to_fit(tk_root, state_path):
+    def script(dlg, entries, spinboxes, buttons):
+        card = next(c for c in _cards(dlg) if c not in _stepper_cards(dlg))
+        _open_detail(dlg, card)
+        d = card.detail
+        lines = d.text.count("1.0", "end-1c", "displaylines")[0]
+        assert int(d.text.cget("height")) == min(lines, extra_env._ScrollText.MAX_LINES)
+        buttons["取消"]._command()
+
+    _drive_dialog_widgets(tk_root, script)
+
+
+def test_dialog_grows_to_fit_and_shrinks_back_when_detail_toggled(tk_root, state_path):
+    """展開後視窗要跟著變高（否則下面的按鈕列會被擠出視窗），收起後回到原高度。"""
+    def script(dlg, entries, spinboxes, buttons):
+        dlg.update()
+        h0 = dlg.winfo_height()
+        card = _stepper_cards(dlg)[0]
+        _open_detail(dlg, card)
+        h1 = dlg.winfo_height()
+        assert h1 > h0
+        footer_btn = buttons["✓ 儲存"]
+        assert footer_btn.winfo_rooty() + footer_btn.winfo_height() <= dlg.winfo_rooty() + dlg.winfo_height()  # 儲存鈕仍在視窗內
+        assert h1 <= dlg.winfo_screenheight()
+        _open_detail(dlg, card)  # 再按一次收起
+        assert h0 - 60 <= dlg.winfo_height() <= h0 + 2 and dlg.winfo_height() < h1  # 回到（或略小於）原高度：第一次開啟時的高度是估算值
+        buttons["取消"]._command()
+
+    _drive_dialog_widgets(tk_root, script)
+
+
+def test_both_details_open_still_fit_the_screen_and_show_buttons(tk_root, state_path):
+    def script(dlg, entries, spinboxes, buttons):
+        for card in _stepper_cards(dlg):
+            _open_detail(dlg, card)
+        assert dlg.winfo_height() <= dlg.winfo_screenheight()
+        btn = buttons["✓ 儲存"]
+        assert btn.winfo_ismapped()
+        assert btn.winfo_rooty() + btn.winfo_height() <= dlg.winfo_rooty() + dlg.winfo_height()
         buttons["取消"]._command()
 
     _drive_dialog_widgets(tk_root, script)

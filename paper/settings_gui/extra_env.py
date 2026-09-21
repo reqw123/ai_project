@@ -29,6 +29,7 @@
 """
 
 import math
+import re
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog
@@ -97,7 +98,10 @@ FIELDS = [
         "step": 0.01,
         "hint": "這是「偵測框（bbox）」的信心門檻（YOLO predict 的 conf）：低於此值的整隻貓偵測框直接丟掉，"
                 "值越高越嚴格、越容易漏偵測。不是關鍵點（kp）的信心門檻——那是下面另一個設定。"
-                "點 ▲／▼ 調整 0.1～1.0（每次 0.01）；「不覆寫」＝使用各腳本檔內預設（多數是 0.5，1_skeleton_visualizer 是 0.8）。",
+                "點 ▲／▼ 調整 0.1～1.0（每次 0.01）；「不覆寫」＝使用各腳本檔內預設（多數是 0.5，1_skeleton_visualizer 是 0.8）。"
+                "cat_pose/ 底下的 video_infer_save／tail_bend_detect／pose_single_image_test／0_video_pose_viewer／"
+                "0_compare_two_models_images／eda_motion_anomaly／eda_motion_score／eda_realtime_anomaly_viewer／"
+                "自動標註工具（auto_labeling／auto_labeling_capture／labeling）／tello_drone_archive 也會讀。",
     },
     {
         # 對應 config.py：AnomalyDetectionConfig.KP_CONF_THRES（環境變數 CAT_MONITORING_KP_CONF_THRES）
@@ -114,7 +118,10 @@ FIELDS = [
                 "1_run_video_inference／1_skeleton_visualizer／1_visualize_interpolation／1_visualize_three_normalizations／"
                 "2_run_dual_model_compare／test_bone_length_stability／test_pose_jitter_analysis 的骨架顯示門檻"
                 "（DRAW_KP_CONF_THRESHOLD）與 test_anomaly_detection 的 KP_CONF_THRES 會讀。"
-                "點 ▲／▼ 調整 0.1～1.0（每次 0.01）；「不覆寫」＝使用各腳本檔內預設（0.25～0.7 不等）。",
+                "點 ▲／▼ 調整 0.1～1.0（每次 0.01）；「不覆寫」＝使用各腳本檔內預設（0.25～0.7 不等）。"
+                "cat_pose/ 底下的 video_infer_save／tail_bend_detect／pose_single_image_test／0_video_pose_viewer／"
+                "0_compare_two_models_images／eda_motion_anomaly／eda_motion_score／eda_realtime_anomaly_viewer／"
+                "tello_drone_archive 也會讀（自動標註工具沒有 kp 門檻，不受影響）。",
     },
 ]
 
@@ -333,12 +340,73 @@ def _is_active(field, value):
     return bool(v) and v not in (NO_OVERRIDE, NO_OVERRIDE_TEXT)
 
 
+class _ScrollText(tk.Frame):
+    """唯讀、可滾動的說明文字區：內容短就依實際行數縮到剛好，超過 MAX_LINES 行就固定高度並出現捲軸
+    （滑鼠滾輪、拖曳捲軸都能捲；也能用滑鼠反白複製）。換行寬度就是這個元件的寬度，
+    所以寬度改變（視窗／卡片縮放）時會重新量一次行數。"""
+
+    MAX_LINES = 6
+
+    def __init__(self, parent, family, text, bg, fg):
+        super().__init__(parent, bg=bg, highlightbackground=_CARD_BORDER, highlightthickness=1)
+        self.text = tk.Text(
+            self, wrap="word", height=1, width=10, font=(family, 10), bg=bg, fg=fg, relief="flat", bd=0,
+            padx=8, pady=5, highlightthickness=0, cursor="arrow", takefocus=0,
+            selectbackground="#cfe3fb", selectforeground=_TEXT_FG, inactiveselectbackground="#cfe3fb",
+        )
+        self.bar = tk.Scrollbar(self, orient="vertical", command=self.text.yview)
+        self.text.configure(yscrollcommand=self.bar.set)
+        self.text.insert("1.0", text)
+        self.text.config(state="disabled")  # 唯讀；disabled 的 Text 仍可反白，Ctrl+C 要先取得焦點
+        self.text.pack(side="left", fill="both", expand=True)
+        self._bar_shown = False
+        self._last_width = -1
+        self.text.bind("<MouseWheel>", self._on_wheel)
+        self.text.bind("<Button-1>", lambda _e: self.text.focus_set())
+        self.text.bind("<Configure>", self._on_configure)
+
+    def content(self):
+        return self.text.get("1.0", "end-1c")
+
+    def _on_wheel(self, event):
+        first, last = self.text.yview()
+        if first <= 0.0 and last >= 1.0:
+            return None  # 內容沒有超出，不吃掉滾輪事件（讓外層照常處理）
+        self.text.yview_scroll(-1 if event.delta > 0 else 1, "units")
+        return "break"
+
+    def _on_configure(self, event):
+        if event.width != self._last_width:  # 只在寬度變（＝換行位置變）時重量；高度變不用，避免互相觸發
+            self._last_width = event.width
+            self.after_idle(self.fit)
+
+    def fit(self):
+        """依目前寬度量出換行後的行數，決定文字區高度與要不要顯示捲軸。"""
+        try:
+            self.update_idletasks()
+            counted = self.text.count("1.0", "end-1c", "displaylines")
+            lines = max(1, counted[0] if counted else 1)
+            self.text.config(height=min(lines, self.MAX_LINES))
+            need_bar = lines > self.MAX_LINES
+            if need_bar and not self._bar_shown:
+                self.bar.pack(side="right", fill="y", before=self.text)
+                self._bar_shown = True
+            elif not need_bar and self._bar_shown:
+                self.bar.pack_forget()
+                self._bar_shown = False
+            if not need_bar:
+                self.text.yview_moveto(0)
+        except tk.TclError:
+            pass  # 視窗已被關閉
+
+
 class _Card(tk.Frame):
     """一個設定項目的卡片：左側狀態色條（綠＝已覆寫、灰＝不覆寫）、標題＋「已覆寫／不覆寫」徽章、
     環境變數名（小字等寬）、一行摘要、控制項區（`self.control`）、可展開的詳細說明。"""
 
-    def __init__(self, parent, family, field):
+    def __init__(self, parent, family, field, on_layout_change=None):
         super().__init__(parent, bg=_CARD_BG, highlightbackground=_CARD_BORDER, highlightthickness=1)
+        self._on_layout_change = on_layout_change  # 詳細說明展開／收起後卡片高度會變，通知對話框跟著調整高度
         self.strip = tk.Frame(self, bg=_STRIP_IDLE, width=5)
         self.strip.pack(side="left", fill="y")
         body = tk.Frame(self, bg=_CARD_BG)
@@ -364,10 +432,8 @@ class _Card(tk.Frame):
         self.control = tk.Frame(body, bg=_CARD_BG)
         self.control.pack(fill="x", pady=(8, 0))
 
-        self.detail = tk.Label(
-            body, text=field.get("hint", ""), bg=_CARD_BG, fg=_MUTED_FG, font=(family, 10),
-            anchor="w", justify="left", wraplength=320,
-        )
+        # 詳細說明很長（bbox／kp 會列出一整串腳本名），放在可滾動的文字區裡，不會被截掉或把視窗撐爆
+        self.detail = _ScrollText(body, family, field.get("hint", ""), bg=_CARD_BG, fg=_MUTED_FG)
         self._detail_open = False
         self.toggle = tk.Label(body, text="ⓘ 詳細說明 ▸", bg=_CARD_BG, fg=_LINK_FG, font=(family, 10), cursor="hand2")
         if field.get("hint"):
@@ -377,18 +443,19 @@ class _Card(tk.Frame):
         body.bind("<Configure>", self._on_resize)
 
     def _on_resize(self, event):
-        wrap = max(180, event.width - 8)
-        self.summary.config(wraplength=wrap)
-        self.detail.config(wraplength=wrap)
+        self.summary.config(wraplength=max(180, event.width - 8))  # 詳細說明的換行寬度由文字區自己的寬度決定
 
     def _toggle_detail(self):
         self._detail_open = not self._detail_open
         if self._detail_open:
             self.detail.pack(fill="x", pady=(4, 0))
             self.toggle.config(text="ⓘ 詳細說明 ▾")
+            self.detail.fit()
         else:
             self.detail.pack_forget()
             self.toggle.config(text="ⓘ 詳細說明 ▸")
+        if self._on_layout_change is not None:
+            self._on_layout_change()
 
     def set_active(self, active):
         if active:
@@ -437,6 +504,23 @@ def open_dialog(parent, on_change=None):
     body = tk.Frame(dlg, bg=_BODY_BG)
     body.pack(fill="both", expand=True, padx=16, pady=(12, 0))
     summary_var = tk.StringVar(value="")
+
+    def _fit_dialog_height():
+        """展開／收起詳細說明後，把視窗高度調成剛好（寬度與位置不變；放不進螢幕時往上移、
+        最多到螢幕高度減去工作列的空間，說明本身有自己的捲軸，不會因此被截掉）。"""
+        try:
+            dlg.update_idletasks()
+            dlg.update_idletasks()
+            m = re.match(r"(\d+)x(\d+)([+-]\d+)([+-]\d+)", dlg.geometry())
+            if not m:
+                return
+            w, x, y = int(m.group(1)), int(m.group(3)), int(m.group(4))
+            screen_h = dlg.winfo_screenheight()
+            h = min(dlg.winfo_reqheight(), screen_h - 80)
+            y = max(0, min(y, screen_h - 60 - h))
+            dlg.geometry(f"{w}x{h}{x:+d}{y:+d}")
+        except tk.TclError:
+            pass
 
     def _make_control(card, f, var):
         """依型別把控制項放進卡片的 control 區。"""
@@ -516,7 +600,7 @@ def open_dialog(parent, on_change=None):
         row.pack(fill="x", pady=(0, 8 if i + len(group) < len(FIELDS) else 0))
         for col, gf in enumerate(group):
             row.columnconfigure(col, weight=1, uniform="cards")
-            card = _Card(row, family, gf)
+            card = _Card(row, family, gf, on_layout_change=_fit_dialog_height)
             card.grid(row=0, column=col, sticky="nsew", padx=(0, 10) if col < len(group) - 1 else (0, 0))
             is_choice = gf["type"] == "choice"
             is_stepper = gf["type"] == "stepper"

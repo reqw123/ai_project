@@ -1154,6 +1154,9 @@ class SettingsWindow(tk.Tk):
             console = getattr(self, "_console_panel", None)
             if note and console is not None:
                 console.append(f"（{note}）\n", tag="muted")  # 讓使用者看得到這次有覆寫什麼
+            if console is not None:
+                # 確認腳本已啟動後，把焦點放到終端機輸入框，有 input() 前置操作的腳本可以直接打字回答
+                console.focus_input_soon()
         # 記住「上次使用的腳本 + 影片路徑 + 模型路徑」，下次開視窗自動還原
         self._save_tool_ui_state()
 

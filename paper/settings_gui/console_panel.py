@@ -538,6 +538,51 @@ class ConsolePanel:
             return  # 沒有行程在跑，輸入框本來就停用，搶了焦點也打不了字
         self.stdin_entry.focus_set()
 
+    # 啟動腳本後「搶回輸入焦點」的重試時間點（毫秒）。腳本啟動後常常過一兩秒才跳出自己的
+    # 預覽視窗（cv2／tkinter），新視窗會把系統焦點搶走；所以除了立刻聚焦一次，還要在這段
+    # 時間內補幾次。刻意只補到 1.5 秒左右——再久就可能搶走使用者剛點進預覽視窗的焦點。
+    FOCUS_RETRY_DELAYS_MS = (0, 300, 800, 1500)
+
+    def focus_input(self, force=False):
+        """把鍵盤焦點放到輸入框並把游標移到最後。輸入框停用（沒有行程在跑）時什麼都不做，
+        回傳 False。force=True 時連視窗本身一起拉到前景（Windows 對「不是前景的行程」
+        搶焦點有限制，能不能成功取決於系統，失敗只是維持原狀，不會丟例外）。"""
+        try:
+            if str(self.stdin_entry["state"]) == "disabled":
+                return False
+            if force:
+                self.window.focus_force()
+            self.stdin_entry.focus_set()
+            self.stdin_entry.icursor("end")
+            return True
+        except tk.TclError:
+            return False  # 視窗已被關閉
+
+    def focus_input_soon(self):
+        """腳本剛啟動後呼叫：立刻聚焦輸入框，並在短時間內重試，讓使用者可以直接打字回答
+        腳本開場的 input() 問題。使用者在這段時間內已經自己在別的元件上操作（焦點在本視窗
+        的別的控制項）、或已經開始在輸入框打字，就不再搶。"""
+        for delay in self.FOCUS_RETRY_DELAYS_MS:
+            self.window.after(delay, self._refocus_input_step)
+
+    def _refocus_input_step(self):
+        try:
+            current = self.window.focus_get()
+        except (tk.TclError, KeyError):
+            current = None  # focus_get 遇到 ttk 彈出視窗（下拉清單）等特殊 widget 會丟 KeyError
+        if current is self.stdin_entry:
+            return  # 已經在輸入框
+        if current is not None and current.winfo_toplevel() is self.window and not self._focus_is_startup_default(current):
+            return  # 使用者已經點了本視窗別的控制項，尊重他的選擇
+        self.focus_input(force=True)
+
+    def _focus_is_startup_default(self, widget):
+        """剛按下「▶ 執行所選腳本」／確認對話框關閉後，焦點會落在啟動按鈕、下拉選單或視窗本身，
+        這些都不算「使用者刻意移走焦點」，可以搶回輸入框。"""
+        start_btn = getattr(self.window, "_start_tool_btn", None)
+        combo = getattr(self.window, "_tool_combo", None)
+        return widget is self.window or widget is start_btn or widget is combo
+
     def set_input_enabled(self, enabled):
         state = "normal" if enabled else "disabled"
         self.stdin_entry.config(state=state)
