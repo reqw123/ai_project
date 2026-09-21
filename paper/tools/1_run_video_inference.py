@@ -74,6 +74,10 @@ DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 # 只有實際按到的那個類別才會建立（先檢查是否已存在，沒有才建），沒按到的類別不會產生空資料夾：
 # 影片已經在某個行為資料夾裡（例如 …\模型專用\walk\a.mp4）時，分類根目錄就是該行為資料夾的上一層
 # （…\模型專用），改分到別的行為會落在它的兄弟資料夾；否則就是影片所在的資料夾本身。
+# 「已檢視」資料夾：影片已經在 walk 裡、又按 Shift+A（＝檢視後確認它就是 walk）時，改搬到同層的 walk_2
+# （沒有才建立，已存在就沿用）；lick/scratch/shake/stop 一樣是 lick_2 …。這樣原本的 walk 只剩還沒檢視的影片，
+# 中斷後重開播放清單就是沒看過的那些。影片已經在 walk_2 裡再按 Shift+A 不會搬回 walk。
+REVIEWED_SUFFIX = "_2"
 CLASS_KEYS = {letter: behavior for letter, behavior in zip("ABCDE", BEHAVIOR_CLASSES)}
 
 # 測試資料夾模式
@@ -354,14 +358,22 @@ def draw_extra_cat_instance_boxes(frame, instances, ui_scale=1.0, scale=1.0, cro
     return frame
 
 
+def _is_behavior_folder_name(name):
+    """資料夾名稱是不是行為資料夾：walk/lick/…，或它的「已檢視」版本 walk_2/lick_2/…（不分大小寫）。"""
+    n = name.lower()
+    if n in BEHAVIOR_CLASSES:
+        return True
+    return n.endswith(REVIEWED_SUFFIX) and n[: -len(REVIEWED_SUFFIX)] in BEHAVIOR_CLASSES
+
+
 def find_class_root(video_path):
     """影片所屬的「分類根目錄」（行為資料夾要建在它底下）。
 
-    從影片所在位置往上找第一個名稱等於行為類別（walk/lick/…，不分大小寫）的資料夾，找到就回傳它的
-    上一層；找不到（影片放在沒分類的資料夾）就回傳影片所在的資料夾。"""
+    從影片所在位置往上找第一個行為資料夾（名稱等於 walk/lick/…，或已檢視的 walk_2/lick_2/…，不分大小寫），
+    找到就回傳它的上一層；找不到（影片放在沒分類的資料夾）就回傳影片所在的資料夾。"""
     parent = Path(video_path).parent
     for folder in (parent, *parent.parents):
-        if folder.name.lower() in BEHAVIOR_CLASSES:
+        if _is_behavior_folder_name(folder.name):
             return folder.parent
     return parent
 
@@ -371,12 +383,17 @@ def move_video_to_class_folder(video_path, behavior):
 
     只建立這次真正用到的那一個行為資料夾（先檢查是否已存在，不存在才建立），不會一次把
     walk/lick/scratch/shake/stop 五個都建出來——一次分類作業常常只會用到其中幾類。
-    影片本來就在目標行為資料夾裡時不搬，直接回傳原路徑。"""
+    影片已經在目標行為資料夾（例如 walk）裡時，表示使用者檢視後確認它就是這個類別：改搬到同層的
+    「已檢視」資料夾（walk_2，沒有才建立）；影片已經在 walk_2 裡就不搬，直接回傳原路徑。"""
     src = Path(video_path)
     root = find_class_root(src)
     dest_dir = root / behavior
-    if dest_dir.resolve() == src.parent.resolve():
+    reviewed_dir = root / f"{behavior}{REVIEWED_SUFFIX}"
+    here = src.parent.resolve()
+    if here == reviewed_dir.resolve():
         return src
+    if here == dest_dir.resolve():
+        dest_dir = reviewed_dir
     if not dest_dir.is_dir():
         dest_dir.mkdir(parents=True)
         print(f"\n🆕 建立資料夾: {dest_dir}")
@@ -398,8 +415,11 @@ def classify_video_to_folder(video_path, behavior):
         print(f"⚠ 移動影片失敗（{video_path}）：{e}")
         return False
     if Path(dest) == Path(video_path):
-        print(f"\nℹ 影片本來就在 {behavior.upper()} 資料夾，未移動")
+        print(f"\nℹ 影片本來就在 {behavior.upper()} 的已檢視資料夾（{behavior}{REVIEWED_SUFFIX}），未移動")
         return False
+    if Path(dest).parent.name.lower() == f"{behavior}{REVIEWED_SUFFIX}":
+        print(f"\n✅ 已檢視確認為 {behavior.upper()}，移動到已檢視資料夾: {dest}")
+        return True
     print(f"\n📁 已歸類為 {behavior.upper()}，移動到: {dest}")
     return True
 
