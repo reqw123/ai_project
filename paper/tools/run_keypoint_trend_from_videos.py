@@ -50,7 +50,13 @@ TARGET_FPS = 30
 sys.path.append(str(Path(__file__).parent.parent))  # config.py 在 paper/ 根目錄
 from config import YOLOConfig as _YOLOConfig
 IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（設定視窗 yolo.image_size／環境變數 CAT_MONITORING_YOLO_IMAGE_SIZE，預設 640）
-CONF_THRESHOLD = 0.5
+CONF_THRESHOLD = 0.5  # YOLO 偵測框（bbox）信心門檻（predict 的 conf）；本腳本沒有關鍵點（kp）門檻
+_env_yolo_conf = os.getenv("CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；變數名同 config.py 的 YOLOConfig.CONFIDENCE_THRESHOLD
+if _env_yolo_conf:
+    try:
+        CONF_THRESHOLD = float(_env_yolo_conf)
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD={_env_yolo_conf!r} 不是數字，沿用預設 {CONF_THRESHOLD}")
 
 SUPPORTED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".flv"}
 _JSON_NUM_JOINTS = 17

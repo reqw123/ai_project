@@ -33,6 +33,17 @@ YELLOW = (0, 255, 255)
 
 
 # ==================== Skeleton Drawing Functions ====================
+import os as _os
+YOLO_CONF_THRESHOLD = 0.5  # YOLO 偵測框（bbox）信心門檻（predict 的 conf）；不是關鍵點（kp）門檻，kp 見 KP_CONF_THRES
+_env_yolo_conf = _os.getenv("CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；變數名同 config.py 的 YOLOConfig.CONFIDENCE_THRESHOLD
+if _env_yolo_conf:
+    try:
+        YOLO_CONF_THRESHOLD = float(_env_yolo_conf)
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD={_env_yolo_conf!r} 不是數字，沿用預設 {YOLO_CONF_THRESHOLD}")
+print(f"[Info] 信心門檻：bbox（偵測框）={YOLO_CONF_THRESHOLD}")
+
+
 def draw_links_fast(frame, kpts, visibility, links, color, thickness=2):
     """Draw skeleton connections"""
     for a, b in links:
@@ -395,7 +406,7 @@ def main():
             continue
         
         # Auto inference
-        result = model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, conf=0.5, quantize=16, verbose=False)[0]
+        result = model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, conf=YOLO_CONF_THRESHOLD, quantize=16, verbose=False)[0]
         
         # Display frame
         disp_frame = frame.copy()

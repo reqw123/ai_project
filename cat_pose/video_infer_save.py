@@ -176,9 +176,19 @@ from pathlib import Path as _Path
 _sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.py 在 paper/ 根目錄
 from config import YOLOConfig as _YOLOConfig
 
+import os as _os
+YOLO_CONF_THRESHOLD = 0.5  # YOLO 偵測框（bbox）信心門檻（predict 的 conf）；不是關鍵點（kp）的門檻，kp 見下面的 KP_CONF_THRES
+_env_yolo_conf = _os.getenv("CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；變數名同 config.py 的 YOLOConfig.CONFIDENCE_THRESHOLD
+if _env_yolo_conf:
+    try:
+        YOLO_CONF_THRESHOLD = float(_env_yolo_conf)
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD={_env_yolo_conf!r} 不是數字，沿用預設 {YOLO_CONF_THRESHOLD}")
+
+
 def infer(frame):
     """單張影像推論，回傳第一個 Results。"""
-    return model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, conf=0.5, verbose=False, **PRECISION_KW)[0]
+    return model.predict(frame, imgsz=_YOLOConfig.IMAGE_SIZE, conf=YOLO_CONF_THRESHOLD, verbose=False, **PRECISION_KW)[0]
 
 # ========== 儲存日誌 ==========
 saved_log = {}  # 影片路徑: [儲存過的圖片檔名]
@@ -493,7 +503,15 @@ resize_window_to_video()
 # 該檔案直接複製自 paper/cat_monitoring_system/utils/constants.py 目前使用中
 # 的版本；原本這裡 _KP_COLORS 索引 3/4/5 是舊的黃綠色系版本，換成共用模組後
 # 會變成色相分離的黃/洋紅/綠，畫面上關鍵點顏色會有感知得到的變化） ====================
-KP_CONF_THRES = 0.5
+KP_CONF_THRES = 0.5  # 關鍵點（kp）信心門檻：低於此值的關鍵點不畫（不是 bbox 偵測框門檻，bbox 見 YOLO_CONF_THRESHOLD）
+_env_kp_conf = _os.getenv("CAT_MONITORING_KP_CONF_THRES", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；變數名同 config.py 的 AnomalyDetectionConfig.KP_CONF_THRES
+if _env_kp_conf:
+    try:
+        KP_CONF_THRES = float(_env_kp_conf)
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_KP_CONF_THRES={_env_kp_conf!r} 不是數字，沿用預設 {KP_CONF_THRES}")
+# 啟動時印出實際採用的門檻，從設定視窗覆寫後可以直接在終端面板確認有沒有套用
+print(f"[Info] 信心門檻：bbox（偵測框）={YOLO_CONF_THRESHOLD}  kp（關鍵點）={KP_CONF_THRES}")
 BLUE = (255, 0, 0)
 
 

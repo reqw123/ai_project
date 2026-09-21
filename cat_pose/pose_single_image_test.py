@@ -18,8 +18,22 @@ _sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))  # config.
 from config import YOLOConfig as _YOLOConfig
 
 IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（paper/config.py 的 YOLOConfig.IMAGE_SIZE）
-CONF_THRES = 0.50
-KP_CONF_THRES = 0.50
+import os as _os
+CONF_THRES = 0.50  # YOLO 偵測框（bbox）信心門檻（predict 的 conf）；不是關鍵點（kp）門檻，kp 見 KP_CONF_THRES
+_env_yolo_conf = _os.getenv("CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；變數名同 config.py 的 YOLOConfig.CONFIDENCE_THRESHOLD
+if _env_yolo_conf:
+    try:
+        CONF_THRES = float(_env_yolo_conf)
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD={_env_yolo_conf!r} 不是數字，沿用預設 {CONF_THRES}")
+KP_CONF_THRES = 0.50  # 關鍵點（kp）信心門檻（不是 bbox 偵測框門檻，bbox 見 CONF_THRES）
+_env_kp_conf = _os.getenv("CAT_MONITORING_KP_CONF_THRES", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；變數名同 config.py 的 AnomalyDetectionConfig.KP_CONF_THRES
+if _env_kp_conf:
+    try:
+        KP_CONF_THRES = float(_env_kp_conf)
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_KP_CONF_THRES={_env_kp_conf!r} 不是數字，沿用預設 {KP_CONF_THRES}")
+print(f"[Info] 信心門檻：bbox（偵測框）={CONF_THRES}  kp（關鍵點）={KP_CONF_THRES}")
 DEVIATION_THRES = 0.60
 TOTAL_KPTS = 17
 

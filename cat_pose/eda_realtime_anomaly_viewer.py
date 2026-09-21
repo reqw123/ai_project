@@ -55,8 +55,22 @@ if _env_resolution:
     else:
         print(f"⚠ 環境變數 DISPLAY_RESOLUTION={_env_resolution!r} 無效（只接受 {list(_DISPLAY_RESOLUTION_PRESETS)}），沿用預設 {DISPLAY_RESOLUTION}")
 DISPLAY_SIZE = _DISPLAY_RESOLUTION_PRESETS[DISPLAY_RESOLUTION]  # 視窗顯示解析度（寬, 高）
-CONF_THRES = 0.50
-KP_CONF_THRES = 0.98
+import os as _os
+CONF_THRES = 0.50  # YOLO 偵測框（bbox）信心門檻（predict 的 conf）；不是關鍵點（kp）門檻，kp 見 KP_CONF_THRES
+_env_yolo_conf = _os.getenv("CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；變數名同 config.py 的 YOLOConfig.CONFIDENCE_THRESHOLD
+if _env_yolo_conf:
+    try:
+        CONF_THRES = float(_env_yolo_conf)
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD={_env_yolo_conf!r} 不是數字，沿用預設 {CONF_THRES}")
+KP_CONF_THRES = 0.98  # 關鍵點（kp）信心門檻（不是 bbox 偵測框門檻，bbox 見 CONF_THRES）
+_env_kp_conf = _os.getenv("CAT_MONITORING_KP_CONF_THRES", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；變數名同 config.py 的 AnomalyDetectionConfig.KP_CONF_THRES
+if _env_kp_conf:
+    try:
+        KP_CONF_THRES = float(_env_kp_conf)
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_KP_CONF_THRES={_env_kp_conf!r} 不是數字，沿用預設 {KP_CONF_THRES}")
+print(f"[Info] 信心門檻：bbox（偵測框）={CONF_THRES}  kp（關鍵點）={KP_CONF_THRES}")
 TOTAL_KPTS = 17
 
 # Abnormality detection parameters

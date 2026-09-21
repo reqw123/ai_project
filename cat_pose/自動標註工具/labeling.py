@@ -86,6 +86,19 @@ FONT_THICKNESS = 1
 # =====================
 # 数据标注主类
 # =====================
+import os as _os
+# YOLO 偵測框（bbox）信心門檻（predict 的 conf）；不是關鍵點（kp）門檻。原本沒傳 conf（沿用 ultralytics 預設 0.25），
+# 所以只有從設定視窗「⚙ 額外設定」設了環境變數時才覆寫，沒設就維持原行為
+YOLO_CONF_KW = {}
+_env_yolo_conf = _os.getenv("CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD", "").strip()  # 變數名同 config.py 的 YOLOConfig.CONFIDENCE_THRESHOLD
+if _env_yolo_conf:
+    try:
+        YOLO_CONF_KW = {"conf": float(_env_yolo_conf)}
+        print(f"[Info] 信心門檻：bbox（偵測框）={YOLO_CONF_KW['conf']}")
+    except ValueError:
+        print(f"⚠ 環境變數 CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD={_env_yolo_conf!r} 不是數字，沿用 ultralytics 預設")
+
+
 class PoseAnnotator:
     def __init__(self, model_path, img_dir, output_dir):
         """初始化標註器"""
@@ -208,7 +221,7 @@ class PoseAnnotator:
     
     def infer_pose(self):
         """使用YOLOv8推理姿态"""
-        results = self.model.predict(self.original_img, imgsz=_YOLOConfig.IMAGE_SIZE, quantize=16, verbose=False)[0]
+        results = self.model.predict(self.original_img, imgsz=_YOLOConfig.IMAGE_SIZE, quantize=16, verbose=False, **YOLO_CONF_KW)[0]
         
         # 初始化关键点
         self.keypoints = np.zeros((TOTAL_KPTS, 2), np.float32)
