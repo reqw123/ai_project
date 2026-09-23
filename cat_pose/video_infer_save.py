@@ -11,7 +11,8 @@ Cat Pose Video Inference & Save Tool
 - S 儲存  Space 切換 Step/Auto  ESC 離開
 - Step：D/A 前後一幀（步長 Z/X）
 - 通用：[ ] 往回/往前跳 JUMP_FRAMES 幀   t 終端輸入跳轉（秒數加 s 或幀號）
-- 視窗頂端進度條可拖曳即時 seek
+- 畫面最上方是自繪時間拉桿（非原生 cv2 元件）：點擊/拖曳跳轉，拖曳時正上方會即時顯示
+  預覽幀號/時間；滑鼠移到拉桿上滾滾輪可逐幀微調（一格=1幀），比原生 Trackbar 精細好操作
 - 1 / 2（數字列或 numpad，需開 NumLock）上一部 / 下一部影片
 - = 或 + 加大快轉倍率、- 減小（階梯 0.5/1/2/4/8x，單次切換）
 - . / , 在倍率之外額外微調抽幀（快轉）
@@ -43,7 +44,7 @@ from constants import (
 )
 
 # ==================== 設定 ====================
-MODEL_PATH = r"C:\ai_project\yolo_models\v11s_150.pt"
+MODEL_PATH = str(Path(__file__).resolve().parents[1] / "yolo_models" / "v11s_151.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -62,8 +63,8 @@ if _env_test_video and os.path.isfile(_env_test_video):
 elif _env_test_video and os.path.isdir(_env_test_video):
     VIDEO_DIR = _env_test_video
 
-OUTPUT_DIR = r"C:/cat_pose/cat53"
-IMG_NAME_FORMAT = "lick_real3-{}.png"
+OUTPUT_DIR = r"C:/cat_pose/cat80"
+IMG_NAME_FORMAT = "lick_real80-{}.png"
 TARGET_MODEL_FPS = 30.0
 
 # ==================== 播放 / 跳幀 / 跳轉設定 ====================
@@ -229,12 +230,8 @@ def open_video(idx):
         frame_idx = max(0, int(SEEK_FRAME))
     if frame_idx > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-    # 進度條上限對齊新影片，並把游標移到起始幀；清掉可能殘留的跳轉請求。
-    try:
-        cv2.setTrackbarMax(TRACKBAR_NAME, WIN_NAME, max(1, total_frames - 1))
-    except cv2.error:
-        pass
-    sync_trackbar(frame_idx)
+    # 拉桿是自繪的、每次渲染都直接讀目前的 frame_idx/total_frames，換片不用另外同步；
+    # 只需要清掉可能殘留的跳轉請求。
     seek_request = None
     print(
         f"[Info] Video: {VIDEO_PATH}  {width}x{height}  {fps:.2f} FPS  {total_frames} frames"
@@ -255,9 +252,15 @@ last_shown_video = -1    # 上面那一幀屬於哪一部影片（video_idx）�
 frame_step = 1  # 每次移動的幀數（Z 增加，X 減少）
 playback_speed = DEFAULT_PLAYBACK_SPEED  # Auto 模式倍速（1~5 鍵切換）
 pending_key = 255       # 節流等待期間收到的按鍵，暫存到下一輪處理（255 = 無）
-seek_request = None     # 進度條拖曳 / t 鍵請求跳轉的目標幀（None = 無）
-_trackbar_syncing = False  # 程式碼主動移動進度條時擋掉回呼，避免自我觸發
+seek_request = None     # 拉桿拖曳/滾輪 / t 鍵請求跳轉的目標幀（None = 無）
 _last_display_ts = 0.0  # 0.5x 節流用的上次顯示時間戳
+
+# ---- 自繪時間拉桿狀態（見下方 draw_seek_bar() / _on_seek_mouse()） ----
+_seek_bar_rect = None    # (x0, y0, w, h)：拉桿在「組合畫面（compose_with_hud 輸出）」座標系裡的可點擊範圍
+_seek_dragging = False   # 滑鼠左鍵正在拉桿上按住拖曳
+_seek_hover_frame = None  # 滑鼠目前懸停/拖曳對應到的幀號（None＝沒有懸停），拉桿上方會顯示這一幀的預覽文字
+_last_canvas_shape = None  # (h, w)：最近一次 compose_with_hud() 輸出的完整畫面尺寸，用來把滑鼠座標從
+                            # 「imshow 實際顯示大小」換算回「組合畫面座標」（畫面被 shrink_to_cap() 再縮小時兩者不同）
 
 
 
@@ -306,19 +309,22 @@ def cycle_speed(direction):
         print(f"[Speed] 快轉倍率 = {playback_speed:g}x")
 
 # 實際使用的顯示上限（寬, 高）＝DISPLAY_SIZE，第一次顯示前會依螢幕工作區校正（見 _fit_cap_to_screen）：
-# 視窗的標題列、邊框、進度條都算在視窗外框裡，畫面直接開到 DISPLAY_SIZE 大會讓視窗底部／右側超出螢幕
-# （1080p 時最明顯：畫面 1080 高 + 外框 100 多像素 > 螢幕高度，下方被裁掉）。
+# 視窗的標題列、邊框都算在視窗外框裡，畫面直接開到 DISPLAY_SIZE 大會讓視窗底部／右側超出螢幕
+# （1080p 時最明顯：畫面 1080 高 + 外框 30~60 多像素 > 螢幕高度，下方被裁掉）。自繪時間拉桿
+# 不算外框——它是 compose_with_hud() 組合畫面本身的一部分，走 _hud_extra_h 那條預留路徑
+# （見 compose_with_hud()），不是這裡量的視窗 chrome。
 _display_cap = list(DISPLAY_SIZE)
 _cap_fitted = False
-_hud_extra_h = 0  # compose_with_hud() 在影片畫面上下加的資訊色塊總高度；它是縮小之後才加上去的，要從上限裡預留
+_hud_extra_h = 0  # compose_with_hud() 在影片畫面上下加的資訊色塊＋時間拉桿總高度；縮小之後才加上去，要從上限裡預留
 _screen_limited = False  # 螢幕放不下 DISPLAY_SIZE（上限被校正縮小）時才為 True；只有這時才預留 HUD 高度／整張再縮
 
 
 def _fit_cap_to_screen(w, h):
-    """第一次顯示前執行一次：量視窗外框（標題列＋邊框＋進度條）實際佔多少像素，把顯示上限縮到
-    「螢幕工作區（不含工作列）扣掉外框」以內，並把視窗移到工作區左上角。w, h＝這支影片要顯示的畫面原始大小。
-    做法：用「跟實際顯示同寬、但高度很小」的黑圖去量——外框大小跟圖高無關、只跟寬度有關，而且這種小視窗不會被
-    作業系統因為超出螢幕而強制縮小，量得準。Windows 限定；量不到（非 Windows、找不到視窗）就維持原上限。"""
+    """第一次顯示前執行一次：量視窗外框（標題列＋邊框，不含畫面內容裡的 HUD／拉桿）實際佔多少
+    像素，把顯示上限縮到「螢幕工作區（不含工作列）扣掉外框」以內，並把視窗移到工作區左上角。
+    w, h＝這支影片要顯示的畫面原始大小。做法：用「跟實際顯示同寬、但高度很小」的黑圖去量——
+    外框大小跟圖高無關、只跟寬度有關，而且這種小視窗不會被作業系統因為超出螢幕而強制縮小，量得準。
+    Windows 限定；量不到（非 Windows、找不到視窗）就維持原上限。"""
     global _cap_fitted
     _cap_fitted = True
     try:
@@ -329,7 +335,7 @@ def _fit_cap_to_screen(w, h):
         user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)  # SPI_GETWORKAREA
         work_w, work_h = work.right - work.left, work.bottom - work.top
         probe_h = 300
-        chrome = (16, 100)  # 量不到時的保守起始估計（邊框 16、標題列＋邊框＋進度條約 100）
+        chrome = (16, 60)  # 量不到時的保守起始估計（邊框 16、標題列＋邊框約 60；已不含原生進度條，那條已移除）
         for _ in range(3):  # 外框高度會隨寬度略有變動，最多修正幾次就收斂
             sc = min(_display_cap[0] / w, _display_cap[1] / h, 1.0)
             probe_w = max(320, int(round(w * sc)))
@@ -345,7 +351,7 @@ def _fit_cap_to_screen(w, h):
                     break
             else:
                 break
-            time.sleep(0.25)  # 貼合寬度後進度條列還會再調整一次高度
+            time.sleep(0.25)  # 貼合寬度後視窗框線／DPI 相關的版面還會再調整一次高度
             cv2.waitKey(1)
             user32.GetWindowRect(hwnd, ctypes.byref(rect))
             new_chrome = ((rect.right - rect.left) - probe_w, (rect.bottom - rect.top) - probe_h)
@@ -395,29 +401,121 @@ WIN_NAME = "Cat Pose Inference"
 # 後端不會再縮放/拉伸畫面，比例一定正確。
 cv2.namedWindow(WIN_NAME, cv2.WINDOW_AUTOSIZE)
 
-# ---- 視窗頂端進度條：拖曳即時 seek（兩種模式都可用）----
-TRACKBAR_NAME = "Frame"
+# ---- 自繪時間拉桿：點擊/拖曳/滾輪即時 seek（兩種模式都可用）----
+# 原本用 cv2.createTrackbar 建立原生 Win32 滑桿元件，缺點很明顯：畫面窄、樣式跟其他
+# HUD 完全不搭（不能改色/改高度），而且拖曳中完全沒有回饋——放開前不知道會跳到哪一幀，
+# 長影片一拖就是好幾百幀，很難拖準。改成把拉桿畫進 compose_with_hud() 組出的畫面最上方
+# （見該函式），自己接管滑鼠事件：拖曳中即時在拉桿正上方顯示「第幾幀／時間」預覽文字，
+# 滾輪可逐幀微調（一格=1幀），比原生元件精細很多。
 
-def _on_trackbar(pos):
-    global seek_request
-    if _trackbar_syncing:
+SEEK_ACCENT = (60, 200, 255)   # 拉桿已播放進度／把手顏色（BGR，暖黃橘，跟深色 HUD 底色對比清楚）
+SEEK_TRACK_BG = (75, 75, 75)   # 拉桿底色（未播放進度）
+
+
+def _seek_wheel_delta(flags):
+    """從 cv2 滑鼠回呼的 flags 解出滾輪方向：flags 高 16 位是有號的滾動量。"""
+    d = (flags >> 16) & 0xFFFF
+    if d >= 0x8000:
+        d -= 0x10000
+    return d
+
+
+def _seek_frame_from_x(x, bar_x0, bar_w):
+    """把拉桿座標系裡的 x（已經是「軌道」左緣算起的相對座標）換算成幀號。"""
+    if total_frames <= 1 or bar_w <= 0:
+        return 0
+    ratio = max(0.0, min(1.0, (x - bar_x0) / float(bar_w)))
+    return int(round(ratio * (total_frames - 1)))
+
+
+def _client_to_canvas_xy(x, y):
+    """滑鼠回呼收到的 (x, y) 是目前 imshow 實際顯示大小的座標；螢幕太小導致
+    shrink_to_cap() 又把整張畫面縮小過時，要先換算回 compose_with_hud() 組出的
+    「畫布」座標，才能跟 _seek_bar_rect（用畫布座標記錄）比對。"""
+    if not _screen_limited or _last_canvas_shape is None:
+        return x, y
+    ch, cw = _last_canvas_shape
+    if ch <= 0 or cw <= 0:
+        return x, y
+    s = min(_display_cap[0] / cw, _display_cap[1] / ch, 1.0)
+    if s >= 1.0:
+        return x, y
+    return int(round(x / s)), int(round(y / s))
+
+
+def _on_seek_mouse(event, x, y, flags, param):
+    global seek_request, _seek_dragging, _seek_hover_frame
+    if _seek_bar_rect is None:
         return
-    seek_request = pos
+    cx, cy = _client_to_canvas_xy(x, y)
+    bx, by, bw, bh = _seek_bar_rect
+    inside = bx <= cx <= bx + bw and by <= cy <= by + bh
 
-cv2.createTrackbar(TRACKBAR_NAME, WIN_NAME, 0, 1, _on_trackbar)
+    if event == cv2.EVENT_LBUTTONDOWN:
+        if inside:
+            _seek_dragging = True
+            seek_request = _seek_frame_from_x(cx, bx, bw)
+    elif event == cv2.EVENT_MOUSEMOVE:
+        _seek_hover_frame = _seek_frame_from_x(cx, bx, bw) if inside else None
+        if _seek_dragging:
+            clamped_x = max(bx, min(cx, bx + bw))
+            seek_request = _seek_frame_from_x(clamped_x, bx, bw)
+    elif event == cv2.EVENT_LBUTTONUP:
+        _seek_dragging = False
+    elif event == cv2.EVENT_MOUSEWHEEL:
+        if inside:
+            step = 1 if _seek_wheel_delta(flags) > 0 else -1
+            seek_request = max(0, min(frame_idx + step, max(0, total_frames - 1)))
 
-def sync_trackbar(idx):
-    """把進度條移到 idx（擋掉回呼，避免自我觸發跳轉）。"""
-    global _trackbar_syncing
-    hi = max(1, total_frames - 1)
-    pos = max(0, min(int(idx), hi))
-    _trackbar_syncing = True
-    try:
-        cv2.setTrackbarPos(TRACKBAR_NAME, WIN_NAME, pos)
-    except cv2.error:
-        pass
-    finally:
-        _trackbar_syncing = False
+
+cv2.setMouseCallback(WIN_NAME, _on_seek_mouse)
+
+
+def draw_seek_bar(w, scale):
+    """畫一條跟畫面等寬的自繪時間拉桿：底色軌道＋已播放進度＋把手圓點；拖曳中或滑鼠
+    懸停在拉桿上時，正上方會顯示「第幾幀／時間」的預覽文字（見 _on_seek_mouse()）。
+    回傳這張拉桿小圖（之後由 compose_with_hud() 疊在組合畫面最上方）。"""
+    label_h = max(16, int(18 * scale))
+    track_area_h = max(14, int(16 * scale))
+    bar_h = label_h + track_area_h
+    margin = max(10, int(14 * scale))
+    img = np.full((bar_h, max(1, w), 3), HUD_BG, dtype=np.uint8)
+
+    bx, bw = margin, max(1, w - margin * 2)
+    track_h = max(5, int(6 * scale))
+    ty0 = label_h + (track_area_h - track_h) // 2
+
+    global _seek_bar_rect
+    # 可點擊範圍比視覺軌道左右各多留 margin，手把/游標不用剛好對到那條細線也能點中。
+    _seek_bar_rect = (bx - margin, 0, bw + margin * 2, bar_h)
+
+    cv2.rectangle(img, (bx, ty0), (bx + bw, ty0 + track_h), SEEK_TRACK_BG, -1, cv2.LINE_AA)
+    ratio = 0.0 if total_frames <= 1 else frame_idx / float(total_frames - 1)
+    fill_w = int(round(bw * max(0.0, min(1.0, ratio))))
+    if fill_w > 0:
+        cv2.rectangle(img, (bx, ty0), (bx + fill_w, ty0 + track_h), SEEK_ACCENT, -1, cv2.LINE_AA)
+
+    handle_r = max(6, int(8 * scale))
+    handle_cy = ty0 + track_h // 2
+    handle_cx = bx + fill_w
+    cv2.circle(img, (handle_cx, handle_cy), handle_r, (15, 15, 15), -1, cv2.LINE_AA)
+    cv2.circle(img, (handle_cx, handle_cy), max(1, handle_r - 2), SEEK_ACCENT, -1, cv2.LINE_AA)
+
+    preview_frame = _seek_hover_frame
+    if preview_frame is None and _seek_dragging:
+        preview_frame = frame_idx
+    if preview_frame is not None:
+        label = f"{preview_frame + 1}/{total_frames}  {fmt_time(preview_frame / cur_src_fps())}"
+        fs = 0.4 * scale
+        th = max(1, int(round(scale)))
+        (tw, _th_px), _baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, fs, th)
+        px = bx + int(round(bw * (0.0 if total_frames <= 1 else preview_frame / float(total_frames - 1))))
+        tx = max(2, min(w - tw - 2, px - tw // 2))
+        ty = label_h - 4
+        cv2.putText(img, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 0, 0), th + 2, cv2.LINE_AA)
+        cv2.putText(img, label, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, fs, (255, 255, 255), th, cv2.LINE_AA)
+
+    return img
 
 def prompt_seek():
     """按 t：於終端輸入目標位置，回傳夾好範圍的幀號（None = 取消）。"""
@@ -460,15 +558,12 @@ def find_last_readable_frame(from_idx, max_back=END_PROBE_MAX_BACK):
     return None
 
 def correct_total_frames(real_total):
-    """檔案標示的總幀數（CAP_PROP_FRAME_COUNT）跟實際讀到的不一樣時，以實際為準，並同步進度條範圍。
-    只在差距不大（2×END_PROBE_MAX_BACK 幀內）時才修正，避免中途解碼失敗就把總幀數砍掉一大截。"""
+    """檔案標示的總幀數（CAP_PROP_FRAME_COUNT）跟實際讀到的不一樣時，以實際為準。
+    只在差距不大（2×END_PROBE_MAX_BACK 幀內）時才修正，避免中途解碼失敗就把總幀數砍掉一大截。
+    拉桿是自繪的、每次渲染都直接讀目前的 total_frames，這裡改完不用另外同步拉桿範圍。"""
     global total_frames
     if real_total != total_frames and abs(total_frames - real_total) <= 2 * END_PROBE_MAX_BACK:
         total_frames = real_total
-        try:
-            cv2.setTrackbarMax(TRACKBAR_NAME, WIN_NAME, max(1, total_frames - 1))
-        except cv2.error:
-            pass
 
 def resize_window_to_video():
     """WINDOW_AUTOSIZE：視窗自動貼合縮小後的畫面，無需手動調整。"""
@@ -515,7 +610,7 @@ def print_mode():
         f"\n[操作說明] S=儲存影像  Z=增加步長  X=減少步長 (當前步長={frame_step})  "
         f"1=上一部影片  2=下一部影片  Space=切換模式({mode})  ESC=離開\n"
         f"[通用] [ =往回跳 {JUMP_FRAMES} 幀   ] =往前跳 {JUMP_FRAMES} 幀   "
-        f"t=輸入跳轉(秒數/幀號)   視窗頂端進度條可拖曳即時 seek\n"
+        f"t=輸入跳轉(秒數/幀號)   畫面最上方拉桿可點擊/拖曳跳轉、滾輪逐幀微調\n"
         f"[Step模式] D=下一幀  A=上一幀\n"
         f"[Auto模式] 目標推論FPS={TARGET_MODEL_FPS:.0f}，每 {auto_infer_interval} 幀推論一次   "
         f"= 或 + =加大倍率   - =減小倍率  階梯 {'/'.join(f'{s:g}' for s in SPEED_STEPS)}x (目前 {playback_speed:g}x)   "
@@ -613,8 +708,9 @@ def compose_with_hud(disp_frame, scale, top_lines, bottom_lines):
     改成上下各加一條「HUD 色塊」，跟影片畫面上下拼接成一張更高的新畫面：文字
     永遠畫在色塊裡，不管貓咪站在畫面哪個角落，影片內容本身完全不會被文字蓋到。
     `cv2.namedWindow(..., cv2.WINDOW_AUTOSIZE)` 會自動貼合這張變高的畫面，不用
-    另外處理視窗縮放；進度條是 `cv2.createTrackbar` 建立的原生 HighGUI 元件，
-    跟畫面像素座標無關，也不受影響。
+    另外處理視窗縮放；自繪時間拉桿（見 draw_seek_bar()）疊在最上方，是這張組合
+    畫面的一部分（不像原本的原生 cv2.createTrackbar 元件是獨立於畫面像素之外的
+    視窗 chrome），所以滑鼠座標需要換算，見 _on_seek_mouse()／_client_to_canvas_xy()。
 
     `top_lines`/`bottom_lines`：[(文字, font_scale, thickness), ...]，由上到下
     依序排列；`font_scale`/`thickness` 是「未乘上 scale」的原始值（跟原本
@@ -656,12 +752,17 @@ def compose_with_hud(disp_frame, scale, top_lines, bottom_lines):
     top_h = _band_height(top_lines)
     bottom_h = _band_height(bottom_lines)
 
-    canvas = np.full((top_h + h + bottom_h, w, 3), HUD_BG, dtype=disp_frame.dtype)
-    canvas[top_h:top_h + h, :] = disp_frame
-    _draw_band(canvas, top_lines, 0)
-    _draw_band(canvas, bottom_lines, top_h + h)
-    global _hud_extra_h
-    _hud_extra_h = top_h + bottom_h  # 之後 fit_for_display() 縮影片畫面時要預留這段高度
+    seek_bar = draw_seek_bar(w, scale)
+    seek_h = seek_bar.shape[0]
+
+    canvas = np.full((seek_h + top_h + h + bottom_h, w, 3), HUD_BG, dtype=disp_frame.dtype)
+    canvas[0:seek_h, :] = seek_bar
+    canvas[seek_h + top_h:seek_h + top_h + h, :] = disp_frame
+    _draw_band(canvas, top_lines, seek_h)
+    _draw_band(canvas, bottom_lines, seek_h + top_h + h)
+    global _hud_extra_h, _last_canvas_shape
+    _hud_extra_h = seek_h + top_h + bottom_h  # 之後 fit_for_display() 縮影片畫面時要預留這段高度
+    _last_canvas_shape = canvas.shape[:2]  # 給滑鼠座標換算用（見 _client_to_canvas_xy()）
     return canvas
 
 while True:
@@ -728,8 +829,7 @@ while True:
                 ],
             )
             cv2.imshow(WIN_NAME, shrink_to_cap(disp_frame))
-            sync_trackbar(frame_idx)
-            # 阻塞等待按鍵，但同時讓進度條拖曳能中斷（拖曳會設定 seek_request）
+            # 阻塞等待按鍵，但同時讓拉桿拖曳能中斷（拖曳會設定 seek_request）
             key = 255
             while True:
                 key = cv2.waitKey(50) & 0xFF
@@ -859,7 +959,6 @@ while True:
                 frame_idx = tgt
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                 last_result = None
-                sync_trackbar(frame_idx)
                 print(f"[Seek] → 第 {frame_idx} 幀  ({fmt_time(frame_idx/cur_src_fps())})")
             else:
                 print("[Seek] 取消跳轉")
@@ -911,14 +1010,13 @@ while True:
         elif key != 255:
             print(f"[Key] 未綁定按鍵: {chr(key) if 32 <= key < 127 else key}")
 
-        # ---- 進度條拖曳跳轉 ----
+        # ---- 拉桿拖曳/滾輪跳轉 ----
         if seek_request is not None:
             frame_idx = max(0, min(int(seek_request), max(0, total_frames - 1)))
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             last_result = None
             seek_request = None
-            sync_trackbar(frame_idx)
-            print(f"[Seek] 進度條 → 第 {frame_idx} 幀  ({fmt_time(frame_idx/cur_src_fps())})")
+            print(f"[Seek] 拉桿 → 第 {frame_idx} 幀  ({fmt_time(frame_idx/cur_src_fps())})")
 
         # ---- 讀取與推論 ----
         ret, frame = cap.read()
@@ -985,7 +1083,6 @@ while True:
             ],
         )
         cv2.imshow(WIN_NAME, shrink_to_cap(disp_frame))
-        sync_trackbar(frame_idx)
         frame_idx += 1
 
         # ---- 倍速 / 快轉推進 ----

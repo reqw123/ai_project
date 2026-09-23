@@ -22,6 +22,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
+from utils.video_name_overlay import draw_video_name_label
 
 sys.path.append(str(Path(__file__).parent.parent))  # config.py 在 paper/ 根目錄
 from config import YOLOConfig as _YOLOConfig
@@ -299,7 +300,7 @@ _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video:
     VIDEO_LIST = [_env_test_video]
     MAX_VIDEOS = 1
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_121.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -896,6 +897,8 @@ def main():
                 cv2.putText(display, status_text, (text_x, status_y), cv2.FONT_HERSHEY_SIMPLEX, 0.88 * ui_scale, status_color, max(2, int(2 * ui_scale)), cv2.LINE_AA)
 
             if DISPLAY_WINDOW:
+                # 目前播放的影片檔名（右下角；右上是 NORM 框、左上是 TIME/SRC）
+                draw_video_name_label(display, video_path, current_video_idx, len(video_paths), ui_scale=ui_scale)
                 cv2.imshow(WINDOW_NAME, display)
                 key = cv2.waitKey(1) & 0xFF
                 action = _handle_key(key, cap_obj=cap)

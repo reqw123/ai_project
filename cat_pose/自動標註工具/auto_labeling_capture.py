@@ -304,7 +304,7 @@ def main():
     """Main program entry"""
     
     # ==================== Configuration ====================
-    MODEL_PATH = r"C:/ai_project/yolo_models/2222.pt"  # ⚠ 此檔名目前 yolo_models/ 底下已無，僅修正資料夾；執行前請改成實際存在的模型檔名
+    MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "2222.pt")  # ⚠ 此檔名目前 yolo_models/ 底下已無，僅修正資料夾；執行前請改成實際存在的模型檔名
     VIDEO_PATH = r"C:/cat_pose/test1.mp4"
 
     # 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH，

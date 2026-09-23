@@ -1,6 +1,12 @@
 """
-測試影片推論腳本（EMA 平滑版）- 使用指數移動平均對關鍵點座標平滑，提升穩定性
-其餘功能與 test_video_inference.py 完全相同
+人工複審：逐支觀看影片，手動按鍵判定行為姿勢變體（跟自動分類不同，最終分類完全由人決定）。
+
+沿用 1_run_video_inference.py 的播放/YOLO+ST-GCN 疊圖/EMA 平滑機制（可用 m 鍵關閉推論，
+純播放不佔用 GPU），改成兩段式按鍵分類：先按 z/x/c/v/b 選五大類之一（跟
+utils.constants.BEHAVIOR_CLASSES 順序一致），再按數字鍵選該類底下的姿勢變體（從 1 開始，
+即使目前只有一種變體如 stop 的 "all" 也要按），選定後把影片搬進 <分類根目錄>/<behavior>/<variant>/。
+變體清單在下方 VARIANTS 集中定義，之後要新增同姿勢的變體（例如新增 walk 的第四種變體）
+只要在對應清單裡加一筆，五大類本身不會變動。
 """
 import sys
 import os
@@ -50,52 +56,50 @@ from utils.constants import (
 from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
-# ── 五個行為資料夾（按 z/x/c/v/b 切換）────────────────────────────────
-_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
-FOLDER_WALK    = rf"{_BASE}\walk"
-FOLDER_LICK    = rf"{_BASE}\lick"
-FOLDER_SCRATCH = rf"{_BASE}\scratch"
-FOLDER_SHAKE   = rf"{_BASE}\shake"
-FOLDER_STOP    = rf"{_BASE}\stop"
+# ── 待複審影片來源（單一資料夾，遞迴掃描）──────────────────────────────────
+SOURCE_FOLDER = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\白貓舔舐測試"
 
-# 按鍵 → (資料夾路徑, 顯示名稱)
-FOLDER_MAP = {
-    'z': (FOLDER_WALK,    "WALK"),
-    'x': (FOLDER_LICK,    "LICK"),
-    'c': (FOLDER_SCRATCH, "SCRATCH"),
-    'v': (FOLDER_SHAKE,   "SHAKE"),
-    'b': (FOLDER_STOP,    "STOP"),
-}
-DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
-
-# ── 模式2 影片分類（Shift+A~E，把目前影片直接移進對應的行為資料夾）───────────
-# 用大寫 A~E（Shift+字母）觸發，避免跟上面 z/x/c/v/b 小寫的資料夾切換鍵衝突。
-# A=walk  B=lick  C=scratch  D=shake  E=stop（依 BEHAVIOR_CLASSES 順序）。
-# 行為資料夾（walk/lick/scratch/shake/stop）建立在影片所屬的「分類根目錄」底下，不分字母資料夾；
-# 只有實際按到的那個類別才會建立（先檢查是否已存在，沒有才建），沒按到的類別不會產生空資料夾：
-# 影片已經在某個行為資料夾裡（例如 …\模型專用\walk\a.mp4）時，分類根目錄就是該行為資料夾的上一層
-# （…\模型專用），改分到別的行為會落在它的兄弟資料夾；否則就是影片所在的資料夾本身。
-# 「已檢視」資料夾：影片已經在 walk 裡、又按 Shift+A（＝檢視後確認它就是 walk）時，改搬到同層的 walk_2
-# （沒有才建立，已存在就沿用）；lick/scratch/shake/stop 一樣是 lick_2 …。這樣原本的 walk 只剩還沒檢視的影片，
-# 中斷後重開播放清單就是沒看過的那些。影片已經在 walk_2 裡再按 Shift+A 不會搬回 walk。
-REVIEWED_SUFFIX = "_2"
-CLASS_KEYS = {letter: behavior for letter, behavior in zip("ABCDE", BEHAVIOR_CLASSES)}
-
-# 測試資料夾模式
-# 'single' : 測試 SINGLE_FOLDER_PATH 指定的單一扁平資料夾（影片直接放在該目錄，不分子資料夾）
-# 'all'    : 測試所有五個行為資料夾（按 FOLDER_MAP 順序合併為一份播放清單）
-FOLDER_TEST_MODE = 'single'  # 'single' or 'all'
-SINGLE_FOLDER_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\未被選擇的模型影片\lick"  # 'single' 模式使用的扁平資料夾
-
-# VIDEO_PATHS 保留作備用（不使用 FOLDER_MAP 時可手動指定）
+# VIDEO_PATHS 保留作備用（填了就取代 SOURCE_FOLDER，可手動指定單支/多支影片或資料夾）
 VIDEO_PATHS = []
 
-# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該單一影片路徑（覆蓋 FOLDER_TEST_MODE / VIDEO_PATHS）
+# 若設定 TEST_VIDEO_PATH 環境變數，優先使用該單一影片路徑（覆蓋 SOURCE_FOLDER / VIDEO_PATHS）
 _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video:
     VIDEO_PATHS = [_env_test_video]
 
-YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_152.pt")
+# ── 兩段式分類：z/x/c/v/b 選五大類之一，再按數字鍵選姿勢變體 ──────────────────
+# 按鍵 → 行為名稱（跟 utils.constants.BEHAVIOR_CLASSES 的順序/拼字一致，字典序＝面板顯示順序）。
+BEHAVIOR_KEYS = {
+    'z': 'walk',
+    'x': 'lick',
+    'c': 'scratch',
+    'v': 'shake',
+    'b': 'stop',
+}
+
+# 各行為底下的姿勢變體清單（顯示順序＝按鍵 1/2/3… 的順序）。永遠只有這五大類；
+# 之後新增同姿勢的變體（例如 walk 多一種），直接在對應清單裡加一筆字串即可，
+# 不用改鍵盤處理邏輯——數字鍵是依清單長度自動產生的。
+VARIANTS = {
+    'walk':    ['side', 'front', 'back'],
+    'lick':    ['lying', 'sit', 'stand_up'],
+    'scratch': ['lying', 'sit'],
+    'shake':   ['side', 'front', 'back'],
+    'stop':    ['all'],
+}
+
+# 分類後影片搬到哪裡：<分類根目錄>/<behavior>/<variant>/（巢狀資料夾）。
+# 分類根目錄的判斷邏輯跟 1_run_video_inference.py 的 Shift+A~E 一致，見 find_class_root()。
+
+# 每次分類動作都會 append 一列到這份 CSV，作為人工複審的工作紀錄（可回溯誰在什麼時候
+# 把哪支影片標成什麼）；純附加、不影響分類流程本身，檔案不存在會自動建立含表頭。
+LABEL_LOG_PATH = r"C:\ai_project\paper\cat_monitoring_system\eval_results\manual_variant_review_log.csv"
+
+# 推論開關的啟動預設值（可在播放中按 m 鍵即時切換）：True＝跟 1_run_video_inference.py
+# 一樣跑 YOLO+ST-GCN 疊圖輔助判斷；False＝純播放原始畫面，不佔用 GPU／不跑模型。
+ENABLE_INFERENCE_DEFAULT = True
+
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_149.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位；只覆寫 YOLO pose 偵測模型，不影響
@@ -105,7 +109,7 @@ if _env_yolo_model:
     YOLO_MODEL_PATH = _env_yolo_model
 
 # 相對於這支腳本的位置（paper/tools/ → 專案根目錄 → stgcn_models/），不寫死磁碟機與使用者資料夾
-STGCN_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_147_xy_conf_v_bone_att_on" / "147_best_model.pth")
+STGCN_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_124_xy_conf_v_bone_att_on" / "124_best_model.pth")
 import os as _os
 _env_stgcn_model = _os.getenv("CAT_MONITORING_STGCN_MODEL", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；環境變數名同 config.py 的 ModelPaths.STGCN_MODEL
 if _env_stgcn_model:
@@ -140,7 +144,7 @@ TARGET_MODEL_FPS = 30.0  # 模型訓練/推論設計時基
 ENABLE_FPS_DOWNSAMPLE = True  # 只要不是 30fps，就把模型時基統一到 30fps（高於則降採樣，低於則用 30fps 時基）
 CLASSIFY_STRIDE = 2  # 每幾個處理幀做一次分類（1=每幀）
 DISPLAY_WINDOW = True
-WINDOW_NAME = "Cat Behavior Inference (EMA)"
+WINDOW_NAME = "Cat Behavior Variant Review"
 # 預覽視窗解析度：改這個變數即可（"720p" → 1280x720、"1080p" → 1920x1080）。
 # 只決定「預覽視窗」的大小：偵測／姿態／ST-GCN 推論一律吃原始解析度的畫面，統計與報告不受影響；
 # 骨架與文字疊圖是縮放後才畫上去的，線條維持銳利。
@@ -169,8 +173,6 @@ LOOP_PLAYBACK = True  # 是否循環播放
 ENABLE_AUDIO_PLAYBACK = False   # 是否播放外部音訊檔
 AUDIO_PATH = r"C:\Users\homec\Downloads\7月2日.mp3"  # 從影片抽出的音訊檔路徑（mp3/wav），留空則不播放
 
-REPORT_OUTPUT_PATH = r"C:\ai_project\paper\output\inference_analysis_report_ema.csv"  # 最終 CSV 報告
-RUN_MODE = 0  # 0: 啟動時選擇, 1: 只生成統計, 2: 只做視窗測試
 
 # ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
 YOLO_CONF_THRESHOLD = 0.5       # YOLO bbox 偵測信心門檻（KeypointDetector 內部過濾用）
@@ -360,18 +362,16 @@ def draw_extra_cat_instance_boxes(frame, instances, ui_scale=1.0, scale=1.0, cro
 
 
 def _is_behavior_folder_name(name):
-    """資料夾名稱是不是行為資料夾：walk/lick/…，或它的「已檢視」版本 walk_2/lick_2/…（不分大小寫）。"""
-    n = name.lower()
-    if n in BEHAVIOR_CLASSES:
-        return True
-    return n.endswith(REVIEWED_SUFFIX) and n[: -len(REVIEWED_SUFFIX)] in BEHAVIOR_CLASSES
+    """資料夾名稱是不是五大行為之一（walk/lick/scratch/shake/stop，不分大小寫）。"""
+    return name.lower() in BEHAVIOR_CLASSES
 
 
 def find_class_root(video_path):
-    """影片所屬的「分類根目錄」（行為資料夾要建在它底下）。
+    """影片所屬的「分類根目錄」（<behavior>/<variant>/ 要建在它底下）。
 
-    從影片所在位置往上找第一個行為資料夾（名稱等於 walk/lick/…，或已檢視的 walk_2/lick_2/…，不分大小寫），
-    找到就回傳它的上一層；找不到（影片放在沒分類的資料夾）就回傳影片所在的資料夾。"""
+    從影片所在位置往上找第一個行為資料夾（名稱等於 walk/lick/…，不分大小寫，不論影片
+    目前是在該資料夾本身還是它底下的某個變體子資料夾），找到就回傳它的上一層；找不到
+    （影片放在還沒分類的來源資料夾）就回傳影片所在的資料夾。"""
     parent = Path(video_path).parent
     for folder in (parent, *parent.parents):
         if _is_behavior_folder_name(folder.name):
@@ -379,22 +379,16 @@ def find_class_root(video_path):
     return parent
 
 
-def move_video_to_class_folder(video_path, behavior):
-    """把目前影片移動到 <分類根目錄>/<behavior>/，檔名重複時自動加流水號後綴，回傳新路徑。
+def move_video_to_variant_folder(video_path, behavior, variant):
+    """把目前影片移動到 <分類根目錄>/<behavior>/<variant>/，檔名重複時自動加流水號後綴，回傳新路徑。
 
-    只建立這次真正用到的那一個行為資料夾（先檢查是否已存在，不存在才建立），不會一次把
-    walk/lick/scratch/shake/stop 五個都建出來——一次分類作業常常只會用到其中幾類。
-    影片已經在目標行為資料夾（例如 walk）裡時，表示使用者檢視後確認它就是這個類別：改搬到同層的
-    「已檢視」資料夾（walk_2，沒有才建立）；影片已經在 walk_2 裡就不搬，直接回傳原路徑。"""
+    只建立這次真正用到的那一層資料夾（先檢查是否已存在，不存在才建立）。影片已經剛好在
+    目標變體資料夾裡時視為「已經是這個分類」，不搬動、直接回傳原路徑。"""
     src = Path(video_path)
     root = find_class_root(src)
-    dest_dir = root / behavior
-    reviewed_dir = root / f"{behavior}{REVIEWED_SUFFIX}"
-    here = src.parent.resolve()
-    if here == reviewed_dir.resolve():
+    dest_dir = root / behavior / variant
+    if src.parent.resolve() == dest_dir.resolve():
         return src
-    if here == dest_dir.resolve():
-        dest_dir = reviewed_dir
     if not dest_dir.is_dir():
         dest_dir.mkdir(parents=True)
         print(f"\n🆕 建立資料夾: {dest_dir}")
@@ -407,21 +401,35 @@ def move_video_to_class_folder(video_path, behavior):
     return dest
 
 
-def classify_video_to_folder(video_path, behavior):
-    """Shift+A~E 的實際動作：把影片移進 behavior 資料夾並印出結果。
+def log_label_action(source_path, dest_path, behavior, variant):
+    """把這次分類動作附加寫進 LABEL_LOG_PATH，作為人工複審的工作紀錄；純附加、best-effort，
+    寫檔失敗只印警告，不影響分類本身（影片已經搬動完成）。"""
+    log_path = Path(LABEL_LOG_PATH)
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        is_new = not log_path.exists()
+        with log_path.open("a", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            if is_new:
+                writer.writerow(["timestamp", "behavior", "variant", "source_path", "dest_path"])
+            writer.writerow([time.strftime("%Y-%m-%d %H:%M:%S"), behavior, variant, str(source_path), str(dest_path)])
+    except Exception as e:
+        print(f"⚠ 無法寫入複審紀錄（{LABEL_LOG_PATH}）：{e}")
+
+
+def classify_video_to_variant_folder(video_path, behavior, variant):
+    """兩段式分類命中後的實際動作：把影片移進 <behavior>/<variant>/、印出結果、附加寫入複審紀錄。
     回傳 True＝影片已被搬走（呼叫端要把它從播放清單移除）；已經在該資料夾或移動失敗回傳 False。"""
     try:
-        dest = move_video_to_class_folder(video_path, behavior)
+        dest = move_video_to_variant_folder(video_path, behavior, variant)
     except Exception as e:
         print(f"⚠ 移動影片失敗（{video_path}）：{e}")
         return False
     if Path(dest) == Path(video_path):
-        print(f"\nℹ 影片本來就在 {behavior.upper()} 的已檢視資料夾（{behavior}{REVIEWED_SUFFIX}），未移動")
+        print(f"\nℹ 影片本來就在 {behavior.upper()}/{variant} 資料夾，未移動")
         return False
-    if Path(dest).parent.name.lower() == f"{behavior}{REVIEWED_SUFFIX}":
-        print(f"\n✅ 已檢視確認為 {behavior.upper()}，移動到已檢視資料夾: {dest}")
-        return True
-    print(f"\n📁 已歸類為 {behavior.upper()}，移動到: {dest}")
+    print(f"\n📁 已歸類為 {behavior.upper()}/{variant}，移動到: {dest}")
+    log_label_action(video_path, dest, behavior, variant)
     return True
 
 
@@ -739,137 +747,6 @@ def draw_test2_style_overlay(
     return frame
 
 
-def print_jitter_report(title, jitter_px, jitter_norm, valid_counts, pair_counts):
-    print("\n" + "=" * 60)
-    print(title)
-    print("=" * 60)
-
-    all_px = [v for arr in jitter_px for v in arr]
-    all_norm = [v for arr in jitter_norm for v in arr]
-    total_valid = int(np.sum(valid_counts))
-    total_pairs = int(np.sum(pair_counts))
-
-    if not all_px:
-        print("無足夠資料計算抖動（可能關鍵點信心不足或連續幀不足）")
-        return
-
-    print("[全域抖動指標]")
-    print(f"  樣本數(像素): {len(all_px)}")
-    print(f"  平均: {np.mean(all_px):.3f} px")
-    print(f"  標準差: {np.std(all_px):.3f} px")
-    print(f"  P95: {np.percentile(all_px, 95):.3f} px")
-    print(f"  最大值: {np.max(all_px):.3f} px")
-    print(f"  有效關鍵點數: {total_valid}")
-    print(f"  連續可比較配對數: {total_pairs}")
-
-    if all_norm:
-        print(f"  正規化平均(除以bbox對角線): {np.mean(all_norm):.5f}")
-        print(f"  正規化P95: {np.percentile(all_norm, 95):.5f}")
-
-    print("\n[17關鍵點逐點統計]")
-    print("  idx | valid | pairs | mean_px | std_px | p95_px | max_px | mean_norm")
-    for i in range(17):
-        if jitter_px[i]:
-            mean_px = np.mean(jitter_px[i])
-            std_px = np.std(jitter_px[i])
-            p95_px = np.percentile(jitter_px[i], 95)
-            max_px = np.max(jitter_px[i])
-        else:
-            mean_px = std_px = p95_px = max_px = 0.0
-
-        mean_norm = np.mean(jitter_norm[i]) if jitter_norm[i] else 0.0
-
-        print(
-            f"  {i:>3d} | {int(valid_counts[i]):>5d} | {int(pair_counts[i]):>5d} | "
-            f"{mean_px:>7.3f} | {std_px:>6.3f} | {p95_px:>6.3f} | {max_px:>6.3f} | {mean_norm:>9.5f}"
-        )
-
-
-def generate_report_file(report_path, recorded_video_stats):
-    """輸出 CSV 統計摘要（每列一部影片）。"""
-    out_path = Path(report_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    headers = [
-        "video_idx",
-        "video_path",
-        "width",
-        "height",
-        "source_fps",
-        "model_input_fps",
-        "frame_step",
-        "total_frames",
-        "processed_frames",
-        "frames_with_cat",
-        "frames_without_cat",
-        "pred_walk",
-        "pred_lick",
-        "pred_scratch",
-        "pred_shake",
-        "pred_stop",
-        "duration_walk_sec",
-        "duration_lick_sec",
-        "duration_scratch_sec",
-        "duration_shake_sec",
-        "duration_stop_sec",
-        "mean_confidence",
-        "jitter_mean_px",
-        "jitter_p95_px",
-        "jitter_max_px",
-        "occ_walk",
-        "occ_lick",
-        "occ_scratch",
-        "occ_shake",
-        "occ_stop",
-    ]
-
-    with out_path.open("w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f)
-        writer.writerow(headers)
-
-        for vid_idx in sorted(recorded_video_stats.keys()):
-            s = recorded_video_stats[vid_idx]
-            behavior_counts = np.asarray(s.get("behavior_counts", np.zeros(5, dtype=np.int64)), dtype=np.int64)
-            behavior_duration_sec = np.asarray(s.get("behavior_duration_sec", np.zeros(5, dtype=np.float64)), dtype=np.float64)
-            behavior_occurrence_counts = np.asarray(s.get("behavior_occurrence_counts", np.zeros(5, dtype=np.int64)), dtype=np.int64)
-            confidences = s.get("behavior_confidences", [])
-            jp = s.get("jitter_px", [[] for _ in range(17)])
-            all_jitter = [v for arr in jp for v in arr]
-
-            writer.writerow([
-                int(s.get("video_idx", vid_idx)),
-                s.get("video_path", ""),
-                int(s.get("width", 0)),
-                int(s.get("height", 0)),
-                float(s.get("fps", 0.0)),
-                float(s.get("model_input_fps", 0.0)),
-                int(s.get("frame_step", 1)),
-                int(s.get("total_frames", 0)),
-                int(s.get("processed_frames", 0)),
-                int(s.get("frames_with_cat", 0)),
-                int(s.get("frames_without_cat", 0)),
-                int(behavior_counts[0]) if len(behavior_counts) > 0 else 0,
-                int(behavior_counts[1]) if len(behavior_counts) > 1 else 0,
-                int(behavior_counts[2]) if len(behavior_counts) > 2 else 0,
-                int(behavior_counts[3]) if len(behavior_counts) > 3 else 0,
-                int(behavior_counts[4]) if len(behavior_counts) > 4 else 0,
-                float(behavior_duration_sec[0]) if len(behavior_duration_sec) > 0 else 0.0,
-                float(behavior_duration_sec[1]) if len(behavior_duration_sec) > 1 else 0.0,
-                float(behavior_duration_sec[2]) if len(behavior_duration_sec) > 2 else 0.0,
-                float(behavior_duration_sec[3]) if len(behavior_duration_sec) > 3 else 0.0,
-                float(behavior_duration_sec[4]) if len(behavior_duration_sec) > 4 else 0.0,
-                float(np.mean(confidences)) if confidences else 0.0,
-                float(np.mean(all_jitter)) if all_jitter else 0.0,
-                float(np.percentile(all_jitter, 95)) if all_jitter else 0.0,
-                float(np.max(all_jitter)) if all_jitter else 0.0,
-                int(behavior_occurrence_counts[0]) if len(behavior_occurrence_counts) > 0 else 0,
-                int(behavior_occurrence_counts[1]) if len(behavior_occurrence_counts) > 1 else 0,
-                int(behavior_occurrence_counts[2]) if len(behavior_occurrence_counts) > 2 else 0,
-                int(behavior_occurrence_counts[3]) if len(behavior_occurrence_counts) > 3 else 0,
-                int(behavior_occurrence_counts[4]) if len(behavior_occurrence_counts) > 4 else 0,
-            ])
-
-    return out_path
 
 
 def compute_skeleton_quality(seq_raw, conf_window, bbox_window, seq_normalized):
@@ -991,124 +868,47 @@ def compute_skeleton_quality(seq_raw, conf_window, bbox_window, seq_normalized):
     return len(failed_checks) == 0, metrics, failed_checks
 
 
-def resolve_run_mode():
-    if RUN_MODE in (1, 2):
-        return RUN_MODE
-
-    # 原本這裡有 `if not sys.stdin.isatty(): return 2` 的提前判斷，用來擋「stdin 不是
-    # 真終端機」的情況（例如被其他程式以 subprocess 呼叫、CI 自動化）。但這個判斷把
-    # 「不是 tty」跟「沒辦法讀到輸入」劃上等號——stdin 被導向 pipe（例如
-    # settings_window.py 的「獨立腳本工具」面板）時 isatty() 一樣是 False，但那個 pipe
-    # 其實是可以讀的，使用者能透過該面板的輸入框把文字送進來。拿掉這段提前判斷，
-    # 一律嘗試 input()；真的完全沒有 stdin 可讀時（例如雙擊執行、沒有任何主控台）
-    # 下面的 except EOFError 還是會接住、給預設值，不會卡住。
-    print("\n請選擇執行模式:")
-    print("  1) 只生成統計結果（不開視窗）")
-    print("  2) 只測試模型效果（開視窗）")
-    while True:
-        try:
-            choice = input("輸入模式 (1/2, 預設=2): ").strip()
-        except EOFError:
-            print("\n未輸入模式，預設使用模式 2（只測試模型效果，開視窗）")
-            return 2
-
-        if choice == "":
-            return 2
-        if choice == "1":
-            return 1
-        if choice == "2":
-            return 2
-        print(f"⚠ 輸入無效「{choice}」，請輸入 1 或 2（直接按 Enter 預設為 2）")
-
-
 def main():
-    run_mode = resolve_run_mode()
-    is_stats_mode = (run_mode == 1)
-    is_test_mode = (run_mode == 2)
+    # 這支工具只有「開視窗人工複審」一種模式，沒有 1_run_video_inference.py 的
+    # 統計模式（那是給自動推論跑完整份資料集用的，跟逐支手動判定的用途不同）。
+    is_stats_mode = False
+    is_test_mode = True
 
     # use a local mutable copy to avoid modifying module-level constant
     feature_mode = STGCN_FEATURE_MODE
 
-    # 解析所有資料夾的影片清單（啟動時一次完成）
-    folder_videos: dict = {}
-    for fkey, (fpath, fname) in FOLDER_MAP.items():
-        vids = resolve_video_paths([fpath])
-        folder_videos[fkey] = vids
-        print(f"  [{fkey}] {fname}: {len(vids)} 部影片  ({fpath})")
-
-    # 若指定了 VIDEO_PATHS 就用那個；否則依 FOLDER_TEST_MODE 決定播放清單
-    folder_range: dict = {}   # all 模式下：fkey -> (start_idx, end_idx) in merged video_paths
+    # 待複審清單：VIDEO_PATHS（含 TEST_VIDEO_PATH 覆寫）優先，否則遞迴掃描 SOURCE_FOLDER。
+    # 這支工具不分「五個行為資料夾各自瀏覽」——所有待複審影片混在同一份清單裡，
+    # 分類時才決定要進哪個 behavior/variant，跟來源目前放在哪個資料夾無關。
     if VIDEO_PATHS:
         video_paths = resolve_video_paths(VIDEO_PATHS)
-        current_folder_key = DEFAULT_FOLDER_KEY
-        is_all_mode = False
-    elif FOLDER_TEST_MODE == 'all':
-        # 所有行為子資料夾依 FOLDER_MAP 順序合併，並記錄各資料夾的索引分區
-        video_paths = []
-        _offset = 0
-        for fkey in FOLDER_MAP:
-            _n = len(folder_videos[fkey])
-            folder_range[fkey] = (_offset, _offset + _n)
-            video_paths.extend(folder_videos[fkey])
-            _offset += _n
-        current_folder_key = DEFAULT_FOLDER_KEY
-        is_all_mode = True
-        print(f"[FOLDER_TEST_MODE=all] 已合併全部 {len(video_paths)} 部影片")
-        for _fk, (_s, _e) in folder_range.items():
-            print(f"  [{_fk}] {FOLDER_MAP[_fk][1]}: 索引 {_s}~{_e-1} ({_e-_s} 部)")
     else:
-        # 'single'：掃描 SINGLE_FOLDER_PATH 扁平資料夾，影片直接放在該目錄
-        video_paths = resolve_video_paths([SINGLE_FOLDER_PATH])
-        current_folder_key = DEFAULT_FOLDER_KEY
-        is_all_mode = False
-        print(f"[FOLDER_TEST_MODE=single] {SINGLE_FOLDER_PATH}  共 {len(video_paths)} 部影片")
+        video_paths = resolve_video_paths([SOURCE_FOLDER])
+        print(f"[來源] {SOURCE_FOLDER}  共 {len(video_paths)} 部影片")
 
     if not video_paths:
-        print("❌ 找不到可用影片，請確認 FOLDER_MAP / VIDEO_PATHS 的路徑")
+        print("❌ 找不到可用影片，請確認 SOURCE_FOLDER / VIDEO_PATHS 的路徑")
         return
 
-    # 記住每個資料夾上次的播放位置（切回去時能續播）
-    # all 模式下存的是 merged video_paths 的全域索引；single/VIDEO_PATHS 存的是各自清單索引
-    if is_all_mode:
-        folder_positions: dict = {k: folder_range[k][0] for k in FOLDER_MAP}
-    else:
-        folder_positions: dict = {k: 0 for k in FOLDER_MAP}
-    switch_folder_key: str = ""   # 非空時代表要切換資料夾
-
-    def drop_video_at(idx, folder_key):
-        """把 video_paths[idx] 從播放清單移除（影片已被分類移走或檔案已不存在），並維持
-        all 模式的分區索引（folder_range／folder_positions）一致。回傳「接下來該播放的索引」；
-        清單空了回傳 None。
+    def drop_video_at(idx):
+        """把 video_paths[idx] 從播放清單移除（影片已被分類移走或檔案已不存在）。
+        回傳「接下來該播放的索引」；清單空了回傳 None。
 
         分類後影片已搬離原處，若清單還留著舊路徑，主迴圈只會一直「影片不存在，跳過」——
         剩最後一部被分類掉時整份清單都是舊路徑，就會無限空轉卡死。"""
         del video_paths[idx]
         if not video_paths:
             return None
-        if not is_all_mode:
-            return idx % len(video_paths)
-        s, e = folder_range[folder_key]
-        folder_range[folder_key] = (s, e - 1)
-        for fk, (fs, fe) in list(folder_range.items()):
-            if fs > idx:  # 後面的資料夾分區整段往前移一格
-                folder_range[fk] = (fs - 1, fe - 1)
-                folder_positions[fk] = max(folder_positions.get(fk, fs) - 1, fs - 1)
-        s, e = folder_range[folder_key]
-        if e > s:
-            return s + (idx - s) % (e - s)  # 只在目前資料夾分區內循環，跟 1/2 鍵一致
-        # 這個資料夾已經沒有影片：跳到下一個還有影片的分區（沒有就回到第一個有影片的）
-        nonempty = [rng for rng in folder_range.values() if rng[1] > rng[0]]
-        after = [rng for rng in nonempty if rng[0] >= idx]
-        return (after or nonempty)[0][0]
+        return idx % len(video_paths)
 
     display_window = DISPLAY_WINDOW and is_test_mode
     loop_playback = LOOP_PLAYBACK and is_test_mode
 
     print("="*60)
-    print("影片推論測試（EMA 平滑版）")
+    print("行為姿勢變體人工複審")
     print("="*60)
-    print(f"執行模式: {'模式1-統計分析' if is_stats_mode else '模式2-視窗測試'}")
     print(f"EMA Alpha: {EMA_ALPHA}")
+    print(f"推論開關預設: {'開' if ENABLE_INFERENCE_DEFAULT else '關'}（播放中按 m 切換）")
     print(f"影片路徑 (展開後共 {len(video_paths)} 部):")
     for i, p in enumerate(video_paths):
         print(f"  [{i}] {p}")
@@ -1213,6 +1013,8 @@ def main():
     stop_requested = False
     current_video_idx = 0
     show_overlay_info = True
+    enable_inference = ENABLE_INFERENCE_DEFAULT   # m 鍵即時切換：關閉時不跑 YOLO/ST-GCN，純播放
+    pending_behavior = None   # 兩段式分類：已按 z/x/c/v/b 選定、等使用者按數字鍵選變體時的暫存狀態
 
     # a/d 逐幀瀏覽（僅暫停時可用）：用畫面快取往回捲動，不重新呼叫模型
     # pipeline——如果反著重新推論，EMA/keypoints_buffer 等跨幀狀態會被錯誤的
@@ -1392,6 +1194,48 @@ def main():
         seek_to_seconds(target_sec)
         return True
 
+    def try_classify_key(k):
+        """兩段式分類共用邏輯：播放中／暫停中兩個按鍵處理分支都呼叫這個，行為要完全一致。
+        k 是目前按下的按鍵字元（小寫字母、數字字元、或 Backspace）。
+
+        回傳 True 代表已經完成一次分類搬移，呼叫端要接著 reset_video_runtime_state()／
+        把 switch_delta 設成前進一部／break 播下一部（video_moved 已經在這裡設好）；
+        回傳 False 代表這次按鍵只是選了大類、取消選擇、或按了無效數字，繼續播放、
+        不用切換影片。"""
+        nonlocal pending_behavior, video_moved
+        if k == 8:  # Backspace：取消已選的大類
+            if pending_behavior is not None:
+                print(f"\n已取消選擇 {pending_behavior.upper()}")
+                pending_behavior = None
+            return False
+        kc = chr(k) if 0 <= k < 256 else ''
+        if kc in BEHAVIOR_KEYS:
+            behavior = BEHAVIOR_KEYS[kc]
+            if pending_behavior == behavior:  # 再按一次同一個大類鍵＝取消
+                print(f"\n已取消選擇 {behavior.upper()}")
+                pending_behavior = None
+                return False
+            # 一律等數字鍵才分類，即使目前只有一種變體（例如 stop 只有 all）也一樣——
+            # 之後可能幫這個類別加第二種變體，數字索引從一開始就固定「1=第一個」，
+            # 不要因為現在只有一個就走捷徑，維持行為一致。
+            pending_behavior = behavior
+            variants = VARIANTS[behavior]
+            variant_hint = "  ".join(f"{i+1}={v}" for i, v in enumerate(variants))
+            print(f"\n已選 {behavior.upper()}，請按數字鍵選變體：{variant_hint}（Backspace 取消）")
+            return False
+        if pending_behavior is not None and ord('1') <= k <= ord('9'):
+            idx = k - ord('1')
+            variants = VARIANTS[pending_behavior]
+            if idx >= len(variants):
+                print(f"\n⚠ {pending_behavior.upper()} 沒有變體編號 {idx + 1}（共 {len(variants)} 個）")
+                return False
+            behavior = pending_behavior
+            pending_behavior = None
+            cap.release()  # Windows 上檔案控制代碼未釋放會導致移動失敗，先關閉
+            video_moved = classify_video_to_variant_folder(video_path, behavior, variants[idx])
+            return True
+        return False
+
     window_scale = 1.0  # Ctrl+加號／減號調整的視窗縮放倍率
     if display_window:
         if DISPLAY_SIZE is not None:
@@ -1433,12 +1277,6 @@ def main():
 
     open_fail_streak = 0  # 連續「打不開」的影片數；達到清單長度代表全部都打不開，要結束而不是無限輪播
     while not stop_requested:
-        # all 模式：依目前索引同步更新 current_folder_key
-        if is_all_mode:
-            for _fk, (_s, _e) in folder_range.items():
-                if _s <= current_video_idx < _e:
-                    current_folder_key = _fk
-                    break
         video_path = video_paths[current_video_idx]
         is_stream_url = _is_stream_url(video_path)
         if not is_stream_url and not Path(video_path).exists():
@@ -1450,7 +1288,7 @@ def main():
             else:
                 # 直接把這一項移出清單（而不是只跳到下一個），這樣清單裡的舊路徑不會越積越多，
                 # 全部都不存在時清單會變空而結束，不會無限空轉
-                new_idx = drop_video_at(current_video_idx, current_folder_key)
+                new_idx = drop_video_at(current_video_idx)
                 if new_idx is None:
                     print("❌ 播放清單已沒有可用影片，結束")
                     break
@@ -1517,15 +1355,13 @@ def main():
         frame_dt = 1.0 / max(model_input_fps, 1e-6)
 
         print("\n" + "=" * 60)
-        folder_name = FOLDER_MAP.get(current_folder_key, ("", "UNKNOWN"))[1]
-        folder_hint = "  ".join(f"[{k}]{FOLDER_MAP[k][1]}" for k in FOLDER_MAP)
-        print(f"資料夾: {folder_name} [{current_folder_key}]  |  {folder_hint}")
         print(f"目前影片 [{current_video_idx + 1}/{len(video_paths)}] {video_path}")
         print(f"影片資訊: {width}x{height}, source_fps={source_fps:.1f}, total={total_frames} 幀")
         print(f"模型輸入時基: {model_input_fps:.2f} fps (frame_step={frame_step})")
         print(f"時長: {duration:.1f} 秒")
         if is_test_mode:
-            print("控制: ESC=退出  space=暫停  r=重置  t=跳轉時間點  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  Ctrl+加號/減號=縮放視窗  Shift+A/B/C/D/E=移入 walk/lick/scratch/shake/stop 資料夾")
+            print("控制: ESC=退出  space=暫停  r=重置  t=跳轉時間點  n/p=下/上一部(不分類)  a/d=逐幀  i=資訊  m=推論開關  Ctrl+加號/減號=縮放視窗")
+            print("分類: z WALK  x LICK  c SCRATCH  v SHAKE  b STOP → 按下後一律再按數字鍵選變體（STOP 目前只有 1=all 也要按）；Backspace 取消已選的大類")
         if loop_playback:
             print("🔁 循環播放模式（當前影片播完會重播）")
         print("-" * 60)
@@ -1538,7 +1374,8 @@ def main():
         bbox_buffer = deque(maxlen=SEQUENCE_LENGTH)
         local_loop_count = 0
         switch_delta = 0
-        video_moved = False  # Shift+A~E 成功把目前影片移走後為 True，迴圈結尾要把它從播放清單移除
+        video_moved = False  # 分類動作成功把目前影片移走後為 True，迴圈結尾要把它從播放清單移除
+        pending_behavior = None  # 換影片時清掉上一支影片殘留的「已選大類、等變體」狀態
         prev_kpts = None
         prev_kpt_conf = None
         first_pass_completed = False
@@ -1637,7 +1474,11 @@ def main():
             # return_all_instances=True 讓它把本來就算好的其餘實例一併回傳，
             # 只在開視窗（display_window）時才要求多回傳這份資料，行為分類/
             # CSV 統計仍然只跟著前 4 個回傳值（單一追蹤目標）走，跟原本完全一致。
-            if display_window:
+            if not enable_inference:
+                # m 鍵關閉推論：不跑 YOLO/ST-GCN，純顯示原始畫面（省 GPU）。
+                kpts = kpt_conf = bbox = bbox_conf = None
+                all_cat_instances = []
+            elif display_window:
                 kpts, kpt_conf, bbox, bbox_conf, all_cat_instances = keypoint_detector.detect(
                     frame, return_all_instances=True
                 )
@@ -1865,8 +1706,8 @@ def main():
                             bbox_conf=bbox_conf,
                         )
                     else:
-                        draw_no_cat_overlay(show_frame)
-                    if show_overlay_info:
+                        draw_no_cat_overlay(show_frame, text="Inference OFF (m)" if not enable_inference else "No cat detected")
+                    if show_overlay_info and enable_inference:
                         draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts, total_duration_sec=panel_total_duration)
                 else:
                     show_frame = frame.copy()
@@ -1884,8 +1725,8 @@ def main():
                             bbox_conf=bbox_conf,
                         )
                     else:
-                        draw_no_cat_overlay(show_frame)
-                    if show_overlay_info:
+                        draw_no_cat_overlay(show_frame, text="Inference OFF (m)" if not enable_inference else "No cat detected")
+                    if show_overlay_info and enable_inference:
                         draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts, total_duration_sec=panel_total_duration)
                 _h, _w = show_frame.shape[:2]
                 _ui = compute_ui_scale(_w, _h)
@@ -1900,11 +1741,18 @@ def main():
                         show_frame, _extra_instances,
                         ui_scale=_ui, scale=preview_scale, crop_x=preview_pad_x, crop_y=preview_pad_y,
                     )
-                # 資料夾名稱 + 影片進度條（左上角）
-                _fn  = FOLDER_MAP.get(current_folder_key, ("", "?"))[1]
-                _nav = (f"[{current_folder_key.upper()}]{_fn}  "
-                        f"{current_video_idx + 1}/{len(video_paths)}  "
-                        f"| z WALK  x LICK  c SCRATCH  v SHAKE  b STOP  | Shift+A WALK B LICK C SCRATCH D SHAKE E STOP move  | a/d step  | t seek")
+                # 影片進度 + 分類提示（左上角）：還沒選大類時列出五個按鍵，選了之後改列該類的變體數字鍵
+                # cv2.putText 的內建 Hershey 字型不支援中文／非 ASCII 符號（會畫成亂碼），
+                # 疊在畫面上的文字一律只能用 ASCII；中文說明留在 print() 印到終端機。
+                if pending_behavior is None:
+                    _classify_hint = "z WALK  x LICK  c SCRATCH  v SHAKE  b STOP"
+                else:
+                    _variant_list = " ".join(
+                        f"{_i+1}:{_v}" for _i, _v in enumerate(VARIANTS[pending_behavior])
+                    )
+                    _classify_hint = f"SELECTED {pending_behavior.upper()} -> {_variant_list}  (Backspace=cancel)"
+                _nav = (f"{current_video_idx + 1}/{len(video_paths)}  "
+                        f"| {_classify_hint}  | m:infer {'ON' if enable_inference else 'OFF'}  | n/p:switch  | a/d:step  | t:seek")
                 _fs = 0.42 * _ui
                 _th = max(1, int(_ui))
                 # Compute text size to ensure background rectangle fully covers label
@@ -1918,7 +1766,39 @@ def main():
                 text_y = int(max(rect_h * 0.7, scale_px(20, _ui, min_px=14)))
                 cv2.putText(show_frame, _nav, (x_pos, text_y),
                             cv2.FONT_HERSHEY_SIMPLEX, _fs, (160, 210, 255), _th, cv2.LINE_AA)
-                # 目前播放的影片檔名（右下角；左下是行為統計面板、右上是導覽列）
+                # 已選大類、等待按數字鍵選變體時，畫面正上方加一塊醒目的橘色大字色塊——
+                # 跟右上角那行小字提示並存，複審時掃過去就能立刻注意到「還沒選完」。
+                # 一樣只能用 ASCII（見上面關於 cv2.putText 中文字型的說明）。
+                if pending_behavior is not None:
+                    _banner_l1 = (
+                        f"{pending_behavior.upper()} -> "
+                        + "   ".join(f"{_i+1}:{_v}" for _i, _v in enumerate(VARIANTS[pending_behavior]))
+                    )
+                    _banner_l2 = "(Backspace = cancel)"
+                    _bfs1 = 0.85 * _ui
+                    _bfs2 = 0.48 * _ui
+                    _bth1 = max(2, int(round(2 * _ui)))
+                    _bth2 = max(1, int(round(_ui)))
+                    (_l1w, _l1h), _ = cv2.getTextSize(_banner_l1, cv2.FONT_HERSHEY_SIMPLEX, _bfs1, _bth1)
+                    (_l2w, _l2h), _ = cv2.getTextSize(_banner_l2, cv2.FONT_HERSHEY_SIMPLEX, _bfs2, _bth2)
+                    _bpad_x = scale_px(18, _ui, min_px=10)
+                    _bpad_y = scale_px(10, _ui, min_px=6)
+                    _bgap = scale_px(4, _ui, min_px=2)
+                    _box_w = max(_l1w, _l2w) + _bpad_x * 2
+                    _box_h = _l1h + _l2h + _bpad_y * 2 + _bgap
+                    _box_x1 = max(0, (_w - _box_w) // 2)
+                    _box_y1 = scale_px(34, _ui, min_px=24)
+                    _box_x2 = min(_w, _box_x1 + _box_w)
+                    _box_y2 = _box_y1 + _box_h
+                    cv2.rectangle(show_frame, (_box_x1, _box_y1), (_box_x2, _box_y2), (0, 165, 255), -1, cv2.LINE_AA)
+                    cv2.rectangle(show_frame, (_box_x1, _box_y1), (_box_x2, _box_y2), (0, 0, 0), max(1, int(round(2 * _ui))), cv2.LINE_AA)
+                    _l1_x = _box_x1 + (_box_w - _l1w) // 2
+                    _l1_y = _box_y1 + _bpad_y + _l1h
+                    cv2.putText(show_frame, _banner_l1, (_l1_x, _l1_y), cv2.FONT_HERSHEY_SIMPLEX, _bfs1, (0, 0, 0), _bth1, cv2.LINE_AA)
+                    _l2_x = _box_x1 + (_box_w - _l2w) // 2
+                    _l2_y = _l1_y + _bgap + _l2h
+                    cv2.putText(show_frame, _banner_l2, (_l2_x, _l2_y), cv2.FONT_HERSHEY_SIMPLEX, _bfs2, (0, 0, 0), _bth2, cv2.LINE_AA)
+                # 目前播放的影片檔名（右下角）
                 draw_video_name_label(show_frame, video_path, current_video_idx, len(video_paths), ui_scale=_ui)
                 cv2.imshow(WINDOW_NAME, show_frame)
                 # 進來的都是「新推進」的一幀（scrub 瀏覽只重播快取，不會走到這裡），
@@ -1951,32 +1831,27 @@ def main():
                     show_overlay_info = not show_overlay_info
                     print(f"\n資訊面板: {'顯示' if show_overlay_info else '隱藏'}")
                     continue
-                if key == ord('2'):
+                if key == ord('m'):
+                    enable_inference = not enable_inference
+                    print(f"\n推論（YOLO+ST-GCN）: {'開啟' if enable_inference else '關閉（純播放，省資源）'}")
+                    continue
+                if key == ord('n'):
                     switch_delta = 1
                     if not first_pass_completed:
                         switched_before_first_pass_complete = True
                     reset_video_runtime_state()
-                    print("\n切換到下一部影片")
+                    print("\n切換到下一部影片（未分類）")
                     break
-                if key == ord('1'):
+                if key == ord('p'):
                     switch_delta = -1
                     if not first_pass_completed:
                         switched_before_first_pass_complete = True
                     reset_video_runtime_state()
-                    print("\n切換到上一部影片")
+                    print("\n切換到上一部影片（未分類）")
                     break
-                # z/x/c/v/b 切換行為資料夾
-                if chr(key & 0xFF) in FOLDER_MAP and chr(key & 0xFF) != current_folder_key:
-                    switch_folder_key = chr(key & 0xFF)
-                    if not first_pass_completed:
-                        switched_before_first_pass_complete = True
-                    reset_video_runtime_state()
-                    print(f"\n切換資料夾 → {FOLDER_MAP[switch_folder_key][1]} [{switch_folder_key}]")
-                    break
-                # Shift+A~E 分類：把目前影片直接移進 walk/lick/scratch/shake/stop 資料夾後接著播下一部
-                if chr(key) in CLASS_KEYS:
-                    cap.release()  # Windows 上檔案控制代碼未釋放會導致移動失敗，先關閉
-                    video_moved = classify_video_to_folder(video_path, CLASS_KEYS[chr(key)])
+                # 兩段式分類：z/x/c/v/b 選大類、數字鍵選變體，命中後把影片搬進
+                # <分類根目錄>/<behavior>/<variant>/ 並接著播下一部
+                if try_classify_key(key):
                     switch_delta = 1
                     if not first_pass_completed:
                         switched_before_first_pass_complete = True
@@ -2041,6 +1916,9 @@ def main():
                         elif k2 == ord('i'):
                             show_overlay_info = not show_overlay_info
                             print(f"\n資訊面板: {'顯示' if show_overlay_info else '隱藏'}")
+                        elif k2 == ord('m'):
+                            enable_inference = not enable_inference
+                            print(f"\n推論（YOLO+ST-GCN）: {'開啟' if enable_inference else '關閉（純播放，省資源）'}")
                         elif k2 == ord('a'):
                             if history_back_steps < len(frame_history) - 1:
                                 history_back_steps += 1
@@ -2056,34 +1934,24 @@ def main():
                                 # 順序未被打亂），處理完在外層自動重新暫停
                                 step_one_frame_and_repause = True
                                 paused = False
-                        elif k2 == ord('2'):
+                        elif k2 == ord('n'):
                             paused = False
                             switch_delta = 1
                             if not first_pass_completed:
                                 switched_before_first_pass_complete = True
                             reset_video_runtime_state()
-                            print("\n切換到下一部影片")
+                            print("\n切換到下一部影片（未分類）")
                             break
-                        elif k2 == ord('1'):
+                        elif k2 == ord('p'):
                             paused = False
                             switch_delta = -1
                             if not first_pass_completed:
                                 switched_before_first_pass_complete = True
                             reset_video_runtime_state()
-                            print("\n切換到上一部影片")
+                            print("\n切換到上一部影片（未分類）")
                             break
-                        elif chr(k2 & 0xFF) in FOLDER_MAP and chr(k2 & 0xFF) != current_folder_key:
+                        elif try_classify_key(k2):
                             paused = False
-                            switch_folder_key = chr(k2 & 0xFF)
-                            if not first_pass_completed:
-                                switched_before_first_pass_complete = True
-                            reset_video_runtime_state()
-                            print(f"\n切換資料夾 → {FOLDER_MAP[switch_folder_key][1]} [{switch_folder_key}]")
-                            break
-                        elif chr(k2) in CLASS_KEYS:
-                            paused = False
-                            cap.release()  # Windows 上檔案控制代碼未釋放會導致移動失敗，先關閉
-                            video_moved = classify_video_to_folder(video_path, CLASS_KEYS[chr(k2)])
                             switch_delta = 1
                             if not first_pass_completed:
                                 switched_before_first_pass_complete = True
@@ -2197,31 +2065,14 @@ def main():
         if stop_requested:
             break
 
-        # Shift+A~E 分類後影片已經搬走：從播放清單移除，接著播原位置的下一部（不再額外前進一格）。
+        # 分類後影片已經搬走：從播放清單移除，接著播原位置的下一部（不再額外前進一格）。
         # 清單空了（最後一部也分類完）就結束，而不是留著全是舊路徑的清單無限空轉。
         if video_moved:
-            new_idx = drop_video_at(current_video_idx, current_folder_key)
+            new_idx = drop_video_at(current_video_idx)
             if new_idx is None:
                 print("\n✅ 這份清單的影片都已分類完畢，沒有剩餘影片，結束。")
                 break
             current_video_idx = new_idx
-            switch_delta = 0
-            switch_folder_key = ""
-            continue
-
-        # 資料夾切換（z/x/c/v/b）：儲存目前位置後切換到新資料夾
-        if switch_folder_key:
-            folder_positions[current_folder_key] = current_video_idx
-            if is_all_mode:
-                # all 模式：video_paths 不替換，只在合併清單內跳到目標資料夾分區
-                _ts, _te = folder_range[switch_folder_key]
-                _saved = folder_positions.get(switch_folder_key, _ts)
-                current_video_idx = max(_ts, min(_saved, _te - 1)) if _te > _ts else _ts
-            else:
-                video_paths = folder_videos[switch_folder_key]
-                current_video_idx = folder_positions.get(switch_folder_key, 0)
-            current_folder_key = switch_folder_key
-            switch_folder_key = ""
             switch_delta = 0
             continue
 
@@ -2231,14 +2082,7 @@ def main():
                 break
         else:
             if switch_delta != 0:
-                if is_all_mode:
-                    # all 模式：1/2 只在目前資料夾分區內循環，不跨越分區
-                    _s, _e = folder_range[current_folder_key]
-                    _count = _e - _s
-                    if _count > 0:
-                        current_video_idx = _s + (current_video_idx - _s + switch_delta) % _count
-                else:
-                    current_video_idx = (current_video_idx + switch_delta) % len(video_paths)
+                current_video_idx = (current_video_idx + switch_delta) % len(video_paths)
             elif is_stream_url:
                 # 串流不做循環播放，結束後維持在當前來源即可
                 break
@@ -2253,101 +2097,9 @@ def main():
         except Exception:
             pass
 
-    if is_test_mode:
-        print("\n模式2完成：視窗測試結束（未產生統計報告）")
-        print("=" * 60)
-        return
+    print("\n人工複審結束（未播放清單裡的影片視為還沒看過，重開腳本會繼續從來源資料夾掃描）")
+    print("=" * 60)
 
-    print("-"*60)
-    print(f"\n推論完成！共納入 {frame_count} 幀（僅完整播放影片）")
-    print(f"\nYOLO 偵測統計:")
-    if frame_count > 0:
-        print(f"  偵測到貓咪: {frames_with_cat} 幀 ({frames_with_cat/frame_count*100:.1f}%)")
-        print(f"  未偵測到: {frames_without_cat} 幀 ({frames_without_cat/frame_count*100:.1f}%)")
-    else:
-        print("  偵測到貓咪: 0 幀 (0.0%)")
-        print("  未偵測到: 0 幀 (0.0%)")
-    print(f"\n有效預測: {len(predictions)} 次")
-    print(f"行為變化: {behavior_change_count} 次")
-
-    # 抖動統計（全域）
-    print_jitter_report(
-        title=f"17關鍵點抖動統計（全域，EMA={EMA_ALPHA}，conf>{JITTER_CONF_THRESHOLD}）",
-        jitter_px=global_jitter_px,
-        jitter_norm=global_jitter_norm,
-        valid_counts=global_valid_counts,
-        pair_counts=global_pair_counts,
-    )
-
-    # 抖動統計（每影片）
-    for vid_idx, stats in sorted(per_video_stats.items(), key=lambda x: x[0]):
-        print_jitter_report(
-            title=f"17關鍵點抖動統計（影片[{vid_idx}]，EMA={EMA_ALPHA}，conf>{JITTER_CONF_THRESHOLD}）",
-            jitter_px=stats["jitter_px"],
-            jitter_norm=stats["jitter_norm"],
-            valid_counts=stats["valid_counts"],
-            pair_counts=stats["pair_counts"],
-        )
-
-    # 產出文檔報告
-    try:
-        report_path = generate_report_file(REPORT_OUTPUT_PATH, recorded_video_stats)
-        print(f"\n✓ 分析報告已輸出: {report_path}")
-    except Exception as e:
-        print(f"⚠ 無法輸出報告（{REPORT_OUTPUT_PATH}）：{e}")
-
-    # 統計分析
-    if predictions:
-        print("\n" + "="*60)
-        print("統計分析")
-        print("="*60)
-
-        from collections import Counter
-        behavior_counts = Counter([p['behavior_id'] for p in predictions])
-        print("\n各行為出現次數:")
-        for bid in range(5):
-            count = behavior_counts.get(bid, 0)
-            pct = count / len(predictions) * 100 if predictions else 0
-            print(f"  {BEHAVIOR_TEXT_MAP[bid]:6s} ({BEHAVIOR_CLASSES[bid]:8s}): {count:4d} 次 ({pct:5.1f}%)")
-
-        print("\n各行為持續時間（秒）:")
-        for bid in range(5):
-            print(f"  {BEHAVIOR_TEXT_MAP[bid]:6s} ({BEHAVIOR_CLASSES[bid]:8s}): {float(global_behavior_duration_sec[bid]):7.2f} s")
-
-        avg_probs = np.mean([p['probs'] for p in predictions], axis=0)
-        print("\n平均機率分布:")
-        for i, (cls, prob) in enumerate(zip(BEHAVIOR_CLASSES, avg_probs)):
-            print(f"  {BEHAVIOR_TEXT_MAP[i]:6s} ({cls:8s}): {prob*100:5.1f}%")
-
-        confidences = [p['confidence'] for p in predictions]
-        print(f"\n信心值統計:")
-        print(f"  平均: {np.mean(confidences)*100:.1f}%")
-        print(f"  最小: {np.min(confidences)*100:.1f}%")
-        print(f"  最大: {np.max(confidences)*100:.1f}%")
-
-        most_common_id = behavior_counts.most_common(1)[0][0]
-        print(f"\n✓ 主要行為: {BEHAVIOR_TEXT_MAP[most_common_id]} ({BEHAVIOR_CLASSES[most_common_id]})")
-        print(f"  出現比例: {behavior_counts[most_common_id]/len(predictions)*100:.1f}%")
-
-        print("\n" + "="*60)
-        print("結果分析")
-        print("="*60)
-
-        if most_common_id == 1:
-            print("⚠ 主要預測為 scratch（搔抓），建議檢查:")
-            print("  1. 影片內容是否包含抓癢/停頓等與 scratch 相似片段")
-            print("  2. 是否有大量低信心窗被濾除，造成剩餘樣本偏向 scratch")
-            print("  3. 重新檢視混淆矩陣與該影片逐幀機率曲線")
-        elif most_common_id == 0:
-            print("✓ 主要預測為 walk（走動），符合預期")
-            print("  → 模型正確辨識出行走行為")
-        else:
-            print(f"預測為 {BEHAVIOR_TEXT_MAP[most_common_id]}，需檢查:")
-            print("  1. 影片內容是否確實為此行為")
-            print("  2. 模型訓練數據品質")
-            print("  3. 正規化是否正確 (normalize=True)")
-
-    print("\n" + "="*60)
 
 if __name__ == "__main__":
     try:

@@ -3,6 +3,10 @@
 （各自獨立的 YOLO-Pose + ST-GCN 組合）做即時推論，方便肉眼比較兩組模型在同一段
 動作上的骨架穩定度與行為判斷差異。
 
+MODEL_A／MODEL_B 的 yolo_path、stgcn_path 各自獨立設定（見下方「使用者設定區」），
+三種比較組合都支援：只換 YOLO（stgcn_path 兩邊填一樣）、只換 GCN（yolo_path 兩邊
+填一樣）、或兩者都換——不需要另外切換模式，直接照想比較的東西填就好。
+
 跟 1_run_video_inference.py 共用同一套 detectors/models/utils 模組（同樣的
 sys.path 設定），但為了讓兩個模型的執行狀態（EMA/緩衝區/hysteresis）互不干擾，
 把單一模型的推論流程封裝進 ModelPipeline，同一幀畫面分別餵給兩個獨立的
@@ -24,6 +28,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
+from utils.video_name_overlay import draw_video_name_label
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import YOLOConfig as _YOLOConfig
@@ -52,10 +57,20 @@ from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 #  使用者設定區
 # ═══════════════════════════════════════════════════════
 # 相對於這支腳本的位置（paper/tools/ → 專案根目錄 → stgcn_models/），不寫死磁碟機與使用者資料夾
+# 備妥兩個 ST-GCN checkpoint 常數（不是只給 MODEL_B 用、也不是綁死哪一個給
+# MODEL_A／MODEL_B）——想比較 GCN 時把 MODEL_A/MODEL_B 的 stgcn_path 分別指到
+# 這兩個常數即可；想只比較 YOLO 時，兩邊 stgcn_path 填同一個常數就好。
 _STGCN_124_PATH = str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_124_xy_conf_v_bone_att_on" / "124_best_model.pth")
+_STGCN_130_PATH = str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_147_xy_conf_v_bone_att_on" / "147_best_model.pth")
+
+# 下面這組預設同時換了 YOLO 跟 ST-GCN（A=v11s_151+124本、B=v11s_152+130本）——
+# 只是示範兩邊都能各自獨立填，不代表非得兩個都換：
+#   只比較 YOLO → 兩邊 stgcn_path 都填 _STGCN_124_PATH（或都填 _STGCN_130_PATH）
+#   只比較 GCN  → 兩邊 yolo_path 都填同一個 YOLO 路徑
+#   兩者都比較 → 維持目前這樣，yolo_path／stgcn_path 各自填不同的
 MODEL_A = dict(
     label="Model A",
-    yolo_path=r"C:\ai_project\yolo_models\v11s_149.pt",
+    yolo_path=str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_152.pt"),
     stgcn_path=_STGCN_124_PATH,
     feature_mode=None,   # None = 用下面 STGCN_FEATURE_MODE 的預設值
     ema_alpha=1.0,
@@ -63,8 +78,8 @@ MODEL_A = dict(
 )
 MODEL_B = dict(
     label="Model B",
-    yolo_path=r"C:\ai_project\yolo_models\v11s_150.pt",
-    stgcn_path=_STGCN_124_PATH,
+    yolo_path=str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_152.pt"),
+    stgcn_path=_STGCN_130_PATH,
     feature_mode=None,
     ema_alpha=1.0,
     banner_color=(60, 180, 60),   # BGR，綠色系
@@ -998,6 +1013,9 @@ def main():
                 _base_display, _scale, _crop_x, _crop_y = resize_with_letterbox(last_raw_frame, DISPLAY_SIZE)
                 frame_a = render_pipeline_frame(_base_display.copy(), _scale, _crop_x, _crop_y, worker_a.snapshot(), visualizer, nav_text)
                 frame_b = render_pipeline_frame(_base_display, _scale, _crop_x, _crop_y, worker_b.snapshot(), visualizer, nav_text)
+                # 目前播放的影片檔名（兩個視窗都畫在右下角；右上是模型橫幅、左下是行為統計面板）
+                for _fr in (frame_a, frame_b):
+                    draw_video_name_label(_fr, video_path, current_video_idx, len(video_paths))
                 cv2.imshow(win_a, frame_a)
                 cv2.imshow(win_b, frame_b)
 

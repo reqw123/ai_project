@@ -71,7 +71,7 @@ CH_TO_FEATURE = {
 }
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
-DEFAULT_YOLO    = r"C:\ai_project\yolo_models\v11s_144.pt"
+DEFAULT_YOLO    = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_152.pt")
 DEFAULT_IMGSZ   = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（設定視窗 yolo.image_size／環境變數 CAT_MONITORING_YOLO_IMAGE_SIZE，預設 640）
 DEFAULT_CONF    = 0.5
 DEFAULT_SEQ_LEN = 16
@@ -90,52 +90,29 @@ PARTIAL_COVERAGE_CLASSES = {'scratch', 'shake'}
 # 預設比較清單：2~5 筆皆可，每筆為 {path, name, ema_alpha, seq_len}，
 # 可另外加 smoothing_kind/kalman_process_noise/kalman_measurement_noise
 # （省略則預設 'none'/90.0/70.0，等同這幾個欄位加入前的行為）。
-# name=None 時自動從檔名推導；--models 等 CLI 參數會整個覆蓋這份清單。
+# 'name' 可省略：自動從 run 資料夾抓版本編號、從 checkpoint 讀關節數，組成
+# 「Run147_14關節」（見 _short_name()）；要自訂顯示名稱再手動填。
+# --models 等 CLI 參數會整個覆蓋這份清單。
 # 比較「不同關鍵點平滑方式訓練出來的模型」時，每筆的 smoothing_kind 要跟
 # 該模型訓練時的 stgcn_config.yaml SMOOTHING_KIND 一致，才是公平比較
 # （見 evaluate_video() 開頭說明）。
 
 HARD_MODELS = [
-    {   # baseline — SMOOTHING_KIND="ema"（等同不平滑）訓練
-        'path':              r"C:\ai_project\stgcn_models\run_122_xy_conf_v_bone_att_on\122_best_model.pth",
-        'name':              'Baseline_122_無平滑',
+    {   # 舊模型、SMOOTHING_KIND 預設值 "ema" 但 kp_ema_alpha=1.0（等同不平滑，
+        # 見 0_train_gcn.py 的 dispatch：0.0 < alpha < 1.0 才真的套用 EMA），
+        # 用 smoothing_kind='none' 評估行為完全等價
+        'path':              str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_124_xy_conf_v_bone_att_on" / "124_best_model.pth"),
         'ema_alpha':         1.0,
         'seq_len':           16,
         'smoothing_kind':    'none',
     },
-    {   # Kalman Q=90 / R=70（實測校準起點——三組 Kalman 裡表現最好，見 comparison_025）
-        'path':              r"C:\ai_project\stgcn_models\run_126_xy_conf_v_bone_att_on\126_best_model.pth",
-        'name':              'Kalman_126_Q90R70',
+    {   # 新訓練的模型，同樣 kp_ema_alpha=1.0（理由同上，'none' 評估等價）；
+        # infer_num_joints() 會自動從 checkpoint 偵測關節數，14/17 混用不用額外設定
+        'path':              str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_147_xy_conf_v_bone_att_on" / "147_best_model.pth"),
         'ema_alpha':         1.0,
         'seq_len':           16,
-        'smoothing_kind':    'kalman',
-        'kalman_process_noise':     90.0,
-        'kalman_measurement_noise': 70.0,
+        'smoothing_kind':    'none',
     },
-    {   # Kalman Q=45 / R=140（較強平滑）
-        'path':              r"C:\ai_project\stgcn_models\run_127_xy_conf_v_bone_att_on\127_best_model.pth",
-        'name':              'Kalman_127_Q45R140強',
-        'ema_alpha':         1.0,
-        'seq_len':           16,
-        'smoothing_kind':    'kalman',
-        'kalman_process_noise':     45.0,
-        'kalman_measurement_noise': 140.0,
-    },
-    {   # Kalman Q=180 / R=35（較弱平滑——三組 Kalman 裡表現最差）
-        'path':              r"C:\ai_project\stgcn_models\run_128_xy_conf_v_bone_att_on\128_best_model.pth",
-        'name':              'Kalman_128_Q180R35弱',
-        'ema_alpha':         1.0,
-        'seq_len':           16,
-        'smoothing_kind':    'kalman',
-        'kalman_process_noise':     180.0,
-        'kalman_measurement_noise': 35.0,
-    },
-   # {'path': r"C:\ai_project\stgcn_models\run_116_seqlen_ablation_att_on\116_xy_conf_v_bone_T32_att_on.pth",
-   #  'name': None, 'ema_alpha': 1.0, 'seq_len': 32},
-  #   {'path': r"C:\ai_project\stgcn_models\run_095_reg_ablation_att_on\4.pth",
-   #  'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
- #    {'path': r"C:\ai_project\stgcn_models\run_095_reg_ablation_att_on\5.pth",
-#     'name': None, 'ema_alpha': 1.0, 'seq_len': 16},
 ]
 
 HARD_VIDEO_WALK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\walk"
@@ -228,13 +205,20 @@ def _next_comparison_number(out_root: str) -> int:
 
 
 def _short_name(model_path: str) -> str:
-    """從模型路徑提取簡短名稱，優先取 run number + mode 部分。"""
-    stem = Path(model_path).stem          # e.g. stgcn_best_001_xy_v_att_on
-    parts = stem.split('_')
+    """從模型路徑自動產生顯示名稱「Run<編號>_<關節數>關節」，例如
+    .../run_147_xy_conf_v_bone_att_on/147_best_model.pth → Run147_14關節。
+    編號優先取 run 資料夾名稱（run_147_...），其次取檔名開頭的數字（147_best_model）；
+    關節數用 infer_num_joints() 從 checkpoint 讀，不必手動對照。
+    兩者都抓不到時退回舊行為（檔名從第一段 3 位以上數字起的部分）。"""
+    p = Path(model_path)
+    m = re.match(r'run_(\d+)', p.parent.name) or re.match(r'(\d+)_', p.stem)
+    if m:
+        return f"Run{int(m.group(1))}_{infer_num_joints(model_path)}關節"
+    parts = p.stem.split('_')
     for i, part in enumerate(parts):
         if part.isdigit() and len(part) >= 3:
             return '_'.join(parts[i:])    # e.g. 001_xy_v_att_on
-    return stem[-28:] if len(stem) > 28 else stem
+    return p.stem[-28:] if len(p.stem) > 28 else p.stem
 
 
 def infer_bn_input_channels(model_path: str):
@@ -1442,7 +1426,7 @@ def main():
         parser.error(f'需要 2~5 個模型，目前是 {len(models_cfg)} 個')
 
     n_models = len(models_cfg)
-    names = [cfg['name'] or _short_name(cfg['path']) for cfg in models_cfg]
+    names = [cfg.get('name') or _short_name(cfg['path']) for cfg in models_cfg]
     # EMA alpha 不是 1.0 或序列長度不一致時附加標記，讓圖表/CSV 一眼看出差異
     labels = [f"{n}[ema={c['ema_alpha']}]" if c['ema_alpha'] < 1.0 else n
               for n, c in zip(names, models_cfg)]
@@ -1463,7 +1447,7 @@ def main():
     # 這幾支模型其實用的關節數不一樣，跟上面 seq_len 的標記邏輯一致。
     num_joints_list = [infer_num_joints(c['path']) for c in models_cfg]
     if len(set(num_joints_list)) > 1:
-        labels = [f"{l}[V{v}]" for l, v in zip(labels, num_joints_list)]
+        labels = [l if f"{v}關節" in l else f"{l}[V{v}]" for l, v in zip(labels, num_joints_list)]
 
     # 檔案系統安全短名（避免 Windows MAX_PATH），只用在資料夾/檔名，不影響顯示用的 labels
     fs_labels = _fs_safe_labels(labels)

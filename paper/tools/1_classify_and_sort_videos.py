@@ -47,7 +47,7 @@ SOURCE_FOLDER = r"C:\Users\homec\Downloads\再看看"  # TODO: 待分類影片�
 DEST_BASE = os.path.join(SOURCE_FOLDER, "class")
 DEST_FOLDERS = {name: os.path.join(DEST_BASE, name) for name in BEHAVIOR_CLASSES}  # walk/lick/scratch/shake/stop
 
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_150.pt"
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_150.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）

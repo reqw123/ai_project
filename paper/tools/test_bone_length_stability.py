@@ -170,7 +170,7 @@ if _env_test_video:
     INPUT_MODE = "paths"
     VIDEO_PATHS = [_env_test_video]
 
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_128.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）

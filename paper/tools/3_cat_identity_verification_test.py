@@ -61,7 +61,7 @@ from ultralytics import YOLO
 # ═══════════════════════════════════════════════════════
 #  使用者設定區
 # ═══════════════════════════════════════════════════════
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_133.pt"
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_133.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -157,7 +157,7 @@ DISPLAY_FULLSCREEN = (DISPLAY_RESOLUTION == "1080p")  # 1080p ＝ 全螢幕（�
 # 暫停時可用 a/d 逐幀檢視：往回是在這個「已處理過的畫面」快取裡瀏覽（不重跑推論、
 # 不影響追蹤狀態）。每張約 2.7MB，120 幀 ≈ 330MB；記憶體吃緊可調小。
 PREVIEW_HISTORY_FRAMES = 120
-PREVIEW_WINDOW_NAME = "Cat Identity Verification Test (q=quit  space=pause  1/2=prev/next video)"
+PREVIEW_WINDOW_NAME = "Cat Identity Verification Test (ESC=quit  space=pause  1/2=prev/next video)"
 UNKNOWN_COLOR = (120, 120, 120)   # 兩份基準都比不上（判定為未知）時的框線顏色
 
 # ── 顏色直方圖設定 ──

@@ -2,6 +2,7 @@
 Cat Pose Analysis - Fast English Version
 High FPS optimized with trigger keypoint detection
 """
+from pathlib import Path
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -18,7 +19,7 @@ from constants import (
 )
 
 # ==================== Configuration ====================
-MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"
+MODEL_PATH = str(Path(__file__).resolve().parents[1] / "yolo_models" / "v11s_128.pt")
 VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
 
 # 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH，

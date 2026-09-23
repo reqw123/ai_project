@@ -38,7 +38,7 @@ _COLLECT_MODULE_PATH = Path(__file__).parent / "train_data" / "0_dataset_collect
 DATASET_ROOT = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
 CLASS_TO_ANALYZE = "scratch"  # scratch / lick / shake / walk
 VIDEO_FOLDER = str(Path(DATASET_ROOT) / CLASS_TO_ANALYZE)
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_121.pt"
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_121.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）

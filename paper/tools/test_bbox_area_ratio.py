@@ -6,7 +6,7 @@ BBox 佔畫面比例工具（雙模式）。
     bbox 面積佔整個畫面（原始影格）的百分比；同框有多隻貓時每隻都個別
     標示（追蹤鎖定的主要目標另外標註）。滑鼠左鍵在視窗上按住拖曳可畫出
     一個矩形，放開左鍵時定形，這個矩形也會即時算出佔畫面的百分比，當作
-    額外資訊獨立顯示（同一時間只保留一個，按 x 清除）。
+    額外資訊獨立顯示（同一時間只保留一個，按 c 清除）。
 
 模式 2 — 資料夾批次分類（完整移植自 cat_pose/cat_pose_size_tier_report.py）：
     掃描一個資料夾內的所有靜態圖片，依 bbox 占比自動分類搬進
@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
+from utils.video_name_overlay import draw_video_name_label
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import YOLOConfig as _YOLOConfig
@@ -63,7 +64,7 @@ _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video:
     VIDEO_PATH = _env_test_video
 
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_134.pt"
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_134.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH／
 # MODE2_YOLO_MODEL_PATH，兩個模式都套用，對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -97,7 +98,7 @@ USER_RECT_COLOR = (60, 220, 60)        # 綠色：使用者自畫矩形（已定
 USER_RECT_DRAG_COLOR = (60, 220, 220)  # 黃綠色：拖曳中、尚未放開左鍵
 
 # ── 模式 2：資料夾批次分類（沿用 cat_pose/cat_pose_size_tier_report.py 原始設定）──
-MODE2_YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_114.pt"  # 換成你要用的模型
+MODE2_YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_114.pt")  # 換成你要用的模型
 if _env_yolo_model:
     MODE2_YOLO_MODEL_PATH = _env_yolo_model
 MODE2_FOLDER = r"C:\Users\homec\OneDrive\圖片\Screenshots\screen_cat"           # 換成你的資料夾
@@ -243,7 +244,7 @@ def run_mode1_video():
     cv2.setMouseCallback(WINDOW_NAME, _on_mouse)
 
     print("=" * 60)
-    print("控制: ESC=退出  space=暫停/播放  x=清除自畫矩形")
+    print("控制: ESC=退出  space=暫停/播放  c=清除自畫矩形")
     print("滑鼠左鍵在畫面上按住拖曳可畫一個矩形，放開左鍵定形；同一時間只保留一個。")
     print("=" * 60)
 
@@ -313,6 +314,8 @@ def run_mode1_video():
         if user_pct is not None:
             lines = lines + [f"Custom region: {user_pct:5.2f}% of frame"]
         _draw_hud(show_frame, lines)
+        # 目前播放的影片檔名（右下角；VIDEO_PATH 是攝影機編號時顯示 Webcam）
+        draw_video_name_label(show_frame, VIDEO_PATH if isinstance(VIDEO_PATH, str) else f"Webcam {VIDEO_PATH}")
 
         cv2.imshow(WINDOW_NAME, show_frame)
 
@@ -322,7 +325,7 @@ def run_mode1_video():
         elif key == ord(' '):
             paused = not paused
             print("⏸ 已暫停" if paused else "▶ 繼續播放")
-        elif key == ord('x'):
+        elif key == ord('c'):  # 2026-09 前是 x，改成 c 避免跟其他腳本「x=切到 LICK 資料夾」混淆
             _user_rect_display = None
             print("✓ 已清除自畫矩形")
 

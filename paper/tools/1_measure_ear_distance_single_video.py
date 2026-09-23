@@ -38,6 +38,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
+from utils.video_name_overlay import draw_video_name_label
 
 sys.path.append(str(Path(__file__).parent.parent))  # config.py 在 paper/ 根目錄
 from config import YOLOConfig as _YOLOConfig
@@ -77,7 +78,7 @@ if _env_test_video:
     if not Path(_env_test_video).is_dir():
         MAX_VIDEOS = 1
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_147.pt"
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_147.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -2939,6 +2940,8 @@ def main():
                     break
 
             if DISPLAY_WINDOW and STREAM_MODE == 1:
+                # 目前播放的影片檔名（右下角；左下是統計面板、右上是狀態框）
+                draw_video_name_label(display, video_path, current_video_idx, len(video_paths), ui_scale=_ov)
                 cv2.imshow(WINDOW_NAME, display)
                 if auto_pause_next_frame:
                     # 這一幀是暫停時按 a/d 跳轉出來的：跳過正常等待按鍵，
@@ -2959,6 +2962,9 @@ def main():
                             source = display
 
                         pause_img = source.copy()
+                        if source is display_det_only:
+                            # display 上面已經畫過檔名；DET_ONLY 用的是更早複製的副本，要另外補畫
+                            draw_video_name_label(pause_img, video_path, current_video_idx, len(video_paths), ui_scale=_ov)
                         cv2.putText(
                             pause_img,
                             "PAUSED (Space:Play, A/D:Frame)",

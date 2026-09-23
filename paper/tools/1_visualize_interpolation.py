@@ -12,8 +12,8 @@ vs「時間軸插值補全後」的骨架差異，用來實際驗證插值在不
 進入畫遮蔽區模式，在左側 RAW 面板上連續點 4 下滑鼠左鍵，這 4 個點會自動
 組成一個黑色遮蔽多邊形（依你點擊的順序連成四邊形，建議照著想遮的區域邊緣
 順時鐘或逆時鐘點，不要跳著點以免自我交叉變成蝴蝶結形狀）；可以連續點好幾組
-4 點疊加出多個遮蔽區塊。按 s 儲存目前畫的所有區塊、正式套用到偵測；按 x
-清除所有已存的遮蔽區塊（未存滿 4 點的那組點擊不算數，s/x 都會先清掉）。
+4 點疊加出多個遮蔽區塊。按 s 儲存目前畫的所有區塊、正式套用到偵測；按 c
+清除所有已存的遮蔽區塊（未存滿 4 點的那組點擊不算數，s/c 都會先清掉）。
 
 儲存後的遮蔽區塊會真的畫黑色多邊形到 detect_frame 上再餵給 YOLO 重新推論，
 信心值和座標都是 YOLO 看不到那塊區域時的真實反應，不是人為假設；同時另外
@@ -21,7 +21,7 @@ vs「時間軸插值補全後」的骨架差異，用來實際驗證插值在不
 當 ground truth（不會拿去餵插值，純粹用來畫比對線／算誤差像素數），藉此在
 任意影片上重現、驗證「短暫遮擋 vs 持續遮擋超過視窗長度」這兩種情境的插值
 行為差異，不需要真的找一段剛好被遮到的影片。遮蔽區塊存了之後會持續套用到
-後續每一幀（模擬「有東西一直擋在鏡頭前」），直到你按 x 清除，不是照時間
+後續每一幀（模擬「有東西一直擋在鏡頭前」），直到你按 c 清除，不是照時間
 自動開關。
 
 按鍵：
@@ -31,11 +31,13 @@ vs「時間軸插值補全後」的骨架差異，用來實際驗證插值在不
     o     = 開關「畫遮蔽區模式」（僅暫停時可進入，進入後在左側面板點 4 下
             滑鼠左鍵形成一個區塊，可連續點多組）
     s     = 儲存目前畫的遮蔽區塊，套用到後續偵測（暫停時按下畫面會立刻更新）
-    x     = 清除所有已存的遮蔽區塊（暫停時按下畫面會立刻更新，不用等恢復播放）
+    c     = 清除所有已存的遮蔽區塊（暫停時按下畫面會立刻更新，不用等恢復播放；
+            2026-09 前是 x 鍵，改成 c 是為了避免跟其他腳本「x=切到 LICK 資料夾」
+            的用法在跨腳本切換時混淆）
     t     = 開關「是否套用已存的遮蔽區塊」——區塊本身不會被刪除，只是暫時
             不塗黑/不影響偵測，播放中隨時可以按，方便快速對照「有遮擋」跟
-            「沒遮擋」兩種狀態，不用重畫或用 x 真的刪掉再重畫
-    r     = 重新從頭播放（遮蔽區塊不會被重置，只有 x 會清除）
+            「沒遮擋」兩種狀態，不用重畫或用 c 真的刪掉再重畫
+    r     = 重新從頭播放（遮蔽區塊不會被重置，只有 c 會清除）
     ESC   = 離開
 
 畫面上的文字全部使用英文——OpenCV 內建的 Hershey 字型不支援中文字元，
@@ -53,6 +55,7 @@ import numpy as np
 # top-level modules like config.py can be imported when running this script
 # from within the cat_monitoring_system folder.
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
+from utils.video_name_overlay import draw_video_name_label
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import YOLOConfig as _YOLOConfig
@@ -67,7 +70,7 @@ _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video:
     VIDEO_PATH = _env_test_video
 
-YOLO_MODEL_PATH = r"C:\ai_project\yolo_models\v11s_133.pt"
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_133.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -247,7 +250,7 @@ def main():
     print("=" * 60)
     print(f"影片: {VIDEO_PATH}")
     print(f"視窗長度: {SEQUENCE_LENGTH} 幀 @ {TARGET_MODEL_FPS} fps ≈ {window_seconds:.2f} 秒（插值真正的記憶邊界）")
-    print("遮蔽區塊: 用滑鼠互動畫（暫停後按 o 進入畫遮蔽區模式，左側面板點 4 下形成一個區塊，s 儲存 / x 清除）")
+    print("遮蔽區塊: 用滑鼠互動畫（暫停後按 o 進入畫遮蔽區模式，左側面板點 4 下形成一個區塊，s 儲存 / c 清除）")
     print("=" * 60)
 
     kpts_buffer = deque(maxlen=SEQUENCE_LENGTH)
@@ -311,7 +314,7 @@ def main():
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL if DISPLAY_FULLSCREEN else cv2.WINDOW_AUTOSIZE)
     if DISPLAY_FULLSCREEN:
         cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        print("控制（全螢幕沒有標題列，操作說明改印在這裡）: space=暫停  a/d=逐幀  o=畫遮蔽區  s=存檔  x=清除  t=切換遮蔽  r=重來  q=離開")
+        print("控制（全螢幕沒有標題列，操作說明改印在這裡）: space=暫停  a/d=逐幀  o=畫遮蔽區  s=存檔  c=清除  t=切換遮蔽  r=重來  ESC=離開")
     cv2.setMouseCallback(WINDOW_NAME, on_mouse)
 
     while True:
@@ -466,6 +469,8 @@ def main():
             last_letterbox["scale"], last_letterbox["pad_x"], last_letterbox["pad_y"] = scale, pad_x, pad_y
             canvas = np.hstack([preview_letterboxed, right])
 
+        # 目前播放的影片檔名（右下角，畫在左右合併後的畫布上）
+        draw_video_name_label(canvas, VIDEO_PATH)
         cv2.imshow(WINDOW_NAME, canvas)
 
         key = cv2.waitKey(1 if not paused else 30) & 0xFF
@@ -507,12 +512,12 @@ def main():
                 preview_letterboxed, scale, pad_x, pad_y = resize_with_letterbox(preview, DISPLAY_SIZE)
                 last_letterbox["scale"], last_letterbox["pad_x"], last_letterbox["pad_y"] = scale, pad_x, pad_y
                 canvas = np.hstack([preview_letterboxed, right])
-        elif key == ord('x'):
+        elif key == ord('c'):
             occlusion_regions = []
             pending_points = []
             drawing_mode = False
             print("\n🗑 已清除所有遮蔽區塊")
-            # 暫停時按 x 要立刻反映在畫面上，不能等恢復播放才看到黑色區塊消失
+            # 暫停時按 c 要立刻反映在畫面上，不能等恢復播放才看到黑色區塊消失
             # ——不管當下有沒有在畫遮蔽區模式，都重畫一次左側預覽（這時候
             # occlusion_regions 已經是空的，rebuild_left_preview 自然不會再畫
             # 黑色區塊/紅色外框）。

@@ -71,6 +71,7 @@ from functools import lru_cache
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
+from utils.video_name_overlay import draw_video_name_label
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import YOLOConfig as _YOLOConfig
@@ -138,7 +139,7 @@ _MODE_SUBDIR = {
 # 由 EXCLUDED_KEYPOINTS 衍生，供各分析函式共用
 _ACTIVE_KP_IDS: list = [i for i in range(17) if i not in EXCLUDED_KEYPOINTS]
 
-YOLO_MODEL_PATH  = r"C:\ai_project\yolo_models\v11s_121.pt"
+YOLO_MODEL_PATH  = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_121.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -1746,9 +1747,11 @@ def main():
         ui_s = compute_ui_scale(w, h)
         fs = 0.55 * ui_s
         th = scale_px(2, ui_s, min_px=1)
-        info = f"Frame {local_sampled}  Records: {len(frame_records)}  [ESC] 提前結束"
+        info = f"Frame {local_sampled}  Records: {len(frame_records)}  [ESC] stop early"
         cv2.putText(show_frame, info, (8, 28), cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 0, 0), th + 1, cv2.LINE_AA)
         cv2.putText(show_frame, info, (8, 28), cv2.FONT_HERSHEY_SIMPLEX, fs, (220, 255, 220), th, cv2.LINE_AA)
+        # 目前播放的影片檔名（右下角）
+        draw_video_name_label(show_frame, VIDEO_PATH, ui_scale=ui_s)
 
         cv2.imshow(WINDOW_NAME, show_frame)
         if cv2.waitKey(1) & 0xFF == 27:

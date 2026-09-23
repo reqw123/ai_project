@@ -116,9 +116,9 @@ def get_emotion_color(emotion):
 
 # ==================== 模型清單 ====================
 MODEL_LIST = [
-    r"C:\ai_project\yolo_models\white_edge.pt",
-    r"C:\ai_project\yolo_models\v11s_53.pt",   # ⚠ 目前 yolo_models/ 底下已無此檔案，可能是被清掉的舊 checkpoint
-    r"C:\ai_project\yolo_models\v11s_60.pt",   # ⚠ 同上，目前 yolo_models/ 底下找不到
+    str(Path(__file__).resolve().parents[1] / "yolo_models" / "white_edge.pt"),
+    str(Path(__file__).resolve().parents[1] / "yolo_models" / "v11s_53.pt"),   # ⚠ 目前 yolo_models/ 底下已無此檔案，可能是被清掉的舊 checkpoint
+    str(Path(__file__).resolve().parents[1] / "yolo_models" / "v11s_60.pt"),   # ⚠ 同上，目前 yolo_models/ 底下找不到
 ]
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先只使用該單一模型路徑（覆蓋上面的 MODEL_LIST，

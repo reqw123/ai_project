@@ -42,7 +42,7 @@ GREEN = (0, 255, 0)
 RED   = (0, 0, 255)
 BLUE  = (255, 0, 0)
 
-model = YOLO(r"C:\ai_project\yolo_models\v11s_121.pt")
+model = YOLO(str(_Path(__file__).resolve().parents[1] / "yolo_models" / "v11s_121.pt"))
 
 # ==================== 推論與繪製函式 ====================
 def run_inference(img_path: str):
@@ -145,7 +145,7 @@ def ask_image_path(_tk_root):
 _tk_root = tk.Tk()
 _tk_root.withdraw()
 
-WINDOW_NAME = "Detection Result  [ O ] 開啟新圖片  [ ESC ] 離開"
+WINDOW_NAME = "Detection Result  [ O ] Open image  [ ESC ] Quit"
 cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
 current_path = r"C:\Users\homec\Downloads\side-view-cat-walking-field.jpg"

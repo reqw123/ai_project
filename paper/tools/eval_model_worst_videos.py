@@ -19,7 +19,6 @@ Output directory: <output>/single_eval_NNN_<name>/
 """
 import argparse
 import csv
-import os
 import re
 from pathlib import Path
 from collections import deque
@@ -64,14 +63,12 @@ CH_TO_FEATURE = {
 }
 
 # ── Default / hardcoded paths ─────────────────────────────────────────────
-DEFAULT_YOLO    = r"C:\ai_project\yolo_models\v11s_114.pt"
-
-# 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 DEFAULT_YOLO，對應
-# settings_window.py 的「🧠 模型路徑」欄位）；命令列的 --yolo 仍然優先於這裡（argparse
-# 只有在沒帶 --yolo 時才會用到這個預設值）。
-_env_yolo_model = os.getenv("YOLO_MODEL_PATH", "").strip()
-if _env_yolo_model:
-    DEFAULT_YOLO = _env_yolo_model
+# 刻意不吃 YOLO_MODEL_PATH／settings_window.py「🧠 模型路徑」欄位覆寫：這支腳本是
+# 針對「這一個」YOLO+ST-GCN 組合做量化評分，模型路徑必須固定，不能被其他工具留下的
+# 環境變數悄悄換掉（同 2_run_dual_model_compare.py／eval_pose_compare.py／
+# eval_ema_ablation.py／eval_gcn_compare.py 的原則）。要換模型，改這裡的常數或用
+# 命令列 --yolo。
+DEFAULT_YOLO    = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_114.pt")
 
 DEFAULT_IMGSZ   = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（設定視窗 yolo.image_size／環境變數 CAT_MONITORING_YOLO_IMAGE_SIZE，預設 640）
 DEFAULT_CONF    = 0.5
