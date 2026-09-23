@@ -466,8 +466,19 @@ class Visualizer:
         show_info=True,
         show_skeleton=True,
         show_bbox=True,
+        bbox_color=COLOR_HEAD,
+        skeleton_color=None,
+        draw_face_overlay=True,
     ):
-        """繪製骨架、bbox、行為標籤與機率條等完整疊圖，回傳處理後的畫面。"""
+        """繪製骨架、bbox、行為標籤與機率條等完整疊圖，回傳處理後的畫面。
+
+        bbox_color：bbox 內框顏色（外框固定黑色）。預設 COLOR_HEAD（青色，目標貓）。
+        skeleton_color：None＝骨架用逐關節/逐骨的彩色配色（目標貓）；給一個 BGR
+            顏色則整副骨架都用它畫（多貓時的非目標貓＝灰色）。
+        draw_face_overlay：是否貼貓臉 overlay（跟隨鼻子）。非目標貓傳 False，避免
+            把目標貓的臉貼到別隻貓上。
+        身分驗證多貓場景由 FrameProcessor 對非目標貓傳
+        bbox_color=COLOR_BBOX_NONTARGET / skeleton_color=COLOR_BBOX_NONTARGET。"""
         if show_skeleton:
             for edge_idx, (i, j) in enumerate(EAR_DISTANCE_SKELETON_EDGES):
                 if i >= len(kpts) or j >= len(kpts):
@@ -478,7 +489,7 @@ class Visualizer:
                 ):
                     pt1 = tuple(map(int, kpts[i]))
                     pt2 = tuple(map(int, kpts[j]))
-                    color = (
+                    color = skeleton_color or (
                         EAR_DISTANCE_EDGE_COLORS[edge_idx]
                         if edge_idx < len(EAR_DISTANCE_EDGE_COLORS)
                         else (180, 180, 180)
@@ -488,7 +499,7 @@ class Visualizer:
             for i in range(len(kpts)):
                 if kpt_conf[i] > _AnomalyDetectionConfig.KP_CONF_THRES:
                     pt = tuple(map(int, kpts[i]))
-                    color = (
+                    color = skeleton_color or (
                         EAR_DISTANCE_KP_COLORS[i]
                         if i < len(EAR_DISTANCE_KP_COLORS)
                         else COLOR_KPT
@@ -496,7 +507,7 @@ class Visualizer:
                     cv2.circle(frame, pt, 3, color, -1)
 
         # 將貓臉疊層圖像貼在 nose 關鍵點(0)上，跟隨鼻子移動
-        overlay_frame = self._get_overlay_frame()
+        overlay_frame = self._get_overlay_frame() if draw_face_overlay else None
         if (
             overlay_frame is not None
             and len(kpts) > 0
@@ -525,7 +536,7 @@ class Visualizer:
             outer_w = 4
             inner_w = 2
             cv2.rectangle(frame, (x1, y1), (x2, y2), BLACK, outer_w, cv2.LINE_AA)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_HEAD, inner_w, cv2.LINE_AA)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), bbox_color, inner_w, cv2.LINE_AA)
             label = f"{conf:.2f}"
             cv2.putText(
                 frame,

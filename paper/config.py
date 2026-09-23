@@ -517,6 +517,20 @@ class RunModeConfig:
         "CAT_MONITORING_RUN_MODE", _runtime_default("run_mode.mode", "server", value_type=str)
     )
 
+    # 單貓 / 多貓系統模式（跟 MODE 的 server/gui 無關，兩者可自由組合）：
+    #   "single"（預設）：假設畫面全程只有一隻貓。YOLO 直接只偵測「信心值最高」的
+    #     那一隻（model.predict(max_det=1)），每一幀都獨立鎖信心最高、**不做**跨幀
+    #     IoU 追蹤延續；FrameProcessor 完全跳過「多貓同框挑目標貓 / 把非目標貓畫成
+    #     灰框」這整套邏輯，也不會載入身分驗證 CNN（即使
+    #     cat_identity.enable_identity_verification=True 也忽略）。
+    #   "multi"：多貓場景。YOLO 回傳所有偵測（跨幀用 IoU 追蹤延續同一隻），
+    #     FrameProcessor 依 cat_identity / visualization 的設定挑出目標貓、畫其他貓。
+    #     ENABLE_IDENTITY_VERIFICATION 與 SHOW_NON_TARGET_CATS 這兩個開關只在此模式下才有意義。
+    SYSTEM_MODE = _env_str(
+        "CAT_MONITORING_SYSTEM_MODE",
+        _runtime_default("run_mode.system_mode", "single", value_type=str),
+    )
+
     # server 模式下，處理管線（開影片、載入 YOLO/ST-GCN、tracker 統計、CSV、Node-RED 推送）
     # 原本要等第一個打到 /stream 等路由的 HTTP 請求才會啟動（見 routes.py 的
     # _ensure_processor_started()），也就是實務上要有人打開 Dashboard 點播放才會真正開始跑。
@@ -792,6 +806,15 @@ class VisualizationConfig:
         _runtime_default("visualization.show_gcn_result", True, value_type=bool),
     )  # 是否顯示 ST-GCN 行為分類結果與機率條
 
+    # SHOW_NON_TARGET_CATS: True = 畫面中同時出現多隻貓時，非目標貓也用灰色
+    # bbox + 灰色骨架畫出來（只畫、不進行為分類 / tracker / CSV / Node-RED /
+    # 個體化基線）。身分驗證關閉時「目標貓」＝信心最高 / IoU 追蹤延續的那隻。
+    # 設為 False 則完全維持單貓行為（只畫被選中的那一隻）。
+    SHOW_NON_TARGET_CATS = _env_bool(
+        "CAT_MONITORING_SHOW_NON_TARGET_CATS",
+        _runtime_default("visualization.show_non_target_cats", True, value_type=bool),
+    )
+
 
 # ==================== 異常檢測參數 ====================
 class AnomalyDetectionConfig:
@@ -984,27 +1007,35 @@ class BehaviorTrackingConfig:
 # ==================== 貓咪身分（單一貓咪，固定 ID） ====================
 class CatIdentityConfig:
     """
-    個體化基線的前提是「同一份紀錄都來自同一隻貓」；CAT_ID 把這個假設明確
-    標記在每一筆 log／基線資料上。
+    個體化基線的前提是「同一份紀錄都來自同一隻貓」。
 
     ENABLE_IDENTITY_VERIFICATION 是身分驗證（多貓辨識）的總開關，補上這個
     假設原本沒有強制檢查的部分——見 detectors/identity_verifier.py。跟
-    SQAConfig 同一套「低耦合、fail-safe」慣例：這裡只決定要不要啟用，機制
-    內部的細節（H-S bin 數、色彩門檻等）留在該模組自己管理；基準檔遺失/
-    載入失敗，或啟用時 detectors/identity_verifier.py 整個被刪除，
-    FrameProcessor 都會自動停用這一層、回退成「偵測到的貓一律視為目標貓」
-    的原本行為，不影響其餘功能運行。目前預設關閉（False）——即使
-    TARGET_CAT_PROFILE_PATH/OTHER_CAT_PROFILE_PATH 指向的基準檔案已存在，
-    預設部署下這層過濾也不會生效，所有偵測到的貓一律視為目標貓。需要啟用
-    身分過濾時，設定環境變數 CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION=true
-    （或透過 settings_window.py 存進 runtime_settings.current.json）。
+    SQAConfig 同一套「低耦合、fail-safe」慣例：這裡只決定要不要啟用、指定
+    模型檔與目標貓類別名稱，機制內部細節（信心門檻、平滑視窗、裁切比例等）
+    留在該模組自己管理；模型檔遺失/載入失敗、torch/torchvision 缺失，或
+    啟用時 detectors/identity_verifier.py 整個被刪除，FrameProcessor 都會
+    自動停用這一層、回退成「偵測到的貓一律視為目標貓」的原本行為，不影響
+    其餘功能運行。目前預設關閉（False）——即使 IDENTITY_MODEL_PATH 指向的
+    模型檔已存在，預設部署下這層過濾也不會生效。需要啟用身分過濾時，設定
+    環境變數 CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION=true（或透過
+    settings_window.py 存進 runtime_settings.current.json）。
 
-    啟用後：FrameProcessor 只有在判定「這是目標貓（TARGET_CAT_PROFILE_PATH）」
-    時才會把偵測結果送進行為分類/追蹤/CSV/Node-RED；判定為其他貓或無法判定
+    方法：ImageNet 預訓練的 MobileNetV3-Small 微調成 N 類貓咪身分分類器
+    （由 tools/cat_identity/2_train.py 訓練，權重存在 C:\\ai_project\\
+    identity_models\\；latest.pt 永遠指向最近一次訓練的 best）。
+
+    啟用後：FrameProcessor 只有在判定「這是目標貓（TARGET_CAT_CLASS）」時
+    才會把偵測結果送進行為分類/追蹤/CSV/Node-RED；判定為其他貓或無法判定
     時，直接視同「這一幀貓不在畫面」處理（沿用既有的貓咪消失容忍/NOT_VISIBLE
     路徑），不會產生任何行為紀錄，也不會計入 Node-RED 的 today_stats。
     """
 
+    # 貓咪 ID：只被 logutils/csv_logger.py 原樣寫進兩個 CSV 每一列的最後一欄，用來標記
+    # 「這些紀錄都來自同一隻貓」。不影響身分驗證判斷、統計、基線，多天歷史 DB 也不含此欄。
+    # 設定視窗「貓咪身份驗證」分頁、唯讀：identity_trainer_window.py 按「設為監控系統
+    # 使用的模型」時，連同 identity_model_path 一起把所選模型的自訂顯示名稱
+    # （run_meta.json 的 target_display_name）寫進 runtime_settings。
     CAT_ID = _env_str(
         "CAT_MONITORING_CAT_ID", _runtime_default("cat_identity.cat_id", "cat_001", value_type=str)
     )
@@ -1013,26 +1044,66 @@ class CatIdentityConfig:
         "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION",
         _runtime_default("cat_identity.enable_identity_verification", False, value_type=bool),
     )
-    # 目標貓（唯一會被納入統計）的顏色特徵基準檔路徑，由
-    # tools/3_cat_identity_verification_test.py 的 enroll 模式產生
-    TARGET_CAT_PROFILE_PATH = _env_str(
-        "CAT_MONITORING_TARGET_CAT_PROFILE_PATH",
+    # 身分辨識 CNN 權重檔（.pt）。由 tools/cat_identity/2_train.py 訓練產生，
+    # 檔案自帶 class_names / image_size / normalize 參數。預設指向
+    # C:\ai_project\identity_models\latest.pt（永遠是最近一次訓練的 best）。
+    IDENTITY_MODEL_PATH = _resolve_project_path(
+        _env_str(
+            "CAT_MONITORING_IDENTITY_MODEL_PATH",
+            _runtime_default(
+                "cat_identity.identity_model_path",
+                str(Path("identity_models") / "latest.pt"),
+                value_type=str,
+            ),
+        )
+    )
+    # 「目標貓」在模型 class_names 裡的類別名稱（唯一會被納入統計的貓）。
+    # 其餘所有類別、以及信心不足判為「未知」的偵測，都視為「不是目標貓」。
+    TARGET_CAT_CLASS = _env_str(
+        "CAT_MONITORING_TARGET_CAT_CLASS",
+        _runtime_default("cat_identity.target_cat_class", "目標貓", value_type=str),
+    )
+
+    # 放掉「位置追蹤鎖定」的遲滯幀數：多貓場景下 FrameProcessor 用 bbox IoU
+    # 延續鎖定同一隻貓所在的位置；CNN 平滑後只要沒有「明確」判定這隻是目標貓
+    # （含判為別隻貓、或信心不足的「分不清/未知」），該幀本身就立即不計入
+    # 統計——身分驗證的重點正是不留模糊地帶。這個遲滯只管位置鎖定何時真正
+    # 放掉：要連續這麼多幀身分都沒過，才放棄鎖定、下次改用信心排序重新挑；
+    # 期間位置鎖定仍會跟著候選貓的新位置更新，避免單幀信心不足就整個丟失
+    # 追蹤。目標貓移出畫面（原位置附近沒有貓）則不等遲滯、立即停止。見
+    # processors/frame_processor.py::_select_target_instance。
+    IDENTITY_FILTER_HYSTERESIS_FRAMES = _env_int(
+        "CAT_MONITORING_IDENTITY_FILTER_HYSTERESIS_FRAMES",
         _runtime_default(
-            "cat_identity.target_cat_profile_path",
-            r"C:\ai_project\paper\tools\cat_profile_cat_a.json",
-            value_type=str,
+            "cat_identity.identity_filter_hysteresis_frames", 4, value_type=int
         ),
     )
-    # 其他已知貓（例如同住的另一隻貓）的基準檔路徑；留空或檔案不存在時，
-    # IdentityVerifier 會自動退化成「只跟目標貓比對距離門檻」的單貓模式
-    OTHER_CAT_PROFILE_PATH = _env_str(
-        "CAT_MONITORING_OTHER_CAT_PROFILE_PATH",
+
+    # 單幀身分分類的信心門檻（0–1）：CNN softmax 最高值低於此，該幀判「未知」、
+    # 不投票（見 detectors/identity_verifier.py::_classify）；「未知」跟「明確判為
+    # 別隻貓」在 _select_target_instance() 裡是同一種待遇——都不算目標貓、這幀
+    # 不計入統計。調高＝更保守（更容易判未知、更依賴位置追蹤撐過去）；調低＝
+    # 更敢下判斷、也更容易誤判。改之前先看 2_train.py 產出的
+    # confusion_matrix.png / test_metrics.json。預設 0.80。
+    IDENTITY_CONF_THRESHOLD = _env_float(
+        "CAT_MONITORING_IDENTITY_CONF_THRESHOLD",
         _runtime_default(
-            "cat_identity.other_cat_profile_path",
-            r"C:\ai_project\paper\tools\cat_profile_cat_b.json",
-            value_type=str,
+            "cat_identity.identity_conf_threshold", 0.80, value_type=float
         ),
     )
+
+    @classmethod
+    def is_active(cls) -> bool:
+        """身分驗證這一層實際上會不會運作。
+
+        兩個條件都要成立：ENABLE_IDENTITY_VERIFICATION=True **且**
+        RunModeConfig.SYSTEM_MODE=="multi"。單貓模式（single）下一律回 False——
+        單貓場景不需要「多貓過濾」，FrameProcessor 也因此完全不會載入身分驗證
+        CNN、設定視窗的「貓咪身份驗證」分頁也會整個灰掉（見 settings_window.py）。
+        所有想知道「身分驗證到底有沒有在跑」的地方都應該問這個，不要各自
+        重新拼 ENABLE_IDENTITY_VERIFICATION 的判斷。
+        """
+        return cls.ENABLE_IDENTITY_VERIFICATION and RunModeConfig.SYSTEM_MODE == "multi"
 
 
 # ==================== CSV 日誌參數 ====================
@@ -1174,7 +1245,7 @@ def get_config_summary() -> str:
 
     📷 YOLO 參數
       - 圖像尺寸          : {YOLOConfig.IMAGE_SIZE}
-      - 偵測信心閾值      : {YOLOConfig.CONFIDENCE_THRESHOLD}
+      - 偵測框（bbox）信心閾值 : {YOLOConfig.CONFIDENCE_THRESHOLD}
 
     🧠 ST-GCN 參數  (硬編碼於 STGCNConfig.NUM_CLASSES；無 env 覆寫)
       - 時間窗長度 (T)    : {STGCNConfig.SEQUENCE_LENGTH} 幀
@@ -1200,6 +1271,7 @@ def get_config_summary() -> str:
       - 行為前綴對應      : {_train_behavior_prefixes}
 
     🕐 執行模式與排程
+      - 系統模式          : {RunModeConfig.SYSTEM_MODE}  （single=只偵測信心最高的一隻、不做 IoU 追蹤、跳過多貓挑選/畫非目標貓/身分驗證；multi=多貓場景）
       - 執行模式          : {RunModeConfig.MODE}  ("server" 或 "gui")
       - 啟動即自動處理    : {RunModeConfig.AUTO_START_PROCESSING}  （False=等第一個 /stream 等請求才啟動處理管線）
       - 排程開始時間      : {RunModeConfig.SCHEDULED_START_TIME or "(未設定)"}
@@ -1233,6 +1305,7 @@ def get_config_summary() -> str:
       - 偵測框 bbox (啟動預設): {VisualizationConfig.SHOW_BBOX}  （執行期間可用鍵盤 b 切換(僅限 gui 模式)）
       - 骨架關鍵點 (啟動預設): {VisualizationConfig.SHOW_SKELETON}  （執行期間可用鍵盤 s 切換(僅限 gui 模式)）
       - GCN 分類結果+機率條 (啟動預設): {VisualizationConfig.SHOW_GCN_RESULT}  （執行期間可用鍵盤 l 切換(僅限 gui 模式)）
+      - 多貓時畫出非目標貓     : {VisualizationConfig.SHOW_NON_TARGET_CATS}  （灰框灰骨架，只畫不計入統計）
 
     🛑 靜止偵測（滾動均值閾值，純 CSV 記錄；單位 body_fraction×100）
       - 最大動作值        : {AnomalyDetectionConfig.MAX_MOTION}  （body_fraction×100；走路約 10-20）
@@ -1263,10 +1336,13 @@ def get_config_summary() -> str:
       - 低活動 walk 門檻      : {BehaviorTrackingConfig.LOW_ACTIVITY_TIME_THRESHOLD_SECONDS} s
 
     🐱 貓咪身分與身分驗證
-      - CAT_ID                    : {CatIdentityConfig.CAT_ID}
+      - 貓咪 ID                   : {CatIdentityConfig.CAT_ID}  （唯讀，跟隨採用的身分模型自訂名稱；只寫進 CSV 每列最後一欄當篩選標記）
       - 身分驗證總開關（多貓過濾）: {CatIdentityConfig.ENABLE_IDENTITY_VERIFICATION}  （False=偵測到的貓一律視為目標貓，不做身分過濾）
-      - 目標貓特徵基準檔          : {CatIdentityConfig.TARGET_CAT_PROFILE_PATH}
-      - 其他已知貓特徵基準檔      : {CatIdentityConfig.OTHER_CAT_PROFILE_PATH}  （留空或檔案不存在時自動退化為單貓模式）
+      - 身分驗證實際生效         : {CatIdentityConfig.is_active()}  （需總開關=True 且系統模式=multi；single 模式下一律 False）
+      - 身分辨識 CNN 模型檔       : {CatIdentityConfig.IDENTITY_MODEL_PATH}
+      - 目標貓類別名稱           : {CatIdentityConfig.TARGET_CAT_CLASS}  （對應模型 class_names；其餘類別/未知都視為非目標貓）
+      - 單幀身分信心門檻         : {CatIdentityConfig.IDENTITY_CONF_THRESHOLD}  （CNN softmax 最高值低於此 → 該幀判「未知」，跟明確判為他貓一樣不計入）
+      - 放掉位置鎖定的遲滯幀數   : {CatIdentityConfig.IDENTITY_FILTER_HYSTERESIS_FRAMES} 幀  （身分連續這麼多幀都沒過門檻才放棄位置追蹤；沒過門檻的幀本身立即不計入）
 
     📄 日誌設定
       - 主要 CSV          : {LoggingConfig.CSV_PATH}
@@ -1324,6 +1400,14 @@ def validate_all_config() -> bool:
             errors.append(f"JPEG_QUALITY 應在 [1,100]: {FlaskConfig.JPEG_QUALITY}")
         if NodeRedConfig.TIMEOUT <= 0:
             errors.append(f"Node-RED TIMEOUT 必須 > 0: {NodeRedConfig.TIMEOUT}")
+        if not (0.0 <= CatIdentityConfig.IDENTITY_CONF_THRESHOLD <= 1.0):
+            errors.append(
+                f"CatIdentityConfig IDENTITY_CONF_THRESHOLD 應在 [0,1]: {CatIdentityConfig.IDENTITY_CONF_THRESHOLD}"
+            )
+        if RunModeConfig.SYSTEM_MODE not in ("single", "multi"):
+            errors.append(
+                f"RunModeConfig SYSTEM_MODE 必須是 'single' 或 'multi': {RunModeConfig.SYSTEM_MODE!r}"
+            )
 
         if errors:
             print("  ✗ 參數範圍檢查")

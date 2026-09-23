@@ -290,3 +290,159 @@ def _styled_badge(parent, textvariable, bg, fg, font=None):
     顏色，之後可以用 `.config(bg=..., fg=...)` 動態換色（例如同一個欄位的來源
     從「JSON」變成「環境變數」時，顏色要跟著換但文字/形狀邏輯不變）。"""
     return _StatusBadge(parent, textvariable, bg, fg, font=font)
+
+
+class _RoundedEntry(tk.Canvas):
+    """圓角文字輸入框——取代原生 `tk.Entry` 沒設樣式時那種方正、系統預設灰白底
+    ＋sunken 立體邊框的外觀，在深色標題列或跟 `_PillButton`（膠囊圓角按鈕）並排
+    時明顯格格不入。
+
+    Canvas 沒有原生可編輯文字元件，圓角矩形只能手繪；於是背景用
+    `_rounded_rect_points()` 畫圓角矩形＋邊框，中間用 `create_window()` 內嵌一個
+    真正的 `tk.Entry`（拿掉它自己的邊框/底色，融進畫出來的圓角矩形裡）負責實際
+    文字輸入/游標/選取——兩者疊起來才能同時要圓角外觀跟正常的輸入框行為。邊框
+    顏色隨聚焦狀態在 `border`／`border_focus` 之間切換：手繪邊框不像原生
+    `highlightcolor` 那樣內建聚焦自動變色，這裡改綁 `<FocusIn>`/`<FocusOut>`
+    自己重繪。
+
+    寬度跟著 `.pack(fill="x", expand=True)` 撐開，靠 `<Configure>` 事件重繪，
+    用法（`textvariable=`＋`.pack()`）刻意跟原生 `tk.Entry` 相容，呼叫端不用
+    另外保留這個 widget 的參照。
+    """
+
+    _RADIUS = 10
+
+    def __init__(self, parent, textvariable, bg, fg, border, border_focus,
+                 font=None, height=None, padx=10):
+        self._parent_bg = parent.cget("bg")
+        self._bg = bg
+        self._border = border
+        self._border_focus = border_focus
+        self._focused = False
+        self._padx = padx
+        self._font = font or ("Microsoft JhengHei", 12)
+
+        measurer = tkfont.Font(font=self._font)
+        # 比一般 tk.Entry 的內距鬆一些——使用者明確反映原本的輸入框太侷促。
+        self._height = height or (measurer.metrics("linespace") + 18)
+
+        super().__init__(
+            parent, height=self._height, highlightthickness=0, bd=0,
+            bg=self._parent_bg,
+        )
+
+        self.entry = tk.Entry(
+            self, textvariable=textvariable, font=self._font,
+            bg=bg, fg=fg, insertbackground=fg,
+            relief="flat", bd=0, highlightthickness=0,
+        )
+        self._entry_item = self.create_window(
+            self._padx, self._height / 2, window=self.entry, anchor="w",
+        )
+        self.entry.bind("<FocusIn>", self._on_focus_in)
+        self.entry.bind("<FocusOut>", self._on_focus_out)
+        self.bind("<Configure>", self._on_resize)
+
+    def _on_focus_in(self, _event=None):
+        self._focused = True
+        self._redraw()
+
+    def _on_focus_out(self, _event=None):
+        self._focused = False
+        self._redraw()
+
+    def _on_resize(self, event):
+        self.itemconfig(self._entry_item, width=max(1, event.width - self._padx * 2))
+        self._redraw(event.width)
+
+    def _redraw(self, width=None):
+        w = width if width else self.winfo_width()
+        if w <= 1:
+            return
+        self.delete("bg")
+        border_color = self._border_focus if self._focused else self._border
+        points = _rounded_rect_points(1, 1, w - 1, self._height - 1, self._RADIUS)
+        self.create_polygon(
+            points, smooth=True, fill=self._bg, outline=border_color, width=1.6,
+            tags="bg",
+        )
+        self.tag_lower("bg")
+
+    def focus_set(self):
+        self.entry.focus_set()
+
+
+def _styled_entry(parent, textvariable, bg, fg, border, border_focus, font=None):
+    """建立一個 `_RoundedEntry`（圓角文字輸入框，見該類別說明）。"""
+    return _RoundedEntry(parent, textvariable, bg, fg, border, border_focus, font=font)
+
+
+class _RoundedComboboxFrame(tk.Canvas):
+    """圓角外框包住一顆 `ttk.Combobox`。
+
+    跟 `_RoundedEntry` 不同：`ttk.Combobox` 本身的下拉篩選／Ctrl+F／popdown
+    客製化事件綁定太多，不適合像 `tk.Entry` 那樣整個被這個 widget 吃進去自己
+    建立管理。改成呼叫端自己在這個 frame 底下建好 `ttk.Combobox`（`parent=`
+    傳這個 frame），再呼叫 `.embed(combo)`，之後這個 frame 只負責畫圓角背景＋
+    依聚焦狀態切換邊框顏色，`Combobox` 本身的行為/事件綁定完全不受影響。
+    `Combobox` 自己的 ttk 邊框要另外設成 `borderwidth=0`（呼叫端的 ttk.Style），
+    不然會跟這裡手繪的圓角邊框疊成兩層框線。
+    """
+
+    _RADIUS = 10
+
+    def __init__(self, parent, bg, border, border_focus, padx=6):
+        self._parent_bg = parent.cget("bg")
+        self._bg = bg
+        self._border = border
+        self._border_focus = border_focus
+        self._focused = False
+        self._padx = padx
+        self._height = None
+        self._widget_item = None
+
+        super().__init__(parent, highlightthickness=0, bd=0, bg=self._parent_bg)
+        self.bind("<Configure>", self._on_resize)
+
+    def embed(self, widget):
+        """把已經建好、以這個 frame 為 parent 的 widget（例如 ttk.Combobox）嵌進來。"""
+        widget.update_idletasks()
+        self._height = widget.winfo_reqheight() + 12
+        self.configure(height=self._height)
+        self._widget_item = self.create_window(
+            self._padx, self._height / 2, window=widget, anchor="w",
+        )
+        widget.bind("<FocusIn>", self._on_focus_in, add="+")
+        widget.bind("<FocusOut>", self._on_focus_out, add="+")
+
+    def _on_focus_in(self, _event=None):
+        self._focused = True
+        self._redraw()
+
+    def _on_focus_out(self, _event=None):
+        self._focused = False
+        self._redraw()
+
+    def _on_resize(self, event):
+        if self._widget_item is not None:
+            self.itemconfig(self._widget_item, width=max(1, event.width - self._padx * 2))
+        self._redraw(event.width)
+
+    def _redraw(self, width=None):
+        w = width if width else self.winfo_width()
+        if w <= 1 or not self._height:
+            return
+        self.delete("bg")
+        border_color = self._border_focus if self._focused else self._border
+        points = _rounded_rect_points(1, 1, w - 1, self._height - 1, self._RADIUS)
+        self.create_polygon(
+            points, smooth=True, fill=self._bg, outline=border_color, width=1.6,
+            tags="bg",
+        )
+        self.tag_lower("bg")
+
+
+def _styled_combobox_frame(parent, bg, border, border_focus, padx=6):
+    """建立一個 `_RoundedComboboxFrame`（圓角外框，見該類別說明）。呼叫端接著要
+    以回傳值為 `parent` 建立 `ttk.Combobox`，再呼叫 `.embed(combo)`。"""
+    return _RoundedComboboxFrame(parent, bg, border, border_focus, padx=padx)

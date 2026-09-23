@@ -44,7 +44,8 @@ from settings_manager import (  # noqa: E402
     FIELD_GROUPS, FIELD_SCHEMA, TAB_ORDER, _MISSING, _get_nested, _redact, _set_nested, display_label,
 )
 from settings_gui.console_panel import ConsolePanel  # noqa: E402
-from settings_gui.process_manager import ProcessManager  # noqa: E402
+from settings_gui.process_manager import ProcessManager, any_running  # noqa: E402
+from identity_trainer_window import IdentityTrainerWindow  # noqa: E402
 from settings_gui.field_search import FieldSearchBar  # noqa: E402
 from settings_gui import dialogs  # noqa: E402
 from settings_gui import tab_docs_panel  # noqa: E402
@@ -68,13 +69,14 @@ from settings_gui.style import (  # noqa: E402
     COLOR_TOOL_DESC_ACCENT,
     COLOR_TOOL_DESC_FG,
     CONSOLE_DEFAULT_HEIGHT,
-    CONSOLE_FONT_FAMILY,
     SPACE_XS,
     SPACE_SM,
     SPACE_MD,
     SPACE_LG,
 )
-from settings_gui.widgets import _styled_button, _styled_badge  # noqa: E402
+from settings_gui.widgets import (  # noqa: E402
+    _styled_button, _styled_badge, _styled_entry, _styled_combobox_frame,
+)
 
 # ── 視覺樣式：沿用 analytics/manage_baseline_history.py 的同一組常數 ─────────
 # （終端機面板／子行程管理相關的常數搬到 settings_gui/style.py、_styled_button／
@@ -252,6 +254,11 @@ class SettingsWindow(tk.Tk):
         self._font_hint = tkfont.Font(family=_FONT_FAMILY, size=11)
         self._font_banner = tkfont.Font(family=_FONT_FAMILY, size=16, weight="bold")
         self._font_tabbtn = tkfont.Font(family=_FONT_FAMILY, size=13, weight="bold")
+        # 獨立腳本工具「常駐說明卡片」裡的功能說明文字——使用者指定這段簡短中文
+        # 註解改用標楷體（Windows 內建字型，Tk 裡註冊的家族名稱就是這四個字，
+        # 不是 "DFKai-SB" 那個英文別名），跟其餘表單一律用的 _FONT_FAMILY
+        # （Microsoft JhengHei）分開，只套用在這一個 Label。
+        self._font_tool_desc = tkfont.Font(family="標楷體", size=13, weight="bold")
         self._font_link = tkfont.Font(family=_FONT_FAMILY, size=11, underline=True)
         # 欄位列的標籤欄像素寬（見 _build_field_row）：維持原本 30 個 '0' 的寬度，只是
         # 改成固定像素、不再隨字型變動。
@@ -275,6 +282,9 @@ class SettingsWindow(tk.Tk):
         # 晚），所以 .console 是事後在 _build_middle_area() 裡才指派。
         self._process_manager = ProcessManager(self, on_state_change=self._update_process_buttons_state)
         self._tool_script_var = tk.StringVar(value="")  # 「獨立腳本工具」下拉/瀏覽選中的 .py 路徑
+        self._identity_trainer_win = None  # 「訓練身分模型」子視窗（IdentityTrainerWindow），關閉時設回 None
+        self._identity_tab_enabled = True  # 系統模式＝multi 時才 True；見 _apply_system_mode_gating()
+        self._identity_extra_controls = []  # (widget, 還原用的 state 字串) 清單，例如「訓練身分模型」按鈕
         # 關閉本視窗（不管是按右上角 X 還是下方「關閉」按鈕）視同 main.py 關閉請求，
         # 避免不小心關掉設定視窗後，main.py 還在背景跑、卻再也找不到入口能停止它。
         self.protocol("WM_DELETE_WINDOW", self._on_window_close)
@@ -405,6 +415,23 @@ class SettingsWindow(tk.Tk):
             background=[("active", BTN_SECONDARY_ACTIVE), ("pressed", BTN_SECONDARY_ACTIVE)],
         )
 
+        # 獨立腳本工具的腳本選單專用樣式：外面另外包了一層手繪圓角邊框
+        # （settings_gui/widgets.py::_RoundedComboboxFrame），這裡的 ttk 邊框
+        # 要整個關掉（borderwidth=0），不然圓角外框裡面還會疊一層方形細框，
+        # 兩層框線看起來很奇怪。其餘配色跟通用的 "TCombobox" 一致。
+        style.configure(
+            "ToolScript.TCombobox",
+            fieldbackground=COLOR_TAB_BG, background=BTN_SECONDARY_BG,
+            foreground=COLOR_LABEL_FG, arrowcolor="#ffffff",
+            bordercolor=COLOR_TAB_BG, lightcolor=COLOR_TAB_BG, darkcolor=COLOR_TAB_BG,
+            padding=(8, 4), relief="flat", borderwidth=0, arrowsize=14,
+        )
+        style.map(
+            "ToolScript.TCombobox",
+            fieldbackground=[("readonly", COLOR_TAB_BG), ("disabled", COLOR_BG_MAIN)],
+            background=[("active", BTN_SECONDARY_ACTIVE), ("pressed", BTN_SECONDARY_ACTIVE)],
+        )
+
     # ── 版面 ─────────────────────────────────────────────────────────
 
     def _build_header(self):
@@ -510,32 +537,50 @@ class SettingsWindow(tk.Tk):
         # 到 Combobox 本身字級的 1.5 倍——這是使用者明確要的：清單一次列出一堆腳本
         # 名稱，字大一號＋淡藍底色掃視起來更輕鬆，不用瞇眼睛找。popdown listbox 是
         # ttk 內部另外生的元件，不會自動跟著 Combobox 本身的 font/顏色走，只能用
-        # option_add() 這種全域樣式規則設，沒有直接的 widget 參數可以配置。字型用
-        # 跟終端機面板同一款等寬字（CONSOLE_FONT_FAMILY）。_discover_tool_scripts()
-        # 補空白對齊 `#` 流水號時，直接用「這個 font 物件」逐列 measure() 量測寬度
-        # （不是數字元數）——所以字型要在掃描前先建好。
+        # option_add() 這種全域樣式規則設，沒有直接的 widget 參數可以配置。
+        #
+        # 字型改用粗體標楷體，跟「常駐說明卡片」（self._font_tool_desc）、
+        # 「↕ 排序」對話框的清單/備註輸入框同一套（原本用終端機那款等寬字
+        # Consolas，是舊版「補空白對齊 # 流水號」時代的產物——那個做法已經改成
+        # 流水號固定放最左欄，不用靠字寬對齊了，見 _discover_tool_scripts() 的
+        # 說明）。Consolas 沒有中文字形，清單每一列「#NN 檔名」是純 ASCII 沒差，
+        # 但後面接的中文「── 備註/說明」會整段掉去系統 fallback 字型，同一列裡
+        # 兩種字體風格混在一起很不協調；改用中文字型後整列風格一致，也不影響
+        # `#` 對齊（每列固定從第 0 欄開始，靠的是「起點相同」不是「等寬」）。
         self._tool_listbox_font = tkfont.Font(
-            family=CONSOLE_FONT_FAMILY, size=round(self._font_label.cget("size") * 1.5)
+            family="標楷體", size=round(self._font_label.cget("size") * 1.3), weight="bold"
         )
         self._tool_script_map = self._discover_tool_scripts()  # 顯示名稱（含流水號）→ 完整路徑
         self._restore_last_tool_selection()  # 還原上次選的腳本（見 ui_state.json）
-        combo = ttk.Combobox(
-            tool_row2, textvariable=self._tool_script_var,
-            values=self._tool_combo_values(self._tool_script_map.keys()),
-            font=self._tool_listbox_font, height=16,
+        # 圓角外框：ttk.Combobox 本身只能畫方形邊框（見上面 "ToolScript.TCombobox"
+        # 樣式，這裡把它的邊框整個關掉），外觀改由這層手繪圓角 Canvas 負責，跟輸入框
+        # （_styled_entry／_RoundedEntry）同一套視覺語言，不再是一塊方正的原生下拉框。
+        combo_frame = _styled_combobox_frame(
+            tool_row2, bg=COLOR_TAB_BG,
+            border=COLOR_TOOL_DESC_BORDER, border_focus=TAB_COLORS["模型與輸入來源"][1],
         )
-        combo.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=2)
-        # option_add 對 ttk combobox 的 popdown listbox 不一定生效（要在 popdown 建立
-        # 前設、pattern 還要匹配得到）——實測 `#` 流水號對中文檔名列沒對齊，就是因為
-        # popdown 沒吃到這個等寬字型、改用了主題預設字型，使得 _discover_tool_scripts()
-        # 裡拿「這個字型」measure() 算出來的補空白數，跟實際渲染的字型對不上。這裡
-        # 直接對「真的那個 popdown listbox widget」下 configure，一定生效，量測與渲染
-        # 也就用同一個字型、`#` 才會對齊。option_add 保留當作 popdown 被重建時的保底。
+        combo_frame.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        combo = ttk.Combobox(
+            combo_frame, textvariable=self._tool_script_var,
+            values=self._tool_combo_values(self._tool_script_map.keys()),
+            font=self._tool_listbox_font, height=16, style="ToolScript.TCombobox",
+        )
+        combo_frame.embed(combo)
+        # popdown listbox（展開後的清單）原本沒設 relief/border，吃 Tk 預設的
+        # sunken 立體邊框，跟圓角輸入框/圓角選單框是同一種「方正立體邊框」的
+        # 觀感問題——改成扁平、淡藍細框，跟上面圓角外框、下方常駐說明卡片同一套
+        # 配色語言。option_add 對 popdown listbox 不一定生效（要在 popdown 建立
+        # 前設、pattern 還要匹配得到），下面再對「真的那個 popdown listbox widget」
+        # 直接 configure 一次保證生效，option_add 保留當作 popdown 被重建時的保底。
         self.option_add("*TCombobox*Listbox.font", self._tool_listbox_font)
         self.option_add("*TCombobox*Listbox.background", COLOR_TOOL_LISTBOX_BG)
         self.option_add("*TCombobox*Listbox.foreground", COLOR_LABEL_FG)
         self.option_add("*TCombobox*Listbox.selectBackground", TAB_COLORS["模型與輸入來源"][1])
         self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+        self.option_add("*TCombobox*Listbox.relief", "flat")
+        self.option_add("*TCombobox*Listbox.borderWidth", 0)
+        self.option_add("*TCombobox*Listbox.highlightThickness", 1)
+        self.option_add("*TCombobox*Listbox.highlightBackground", COLOR_TOOL_DESC_BORDER)
         try:
             _popdown = combo.tk.call("ttk::combobox::PopdownWindow", combo)
             combo.tk.call(
@@ -545,10 +590,35 @@ class SettingsWindow(tk.Tk):
                 "-foreground", COLOR_LABEL_FG,
                 "-selectbackground", TAB_COLORS["模型與輸入來源"][1],
                 "-selectforeground", "#ffffff",
+                "-relief", "flat", "-borderwidth", 0,
+                "-highlightthickness", 1, "-highlightbackground", COLOR_TOOL_DESC_BORDER,
             )
         except tk.TclError:
             pass
         self._tool_combo = combo
+        # 鎖定圖示（🔒）要掛在 popdown「真的被展開」那一刻，不能只在 combo["values"]
+        # 剛設定完的當下套一次——ttk 內部的 ttk::combobox::Post（不管使用者是點下拉
+        # 箭頭、按 ↓、還是其他任何方式觸發展開）永遠會先呼叫 ConfigureListbox 把
+        # listbox 內容從乾淨的 -values 重灌一次，這會把之前手動插入的圖示文字整個
+        # 洗掉；踩過一次這個坑：明明用獨立呼叫 _style_tool_combo_locked_rows() 驗證
+        # 過 listbox 內容是對的，使用者實際點開下拉選單卻完全看不到圖示，才發現是
+        # Post 每次都會重新蓋過去。改成掛在 popdown 這個 Toplevel 的 <Map> 事件（
+        # wm deiconify 觸發、剛好在 ConfigureListbox 跑完「之後」、視窗真正被畫出來
+        # 「之前」）：popdown 是純 Tcl 建立的視窗（不是 Python 建立的 tk.Widget，
+        # nametowidget() 找不到），只能用 register() 把 Python 方法包成 Tcl 可呼叫
+        # 的指令名稱，再用原生 bind 掛上去，"+" 前綴表示疊加、不覆蓋 ttk 自己已經
+        # 掛在同一個事件上的 class binding（ComboboxPopdown 的 grab/pressed 狀態
+        # 處理）。掛一次就永久有效，不用再到處補呼叫。
+        try:
+            # 重新呼叫 PopdownWindow 只是拿回同一個路徑（Tcl 端已存在就直接回傳，
+            # 不會重建）——不依賴上面那個 try 區塊裡的 _popdown 是否成功賦值，這裡
+            # 自成一個獨立、不怕上面失敗的區塊。
+            _popdown = combo.tk.call("ttk::combobox::PopdownWindow", combo)
+            _cmd = self.register(self._style_tool_combo_locked_rows)
+            self.tk.call("bind", _popdown, "<Map>", f"+{_cmd}")
+        except tk.TclError:
+            pass
+        self._style_tool_combo_locked_rows()
 
         # 即時篩選：邊打字邊把清單縮小到「顯示名稱含有目前輸入內容」的腳本（不分大小
         # 寫）。Ctrl+F 是進入點——把焦點切到這顆下拉選單、清空目前內容準備輸入；
@@ -588,6 +658,8 @@ class SettingsWindow(tk.Tk):
                 ])
             else:
                 combo["values"] = self._tool_combo_values(all_display_names)
+            # 鎖定圖示不用在這裡重套——已經改成掛在 popdown 的 <Map> 事件，使用者
+            # 實際展開清單時才會現套現算，見上面 combo 建立處的說明。
 
         combo.bind("<KeyRelease>", _refresh_tool_combo_filter)
 
@@ -622,8 +694,17 @@ class SettingsWindow(tk.Tk):
         self._tool_video_path_var = tk.StringVar(
             value=_ui_state.get("last_tool_video_path", "")
         )
-        tk.Entry(
-            tool_row_video, textvariable=self._tool_video_path_var, font=self._font_hint,
+        # 這排在深色的 COLOR_HEADER_BG 底色上——原生 tk.Entry 不管怎麼配色都是
+        # 方正直角，跟同一排自製的膠囊圓角按鈕（_styled_button/_PillButton）擺
+        # 在一起明顯不搭，第一版只換色沒換形狀使用者仍不滿意。改用
+        # _styled_entry（settings_gui/widgets.py 的 _RoundedEntry）：手繪圓角
+        # 矩形背景＋內嵌真正的 tk.Entry，白底、淡藍邊框，聚焦時邊框換成跟下拉
+        # 選單同一種強調藍，內距也比原生 Entry 鬆，不再侷促。
+        _styled_entry(
+            tool_row_video, self._tool_video_path_var,
+            bg=COLOR_TAB_BG, fg=COLOR_LABEL_FG,
+            border=COLOR_TOOL_DESC_BORDER, border_focus=TAB_COLORS["模型與輸入來源"][1],
+            font=self._font_hint,
         ).pack(side="left", fill="x", expand=True, padx=(6, 8))
         # 原本是單一「瀏覽...」按鈕彈出選單選「檔案」或「資料夾」——彈出選單本身
         # 是原生元件，不管怎麼配色都不會有實心按鈕那種立體感/一致外觀（見
@@ -648,19 +729,20 @@ class SettingsWindow(tk.Tk):
         # 自動標註工具/auto_labeling_capture.py／自動標註工具/labeling.py），以及
         # paper/tools/ 底下同樣有寫死 YOLO 模型路徑的腳本
         # （1_classify_and_sort_videos.py／1_export_keypoint_timeseries.py／
-        # 1_measure_ear_distance_single_video.py／1_run_video_inference.py／
-        # 1_skeleton_visualizer.py／1_visualize_interpolation.py／
+        # 1_measure_ear_distance_single_video.py／1_review_behavior_variants.py／
+        # 1_run_video_inference.py／1_skeleton_visualizer.py／1_visualize_interpolation.py／
         # 1_visualize_three_normalizations.py／3_cat_identity_verification_test.py／
         # run_keypoint_trend_from_videos.py／test_bbox_area_ratio.py／
         # test_bone_length_stability.py／test_pose_jitter_analysis.py／
-        # eval_model_worst_videos.py／train_data/0_dataset_collect.py）都已支援。
+        # train_data/0_dataset_collect.py）都已支援。
         # 注意：這裡只覆寫「YOLO pose 偵測模型」，不影響行為辨識用的 ST-GCN 模型
         # 路徑（STGCN_MODEL_PATH 之類）；test_anomaly_detection.py／
         # verify_lick_stage_m2.py 讀的是 config.ModelPaths.YOLO_MODEL，走另一套
         # 官方覆寫機制（CAT_MONITORING_YOLO_MODEL 環境變數），不吃這個欄位；
-        # 2_run_dual_model_compare.py／eval_pose_compare.py／eval_ema_ablation.py
-        # 是刻意比較多個不同模型的工具，也不套用這個欄位。其餘沒讀這個環境變數的
-        # 腳本會安靜忽略、跟沒填一樣，原則同上面的影片路徑欄位。
+        # 2_run_dual_model_compare.py／eval_pose_compare.py／eval_ema_ablation.py／
+        # eval_gcn_compare.py／eval_model_worst_videos.py 這幾支 eval_ 開頭的量化評分／
+        # 模型比較工具，模型路徑必須固定才有可比性，也刻意都不套用這個欄位。其餘
+        # 沒讀這個環境變數的腳本會安靜忽略、跟沒填一樣，原則同上面的影片路徑欄位。
         tool_row_model = tk.Frame(tool_outer, bg=COLOR_HEADER_BG)
         tool_row_model.pack(fill="x", padx=10, pady=(0, 4))
         tk.Label(
@@ -671,8 +753,12 @@ class SettingsWindow(tk.Tk):
         self._tool_model_path_var = tk.StringVar(
             value=_ui_state.get("last_tool_model_path", "")
         )
-        tk.Entry(
-            tool_row_model, textvariable=self._tool_model_path_var, font=self._font_hint,
+        # 跟上面「影片路徑」同一顆 _styled_entry 圓角輸入框，理由同上。
+        _styled_entry(
+            tool_row_model, self._tool_model_path_var,
+            bg=COLOR_TAB_BG, fg=COLOR_LABEL_FG,
+            border=COLOR_TOOL_DESC_BORDER, border_focus=TAB_COLORS["模型與輸入來源"][1],
+            font=self._font_hint,
         ).pack(side="left", fill="x", expand=True, padx=(6, 8))
         _styled_button(
             tool_row_model, "🧠 選擇模型", self._pick_tool_model_file, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
@@ -704,7 +790,7 @@ class SettingsWindow(tk.Tk):
         self._tool_desc_var = tk.StringVar(value="")
         tk.Label(
             desc_card, textvariable=self._tool_desc_var, bg=COLOR_TOOL_DESC_BG, fg=COLOR_TOOL_DESC_FG,
-            font=self._font_label, anchor="w", justify="left", wraplength=1780,
+            font=self._font_tool_desc, anchor="w", justify="left", wraplength=1780,
         ).pack(side="left", fill="x", expand=True, padx=(0, 12), pady=10)
 
         def _on_tool_script_var_change(*_a):
@@ -829,6 +915,7 @@ class SettingsWindow(tk.Tk):
         左邊固定欄才每列都對齊。）"""
         self._tool_script_desc_map = {}  # 顯示名稱（含流水號）→ 功能說明，給常駐說明列／Ctrl+F 用
         self._tool_note_by_display = {}  # 顯示名稱（含流水號）→ 使用者在排序視窗寫的簡短備註
+        self._tool_display_to_relname = {}  # 顯示名稱（含流水號）→ relname，給 _style_tool_combo_locked_rows() 對照鎖定名單用
         self._tool_relnames_ordered = []  # 目前生效的腳本順序（relname 清單），給排序對話框用
         # 一定要在下面 tools_dir 不存在時的早退之前設好：_on_tool_script_var_change()
         # 在 _build_process_bar() 尾端會無條件呼叫一次，若 tools_dir 剛好讀不到（例如
@@ -864,6 +951,7 @@ class SettingsWindow(tk.Tk):
             mapping[display] = str(p)
             self._tool_script_desc_map[display] = plain_descriptions.get(name, "")
             self._tool_note_by_display[display] = notes.get(name, "")
+            self._tool_display_to_relname[display] = name
         return mapping
 
     def _tool_combo_values(self, display_names):
@@ -872,6 +960,78 @@ class SettingsWindow(tk.Tk):
             _tool_order.with_note(n, self._tool_note_by_display.get(n, ""))
             for n in display_names
         ]
+
+    def _style_tool_combo_locked_rows(self):
+        """把「🧩 獨立腳本工具」下拉選單展開後、屬於「↕ 排序」鎖定名單裡的腳本列，
+        文字最前面加「🔒 」圖示、文字顏色換成深橘色（沿用 tool_order.py 的
+        `_LOCKED_FG`，「↕ 排序」對話框自己的鎖定列也用同一個顏色——同一個鎖定
+        概念，兩個地方統一同一種顏色語言），讓使用者不用另外開排序視窗也認得出
+        「這幾支被鎖定、排序不能動」。
+
+        前幾版依序試過：整列變色（琥珀底，跟其餘淡藍色調不搭）→ 純圖示不變色
+        （辨識度不夠）→ 圖示＋藍字（跟整體強調色一致，但使用者後來指定要換成
+        深橘色，且要跟「↕ 排序」對話框自己的鎖定列同一個顏色）；定案：只換文字
+        顏色（不動底色），圖示＋深橘字兩者一起用。
+
+        這裡只改 popdown listbox 這個 widget 本身「顯示」的文字，完全不碰 combo
+        的 -values：選到某一列時 ttk 內部是靠 `$cb current $index` 直接讀
+        `-values[index]` 設回輸入框，不是讀 listbox 目前顯示的文字（已實測
+        確認兩者互不影響）——所以選到鎖定的腳本後，輸入框／後續路徑查找用的
+        key 仍然是乾淨的「#NN  名稱」，不會被這裡加的圖示污染，其餘查表邏輯
+        不用跟著改。
+
+        第二版真正的關鍵：呼叫時機。曾經在每個會設定 combo["values"] 的地方
+        （初始建立、打字篩選、Ctrl+F、排序存檔後）都呼叫這裡一次，用獨立測試
+        腳本驗證過 listbox 內容確實被正確加上圖示——但使用者實際打開下拉選單
+        卻完全看不到，因為 ttk 內部的 ttk::combobox::Post（不管使用者用什麼
+        方式觸發展開：點箭頭、按 ↓、鍵盤導覽……）永遠會在顯示之前重新呼叫
+        ttk::combobox::ConfigureListbox，把 listbox 內容從乾淨的 -values 重灌
+        一次，這會把先前呼叫這裡插入的圖示文字整個蓋掉。改成只在 combo 建立
+        時掛一次 <Map> 事件（popdown 這個 Toplevel 被 wm deiconify 顯示的瞬間，
+        剛好在 ConfigureListbox 跑完「之後」、真正被畫出來「之前」），讓這個
+        方法在每次「使用者真的要看到清單」的當下才重新執行，不用在其他任何
+        地方額外呼叫，也不會有時機被 Post 蓋掉的問題（見 combo 建立處的說明）。
+
+        這裡仍然先呼叫一次 ConfigureListbox 保證 listbox 內容跟 -values 同步
+        （<Map> 場景下這其實是重複呼叫，無副作用；但這個方法也可能在 combo
+        剛建立、還沒真的 Post 過的當下被直接呼叫一次，那種情況 listbox 是空的，
+        需要這行才能真的同步出東西可以套圖示）。找不到 popdown 或讀不到鎖定
+        名單時安靜跳過，這只是輔助辨識用的視覺提示，不是必要功能。"""
+        combo = getattr(self, "_tool_combo", None)
+        if combo is None:
+            return
+        try:
+            locked = set(_tool_order.load_locked())
+        except Exception:
+            return
+        try:
+            _popdown = combo.tk.call("ttk::combobox::PopdownWindow", combo)
+            listbox_path = f"{_popdown}.f.l"
+            combo.tk.call("ttk::combobox::ConfigureListbox", combo)
+            values = combo.cget("values")
+        except tk.TclError:
+            return
+        # 每一列都要重新 delete+insert（不能只處理鎖定的列、其餘 continue 跳過）：
+        # 實測發現 Tk 的 listbox 透過 -listvariable 重新整批寫入內容時，如果新舊
+        # 文字逐字相同，並不會真的清掉該列先前用 itemconfigure 設過的顏色——曾經
+        # 踩過這個坑：一支腳本被鎖定過、上色成功，之後解鎖，這裡的迴圈原本只碰
+        # 「目前鎖定」的列，解鎖後的列完全沒被重新處理，藍字/圖示就一直殘留、
+        # 洗不掉。改成不管鎖不鎖定，都先 delete+insert 建立全新的列（重灌後的列
+        # 沒有任何 itemconfigure 覆寫，自然吃回 widget 層級的預設顏色），鎖定的
+        # 才在那之後額外疊加圖示＋藍字。
+        for idx, val in enumerate(values):
+            relname = self._tool_display_to_relname.get(_tool_order.strip_note(val))
+            is_locked = relname is not None and relname in locked
+            try:
+                combo.tk.call(listbox_path, "delete", idx)
+                combo.tk.call(listbox_path, "insert", idx, f"🔒 {val}" if is_locked else val)
+                if is_locked:
+                    combo.tk.call(
+                        listbox_path, "itemconfigure", idx,
+                        "-foreground", _tool_order._LOCKED_FG,
+                    )
+            except tk.TclError:
+                pass
 
     def _load_tool_script_descriptions(self):
         """解析 docs/獨立運行腳本索引.md 裡「5. paper/tools/」
@@ -997,6 +1157,12 @@ class SettingsWindow(tk.Tk):
         獨立腳本工具若還在本視窗啟動的範圍內執行中，視同一併請求關閉，並實際等到
         確認結束才讓視窗消失，不是送出信號就放著不管——避免「視窗關掉了，行程其實
         還在跑」的情況。"""
+        trainer = self._identity_trainer_win
+        if trainer is not None and trainer.winfo_exists():
+            trainer._on_close()
+            if trainer.winfo_exists():  # 使用者在子視窗的確認對話框選了「否」
+                return
+
         pm = self._process_manager
         if pm.is_running:
             if not dialogs.ask_yesno(
@@ -1019,10 +1185,46 @@ class SettingsWindow(tk.Tk):
             self._save_tool_ui_state()  # 保留「上次選的腳本 / 影片路徑」到下次開視窗
         except Exception:
             pass
+        self._process_manager.stop_poll()
         self.destroy()
 
     def _on_start_main(self):
+        trainer_pm = getattr(self._identity_trainer_win, "_pm", None)
+        blocker = any_running(trainer_pm)
+        if blocker is not None:
+            dialogs.show_info(
+                self,
+                "無法啟動 main.py",
+                f"身分模型訓練視窗的「{blocker.active_label}」正在執行中（PID {blocker.process.pid}），"
+                "請先等它結束或停止後再啟動 main.py（避免同時搶 GPU）。",
+            )
+            return
         self._process_manager.start_main(_MAIN_PY_PATH, _SCRIPT_DIR)
+
+    def _on_open_identity_trainer(self):
+        win = self._identity_trainer_win
+        if win is not None and win.winfo_exists():
+            win.deiconify()
+            win.lift()
+            win.focus_force()
+            return
+        self._identity_trainer_win = IdentityTrainerWindow(self)
+
+    def _sync_identity_model_field(self):
+        """身分訓練視窗按「設為監控系統使用的模型」後呼叫：把幾個欄位（身分辨識
+        CNN 模型檔、目標貓類別名稱、貓咪 ID）重新讀成剛寫進
+        runtime_settings.current.json 的值。"""
+        settings_manager.reload_runtime_settings()
+        for f in FIELD_SCHEMA:
+            if f["json_key"] in (
+                "cat_identity.identity_model_path",
+                "cat_identity.target_cat_class",
+                "cat_identity.cat_id",
+            ):
+                value, source = self._resolve_field_display(f)
+                self._set_field_value(f["json_key"], value)
+                self._apply_source(f["json_key"], source)
+        self._refresh_top_info()
 
     def _on_stop_main(self):
         self._process_manager.stop_main()
@@ -1489,6 +1691,22 @@ class SettingsWindow(tk.Tk):
                     self._build_group_header(left_col, group, accent)
                 previous_group = group
                 self._build_field_row(left_col, field, accent)
+            if tab_name == "貓咪身份驗證":
+                trainer_box = tk.Frame(left_col, bg=COLOR_TAB_BG)
+                trainer_box.pack(fill="x", padx=14, pady=(10, 4))
+                _trainer_btn = _styled_button(
+                    trainer_box, "🐱 選擇 / 訓練身分認證模型", self._on_open_identity_trainer,
+                    BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE, font=self._font_label,
+                )
+                _trainer_btn.pack(side="left")
+                self._identity_extra_controls.append((_trainer_btn, "normal"))
+                tk.Label(
+                    left_col,
+                    text="開啟專屬視窗：選「我的貓 / 其他貓」影片資料夾 → 自動建立資料集 → 訓練 CNN → "
+                    "一鍵把訓練好的模型設為上面的「身分辨識 CNN 模型檔」。",
+                    bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
+                    anchor="w", justify="left", wraplength=750,
+                ).pack(fill="x", padx=14, pady=(0, 10))
             if tab_name == "ST-GCN 推論":
                 tk.Label(
                     left_col,
@@ -1506,6 +1724,7 @@ class SettingsWindow(tk.Tk):
         self._select_tab(TAB_ORDER[0])
 
     def _select_tab(self, tab_name):
+        self._active_tab = tab_name
         for name, frame in self._tab_frames.items():
             if name == tab_name:
                 frame.pack(fill="both", expand=True)
@@ -1513,7 +1732,10 @@ class SettingsWindow(tk.Tk):
                 frame.pack_forget()
         for name, btn in self._tab_buttons.items():
             accent = self._tab_accents[name]
-            if name == tab_name:
+            # 「貓咪身份驗證」分頁在單貓模式下整個灰掉：按鈕用中性灰、不管有沒有被選中
+            if name == "貓咪身份驗證" and not self._identity_tab_enabled:
+                btn.config(bg="#e6e6e6", fg="#9a9a9a", activebackground="#e6e6e6", activeforeground="#9a9a9a")
+            elif name == tab_name:
                 btn.config(bg=accent, fg="#ffffff", activebackground=accent, activeforeground="#ffffff")
             else:
                 light = _lighten(accent, 0.72)
@@ -1541,6 +1763,83 @@ class SettingsWindow(tk.Tk):
             old_hscroll.place_forget()
         self._active_docs_hscroll = self._tab_docs_hscroll.get(tab_name)
         self.after_idle(self._reposition_active_docs_hscroll)
+
+    # ── 系統模式（單貓 / 多貓）連動：single 時整個「貓咪身份驗證」分頁灰掉 ──
+    @staticmethod
+    def _iter_descendants(widget):
+        """深度優先走訪 widget 底下所有子孫（含自己）。"""
+        if widget is None:
+            return
+        yield widget
+        for child in widget.winfo_children():
+            yield from SettingsWindow._iter_descendants(child)
+
+    def _wire_system_mode_gating(self):
+        """把 run_mode.system_mode 下拉的變動接到 _apply_system_mode_gating()，
+        並在視窗建好、表單填好之後先套用一次目前的狀態。之後不管表單透過
+        「載入目前設定／儲存設定／還原預設值」怎麼重新整批填值，都是呼叫
+        `info["var"].set(...)`，會自動觸發這裡掛的 trace，不用在每個按鈕
+        handler 裡另外各呼叫一次。"""
+        info = self._field_widgets.get("run_mode.system_mode")
+        if info is not None:
+            info["var"].trace_add("write", lambda *_a: self._apply_system_mode_gating())
+        self._apply_system_mode_gating()
+
+    def _apply_system_mode_gating(self):
+        """依目前「系統模式」欄位的值，啟用 / 停用整個「貓咪身份驗證」分頁：
+        - single：分頁按鈕灰掉、分頁內所有互動 widget（Entry/Checkbutton/Combobox
+          等）連同「訓練身分模型」按鈕一起停用，並強制把「啟用身份驗證」勾選取消
+          （存檔會寫 false）。
+        - multi：全部還原成可編輯。
+        呼叫時機：視窗初始化一次掛好 trace 之後，往後由 tkinter 的 var trace
+        自動觸發（見 _wire_system_mode_gating）。
+
+        跟舊版的差異：這裡沒有逐欄位保存/還原各自原本的 widget state（舊版靠
+        每個欄位自己記錄的 `_controls` 清單），改成一律走「Entry/Checkbutton 還原
+        normal，ttk.Combobox 還原 readonly」這個通用規則——本分頁目前的欄位剛好
+        都符合，之後這個分頁如果新增其他型別欄位要留意這條假設。"""
+        info = self._field_widgets.get("run_mode.system_mode")
+        tab_frame = self._tab_frames.get("貓咪身份驗證")
+        if info is None or tab_frame is None:
+            return
+        enabled = info["var"].get() == "multi"
+        self._identity_tab_enabled = enabled
+
+        for w in self._iter_descendants(tab_frame.body):
+            # 不用 isinstance 白名單列舉元件類型——本分頁的「瀏覽...」按鈕是
+            # _PillButton（tk.Canvas 子類別，見 settings_gui/widgets.py），不是
+            # tk.Button，白名單容易漏。改成每個 widget 都試著切 state，切不動
+            # （TclError／widget 沒有 state 選項）或不支援某個 state 值就安靜跳過。
+            try:
+                if isinstance(w, ttk.Combobox):
+                    w.config(state=("readonly" if enabled else "disabled"))
+                else:
+                    w.config(state=("normal" if enabled else "disabled"))
+            except Exception:
+                pass
+
+        for w, restore_state in self._identity_extra_controls:
+            try:
+                w.config(state=(restore_state if enabled else "disabled"))
+            except tk.TclError:
+                pass
+
+        if not enabled:
+            ev = self._field_widgets.get("cat_identity.enable_identity_verification")
+            if ev is not None:
+                ev["var"].set(False)
+
+        btn = self._tab_buttons.get("貓咪身份驗證")
+        if btn is not None:
+            emoji, _ = TAB_COLORS.get("貓咪身份驗證", ("⬜", COLOR_HEADER_BG))
+            cur = btn.cget("text")
+            search_suffix = ""
+            if "(" in cur and cur.rstrip().endswith(")"):
+                search_suffix = " " + cur[cur.rfind("(") :]
+            disabled_tag = "" if enabled else "（單貓模式停用）"
+            btn.config(text=f"{emoji} 貓咪身份驗證{disabled_tag}{search_suffix}")
+        if getattr(self, "_active_tab", None) is not None:
+            self._select_tab(self._active_tab)
 
     def _reposition_active_docs_hscroll(self):
         """把目前分頁的說明文件橫向捲軸（`self._active_docs_hscroll`）用

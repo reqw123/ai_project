@@ -30,7 +30,6 @@ from settings_gui.style import (
     BTN_PRIMARY_BG,
     BTN_SECONDARY_ACTIVE,
     BTN_SECONDARY_BG,
-    CONSOLE_FONT_FAMILY,
     SPACE_MD,
     SPACE_SM,
     SPACE_XS,
@@ -46,9 +45,12 @@ _DIALOG_BG = "#f4f6f8"
 _LISTBOX_BG = "#eaf4fc"          # 跟 settings_window 下拉清單同一個淡藍底
 _LISTBOX_SEL_BG = "#1b4f72"
 _TEXT_FG = "#1b2631"
-_LOCKED_BG = "#f5e0c3"           # 鎖定列：琥珀色底
-_LOCKED_FG = "#7a6a55"           # 鎖定列：偏灰文字
-_LOCKED_SEL_BG = "#c9a978"
+_LOCKED_BG = "#f8dcc3"           # 鎖定列：淡橘色底（原琥珀色，使用者要求改深橘色系）
+_LOCKED_FG = "#a34e14"           # 鎖定列：深橘色文字——同一個顏色也給
+                                  # settings_window.py 的主下拉選單鎖定列文字用
+                                  # （見該檔 _style_tool_combo_locked_rows()），
+                                  # 兩處統一同一個「鎖定＝深橘色」的視覺語言
+_LOCKED_SEL_BG = "#e0a06a"       # 鎖定列被選取時的底色（比 _LOCKED_BG 深一階）
 
 
 def _clean_list(value):
@@ -180,7 +182,12 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None, notes_
     dlg.grab_set()
     dlg.configure(bg=_DIALOG_BG)
 
-    lb_font = tkfont.Font(family=CONSOLE_FONT_FAMILY, size=13)
+    # 跟主視窗「🧩 獨立腳本工具」下拉選單同一套字型（settings_window.py 的
+    # self._tool_listbox_font）：粗體標楷體，理由同上——每一列是「#NN 檔名 ──
+    # 備註」，備註是中文，原本的等寬字 Consolas 沒有中文字形會整段掉去系統
+    # fallback 字型，跟前半段 ASCII 檔名風格不一致；`#` 對齊靠「固定放最左欄」
+    # 不靠字型等寬，換掉字型不影響對齊。
+    lb_font = tkfont.Font(family="標楷體", size=13, weight="bold")
     btn_font = ("Microsoft JhengHei", 11, "bold")
 
     tk.Label(
@@ -350,7 +357,7 @@ def open_dialog(parent, current_relnames, on_apply, locked_relnames=None, notes_
         note_row, text="備註：", bg=_DIALOG_BG, fg=_TEXT_FG, font=("Microsoft JhengHei", 11, "bold"),
     ).pack(side="left")
     note_var = tk.StringVar()
-    note_entry = tk.Entry(note_row, textvariable=note_var, font=("Microsoft JhengHei", 12), relief="solid", bd=1)
+    note_entry = tk.Entry(note_row, textvariable=note_var, font=("標楷體", 12, "bold"), relief="solid", bd=1)
     note_entry.pack(side="left", fill="x", expand=True, padx=(SPACE_XS, SPACE_SM), ipady=3)
     note_count = tk.Label(note_row, text=f"0/{NOTE_MAX_LEN}", bg=_DIALOG_BG, fg=_LOCKED_FG, font=("Consolas", 10))
     note_count.pack(side="left")

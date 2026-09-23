@@ -1,6 +1,6 @@
 [
     {
-        "id": "e2bf236ba333e64d",
+        "id": "29b236f5e061aa9a",
         "type": "tab",
         "label": "😺 貓咪健康監測系統",
         "disabled": false,
@@ -8,9 +8,9 @@
         "env": []
     },
     {
-        "id": "c2f9892016583c47",
+        "id": "95a9b99e467b7682",
         "type": "group",
-        "z": "e2bf236ba333e64d",
+        "z": "29b236f5e061aa9a",
         "style": {
             "stroke": "#999999",
             "stroke-opacity": "1",
@@ -21,34 +21,34 @@
             "color": "#a4a4a4"
         },
         "nodes": [
-            "24afe39529075c20",
-            "2f9dcba49bd3df93",
-            "b4c86207563851c7",
-            "bfd5c52f05082b6f",
-            "e42e9d5e2ae4a5c7",
-            "e1a6a4c174216dd8",
-            "e111356d6489737e",
-            "2fe081a66234c98c",
-            "84b93924a8dacd91",
-            "2f6b06a9846a3ed8",
-            "16a4e33442c0f19a",
-            "15c249b842abcd88",
-            "8f2091ff0ebeb139",
-            "a5b644ef70376433",
-            "a23f4de09176ff50",
-            "5151bc5d14b7e5ea",
-            "0c3a6175401d44f1",
-            "3c34d7c649ab0357",
-            "be1acf5bd7f3e421",
-            "d3f522b6c3d60f96",
-            "c2a6c78c7858530b",
-            "3719617a2e85f511",
-            "87b8d2ff06255a9b",
-            "8870d8ec5fb96bc7",
-            "f95ce4964102d87e",
-            "39045f39c00bdc3f",
-            "77bd7918c6325cee",
-            "4a22b45a0d162b16"
+            "6212099f21c6c050",
+            "ed25c59fba4c444e",
+            "29ea536b7afbaded",
+            "4eaaaf788541668b",
+            "4d08de851552230e",
+            "f8beae0476ec99c5",
+            "eb95bf27aa373c1f",
+            "a4712441671139c1",
+            "593d4080b69d1c14",
+            "5d0c9d3bb84b4dcf",
+            "94211a0faa048bac",
+            "4b1cecacce02b681",
+            "73d6c21ea838328b",
+            "2894ade52c8aa0ba",
+            "129799ba26274594",
+            "5a606ccda3e43838",
+            "122d7c821936d71e",
+            "947dfc68c00a79fc",
+            "e2d0c504323fdb08",
+            "e66f368b75836e01",
+            "a3455857b2422f22",
+            "13c867e2a1a0dc52",
+            "ed22f673e2dcb120",
+            "2dc5cd8165ad3f57",
+            "c247893250ed55b6",
+            "ecde63d01ad47833",
+            "8c7834b573688d85",
+            "9c7b112f5b48879c"
         ],
         "x": 244,
         "y": 99,
@@ -56,10 +56,10 @@
         "h": 742
     },
     {
-        "id": "24afe39529075c20",
+        "id": "6212099f21c6c050",
         "type": "http in",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "python_online",
         "url": "/python_online",
         "method": "post",
@@ -70,15 +70,15 @@
         "y": 540,
         "wires": [
             [
-                "2f9dcba49bd3df93"
+                "ed25c59fba4c444e"
             ]
         ]
     },
     {
-        "id": "2f9dcba49bd3df93",
+        "id": "ed25c59fba4c444e",
         "type": "json",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "parse_json",
         "property": "payload",
         "action": "obj",
@@ -87,15 +87,15 @@
         "y": 540,
         "wires": [
             [
-                "e111356d6489737e"
+                "eb95bf27aa373c1f"
             ]
         ]
     },
     {
-        "id": "b4c86207563851c7",
+        "id": "29ea536b7afbaded",
         "type": "inject",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "發送訊息到discord",
         "props": [
             {
@@ -113,15 +113,15 @@
         "y": 740,
         "wires": [
             [
-                "e42e9d5e2ae4a5c7"
+                "4d08de851552230e"
             ]
         ]
     },
     {
-        "id": "bfd5c52f05082b6f",
+        "id": "4eaaaf788541668b",
         "type": "http request",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "送到 Discord",
         "method": "POST",
         "ret": "txt",
@@ -141,10 +141,10 @@
         ]
     },
     {
-        "id": "e42e9d5e2ae4a5c7",
+        "id": "4d08de851552230e",
         "type": "function",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "組成 Discord Webhook 格式",
         "func": "\n\n// Discord Python 上線通知\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// IP\n// =========================\nlet ip = msg.payload?.ip || \"未知IP\";\n\n// 保存 IP 到持久化全域 context，讓重連/重啟後仍可取用\ntry {\n    global.get(\"gfile\").set(\"python_ip\", ip);\n} catch (e) {\n    global.set(\n        \"python_ip\",\n        ip\n    );\n}\n\n// =========================\n// Discord Payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                \"🟢 Python AI 已上線\",\n\n            description:\n                `偵測到 Python 推論系統啟動`,\n\n            color:\n                65280,\n\n            fields: [\n\n                {\n                    name: \"Python IP\",\n                    value: String(ip),\n                    inline: false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
         "outputs": 1,
@@ -157,15 +157,15 @@
         "y": 800,
         "wires": [
             [
-                "bfd5c52f05082b6f"
+                "4eaaaf788541668b"
             ]
         ]
     },
     {
-        "id": "e1a6a4c174216dd8",
+        "id": "f8beae0476ec99c5",
         "type": "http response",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "response_200",
         "statusCode": "200",
         "headers": {},
@@ -174,10 +174,10 @@
         "wires": []
     },
     {
-        "id": "e111356d6489737e",
+        "id": "eb95bf27aa373c1f",
         "type": "function",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "build_response",
         "func": "let ip = null;\ntry {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"gfile\").get(\"python_ip\") || global.get(\"python_ip\") || null);\n} catch (e) {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\") || null);\n}\nif (ip) {\n    try {\n        global.get(\"gfile\").set(\"python_ip\", ip);\n    } catch (e) {\n        global.set(\"python_ip\", ip);\n    }\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = ip ? `http://${ip}:5000/stream` : \"\";\nnode.warn(\"python_online received IP: \" + (ip || 'null'));\nreturn msg;",
         "outputs": 1,
@@ -190,18 +190,18 @@
         "y": 540,
         "wires": [
             [
-                "e42e9d5e2ae4a5c7",
-                "e1a6a4c174216dd8",
-                "0c3a6175401d44f1",
-                "f95ce4964102d87e"
+                "4d08de851552230e",
+                "f8beae0476ec99c5",
+                "122d7c821936d71e",
+                "c247893250ed55b6"
             ]
         ]
     },
     {
-        "id": "2fe081a66234c98c",
+        "id": "a4712441671139c1",
         "type": "inject",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "啟動時發送串流",
         "props": [
             {
@@ -219,15 +219,15 @@
         "y": 640,
         "wires": [
             [
-                "84b93924a8dacd91"
+                "593d4080b69d1c14"
             ]
         ]
     },
     {
-        "id": "84b93924a8dacd91",
+        "id": "593d4080b69d1c14",
         "type": "function",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "從持久化context恢復串流",
         "func": "let ip = null;\ntry {\n    ip = global.get(\"gfile\").get(\"python_ip\") || global.get(\"python_ip\") || null;\n} catch (e) {\n    ip = global.get(\"python_ip\") || null;\n}\nif (!ip) {\n    return null;\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
         "outputs": 1,
@@ -240,16 +240,16 @@
         "y": 640,
         "wires": [
             [
-                "0c3a6175401d44f1",
-                "f95ce4964102d87e"
+                "122d7c821936d71e",
+                "c247893250ed55b6"
             ]
         ]
     },
     {
-        "id": "2f6b06a9846a3ed8",
+        "id": "5d0c9d3bb84b4dcf",
         "type": "http in",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "接收Python數據",
         "url": "/yolo_result",
         "method": "post",
@@ -260,16 +260,16 @@
         "y": 220,
         "wires": [
             [
-                "15c249b842abcd88",
-                "16a4e33442c0f19a"
+                "4b1cecacce02b681",
+                "94211a0faa048bac"
             ]
         ]
     },
     {
-        "id": "16a4e33442c0f19a",
+        "id": "94211a0faa048bac",
         "type": "http response",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "回應200",
         "statusCode": "200",
         "headers": {},
@@ -278,10 +278,10 @@
         "wires": []
     },
     {
-        "id": "15c249b842abcd88",
+        "id": "4b1cecacce02b681",
         "type": "json",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "解析JSON",
         "property": "payload",
         "action": "obj",
@@ -290,15 +290,15 @@
         "y": 220,
         "wires": [
             [
-                "8f2091ff0ebeb139"
+                "73d6c21ea838328b"
             ]
         ]
     },
     {
-        "id": "8f2091ff0ebeb139",
+        "id": "73d6c21ea838328b",
         "type": "function",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "數據分發器",
         "func": "let data = msg.payload;\nif (!data) return null;\n\nif (!data.current)     data.current     = {};\nif (!data.today_stats) data.today_stats = {};\n\nlet stats = data.today_stats;\nstats.walk             = stats.walk             || 0;\nstats.walk_time        = stats.walk_time        || 0;\nstats.lick             = stats.lick             || 0;\nstats.lick_time        = stats.lick_time        || 0;\nstats.scratch          = stats.scratch          || 0;\nstats.scratch_time     = stats.scratch_time     || 0;\nstats.shake            = stats.shake            || 0;\nstats.shake_time       = stats.shake_time       || 0;\nstats.stop             = stats.stop             || 0;\nstats.stop_time        = stats.stop_time        || 0;\nstats.not_detected_time = stats.not_detected_time || 0;\nstats.active_time      = stats.active_time      || 0;\nstats.low_conf         = stats.low_conf         || 0;\nstats.low_conf_time     = stats.low_conf_time     || 0;\n\nif (Array.isArray(data.behavior_log)) {\n    data.behavior_log = data.behavior_log.map(function(item) {\n        return {\n            behavior: item.behavior || 'unknown',\n            time:     item.time     || '--:--',\n            duration: item.duration || 0,\n            emoji:    getEmoji(item.behavior)\n        };\n    });\n} else {\n    data.behavior_log = [];\n}\n\nif (!data.current.emoji)     data.current.emoji     = getEmoji(data.current.behavior);\nif (!data.current.timestamp) data.current.timestamp = new Date().toLocaleTimeString();\n\n\n\n// 行為開始時間追蹤（供時間軸進行中計時器使用）\nlet _curBeh = (data.current && data.current.behavior) || null;\nlet _prevBeh = flow.get('tl_cur_behavior');\nlet _startMs  = flow.get('tl_start_ms') || Date.now();\nif (_curBeh !== _prevBeh) {\n    _startMs = Date.now();\n    flow.set('tl_cur_behavior', _curBeh);\n    flow.set('tl_start_ms', _startMs);\n}\nif (data.current) data.current.start_epoch_ms = _startMs;\n\n// 今日各行為平均時長（供時間軸風險評估）\ndata.avg_duration = {};\nfor (let _b of ['walk','lick','scratch','shake','stop']) {\n    let _cnt = stats[_b] || 0;\n    let _t   = stats[_b + '_time'] || 0;\n    data.avg_duration[_b] = _cnt >= 2 ? Math.round(_t / _cnt * 10) / 10 : 0;\n}\n\nmsg.payload = data;\n\n// CSV：每 5 分鐘寫一次（與 v2 flow 一致）\nlet now     = Date.now();\nlet lastCsv = flow.get('last_csv_write') || 0;\nlet doCsv   = (now - lastCsv) >= 300000;\nif (doCsv) flow.set('last_csv_write', now);\n\nlet csvMsg = doCsv ? { payload: {\n    timestamp:         (function(){var d=new Date(),p=function(n){return String(n).padStart(2,\"0\")};return d.getFullYear()+\"-\"+p(d.getMonth()+1)+\"-\"+p(d.getDate())+\" \"+p(d.getHours())+\":\"+p(d.getMinutes())+\":\"+p(d.getSeconds());})(),\n    walk:              stats.walk,              walk_time:         stats.walk_time,\n    lick:              stats.lick,              lick_time:         stats.lick_time,\n    scratch:           stats.scratch,           scratch_time:      stats.scratch_time,\n    shake:             stats.shake,             shake_time:        stats.shake_time,\n    stop:              stats.stop,              stop_time:         stats.stop_time,\n    active_time:       stats.active_time,\n    low_conf:          stats.low_conf,\n    low_conf_time:     stats.low_conf_time,\n    not_detected_time: stats.not_detected_time,\n    activity_score:    data.activity_score || 0\n}} : null;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    { payload: data.activity_score || 0 },\n    msg,\n    csvMsg,\n    msg\n];\n\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case 'scratch': return '🐾';\n        case 'lick':    return '🧼';\n        case 'walk':    return '🚶';\n        case 'shake':   return '🔄';\n        case 'stop':    return '⏹';\n        case 'not':     return '📷';\n        default:        return '🐱';\n    }\n}",
         "outputs": 7,
@@ -311,31 +311,31 @@
         "y": 220,
         "wires": [
             [
-                "3c34d7c649ab0357"
+                "947dfc68c00a79fc"
             ],
             [
-                "be1acf5bd7f3e421"
+                "e2d0c504323fdb08"
             ],
             [
-                "d3f522b6c3d60f96"
+                "e66f368b75836e01"
             ],
             [
-                "5151bc5d14b7e5ea"
+                "5a606ccda3e43838"
             ],
             [],
             [
-                "a5b644ef70376433"
+                "2894ade52c8aa0ba"
             ],
             [
-                "3719617a2e85f511"
+                "13c867e2a1a0dc52"
             ]
         ]
     },
     {
-        "id": "a5b644ef70376433",
+        "id": "2894ade52c8aa0ba",
         "type": "csv",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "建立CSV",
         "sep": ",",
         "hdrin": false,
@@ -351,15 +351,15 @@
         "y": 480,
         "wires": [
             [
-                "a23f4de09176ff50"
+                "129799ba26274594"
             ]
         ]
     },
     {
-        "id": "a23f4de09176ff50",
+        "id": "129799ba26274594",
         "type": "file",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "儲存CSV",
         "filename": "CAT_MONITORING_NODA_DATA_CSV_PATH",
         "filenameType": "env",
@@ -374,10 +374,10 @@
         ]
     },
     {
-        "id": "4a22b45a0d162b16",
+        "id": "9c7b112f5b48879c",
         "type": "comment",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "⚠️ 個體化基線 CSV／狀態檔路徑改用環境變數（2026-08-26）",
         "info": "# 個體化基線相關路徑改用環境變數\n\n這個節點（「儲存CSV」）跟 `cat_health_v3_flow.json` 裡的 `baseline.csv`／`daily_history.csv`／`deviation_log.csv` 3 個 file 節點，`filenameType` 都已經從寫死字串（`str`）改成 `env`，實際路徑改由下面這些環境變數提供：\n\n| 環境變數名稱 | 目前值 | 用在哪個節點 |\n|---|---|---|\n| `CAT_MONITORING_NODA_DATA_CSV_PATH` | `C:\\a\\noda_data.csv` | 本節點「儲存CSV」 |\n| `CAT_MONITORING_BASELINE_CSV_PATH` | `C:\\a\\baseline.csv` | cat_health_v3_flow.json：baseline.csv |\n| `CAT_MONITORING_NODERED_DAILY_HISTORY_CSV_PATH` | `C:\\a\\daily_history.csv` | cat_health_v3_flow.json：daily_history.csv |\n| `CAT_MONITORING_DEVIATION_LOG_CSV_PATH` | `C:\\a\\deviation_log.csv` | cat_health_v3_flow.json：deviation_log.csv |\n| `CAT_MONITORING_TRACKER_STATE_PATH`（可選，程式碼已有 fallback） | `C:\\ai_project\\paper\\baseline_data\\tracker_state.json` | 本分頁「事件時間軸引擎」function node |\n| `CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH`（2026-08-27 新增，程式碼已有 fallback） | `C:\\ai_project\\paper\\baseline_data\\global.json` | **settings.js** 的 `functionGlobalContext.gfile`（不是 flow 節點，見下方特別說明） |\n\n**設定指令（PowerShell，User 層級，不需要系統管理員權限）：**\n```powershell\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_NODA_DATA_CSV_PATH', 'C:\\a\\noda_data.csv', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_BASELINE_CSV_PATH', 'C:\\a\\baseline.csv', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_NODERED_DAILY_HISTORY_CSV_PATH', 'C:\\a\\daily_history.csv', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_DEVIATION_LOG_CSV_PATH', 'C:\\a\\deviation_log.csv', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_TRACKER_STATE_PATH', 'C:\\ai_project\\paper\\baseline_data\\tracker_state.json', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH', 'C:\\ai_project\\paper\\baseline_data\\global.json', 'User')\n```\n或用 Win 鍵搜尋「編輯帳戶的環境變數」，在「使用者變數」區塊按「新增」，手動逐一輸入上面 6 組名稱／值。\n\n**這些值可以設定在兩個地方（前 5 個兩邊擇一即可，兩邊都設也不衝突；最後一個只能用方法 2，見下方特別說明）：**\n1. 使用者設置 → 環境配置（全局環境變數面板，存在 `flows.json` 的 global-config 節點）\n2. Windows 使用者環境變數（上面那段指令／手動新增，**需要登出重登或重開機後新啟動的行程才讀得到**，重新部署 flow 不會讓已經在跑的 Node-RED 行程重新讀取）\n\n**⚠️ `CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH` 只能用方法 2，方法 1 對它沒用**：這個環境變數是 `settings.js`（Node-RED 啟動時就載入的檔案，早於任何 flow／global-config 節點）在讀，只認得到 Node.js 原生 `process.env`，讀不到「全局環境變數」面板（那個存在 flow 執行期才載入的 `global-config` 節點裡）。\n\n**⚠️ 換機器/搬遷時**：只要在新機器上比照設定這 6 個環境變數指到新位置即可，**不需要**改這些節點本身的設定（`CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH` 這個還要額外改 settings.js 的 fallback，或確保環境變數一定有設）。\n\n**⚠️ 沒設環境變數會怎樣**：前 4 個 CSV 節點沒有 fallback，環境變數沒設時 `filename` 會解析成空字串，該節點會跳出「未指定檔名」警告並跳過寫入（不會讓 Node-RED 崩潰，但那筆資料會遺失）；`CAT_MONITORING_TRACKER_STATE_PATH`／`CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH` 因為寫在程式碼裡（`env.get(...) || fallback` / `process.env... || fallback`）沒設也不會壞，會退回舊路徑。\n\n詳細背景見 repo 內 `paper/docs/資料層架構現況與統一管理評估.md` 第十四、十五節。",
         "x": 580,
@@ -385,10 +385,10 @@
         "wires": []
     },
     {
-        "id": "5151bc5d14b7e5ea",
+        "id": "5a606ccda3e43838",
         "type": "ui_gauge",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "活動力儀表",
         "group": "group_gauge_cat",
         "order": 5,
@@ -414,10 +414,10 @@
         "wires": []
     },
     {
-        "id": "0c3a6175401d44f1",
+        "id": "122d7c821936d71e",
         "type": "ui_template",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "group": "group_stream_cat",
         "name": "影像串流",
         "order": 6,
@@ -436,10 +436,10 @@
         ]
     },
     {
-        "id": "3c34d7c649ab0357",
+        "id": "947dfc68c00a79fc",
         "type": "ui_template",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "group": "group_status_cat",
         "name": "即時狀態卡片",
         "order": 1,
@@ -458,10 +458,10 @@
         ]
     },
     {
-        "id": "be1acf5bd7f3e421",
+        "id": "e2d0c504323fdb08",
         "type": "ui_template",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "group": "group_timeline_cat",
         "name": "行為時間紀錄",
         "order": 2,
@@ -480,10 +480,10 @@
         ]
     },
     {
-        "id": "d3f522b6c3d60f96",
+        "id": "e66f368b75836e01",
         "type": "ui_template",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "group": "group_stats_cat",
         "name": "詳細統計",
         "order": 3,
@@ -502,10 +502,10 @@
         ]
     },
     {
-        "id": "c2a6c78c7858530b",
+        "id": "a3455857b2422f22",
         "type": "ui_template",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "group": "f8a33fa465d44876",
         "name": "健康警示",
         "order": 4,
@@ -524,26 +524,26 @@
         ]
     },
     {
-        "id": "39045f39c00bdc3f",
+        "id": "ecde63d01ad47833",
         "type": "link in",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "來自 cat_health_v3 行為偏差融合引擎（2026-08-09 分工明確：僅供顯示，不重算）",
         "links": [],
         "x": 1125,
         "y": 320,
         "wires": [
             [
-                "c2a6c78c7858530b",
-                "77bd7918c6325cee"
+                "a3455857b2422f22",
+                "8c7834b573688d85"
             ]
         ]
     },
     {
-        "id": "77bd7918c6325cee",
+        "id": "8c7834b573688d85",
         "type": "debug",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "🧪 健康警示除錯（暫時，確認無誤可刪）",
         "active": true,
         "tosidebar": true,
@@ -558,10 +558,10 @@
         "wires": []
     },
     {
-        "id": "3719617a2e85f511",
+        "id": "13c867e2a1a0dc52",
         "type": "function",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "name": "事件時間軸引擎",
         "func": "// fs loaded via node libs: {\"var\":\"fs\",\"module\":\"fs\"}\nconst TRACKER_PATH = env.get('CAT_MONITORING_TRACKER_STATE_PATH') || 'C:\\\\ai_project\\\\paper\\\\baseline_data\\\\tracker_state.json';\n\nlet data = msg.payload;\nif (!data || !data.current) return null;\n\nlet curBeh = data.current.behavior;\nif (!curBeh || curBeh === 'not') return null;\n\n// ── Read tracker_state.json (authoritative daily totals) ──────────\nlet tracker = {};\ntry {\n    tracker = JSON.parse(fs.readFileSync(TRACKER_PATH, 'utf8'));\n} catch(e) {\n    node.warn('tracker_state.json: ' + e.message);\n}\n\n// ── Date helpers ─────────────────────────────────────────────────\nfunction pad(n){ return String(n).padStart(2,'0'); }\nfunction fmtTime(d){\n    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+\n           ' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());\n}\nlet now      = new Date();\nlet nowMs    = now.getTime();\nlet nowStr   = fmtTime(now);\nlet todayStr = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());\nlet isToday  = (tracker.date === todayStr);\n\n// Derive start_time from Python's end_time (HH:MM:SS) and duration (sec)\nfunction deriveStart(endHMS, durSec) {\n    let pts = (endHMS||'00:00:00').split(':').map(Number);\n    let endSec   = (pts[0]||0)*3600 + (pts[1]||0)*60 + (pts[2]||0);\n    let startSec = Math.max(0, endSec - Math.round(durSec));\n    return todayStr+' '+pad(Math.floor(startSec/3600))+':'+\n           pad(Math.floor((startSec%3600)/60))+':'+pad(startSec%60);\n}\n\n// ── Accumulate Python's behavior_log (deduplicate by time+beh+dur) ─\nlet sessionEvents = flow.get('evt_session') || [];\nlet sessionKeys   = new Set(flow.get('evt_keys') || []);\nlet sessionDate   = flow.get('evt_date') || '';\n\nif (sessionDate && sessionDate !== todayStr) {\n    sessionEvents = [];\n    sessionKeys   = new Set();\n}\nflow.set('evt_date', todayStr);\n\nlet inLog   = data.behavior_log || [];\nlet changed = false;\nfor (let i = 0; i < inLog.length; i++) {\n    let rec = inLog[i];\n    if (!rec || !rec.behavior || rec.behavior === 'not' || !rec.time) continue;\n    let dur = Math.max(1, Math.round(rec.duration || 1));\n    let key = rec.time + '|' + rec.behavior + '|' + dur;\n    if (sessionKeys.has(key)) continue;\n    sessionKeys.add(key);\n    let nextId = sessionEvents.length > 0 ? sessionEvents[sessionEvents.length-1].event_id + 1 : 1;\n    sessionEvents.push({\n        event_id:   nextId,\n        behavior:   rec.behavior,\n        end_time:   todayStr + ' ' + rec.time,\n        start_time: deriveStart(rec.time, rec.duration || 0),\n        duration:   dur\n    });\n    changed = true;\n}\nif (changed) {\n    if (sessionEvents.length > 500) {\n        // trim oldest keys too\n        let trimmed = sessionEvents.slice(-500);\n        let keptKeys = new Set(trimmed.map(function(e){\n            return e.end_time.slice(11,19)+'|'+e.behavior+'|'+e.duration;\n        }));\n        sessionKeys = keptKeys;\n        sessionEvents = trimmed;\n    }\n    flow.set('evt_session', sessionEvents);\n    flow.set('evt_keys', Array.from(sessionKeys));\n}\n\n// ── Merge adjacent same-behavior events (Python sends ~2s segments) ─\n// Adjacent = gap ≤ 2s between end_time of one and start_time of the next\nfunction _tsec(dt) {\n    var t = dt.slice(11,19).split(':').map(Number);\n    return t[0]*3600 + t[1]*60 + t[2];\n}\nlet mergedEvents = (function(evts) {\n    if (evts.length < 2) return evts.slice();\n    var res = [{ event_id:evts[0].event_id, behavior:evts[0].behavior,\n                 start_time:evts[0].start_time, end_time:evts[0].end_time,\n                 duration:evts[0].duration }];\n    for (var i = 1; i < evts.length; i++) {\n        var prev = res[res.length-1], cur = evts[i];\n        if (prev.behavior === cur.behavior &&\n            _tsec(cur.start_time) - _tsec(prev.end_time) <= 2) {\n            prev.end_time = cur.end_time;\n            prev.duration = _tsec(cur.end_time) - _tsec(prev.start_time);\n        } else {\n            res.push({ event_id:cur.event_id, behavior:cur.behavior,\n                       start_time:cur.start_time, end_time:cur.end_time,\n                       duration:cur.duration });\n        }\n    }\n    return res;\n})(sessionEvents);\n\n// ── Current event live timer (Node-RED side) ──────────────────────\nlet currentEvt = flow.get('evt_cur') || null;\nif (!currentEvt || currentEvt.behavior !== curBeh) {\n    currentEvt = { behavior: curBeh, start_time: nowStr, start_ms: nowMs };\n}\nif (!currentEvt.start_ms) currentEvt.start_ms = nowMs;\ncurrentEvt.duration_running = Math.max(0, Math.round((nowMs - currentEvt.start_ms) / 1000));\nflow.set('evt_cur', currentEvt);\n\n// ── Per-behavior stats: tracker_state.json for count/total/avg ────\n// IQR / mode / max / min derived from accumulated session events\nlet bCount = (isToday && tracker.behavior_count) ? tracker.behavior_count : {};\nlet bTime  = (isToday && tracker.behavior_time)  ? tracker.behavior_time  : {};\n\n// 優先用 HTTP payload（每 2s 更新），避免等 30s 存檔才反映\nlet _statsMinMax = (data.today_stats) || {};\nlet minDur = _statsMinMax.behavior_min_duration\n             || ((isToday && tracker.behavior_min_duration) ? tracker.behavior_min_duration : {});\nlet maxDur = _statsMinMax.behavior_max_duration\n             || ((isToday && tracker.behavior_max_duration) ? tracker.behavior_max_duration : {});\n\nlet stats = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let count  = Math.round(bCount[b] || 0);\n    let totSec = bTime[b] || 0;\n    if (count === 0) {\n        stats[b] = { count:0, total_duration:0, avg_duration:0,\n                     max_duration:0, min_duration:0,\n                     mode_duration:null, mode_count:0,\n                     outlier_high:null, outlier_low:null };\n        return;\n    }\n    let durs = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .map(function(e){ return e.duration; });\n\n    let outlierHigh = null, outlierLow = null;\n    if (durs.length >= 5) {\n        let sorted = durs.slice().sort(function(a,b){ return a-b; });\n        let n  = sorted.length;\n        let q1 = sorted[Math.floor(n * 0.25)];\n        let q3 = sorted[Math.floor(n * 0.75)];\n        let iqr = q3 - q1;\n        if (iqr > 0) {\n            outlierHigh = Math.round(q3 + 1.5 * iqr);\n            outlierLow  = Math.max(1, Math.round(q1 - 1.5 * iqr));\n        }\n    }\n    let modeKey = null, modeCnt = 0;\n    if (durs.length >= 2) {\n        let buckets = {};\n        durs.forEach(function(d){\n            buckets[d] = (buckets[d]||0) + 1;\n        });\n        Object.keys(buckets).forEach(function(k){\n            if (buckets[k] > modeCnt) { modeCnt = buckets[k]; modeKey = Number(k); }\n        });\n    }\n    stats[b] = {\n        count:         count,\n        total_duration: Math.round(totSec),\n        avg_duration:   Math.round(totSec / count * 10) / 10,\n        max_duration:   maxDur[b] != null ? Math.max(1, Math.round(maxDur[b])) : (durs.length > 0 ? Math.max.apply(null, durs) : 0),\n        min_duration:   minDur[b] != null ? Math.max(1, Math.round(minDur[b])) : (durs.length > 0 ? Math.min.apply(null, durs) : 0),\n        mode_duration:  modeCnt >= 2 ? modeKey : null,\n        mode_count:     modeCnt >= 2 ? modeCnt : 0,\n        outlier_high:   outlierHigh,\n        outlier_low:    outlierLow\n    };\n});\n\n// ── Per-behavior event arrays with outlier flag ───────────────────\nlet byBehavior = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let s = stats[b];\n    byBehavior[b] = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .slice(-20).reverse()\n        .map(function(ev) {\n            let outlier = null;\n            if (s.outlier_high !== null && ev.duration > s.outlier_high) outlier = 'high';\n            else if (s.outlier_low !== null && ev.duration < s.outlier_low) outlier = 'low';\n            return { event_id:ev.event_id, behavior:ev.behavior,\n                     start_time:ev.start_time, end_time:ev.end_time,\n                     duration:ev.duration, outlier:outlier };\n        });\n});\n\nlet todayTotal = Object.values(bCount).reduce(function(a,v){ return a+Math.round(v||0); }, 0);\n\nmsg.payload = {\n    current_event: {\n        behavior:         currentEvt.behavior,\n        start_time:       currentEvt.start_time,\n        duration_running: currentEvt.duration_running,\n        status:           'running'\n    },\n    event_table:       mergedEvents.slice(-20).reverse(),\n    event_by_behavior: byBehavior,\n    event_stats:       stats,\n    total_events:      todayTotal\n};\nreturn msg;",
         "outputs": 1,
@@ -579,15 +579,15 @@
         "y": 540,
         "wires": [
             [
-                "87b8d2ff06255a9b"
+                "ed22f673e2dcb120"
             ]
         ]
     },
     {
-        "id": "87b8d2ff06255a9b",
+        "id": "ed22f673e2dcb120",
         "type": "ui_template",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "group": "666843c1cebdbb7c",
         "name": "行為事件分析",
         "order": 1,
@@ -606,10 +606,10 @@
         ]
     },
     {
-        "id": "8870d8ec5fb96bc7",
+        "id": "2dc5cd8165ad3f57",
         "type": "ui_template",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "group": "",
         "name": "🎨 Dashboard Global Theme",
         "order": 0,
@@ -628,10 +628,10 @@
         ]
     },
     {
-        "id": "f95ce4964102d87e",
+        "id": "c247893250ed55b6",
         "type": "ui_template",
-        "z": "e2bf236ba333e64d",
-        "g": "c2f9892016583c47",
+        "z": "29b236f5e061aa9a",
+        "g": "95a9b99e467b7682",
         "group": "",
         "name": "懸浮影像（全域）",
         "order": 0,
@@ -736,7 +736,7 @@
         "hidden": false
     },
     {
-        "id": "6b70eb44cac41fce",
+        "id": "0c41c30ce393e9a4",
         "type": "global-config",
         "env": [],
         "modules": {

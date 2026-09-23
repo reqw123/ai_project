@@ -143,7 +143,7 @@ FIELD_SCHEMA = [
     {
         "json_key": "yolo.confidence_threshold", "env_var": "CAT_MONITORING_YOLO_CONFIDENCE_THRESHOLD",
         "attr": ("YOLOConfig", "CONFIDENCE_THRESHOLD"), "tab": "YOLO 推論",
-        "label": "偵測信心閾值", "value_type": "float", "validate": "unit_interval",
+        "label": "偵測框（bbox）信心閾值", "value_type": "float", "validate": "unit_interval",
     },
     # ── ST-GCN 推論（不含訓練架構相容性欄位） ───────────────────────────
     {
@@ -193,6 +193,15 @@ FIELD_SCHEMA = [
         "label": "啟用 SQA 雙重判定", "value_type": "bool", "validate": "bool",
     },
     # ── 執行模式與排程 ────────────────────────────────────────────────
+    {
+        "json_key": "run_mode.system_mode", "env_var": "CAT_MONITORING_SYSTEM_MODE",
+        "attr": ("RunModeConfig", "SYSTEM_MODE"), "tab": "執行模式與排程",
+        "label": "系統模式（單貓 / 多貓）", "value_type": "enum", "validate": "enum",
+        "choices": ["single", "multi"],
+        "hint": "single＝假設畫面全程只有一隻貓：只取信心最高的偵測，跳過多貓挑選、不畫其他貓、"
+                "不載入身分驗證 CNN。multi＝多貓場景：依「貓咪身份驗證」與「視覺化」分頁的設定"
+                "挑目標貓 / 畫其他貓——那兩處的開關只在 multi 模式生效。",
+    },
     {
         "json_key": "run_mode.mode", "env_var": "CAT_MONITORING_RUN_MODE",
         "attr": ("RunModeConfig", "MODE"), "tab": "執行模式與排程",
@@ -373,10 +382,16 @@ FIELD_SCHEMA = [
         "label": "低活動 walk 時長門檻（秒）", "value_type": "float", "validate": "nonneg_float",
     },
     # ── 貓咪身份驗證 ─────────────────────────────────────────────────
+    # 注意：CAT_ID／IDENTITY_MODEL_PATH／TARGET_CAT_CLASS 這三個欄位在舊版設計裡是「唯讀／
+    # 隱藏」，由 identity_trainer_window.py 的「設為監控系統使用的模型」自動寫入；目前這份
+    # FIELD_SCHEMA 的通用渲染機制沒有 readonly/hidden 這兩個旗標可用，所以這三個欄位目前會
+    # 照一般欄位顯示成可編輯——手動改了也不會壞掉（正常走 env > json > 預設值那條鏈），只是
+    # 失去「防手滑」的保護，之後如果要補 readonly/hidden 支援可以再加。
     {
         "json_key": "cat_identity.cat_id", "env_var": "CAT_MONITORING_CAT_ID",
         "attr": ("CatIdentityConfig", "CAT_ID"), "tab": "貓咪身份驗證",
         "label": "貓咪 ID", "value_type": "str", "validate": "str",
+        "hint": "跟隨採用的身分模型自訂名稱；僅作 CSV 紀錄標記，不影響辨識。",
     },
     {
         "json_key": "cat_identity.enable_identity_verification", "env_var": "CAT_MONITORING_ENABLE_IDENTITY_VERIFICATION",
@@ -384,16 +399,29 @@ FIELD_SCHEMA = [
         "label": "啟用身份驗證", "value_type": "bool", "validate": "bool",
     },
     {
-        "json_key": "cat_identity.target_cat_profile_path", "env_var": "CAT_MONITORING_TARGET_CAT_PROFILE_PATH",
-        "attr": ("CatIdentityConfig", "TARGET_CAT_PROFILE_PATH"), "tab": "貓咪身份驗證",
-        "label": "目標貓特徵基準檔", "value_type": "file", "validate": "optional_file_warn",
-        "browse_filter": ("特徵基準檔", "*.json"),
+        "json_key": "cat_identity.identity_filter_hysteresis_frames", "env_var": "CAT_MONITORING_IDENTITY_FILTER_HYSTERESIS_FRAMES",
+        "attr": ("CatIdentityConfig", "IDENTITY_FILTER_HYSTERESIS_FRAMES"), "tab": "貓咪身份驗證",
+        "label": "目標貓遲滯幀數", "value_type": "int", "validate": "positive_int",
+        "hint": "沒過信心門檻（含分不清）的幀立即不計入；連續這麼多幀都沒過才放棄位置追蹤。貓離開畫面則立即停。",
     },
     {
-        "json_key": "cat_identity.other_cat_profile_path", "env_var": "CAT_MONITORING_OTHER_CAT_PROFILE_PATH",
-        "attr": ("CatIdentityConfig", "OTHER_CAT_PROFILE_PATH"), "tab": "貓咪身份驗證",
-        "label": "其他已知貓特徵基準檔（可留空）", "value_type": "file", "validate": "optional_file_warn",
-        "browse_filter": ("特徵基準檔", "*.json"),
+        "json_key": "cat_identity.identity_conf_threshold", "env_var": "CAT_MONITORING_IDENTITY_CONF_THRESHOLD",
+        "attr": ("CatIdentityConfig", "IDENTITY_CONF_THRESHOLD"), "tab": "貓咪身份驗證",
+        "label": "單幀信心門檻", "value_type": "float", "validate": "unit_interval",
+        "hint": "0–1。單幀 CNN 最高信心低於此即判「未知」不投票。高＝保守，低＝易誤判。預設 0.80。",
+    },
+    {
+        "json_key": "cat_identity.identity_model_path", "env_var": "CAT_MONITORING_IDENTITY_MODEL_PATH",
+        "attr": ("CatIdentityConfig", "IDENTITY_MODEL_PATH"), "tab": "貓咪身份驗證",
+        "label": "身分辨識 CNN 模型檔", "value_type": "file", "validate": "optional_file_warn",
+        "browse_filter": ("身分辨識 CNN 模型", "*.pt"),
+        "hint": "由 tools/cat_identity/2_train.py 訓練產生；下方訓練視窗「設為監控系統使用的模型」會自動更新這裡。",
+    },
+    {
+        "json_key": "cat_identity.target_cat_class", "env_var": "CAT_MONITORING_TARGET_CAT_CLASS",
+        "attr": ("CatIdentityConfig", "TARGET_CAT_CLASS"), "tab": "貓咪身份驗證",
+        "label": "目標貓類別名稱（對應模型 class_names）", "value_type": "str", "validate": "str",
+        "hint": "填錯會讓身分驗證靜默停用（找不到對應類別）；由訓練視窗自動寫入，一般不用手動改。",
     },
     # ── 日誌、CSV、資料庫與輸出路徑 ────────────────────────────────────
     {
@@ -446,6 +474,14 @@ FIELD_SCHEMA = [
         "json_key": "visualization.show_gcn_result", "env_var": "CAT_MONITORING_SHOW_GCN_RESULT",
         "attr": ("VisualizationConfig", "SHOW_GCN_RESULT"), "tab": "視覺化與串流顯示",
         "label": "顯示 GCN 分類結果（啟動預設）", "value_type": "bool", "validate": "bool",
+    },
+    {
+        "json_key": "visualization.show_non_target_cats", "env_var": "CAT_MONITORING_SHOW_NON_TARGET_CATS",
+        "attr": ("VisualizationConfig", "SHOW_NON_TARGET_CATS"), "tab": "視覺化與串流顯示",
+        "label": "多貓時畫出非目標貓", "value_type": "bool", "validate": "bool",
+        "hint": "畫面同時有多隻貓時，非目標貓也用灰框 + 灰骨架畫出來（只畫、不進行為分類 / "
+                "統計 / 個體化基線）。關閉＝只畫被選中的那一隻。身分驗證關閉時「目標貓」＝"
+                "信心最高 / IoU 追蹤延續的那隻。",
     },
     # ── 進階設定：Node-RED 端點覆寫（預設由 HOST/PORT 推導） ──────────────
     {

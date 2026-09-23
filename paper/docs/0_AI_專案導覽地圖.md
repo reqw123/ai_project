@@ -199,6 +199,7 @@
 | `tools/3_cat_identity_verification_test.py` | 貓咪個體身分辨識測試腳本 |
 | `tools/test_bone_length_stability.py` | 骨架穩定度診斷/校準工具（骨段長度一致性、脊椎中點偏移/角度、Body Axis score jitter 等指標的離線分析與正常基線建立，`processors/skeleton_quality_assessment.py` 的邏輯即由此腳本的模式 2 移植而來） |
 | `tools/1_run_video_inference.py` | 單支影片離線推論 |
+| `tools/1_review_behavior_variants.py` | 人工複審行為姿勢變體：兩段式按鍵（z/x/c/v/b 選大類＋數字鍵選變體）把影片分類進 `<behavior>/<variant>/`，沿用同一套播放/推論疊圖，可關閉推論純播放 |
 | `tools/1_skeleton_visualizer.py` | 骨架視覺化腳本 |
 | `tools/1_visualize_three_normalizations.py` | 互動式 Demo：對照 flip_normalize / orientation_normalize / normalize_skeleton_coords 三種正規化步驟的視覺效果 |
 | `tools/1_visualize_interpolation.py` | 視覺化 `interpolate_missing()` 補點前後的差異 |

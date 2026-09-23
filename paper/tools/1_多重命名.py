@@ -1,13 +1,11 @@
 import os
 import cv2
-import shutil
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from pathlib import Path
 from PIL import Image, ImageTk
 
 VIDEO_EXTS = [".mp4", ".avi", ".mov", ".mkv"]
-RENAMED_SUBFOLDER = "已改名"  # 改名後的影片統一移入此子資料夾
 
 
 class VideoRenameGUI:
@@ -110,16 +108,18 @@ class VideoRenameGUI:
         self.prefix_entry.grid(row=0, column=1, padx=5)
         self.prefix_entry.insert(0, "walk")
 
-        tk.Label(rename, text="編號位數：").grid(row=0, column=2, padx=5)
-        self.digits_entry = tk.Entry(rename, width=8)
-        self.digits_entry.grid(row=0, column=3, padx=5)
-        self.digits_entry.insert(0, "3")
+        # 流水號從這個數字開始往上排（例如填 3 → 3, 4, 5…），不補零
+        tk.Label(rename, text="起始序號：").grid(row=0, column=2, padx=5)
+        self.start_entry = tk.Entry(rename, width=8)
+        self.start_entry.grid(row=0, column=3, padx=5)
+        self.start_entry.insert(0, "1")
 
         tk.Button(rename, text="改名並跳下一部", command=self.rename_current).grid(
             row=0, column=4, padx=10
         )
 
-        # 一鍵整批：清單內所有影片用同一個前綴＋流水號一次改完（接續已改名資料夾內的編號）
+        # 一鍵整批：清單內所有影片原地改名（留在同一個資料夾），用同一個前綴＋
+        # 流水號一次改完（從「起始序號」開始往上排）
         tk.Button(
             rename,
             text="⚡ 全部影片一鍵改名（前綴＋流水號）",
@@ -146,10 +146,6 @@ class VideoRenameGUI:
         self.folder = folder
         self.folder_label.config(text=folder)
         self.load_files()
-
-    def renamed_folder_path(self):
-        """改名後的影片統一移入的子資料夾路徑"""
-        return os.path.join(self.folder, RENAMED_SUBFOLDER)
 
     def load_files(self):
         self.files = [
@@ -295,42 +291,22 @@ class VideoRenameGUI:
         if sel:
             self.open_video(sel[0])
 
-    def get_next_number(self, prefix):
-        """同時檢查原資料夾與已改名子資料夾，避免編號衝突"""
-        nums = []
-
-        search_dirs = [self.folder, self.renamed_folder_path()]
-
-        for d in search_dirs:
-            if not os.path.isdir(d):
-                continue
-
-            for f in os.listdir(d):
-                name = Path(f).stem
-                ext = Path(f).suffix.lower()
-
-                if ext not in VIDEO_EXTS:
-                    continue
-
-                if name.startswith(prefix):
-                    tail = name.replace(prefix, "", 1)
-                    if tail.isdigit():
-                        nums.append(int(tail))
-
-        if nums:
-            return max(nums) + 1
-
-        return 1
-
-    def read_digits(self):
+    def read_start(self):
+        """讀「起始序號」欄位；不是正整數就回傳 None（呼叫端跳錯誤訊息）。"""
         try:
-            return max(1, int(self.digits_entry.get()))
+            n = int(self.start_entry.get().strip())
         except ValueError:
-            return 3
+            return None
+        return n if n >= 0 else None
+
+    def set_start(self, n):
+        self.start_entry.delete(0, tk.END)
+        self.start_entry.insert(0, str(n))
 
     def rename_all(self):
-        """把清單內所有影片依目前排序，以「前綴＋流水號」一次改完並移入已改名子資料夾。
-        編號接續已改名資料夾／原資料夾內同前綴的最大編號，跟逐部改名共用同一套規則。"""
+        """把清單內所有影片依目前排序，以「前綴＋流水號」原地改寫檔名（留在同一個
+        資料夾，不搬到別的地方）。編號從「起始序號」開始往上排（不補零），
+        例如起始序號 3 → prefix3, prefix4, prefix5…"""
         if not self.files:
             messagebox.showinfo("提示", "目前資料夾沒有影片")
             return
@@ -340,19 +316,23 @@ class VideoRenameGUI:
             messagebox.showwarning("錯誤", "請輸入前綴，例如 walk")
             return
 
-        digits = self.read_digits()
-        start = self.get_next_number(prefix)
-        dest_dir = self.renamed_folder_path()
+        start = self.read_start()
+        if start is None:
+            messagebox.showwarning("錯誤", "起始序號請輸入 0 以上的整數，例如 3")
+            return
 
         plan = []  # (舊檔名, 新檔名)
         for i, old_name in enumerate(self.files):
-            new_name = f"{prefix}{start + i:0{digits}d}{Path(old_name).suffix}"
+            new_name = f"{prefix}{start + i}{Path(old_name).suffix}"
             plan.append((old_name, new_name))
 
-        conflicts = [n for _, n in plan if os.path.exists(os.path.join(dest_dir, n))]
+        # 只跟「這批之後仍留在資料夾裡、不屬於這次改名清單」的檔案比對衝突——
+        # self.files 裡的舊檔名這批結束後全部會變成新檔名，不算衝突對象。
+        others = set(os.listdir(self.folder)) - set(self.files)
+        conflicts = [n for _, n in plan if n in others]
         if conflicts:
             messagebox.showerror(
-                "錯誤", f"「{RENAMED_SUBFOLDER}」資料夾已有同名檔案（例如 {conflicts[0]}），已取消，沒有改動任何檔案"
+                "錯誤", f"資料夾內已有同名檔案（例如 {conflicts[0]}），已取消，沒有改動任何檔案"
             )
             return
 
@@ -361,7 +341,7 @@ class VideoRenameGUI:
         preview = first_line if len(plan) == 1 else "\n".join([first_line, "…", last_line])
         confirmed = messagebox.askyesno(
             "確認整批改名",
-            f"將 {len(plan)} 部影片全部改名並移入「{RENAMED_SUBFOLDER}」資料夾：\n\n"
+            f"將 {len(plan)} 部影片原地改名（留在同一個資料夾）：\n\n"
             f"{preview}\n\n確定嗎？",
         )
         if not confirmed:
@@ -373,21 +353,18 @@ class VideoRenameGUI:
             self.cap.release()
             self.cap = None
 
-        try:
-            os.makedirs(dest_dir, exist_ok=True)
-        except OSError:
-            messagebox.showerror("錯誤", "無法建立已改名子資料夾")
-            return
-
         done = 0
         error = None
         for old_name, new_name in plan:
             try:
-                shutil.move(os.path.join(self.folder, old_name), os.path.join(dest_dir, new_name))
+                os.rename(os.path.join(self.folder, old_name), os.path.join(self.folder, new_name))
                 done += 1
             except OSError as e:
                 error = f"{old_name}：{e}"
                 break
+
+        # 起始序號接到已改名的下一個，之後再改名不會撞號
+        self.set_start(start + done)
 
         self.load_files()
         if not self.files:
@@ -408,35 +385,29 @@ class VideoRenameGUI:
             messagebox.showwarning("錯誤", "請輸入前綴，例如 walk")
             return
 
-        digits = self.read_digits()
+        number = self.read_start()
+        if number is None:
+            messagebox.showwarning("錯誤", "起始序號請輸入 0 以上的整數，例如 3")
+            return
 
         old_name = self.files[self.index]
         old_path = os.path.join(self.folder, old_name)
         ext = Path(old_name).suffix
 
-        number = self.get_next_number(prefix)
-        new_name = f"{prefix}{number:0{digits}d}{ext}"
-
-        dest_dir = self.renamed_folder_path()
-        new_path = os.path.join(dest_dir, new_name)
+        new_name = f"{prefix}{number}{ext}"
+        new_path = os.path.join(self.folder, new_name)
 
         # 改名前先釋放影片資源，否則 Windows 會鎖住檔案
         if self.cap:
             self.cap.release()
             self.cap = None
 
-        try:
-            os.makedirs(dest_dir, exist_ok=True)
-        except OSError:
-            messagebox.showerror("錯誤", "無法建立已改名子資料夾")
-            return
-
         if os.path.exists(new_path):
-            messagebox.showerror("錯誤", f"{new_name} 已存在於「{RENAMED_SUBFOLDER}」資料夾")
+            messagebox.showerror("錯誤", f"{new_name} 已存在")
             return
 
         try:
-            shutil.move(old_path, new_path)
+            os.rename(old_path, new_path)
         except PermissionError:
             messagebox.showerror("錯誤", "影片可能正在被其他程式使用，請關閉後再試")
             return
@@ -444,14 +415,24 @@ class VideoRenameGUI:
             messagebox.showerror("錯誤", f"{new_name} 已存在")
             return
 
-        # 記住目前位置，改名（等同從清單移除該檔）後停在同一位置，
-        # 也就是自動接續到下一部影片，而不是跳回清單最前面
-        current_index = self.index
+        # 下一部接著用下一個序號
+        self.set_start(number + 1)
+
+        # 原地改名後，這支影片還是留在同一個資料夾（只是換了名字），不會像舊版
+        # 「移到已改名資料夾」那樣自動從清單消失，重新排序後的位置也不一定緊接在
+        # 原本位置——這裡改記「原本清單裡的下一部影片檔名」，reload 後找它現在的
+        # 新位置接著看，才是真正的「自動接續到下一部還沒改名的影片」，而不是
+        # 用清單索引位置去猜（改名後排序一變就會猜錯，跳到不相干的影片）。
+        next_name = (
+            self.files[self.index + 1] if self.index + 1 < len(self.files) else None
+        )
         self.load_files()
 
         if self.files:
-            next_index = min(current_index, len(self.files) - 1)
-            self.open_video(next_index)
+            if next_name is not None and next_name in self.files:
+                self.open_video(self.files.index(next_name))
+            else:
+                self.open_video(min(self.index, len(self.files) - 1))
         else:
             self.info_label.config(text="目前影片：無")
             self.video_label.config(image="")

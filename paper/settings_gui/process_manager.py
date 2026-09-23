@@ -21,9 +21,21 @@ import subprocess
 import sys
 import threading
 import time
+import tkinter as tk
 from pathlib import Path
 
 from settings_gui import dialogs
+
+
+def any_running(*managers):
+    """回傳第一個 is_running 的 ProcessManager（沒有就回 None）。
+    設定視窗與身分訓練視窗（identity_trainer_window.py）各自有一顆 ProcessManager，
+    啟動前用這個互相檢查，避免 main.py 與 CNN 訓練同時搶 GPU/VRAM。傳入的 None
+    會被略過。"""
+    for m in managers:
+        if m is not None and m.is_running:
+            return m
+    return None
 
 
 class ProcessManager:
@@ -36,6 +48,8 @@ class ProcessManager:
         self.process = None
         self.active_label = None  # 例："main.py" 或某個腳本的檔名；None＝從未啟動過
         self.active_kind = None  # "main" | "tool" | None
+        self._poll_job = None  # poll() 的 after id，關窗前 stop_poll() 取消
+        self._notified_exit = False  # 這支行程結束後，on_state_change 是否已回報過一次
 
     @property
     def is_running(self) -> bool:
@@ -100,6 +114,7 @@ class ProcessManager:
         except OSError as e:
             dialogs.show_error(self.window, "啟動 main.py", f"啟動失敗：{e}")
             return
+        self._notified_exit = False
         self.active_label = "main.py"
         self.active_kind = "main"
         self.on_state_change()
@@ -162,6 +177,7 @@ class ProcessManager:
         except OSError as e:
             dialogs.show_error(self.window, "執行腳本", f"啟動失敗：{e}")
             return
+        self._notified_exit = False
         self.active_label = script_file.name
         self.active_kind = "tool"
         self.on_state_change()
@@ -169,6 +185,52 @@ class ProcessManager:
         self.console.append(f"— {script_file.name} 已啟動（PID {self.process.pid}） —\n", tag="muted")
         self.console.start_log_reader(self.process, self.active_label)
         self._bring_child_window_to_front(self.process)
+
+    def start_tool_quiet(self, script_path, extra_env=None, label=None, clear_console=True):
+        """跟 start_tool 一樣啟動一支獨立腳本，但**不彈任何確認/完成對話框**——
+        給「多步驟串接」的呼叫端用（例如 identity_trainer_window.py 的
+        建立資料集→訓練 兩段式流程，確認訊息由呼叫端自己統一出一次就好）。
+        回傳 (ok: bool, error: str|None)；ok=False 且 error=None 代表「已有行程在跑」。
+        clear_console=False 時不清空終端機（串接的第二步想保留第一步的輸出）。
+        """
+        script_file = Path(script_path)
+        if self.is_running:
+            return (False, None)
+        if not script_file.exists():
+            return (False, f"找不到檔案：{script_path}")
+        try:
+            child_env = os.environ.copy()
+            child_env["PYTHONIOENCODING"] = "utf-8"
+            child_env["PYTHONUTF8"] = "1"
+            child_env["PYTHONUNBUFFERED"] = "1"
+            if extra_env:
+                child_env.update({k: str(v) for k, v in extra_env.items()})
+            popen_kwargs = {
+                "cwd": str(script_file.parent),
+                "env": child_env,
+                "stdin": subprocess.PIPE,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "text": True,
+                "encoding": "utf-8",
+                "errors": "replace",
+                "bufsize": 1,
+            }
+            if os.name == "nt":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            self.process = subprocess.Popen([sys.executable, str(script_file)], **popen_kwargs)
+        except OSError as e:
+            return (False, f"啟動失敗：{e}")
+        self._notified_exit = False
+        self.active_label = label or script_file.name
+        self.active_kind = "tool"
+        self.on_state_change()
+        if clear_console:
+            self.console.clear()
+        self.console.append(f"— {self.active_label} 已啟動（PID {self.process.pid}） —\n", tag="muted")
+        self.console.start_log_reader(self.process, self.active_label)
+        self._bring_child_window_to_front(self.process)
+        return (True, None)
 
     # ── 關閉 ─────────────────────────────────────────────────────────
 
@@ -270,10 +332,33 @@ class ProcessManager:
     def poll(self):
         """每 2 秒檢查一次子行程是否還活著——不管是 main.py 還是獨立腳本工具，都有可能
         不是被「關閉／停止」按鈕結束的（使用者直接把主控台視窗叉掉、或程式自己崩潰），
-        這裡確保按鈕狀態不會卡住。"""
+        這裡確保按鈕狀態不會卡住。
+
+        視窗已銷毀就不再重排（避免對死掉的 widget 呼叫 .after() 丟 TclError）；
+        行程已結束且已回報過一次之後，也不再每 2 秒重複呼叫 on_state_change（否則
+        狀態列／按鈕會被無限重寫、也讓「已結束」狀態沒辦法被別的訊息取代）。"""
+        self._poll_job = None
+        try:
+            if not self.window.winfo_exists():
+                return
+        except tk.TclError:
+            return
         if self.process is not None:
-            self.on_state_change()
-        self.window.after(2000, self.poll)
+            ended = self.process.poll() is not None
+            if not ended or not self._notified_exit:
+                self.on_state_change()
+            if ended:
+                self._notified_exit = True
+        self._poll_job = self.window.after(2000, self.poll)
+
+    def stop_poll(self):
+        """視窗關閉前呼叫：停掉存活輪詢的 after 迴圈。"""
+        if self._poll_job is not None:
+            try:
+                self.window.after_cancel(self._poll_job)
+            except tk.TclError:
+                pass
+            self._poll_job = None
 
     def _bring_child_window_to_front(self, process):
         """背景執行緒輪詢，等子行程（main.py／獨立腳本）自己開出的 GUI 視窗出現後

@@ -61,7 +61,7 @@ class KeypointDetector:
         union = area_a + area_b - inter
         return inter / union if union > 1e-9 else 0.0
 
-    def detect(self, frame, return_all_instances=False):
+    def detect(self, frame, return_all_instances=False, single_cat=False):
         """對單一影格跑 YOLO-Pose 推論，回傳 (keypoints, keypoint_conf, bbox, bbox_conf)；
         沒有偵測到目標時回傳全 None。
 
@@ -72,14 +72,27 @@ class KeypointDetector:
         一併回傳，不會多跑一次推論，也完全不影響前 4 個值的追蹤/選取邏輯——
         單純給呼叫端（例如多貓同框時的畫面視覺化）用，預設 False 時行為與
         既有呼叫端完全一致。
+
+        single_cat=True 時：直接讓 YOLO 只回傳「信心值最高」的那一隻
+        （model.predict(max_det=1)），完全不套用跨幀 IoU 追蹤延續，也不會有
+        「上一幀鎖定的貓」這回事——RunModeConfig.SYSTEM_MODE=="single"（單貓
+        系統模式）專用：假設畫面全程只有一隻貓，每一幀都獨立鎖信心最高的偵測。
+        跟 return_all_instances 互斥沒有意義（只會有一筆），呼叫端不會同時給。
         """
-        results = self.model.predict(
-            frame,
+        # single_cat=False（預設）時刻意不傳 max_det，維持這個參數存在以前的呼叫
+        # 方式（吃 ultralytics 自己的內建預設值）；曾經在這裡不分情況都明寫
+        # max_det=300，結果跟「完全不傳」在某些畫面下不是數值上等價的同一件事
+        # （NMS 結果會受影響），被 test_frame_processor_characterization.py 的
+        # 凍結快照測試抓到單貓模式下 activity_value 悄悄變了。
+        predict_kwargs = dict(
             imgsz=self.imgsz,
             conf=self.conf_thres,
             quantize=16 if self._use_half else None,
             verbose=False,
-        )[0]
+        )
+        if single_cat:
+            predict_kwargs["max_det"] = 1
+        results = self.model.predict(frame, **predict_kwargs)[0]
         if results.keypoints is not None and len(results.keypoints.xy) > 0:
             n = len(results.keypoints.xy)
             has_boxes = results.boxes is not None and len(results.boxes) > 0
@@ -92,8 +105,13 @@ class KeypointDetector:
                 best = int(np.argmax(confs))
 
                 # 多隻貓同框時，優先延續「上一幀鎖定的同一隻貓」而非重新比信心值，
-                # 避免兩隻貓信心值來回互換時，骨架序列在不同貓之間跳動
-                if len(boxes_xyxy) > 1 and self._prev_bbox is not None:
+                # 避免兩隻貓信心值來回互換時，骨架序列在不同貓之間跳動。
+                # single_cat=True（單貓系統模式）時完全不做這件事——永遠鎖信心最高的。
+                if (
+                    not single_cat
+                    and len(boxes_xyxy) > 1
+                    and self._prev_bbox is not None
+                ):
                     ious = np.array([self._iou(self._prev_bbox, b) for b in boxes_xyxy])
                     track_idx = int(np.argmax(ious))
                     if ious[track_idx] >= self.track_iou_thres:
