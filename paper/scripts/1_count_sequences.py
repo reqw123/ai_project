@@ -51,7 +51,8 @@ rejected_unann_count: Counter = Counter()      # 因含 unannotated 被過濾，
 rejected_no_detect_count: Counter = Counter() # 因 bbox 缺失過多被過濾，按主類別計
 rejected_no_detect_detail: list[dict] = []    # 詳細清單（可反推影片）
 
-for p in sorted(SKELETONS_ROOT.glob("*.json")):
+# 根目錄 + train/val/test 子資料夾（底線開頭的是報表/紀錄檔，不是骨架）
+for p in sorted(q for q in SKELETONS_ROOT.rglob("*.json") if not q.name.startswith("_")):
     data = json.loads(p.read_text(encoding="utf-8"))
     frames = data.get("frames", [])
     if not frames or "label" not in frames[0]:

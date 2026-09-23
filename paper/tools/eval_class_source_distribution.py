@@ -33,7 +33,8 @@ def _load_skeleton_dir_from_config(config_path: Path) -> str:
 def scan_label_frame_counts(skeleton_dir: str) -> dict:
     """回傳 {label: {video_id: frame_count}}（排除 'unannotated'）。"""
     per_label = defaultdict(Counter)
-    json_files = sorted(Path(skeleton_dir).glob("*.json"))
+    # 根目錄 + train/val/test 子資料夾（底線開頭的是報表/紀錄檔，不是骨架）
+    json_files = sorted(p for p in Path(skeleton_dir).rglob("*.json") if not p.name.startswith("_"))
     for jf in json_files:
         video_id = jf.stem
         with open(jf, 'r', encoding='utf-8') as f:

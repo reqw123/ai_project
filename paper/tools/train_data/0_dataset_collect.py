@@ -103,8 +103,11 @@ VIDEO_FOLDERS = [
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\shake",
     r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\stop",
 ]
+# 骨架資料集根目錄；底下分 train/ val/ test/，每個再分類別資料夾（見 cat_monitoring_system/utils/
+# skeleton_splits.py）。新抽的骨架寫進 train/<類別>/，已存在的檔案重抽時寫回原本所在的子資料夾，
+# 切分調整用 tools/gcn_dataset_manager.py（模式 2）。
 OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
-MODEL_PATH = r"C:\ai_project\yolo_models\v11s_128.pt"  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
+MODEL_PATH = str(Path(__file__).resolve().parents[3] / "yolo_models" / "v11s_152.pt")  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 MODEL_PATH，對應
 # settings_window.py 的「🧠 模型路徑」欄位）；模式 3「換新模型後重新推論骨架」正好用得上。
@@ -116,6 +119,9 @@ TARGET_FPS = 30
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))  # config.py 在 paper/ 根目錄
 from config import YOLOConfig as _YOLOConfig
+from cat_monitoring_system.utils.skeleton_splits import (
+    SPLITS, iter_skeleton_files, skeleton_path_for, find_skeleton, split_of,
+)
 IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（設定視窗 yolo.image_size／環境變數 CAT_MONITORING_YOLO_IMAGE_SIZE，預設 640）
 CONF_THRESHOLD = 0.5
 KP_CONF_THRESHOLD = 0.5
@@ -162,7 +168,7 @@ def process_all_videos():
     video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv']
 
     # ── 步驟 1：收集所有影片，與 OUTPUT_FOLDER 現有 JSON 比對檔名 ─────────────
-    existing_stems = {p.stem for p in Path(OUTPUT_FOLDER).glob("*.json")}
+    existing_stems = {p.stem for p in iter_skeleton_files(OUTPUT_FOLDER)}
 
     video_files = []
     for folder in VIDEO_FOLDERS:
@@ -199,7 +205,7 @@ def process_all_videos():
 
     # ── 步驟 2：統計現有 skeleton 資料夾各類別數量 ────────────────────────────
     from collections import Counter
-    existing_jsons = list(Path(OUTPUT_FOLDER).glob("*.json"))
+    existing_jsons = iter_skeleton_files(OUTPUT_FOLDER)
     class_counts: Counter = Counter()
     for jp in existing_jsons:
         behavior = _parse_behavior(jp.stem) or 'unknown'
@@ -235,7 +241,7 @@ def process_all_videos():
     for idx, video_path in enumerate(todo_list, 1):
         print(f"[{idx}/{len(todo_list)}] Processing: {video_path.name}")
         video_id    = video_path.stem
-        output_path = Path(OUTPUT_FOLDER) / f"{video_id}.json"
+        output_path = skeleton_path_for(OUTPUT_FOLDER, video_id)
 
         # 從資料夾名稱取得行為標籤（walk/lick/scratch/shake/stop）
         label = video_path.parent.name.lower()
@@ -368,6 +374,8 @@ def extract_test_set_skeletons():
 def setup_directories():
     """Create necessary directories if they do not exist"""
     Path(OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
+    for sp in SPLITS:
+        (Path(OUTPUT_FOLDER) / sp).mkdir(exist_ok=True)
     print(f"✓ Output directory created: {OUTPUT_FOLDER}")
 
 
@@ -770,7 +778,7 @@ def process_single_video():
         "conf_threshold": CONF_THRESHOLD,
         "kp_conf_threshold": KP_CONF_THRESHOLD
     }
-    output_path = Path(OUTPUT_FOLDER) / f"{video_id}.json"
+    output_path = skeleton_path_for(OUTPUT_FOLDER, video_id)
     save_skeleton_data(skeleton_data, output_path, video_metadata)
     print(f"\n✓ Skeleton JSON 已儲存: {output_path}\n可直接用於手動標註模式。\n")
 
@@ -856,7 +864,7 @@ def _list_json_files_menu(folder: str, last_annotated: str = None):
         print(f"[Error] 資料夾不存在: {folder}")
         return None
 
-    json_files = sorted(p.glob("*.json"), key=_natural_sort_key)
+    json_files = sorted(iter_skeleton_files(p), key=_natural_sort_key)
     if not json_files:
         print(f"[Error] 找不到任何 JSON 檔案: {folder}")
         return None
@@ -910,12 +918,19 @@ def _list_json_files_menu(folder: str, last_annotated: str = None):
         g_done  = sum(1 for fi in grp if fi['n_intervals'] > 0)
         g_total = len(grp)
 
+        # 各切分支數放在群組標題列（有 train/val/test 子資料夾時才顯示），
+        # 每行在行尾標註所屬切分，不干擾檔名閱讀
+        from collections import Counter
+        sp_counts = Counter(split_of(fi['path']) for fi in grp)
+        sp_summary = ('  （' + ' / '.join(f"{sp} {sp_counts[sp]}" for sp in SPLITS) + '）'
+                      if any(sp_counts[sp] for sp in SPLITS) else '')
+
         print(sep)
         if behavior == 'unknown':
-            print(f"  ⚠  未分類（檔名無法比對行為關鍵字）  {g_done}/{g_total} 已完成")
+            print(f"  ⚠  未分類（檔名無法比對行為關鍵字）  {g_done}/{g_total} 已完成{sp_summary}")
         else:
             bar = '█' * g_done + '░' * (g_total - g_done)
-            print(f"  [{behavior.upper():<8}]  {g_done}/{g_total} 已完成  {bar}")
+            print(f"  [{behavior.upper():<8}]  {g_done}/{g_total} 已完成  {bar}{sp_summary}")
 
         for fi in grp:
             global_idx += 1
@@ -930,7 +945,9 @@ def _list_json_files_menu(folder: str, last_annotated: str = None):
                                         fi['path'].name == last_name) else ''
             if last_mark and last_idx is None:
                 last_idx = global_idx
-            print(f"    [{global_idx:3d}] {status}  {fi['path'].name:<38}  {detail}{vid_hint}{last_mark}")
+            sp = split_of(fi['path'])
+            sp_tag = f"  [{sp}]" if sp in SPLITS else ""
+            print(f"    [{global_idx:3d}] {status}  {fi['path'].name:<38}  {detail}{vid_hint}{sp_tag}{last_mark}")
 
     print(sep)
     if last_idx is not None and last_name:
@@ -1016,8 +1033,9 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
 
     print("\n操作說明：")
     print("  1/2/3/4/5 切換行為  |  s 標記起點/終點  |  u 撤銷上一個區間")
-    print("  a/d 前/後幀  |  z/x 調整步長  |  SPACE 播放/暫停  |  t 跳轉秒數")
-    print("  q 儲存並離開    [未標記片段訓練時自動捨棄]\n")
+    print("  a/d 前/後幀  |  [/] 調整步長  |  SPACE 播放/暫停  |  t 跳轉秒數")
+    print("  畫面最下方時間軸可點擊/拖曳跳轉、滾輪逐幀微調（拖曳/懸停時正上方會顯示預覽幀號/時間）")
+    print("  ESC 儲存並離開    [未標記片段訓練時自動捨棄]\n")
 
     marking           = False
     intervals_touched = False   # 本次工作階段是否曾新增或撤銷過區間（區分「真的沒動」vs「主動清空」）
@@ -1034,6 +1052,13 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
     cached_frame_idx  = -1
     flash_msg         = ''
     flash_until       = 0.0   # time.time() + duration
+
+    # ── 自繪時間軸的滑鼠互動狀態（見 draw_timeline() / _on_annotate_mouse()） ──
+    # 跟 video_infer_save.py 最上方那條時間拉桿同一套設計：點擊/拖曳跳轉、拖曳中
+    # 即時顯示預覽幀號/時間、滾輪逐幀微調，取代原本純唯讀的時間軸視覺。
+    _seek_bar_rect   = None   # (x0, y0, w, h)：時間軸在 show_img 座標系裡的可點擊範圍
+    _seek_dragging   = False  # 滑鼠左鍵正在時間軸上按住拖曳
+    _seek_hover_frame = None  # 滑鼠懸停/拖曳對應到的幀號（None＝沒有懸停）
 
     MAX_DISP_W, MAX_DISP_H = 1280, 720
     frame_shape = None
@@ -1084,47 +1109,176 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
                 cv2.circle(img, (x, y), ro, (0, 0, 0),   -1, cv2.LINE_AA)
                 cv2.circle(img, (x, y), ri, (0, 220, 60), -1, cv2.LINE_AA)
 
-    def draw_timeline(img, total_f, cur_i, ivs, act_cols):
-        """底部橫向時間軸：顯示各標注區間與當前位置。"""
+    SEEK_ACCENT = (60, 200, 255)   # 時間軸游標／把手顏色（BGR，暖黃橘，跟各行為色塊區分開）
+
+    def _seek_frame_from_x(x, bar_x0, bar_w):
+        if total_frames <= 1 or bar_w <= 0:
+            return 0
+        ratio = max(0.0, min(1.0, (x - bar_x0) / float(bar_w)))
+        return int(round(ratio * (total_frames - 1)))
+
+    def _seek_wheel_delta(flags):
+        """從 cv2 滑鼠回呼的 flags 解出滾輪方向：flags 高 16 位是有號的滾動量。"""
+        d = (flags >> 16) & 0xFFFF
+        if d >= 0x8000:
+            d -= 0x10000
+        return d
+
+    def _on_annotate_mouse(event, x, y, flags, param):
+        """時間軸的點擊/拖曳/滾輪處理：跟 video_infer_save.py 的自繪拉桿同一套邏輯。
+        點擊/拖曳/滾輪都會暫停播放（跟 a/d/t 等手動導覽鍵一致），並強制下一輪用
+        needs_seek 真正 seek（不要用鄰近幀的 grab 捷徑）。"""
+        nonlocal cur_idx, needs_seek, playing, render_needed
+        nonlocal _seek_dragging, _seek_hover_frame
+        if _seek_bar_rect is None:
+            return
+        bx, by, bw, bh = _seek_bar_rect
+        inside = bx <= x <= bx + bw and by <= y <= by + bh
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if inside:
+                _seek_dragging = True
+                playing = False
+                cur_idx = _seek_frame_from_x(x, bx, bw)
+                needs_seek = True
+                render_needed = True
+        elif event == cv2.EVENT_MOUSEMOVE:
+            new_hover = _seek_frame_from_x(x, bx, bw) if inside else None
+            if new_hover != _seek_hover_frame:
+                _seek_hover_frame = new_hover
+                render_needed = True
+            if _seek_dragging:
+                clamped_x = max(bx, min(x, bx + bw))
+                new_idx = _seek_frame_from_x(clamped_x, bx, bw)
+                if new_idx != cur_idx:
+                    cur_idx = new_idx
+                    needs_seek = True
+                    render_needed = True
+        elif event == cv2.EVENT_LBUTTONUP:
+            _seek_dragging = False
+        elif event == cv2.EVENT_MOUSEWHEEL:
+            if inside:
+                step = 1 if _seek_wheel_delta(flags) > 0 else -1
+                new_idx = max(0, min(cur_idx + step, total_frames - 1))
+                if new_idx != cur_idx:
+                    cur_idx = new_idx
+                    needs_seek = True
+                    playing = False
+                    render_needed = True
+
+    def _timeline_geom(h):
+        """時間軸高度／與視窗底邊的距離，draw_timeline() 與 draw_hud() 共用。
+        軌道加高、底下留較大空白，避免拖曳時一不小心滑出視窗底邊。"""
+        bh = max(26, int(h * 0.05))
+        mb = max(14, int(h * 0.025))
+        return bh, mb
+
+    def draw_timeline(img, total_f, cur_i, ivs, act_cols, pending=None):
+        """底部橫向時間軸：顯示各標注區間與當前位置；可點擊/拖曳/滾輪直接跳轉
+        （見 _on_annotate_mouse()）。拖曳中或滑鼠懸停在時間軸上時，正上方會顯示
+        「第幾幀／時間」預覽文字——這段畫在 draw_hud() 的半透明黑底之上，所以主
+        迴圈裡呼叫順序要先 draw_hud() 再 draw_timeline()，順序反過來預覽字會被蓋掉。
+        pending=(start_idx, act_col)：標記進行中（已按 s 開始、尚未結束），在軌道上
+        以半透明色塊畫出「開始點 → 目前位置」這段尚未儲存的區間。"""
+        nonlocal _seek_bar_rect
         h, w  = img.shape[:2]
-        bh    = max(10, int(h * 0.022))
+        bh, mb = _timeline_geom(h)
         mx    = 6
-        by    = h - bh - mx
+        by    = h - bh - mb
         bx1, bx2 = mx, w - mx
         bw    = bx2 - bx1
-        cv2.rectangle(img, (bx1, by), (bx2, by + bh), (25, 25, 25), -1)
+        cv2.rectangle(img, (bx1, by), (bx2, by + bh), (55, 55, 55), -1)
         for s, e, act in ivs:
             x1 = bx1 + int(s / max(total_f, 1) * bw)
             x2 = bx1 + int((e + 1) / max(total_f, 1) * bw)
             col = act_cols.get(act, (80, 80, 80))
             cv2.rectangle(img, (x1, by + 1), (max(x1 + 1, x2), by + bh - 1), col, -1)
+        if pending is not None:
+            p_s, p_col = pending
+            lo, hi = min(p_s, cur_i), max(p_s, cur_i)
+            x1 = bx1 + int(lo / max(total_f, 1) * bw)
+            x2 = bx1 + int((hi + 1) / max(total_f, 1) * bw)
+            ov = img.copy()
+            cv2.rectangle(ov, (x1, by + 1), (max(x1 + 1, x2), by + bh - 1), p_col, -1)
+            cv2.addWeighted(ov, 0.55, img, 0.45, 0, img)
+            sx = bx1 + int(p_s / max(total_f - 1, 1) * bw)
+            cv2.line(img, (sx, by - 4), (sx, by + bh + 4), p_col, 3, cv2.LINE_AA)
         cx = bx1 + int(cur_i / max(total_f - 1, 1) * bw)
-        cv2.line(img, (cx, by - 3), (cx, by + bh + 3), (255, 255, 255), 2)
-        cv2.circle(img, (cx, by + bh // 2), 4, (255, 255, 255), -1, cv2.LINE_AA)
-        cv2.rectangle(img, (bx1, by), (bx2, by + bh), (70, 70, 70), 1)
+        knob_r = max(5, bh // 3)
+        cv2.line(img, (cx, by - 3), (cx, by + bh + 3), SEEK_ACCENT, 2, cv2.LINE_AA)
+        cv2.circle(img, (cx, by + bh // 2), knob_r + 2, (15, 15, 15), -1, cv2.LINE_AA)
+        cv2.circle(img, (cx, by + bh // 2), knob_r, SEEK_ACCENT, -1, cv2.LINE_AA)
+        cv2.rectangle(img, (bx1, by), (bx2, by + bh), (120, 120, 120), 1, cv2.LINE_AA)
 
-    def draw_marking_indicator(img, act, act_col, dur_s, sc):
-        """標記進行中：粗彩色外框 + REC 徽章。"""
+        # 可點擊範圍：上方多留一點；下方一路延伸到視窗底邊，往下拖不會失去拖曳
+        click_pad = 8
+        _seek_bar_rect = (bx1, by - click_pad, bw, h - (by - click_pad))
+
+        preview_frame = _seek_hover_frame
+        if preview_frame is None and _seek_dragging:
+            preview_frame = cur_i
+        if preview_frame is not None:
+            # 畫成不透明的小色塊 tooltip（跟 draw_marking_indicator() 的 REC 徽章同一種手法），
+            # 不管疊在 draw_hud() 的半透明黑底或 line2 說明文字上面，都能完全蓋過去、乾淨可讀，
+            # 不會變成文字疊文字的花畫面。
+            sc = max(0.5, w / 960.0)
+            p_ts = frames[preview_frame].get('timestamp', 0) or 0
+            label = f"{preview_frame + 1}/{total_f}  {p_ts:.2f}s"
+            fs = 0.42 * sc
+            th = max(1, int(round(sc)))
+            (tw, tth), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, fs, th)
+            pad = max(3, int(4 * sc))
+            box_w, box_h = tw + pad * 2, tth + baseline + pad * 2
+            px = bx1 + int(round(bw * (0.0 if total_f <= 1 else preview_frame / float(total_f - 1))))
+            box_x = max(0, min(w - box_w, px - box_w // 2))
+            box_y = max(0, by - click_pad - box_h - 2)
+            cv2.rectangle(img, (box_x, box_y), (box_x + box_w, box_y + box_h), (15, 15, 15), -1, cv2.LINE_AA)
+            cv2.rectangle(img, (box_x, box_y), (box_x + box_w, box_y + box_h), SEEK_ACCENT, 1, cv2.LINE_AA)
+            cv2.putText(img, label, (box_x + pad, box_y + pad + tth),
+                        cv2.FONT_HERSHEY_SIMPLEX, fs, (255, 255, 255), th, cv2.LINE_AA)
+
+    def draw_marking_frame(img, act_col, sc):
+        """標記進行中：整個畫面的粗彩色外框（先畫，其他 HUD 疊在上面）。"""
         h, w = img.shape[:2]
         bw   = max(4, int(9 * sc))
         cv2.rectangle(img, (bw // 2, bw // 2), (w - bw // 2, h - bw // 2), act_col, bw)
-        badge = f"  REC [{act.upper()}]  {dur_s:.1f}s  "
-        (tw, th), _ = cv2.getTextSize(badge, cv2.FONT_HERSHEY_SIMPLEX, 0.65 * sc, max(1, int(2 * sc)))
-        bx = w - tw - int(12 * sc)
-        by = int(12 * sc)
-        ov = img.copy()
-        cv2.rectangle(ov, (bx - 6, by - 6), (bx + tw + 6, by + th + 8), act_col, -1)
-        cv2.addWeighted(ov, 0.82, img, 0.18, 0, img)
-        cv2.putText(img, badge, (bx, by + th),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65 * sc, (10, 10, 10),
-                    max(1, int(2 * sc)), cv2.LINE_AA)
-        cv2.circle(img, (bx + int(7 * sc), by + th // 2 + int(2 * sc)),
-                   max(3, int(5 * sc)), (0, 0, 200), -1, cv2.LINE_AA)
+
+    def draw_marking_indicator(img, act, act_col, dur_s, sc):
+        """標記進行中的 REC 徽章＋大字持續時間。放在頂部資訊欄正下方、右上角，
+        必須在 draw_top_bar() 之後呼叫，否則會被頂部欄的半透明黑底蓋暗。"""
+        h, w = img.shape[:2]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        pad  = int(8 * sc)
+        top  = max(22, int(27 * sc)) + int(8 * sc)   # 頂部資訊欄高度（同 draw_top_bar）+ 間距
+
+        rec_txt = f"REC [{act.upper()}]"
+        rec_fs, rec_th = 0.6 * sc, max(1, int(2 * sc))
+        dur_txt = f"{dur_s:.2f}s"
+        dur_fs, dur_th = 1.35 * sc, max(2, int(3 * sc))
+        (rw, rh), _ = cv2.getTextSize(rec_txt, font, rec_fs, rec_th)
+        (dw, dh), dbl = cv2.getTextSize(dur_txt, font, dur_fs, dur_th)
+        dot_r = max(4, int(6 * sc))
+        box_w = max(rw + dot_r * 2 + pad, dw) + pad * 2
+        box_h = rh + dh + dbl + pad * 3
+        x0 = w - box_w - int(12 * sc)
+        y0 = top
+
+        cv2.rectangle(img, (x0, y0), (x0 + box_w, y0 + box_h), (15, 15, 15), -1)
+        cv2.rectangle(img, (x0, y0), (x0 + box_w, y0 + box_h), act_col, max(2, int(3 * sc)))
+        # 第一行：紅點 + REC [ACT]
+        cy = y0 + pad + rh // 2
+        cv2.circle(img, (x0 + pad + dot_r, cy), dot_r, (0, 0, 230), -1, cv2.LINE_AA)
+        cv2.putText(img, rec_txt, (x0 + pad + dot_r * 2 + pad // 2, y0 + pad + rh),
+                    font, rec_fs, act_col, rec_th, cv2.LINE_AA)
+        # 第二行：大字持續時間（右對齊）
+        cv2.putText(img, dur_txt, (x0 + box_w - pad - dw, y0 + pad * 2 + rh + dh),
+                    font, dur_fs, (255, 255, 255), dur_th, cv2.LINE_AA)
 
     def draw_hud(img, line1, line2, sc):
         """底部半透明 HUD（在時間軸上方）。"""
         h, w  = img.shape[:2]
-        tl_h  = max(10, int(h * 0.022)) + 6
+        _bh, _mb = _timeline_geom(h)
+        tl_h  = _bh + _mb + 8   # 多留 8px 給時間軸上方的可點擊邊界
         hh    = max(46, int(58 * sc))
         hy    = h - tl_h - hh
         ov    = img.copy()
@@ -1169,9 +1323,13 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
                  else (frames[0].get('label', '') if frames else '')
     ctx_prefix = f"[{file_index}/{total_files}] " if file_index and total_files else ""
     win_name   = "Annotation"   # 固定名稱，確保每次重用同一個視窗
-    cv2.namedWindow(win_name, cv2.WINDOW_KEEPRATIO)
-    if frame_shape:
-        cv2.resizeWindow(win_name, frame_shape[1], frame_shape[0])
+    # AUTOSIZE（原本是 KEEPRATIO，可手動拖曳縮放視窗）：時間軸改成可點擊/拖曳跳轉後，
+    # 滑鼠座標需要準確對應到 show_img 的實際像素——AUTOSIZE 下視窗永遠貼合 imshow 畫面，
+    # 座標保證 1:1，不用另外處理「使用者手動縮放視窗後座標怎麼換算」這個不確定性
+    # （KEEPRATIO 下 cv2 的滑鼠座標換算在不同版本/後端行為不一致，換成 AUTOSIZE 才穩）。
+    # 代價是不能再手動拖曳縮放這個視窗，畫面大小固定為 MAX_DISP_W x MAX_DISP_H 等比縮小後的尺寸。
+    cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)
+    cv2.setMouseCallback(win_name, _on_annotate_mouse)
 
     # ── 主迴圈 ────────────────────────────────────────────────────────────────
     while True:
@@ -1225,27 +1383,30 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
                     cv2.rectangle(show_img, (2, 2),
                                   (show_img.shape[1] - 2, show_img.shape[0] - 2), col, 2)
 
-            # 標記中：粗外框 + REC 徽章
+            # 標記中：粗外框（REC 徽章＋大字 dur 在 draw_top_bar() 之後才畫，避免被蓋暗）
             if marking:
                 s_ts  = frames[start_idx].get('timestamp', 0) or 0
                 c_ts  = frame_data.get('timestamp', 0) or 0
                 dur_s = abs(c_ts - s_ts)
                 act_col = ACTION_COLORS.get(current_action, (200, 200, 200))
-                draw_marking_indicator(show_img, current_action, act_col, dur_s, sc)
+                draw_marking_frame(show_img, act_col, sc)
                 line2 = (f"  from frame {start_idx+1} ({s_ts:.1f}s)  ->  now ({c_ts:.1f}s)"
-                         f"  dur={dur_s:.2f}s  |  s=END MARK  u=cancel  q=SAVE")
+                         f"  dur={dur_s:.2f}s  |  s=END MARK  u=cancel  ESC=SAVE")
             else:
                 act_col = ACTION_COLORS.get(current_action, (200, 200, 200))
                 line2 = (f"  1=walk 2=lick 3=scratch 4=shake 5=stop  |  "
-                         f"s=START MARK  u=UNDO  a/d=nav  z/x=skip  t=jump  SPACE  q=SAVE")
+                         f"s=START MARK  u=UNDO  a/d=nav  [/]=skip  t=jump  SPACE  ESC=SAVE")
 
             line1 = (f"{play_str}  Frame {cur_idx+1}/{total_frames}  ({t_str})"
                      f"  skip:{skip_n}  |  Intervals:{len(intervals)}"
                      + (f"  VidFr:{orig_fid}" if orig_fid is not None else "")
                      + ("" if frame_data.get('detected') else "  [NO DETECT]"))
 
-            draw_timeline(show_img, total_frames, cur_idx, intervals, ACTION_COLORS)
+            # 順序刻意固定：draw_hud() 先畫半透明黑底，draw_timeline() 後畫（含拖曳/懸停
+            # 預覽文字），這樣預覽文字才會疊在 HUD 黑底之上，不會被蓋掉（見 draw_timeline() 說明）。
             draw_hud(show_img, line1, line2, sc)
+            draw_timeline(show_img, total_frames, cur_idx, intervals, ACTION_COLORS,
+                          pending=(start_idx, act_col) if marking else None)
 
             # 頂部欄
             lbl_tag = f" [{file_label.upper()}]" if file_label else ''
@@ -1253,10 +1414,13 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
                         f"  |  {len(intervals)} interval(s)"
                         + (f"  kpts:{n_kpts}" if frame_data.get('detected') else "  [NO DETECT]"))
             draw_top_bar(show_img, top_text, sc)
+            if marking:
+                draw_marking_indicator(show_img, current_action, act_col, dur_s, sc)
 
             # 當前行為色塊（左下角小標籤）
             h_img = show_img.shape[0]
-            tl_h  = max(10, int(h_img * 0.022)) + 6
+            _bh, _mb = _timeline_geom(h_img)
+            tl_h  = _bh + _mb + 8   # 同 draw_hud()
             hh    = max(46, int(58 * sc))
             lbl_y = h_img - tl_h - hh - int(6 * sc)
             cv2.putText(show_img, f'[{current_action.upper()}]',
@@ -1279,7 +1443,16 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
             remaining_ms = max(30, int((play_delay_ms / 1000.0 - elapsed) * 1000)) if playing else 30
             key = cv2.waitKey(remaining_ms) & 0xFF
         else:
-            key = cv2.waitKey(0) & 0xFF
+            # 原本這裡是單次阻塞的 cv2.waitKey(0)：等一個「真的按鍵」才會返回，中途滑鼠在
+            # 時間軸上點擊/拖曳/懸停雖然照樣會觸發 _on_annotate_mouse()（cv2 的訊息幫浦在
+            # waitKey 阻塞期間仍會派送滑鼠事件），但畫面不會重繪，使用者會覺得「點了沒反應」，
+            # 直到又按了一個鍵才會突然跳過去。改成 50ms 一次的輪詢迴圈，滑鼠回呼裡把
+            # render_needed 設成 True 就能提前跳出、立即重繪（拖曳/懸停預覽才會即時跟著動）。
+            key = 255
+            while True:
+                key = cv2.waitKey(50) & 0xFF
+                if key != 255 or render_needed:
+                    break
 
         if key == 27:
             break
@@ -1297,10 +1470,10 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
             playing   = False
             cur_idx   = min(total_frames - 1, cur_idx + skip_n)
             render_needed = True
-        elif key == ord('z'):
+        elif key == ord('['):  # 2026-09 前是 z，改掉避免跟其他腳本「z=切到 WALK 資料夾」混淆
             skip_n = max(1, skip_n - 1)
             render_needed = True
-        elif key == ord('x'):
+        elif key == ord(']'):  # 2026-09 前是 x，改掉避免跟其他腳本「x=切到 LICK 資料夾」混淆
             skip_n += 1
             render_needed = True
         elif key in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5')):
@@ -1457,7 +1630,7 @@ def manual_action_labeling():
 
         # 計算在整個 JSON 列表中的位置，供視窗標題顯示進度
         try:
-            all_jsons   = sorted(Path(OUTPUT_FOLDER).glob("*.json"), key=_natural_sort_key)
+            all_jsons   = sorted(iter_skeleton_files(OUTPUT_FOLDER), key=_natural_sort_key)
             file_index  = next((i + 1 for i, jf in enumerate(all_jsons)
                                 if str(jf) == json_path), None)
             total_files = len(all_jsons)
@@ -1712,8 +1885,8 @@ def reextract_preserve_labels(target_stems: set = None):
     saved_frame_labels: dict[str, list] = {}   # video_id -> 舊逐幀 label（依 old timestamp 順序）
     saved_timestamps: dict[str, list] = {}     # video_id -> 舊逐幀 timestamp
     for vf in video_files:
-        jp = Path(OUTPUT_FOLDER) / f"{vf.stem}.json"
-        if jp.exists():
+        jp = find_skeleton(OUTPUT_FOLDER, vf.stem)
+        if jp is not None:
             try:
                 with open(jp, 'r', encoding='utf-8') as f:
                     d = json.load(f)
@@ -1761,7 +1934,7 @@ def reextract_preserve_labels(target_stems: set = None):
     for idx, video_path in enumerate(video_files, 1):
         print(f"\n[{idx}/{len(video_files)}] {video_path.name}")
         video_id    = video_path.stem
-        output_path = Path(OUTPUT_FOLDER) / f"{video_id}.json"
+        output_path = skeleton_path_for(OUTPUT_FOLDER, video_id)
         label       = video_path.parent.name.lower()
 
         result = extract_skeleton_from_video(
@@ -2104,7 +2277,7 @@ def check_discarded_files():
     video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv']
 
     # ── 影片層級 ──────────────────────────────────────────────
-    existing_stems = {p.stem for p in Path(OUTPUT_FOLDER).glob("*.json")}
+    existing_stems = {p.stem for p in iter_skeleton_files(OUTPUT_FOLDER)}
     video_files = []
     for folder in VIDEO_FOLDERS:
         video_folder = Path(folder)
@@ -2129,7 +2302,7 @@ def check_discarded_files():
         print(f"    - {v.name}")
 
     # ── 幀層級 ──────────────────────────────────────────────
-    json_files = sorted(Path(OUTPUT_FOLDER).glob("*.json"), key=_natural_sort_key)
+    json_files = sorted(iter_skeleton_files(OUTPUT_FOLDER), key=_natural_sort_key)
     if not json_files:
         print(f"\n[Warning] {OUTPUT_FOLDER} 底下沒有任何 skeleton JSON，略過幀層級檢查。")
         return

@@ -114,9 +114,9 @@ BEHAVIOR_PREFIXES:
   shake: 3
   stop: 4
 # 模型輸入關節數：
-#   17 = 完整骨架（預設）
-#   14 = 忽略尾巴三點 tail_base(14)/tail_mid(15)/tail_tip(16)，用於消融實驗
-NUM_JOINTS: 17
+#   17 = 完整骨架
+#   14 = 忽略尾巴三點 tail_base(14)/tail_mid(15)/tail_tip(16)（目前使用）
+NUM_JOINTS: 14
 # 輸入模型的序列長度（幀數）
 SEQUENCE_LENGTH: 16
 # 訓練資料滑動視窗步長（幀數）；建議 SEQUENCE_LENGTH // 2（50% 重疊）
@@ -183,9 +183,12 @@ LEARNING_RATE: 0.00005  # init: 0.00005
 WEIGHT_DECAY: 0.0001    # init: 0.0001
 # Optimizer choice: 'adam', 'adamw', or 'sgd'
 OPTIMIZER: "adamw"
-# 早停判定的 patience（以驗證集表現計算）
-EARLY_STOP_PATIENCE: 10
-# 保留做驗證集的影片比例（以影片為單位切分）
+# 早停判定的 patience：連續幾個 epoch val_loss 沒有創新低就停（最佳 checkpoint 也以 val_loss 最低為準）
+EARLY_STOP_PATIENCE: 15   # 2026-09-23 由 10 調高：run_144 在 val_loss 仍下降時就被早停
+# train/val/test 切分 = SKELETON_DATA_FOLDER 底下的 train/ val/ test/ 子資料夾，裡面再分類別資料夾（見
+# cat_monitoring_system/utils/skeleton_splits.py）。新抽的骨架預設進 train/<類別>/，調整切分用
+# tools/gcn_dataset_manager.py（模式 2）。沒有子資料夾時 0_train_gcn.py 才退回下面 TRAIN_TEST_SPLIT 的舊隨機切分。
+# （僅在沒有 train/val/test 子資料夾時使用）舊隨機切分保留做驗證集的影片比例
 TRAIN_TEST_SPLIT: 0.15
 # 隨機種子，用於固定資料切分與增強
 RANDOM_SEED: 42

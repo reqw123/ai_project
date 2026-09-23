@@ -44,6 +44,9 @@ from models.stgcn_model import (
     build_feature_tensor as shared_build_feature_tensor,
 )
 from models.keypoint_kalman import kalman_smooth_sequence
+from utils.skeleton_splits import (
+    iter_skeleton_files, split_of, has_split_layout, SPLITS, UNASSIGNED,
+)
 
 # ==================== Path Config（絕對路徑統一於此管理） ====================
 # 設定檔絕對路徑集中在此常數；可用 STGCN_CONFIG_PATH 環境變數覆寫
@@ -455,7 +458,9 @@ class CatSkeletonDataset(Dataset):
         from collections import Counter
 
         sequences = []
-        json_files = list(self.skeleton_folder.glob("*.json"))
+        # 根目錄 + train/val/test 子資料夾（見 utils/skeleton_splits.py）；每個序列記下
+        # 它來自哪個子資料夾，split_indices() 直接依此切分
+        json_files = iter_skeleton_files(self.skeleton_folder)
         # Use centralized behavior prefixes mapping from CONFIG
         name_to_idx = BEHAVIOR_PREFIXES
 
@@ -557,6 +562,7 @@ class CatSkeletonDataset(Dataset):
                 end_idx = start_idx + self.sequence_length - 1
                 sequences.append({
                     'video_id': video_id,
+                    'split':    split_of(json_file),
                     'sequence': np.array(sequence),
                     'conf_sequence': np.array(confs[start_idx:start_idx + self.sequence_length]),
                     'label':    label_idx,
@@ -757,13 +763,63 @@ def validate(model, dataloader, criterion, device, desc="Val"):
 
 
 # ==================== Main Training Loop ====================
-def split_train_val_indices(full_dataset, verbose=True):
+def split_source_tag():
+    """寫進 run_log/history 的切分來源標記；eval_gcn_test_set.py 用它判斷模型訓練時
+    是否就是用這份資料夾切分（不是的話 test 可能被訓練過）。"""
+    return f"folders:{Path(SKELETON_DATA_FOLDER).resolve()}"
+
+
+def split_indices(full_dataset, verbose=True):
     """
-    影片級切分（防止滑動窗 data leakage），從 train_model() 抽出來獨立成函式，
-    讓不需要重新訓練、只想針對「某個已經訓練好的 checkpoint」跑驗證集診斷
-    （例如 diagnose_keypoint_motion）的獨立腳本可以重用同一套切分邏輯，
-    不用重複貼一份容易失去同步的程式碼。邏輯與參數（RANDOM_SEED/TRAIN_TEST_SPLIT）
-    跟 train_model() 完全相同，只要 full_dataset 的載入參數一致，就能重現同一份切分。
+    影片級 train/val/test 切分：骨架放在 SKELETON_DATA_FOLDER 底下的 train/ val/ test/
+    子資料夾，切分就是檔案所在的資料夾（見 utils/skeleton_splits.py）。val 只拿來早停／
+    挑 checkpoint，test 完全不參與訓練，只在訓練結束後評估一次。
+    直接放在根目錄、尚未分配的檔案暫時當 train，並提醒執行 tools/gcn_dataset_manager.py（模式 2） 歸位。
+    還沒有子資料夾結構時退回舊的隨機切分（_legacy_random_split，沒有 test）。
+
+    Returns: (train_indices, val_indices, test_indices, split_source)
+    """
+    root = Path(full_dataset.skeleton_folder)
+    if not has_split_layout(root):
+        if verbose:
+            print(f"  ⚠ {root} 底下沒有 train/val/test 子資料夾，退回隨機切分（無 test 集；"
+                  f"建議先執行 tools/gcn_dataset_manager.py（模式 2））")
+        tr, va = _legacy_random_split(full_dataset, verbose)
+        return tr, va, [], 'random'
+
+    unassigned = sorted({s['video_id'] for s in full_dataset.sequences if s['split'] == UNASSIGNED})
+    if unassigned and verbose:
+        print(f"  ⚠ {len(unassigned)} 支骨架直接放在 {root} 根目錄、尚未分配，暫時當 train"
+              f"（請執行 tools/gcn_dataset_manager.py（模式 2） 歸位）：{', '.join(unassigned)}")
+
+    train_idx, val_idx, test_idx = [], [], []
+    for i, s in enumerate(full_dataset.sequences):
+        {'val': val_idx, 'test': test_idx}.get(s['split'], train_idx).append(i)
+
+    if verbose:
+        label_names = [n for n, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+        print(f"  切分來源：{root}（train / val / test 子資料夾）")
+        print(f"  {'':8}{'train':>14}{'val':>14}{'test':>14}   （影片 / 視窗）")
+        for c, name in enumerate(label_names):
+            row = []
+            for idxs in (train_idx, val_idx, test_idx):
+                seqs = [full_dataset.sequences[i] for i in idxs if full_dataset.sequences[i]['label'] == c]
+                row.append(f"{len({q['video_id'] for q in seqs})}/{len(seqs)}")
+            print(f"  {name:8}" + ''.join(f"{r:>14}" for r in row))
+    return train_idx, val_idx, test_idx, split_source_tag()
+
+
+def split_train_val_indices(full_dataset, verbose=True):
+    """相容舊呼叫端：只回傳 (train_indices, val_indices)，切分規則同 split_indices()。"""
+    tr, va, _, _ = split_indices(full_dataset, verbose)
+    return tr, va
+
+
+def _legacy_random_split(full_dataset, verbose=True):
+    """
+    舊版隨機影片級切分（骨架還沒分成 train/val/test 子資料夾時才會用到）：每次依 RANDOM_SEED/
+    TRAIN_TEST_SPLIT 對「目前所有影片」重抽 val，資料一增減整份 val 就會重新洗牌，
+    不同 run 之間無法比較，所以只保留當備援。
 
     Returns: (train_indices, val_indices)
     """
@@ -1056,12 +1112,14 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     except Exception as e:
         print(f"⚠ Failed to write initial run log: {e}")
 
-    # 影片級切分（防止滑動窗 data leakage），邏輯抽到 split_train_val_indices()
-    train_indices, val_indices = split_train_val_indices(full_dataset)
-    # split_train_val_indices() 只回傳序列索引、不回傳影片 id 清單本身，
+    # 影片級切分（防止滑動窗 data leakage）：依 train/val/test 子資料夾，見 split_indices()
+    train_indices, val_indices, test_indices, split_source = split_indices(full_dataset)
+    # split_indices() 只回傳序列索引、不回傳影片 id 清單本身，
     # 這裡從切分結果反推「不重複影片數」給下面的 run_log/history 紀錄用。
     train_video_count = len({full_dataset.sequences[i]['video_id'] for i in train_indices})
     val_video_count = len({full_dataset.sequences[i]['video_id'] for i in val_indices})
+    test_video_count = len({full_dataset.sequences[i]['video_id'] for i in test_indices})
+    run_log_data['meta']['split_source'] = split_source
 
     # ── 獨立的 augment 旗標（copy.copy 共享 sequences 但各自持有旗標） ──
     train_base = copy.copy(full_dataset)
@@ -1071,6 +1129,7 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
 
     train_dataset = torch.utils.data.Subset(train_base, train_indices)
     val_dataset   = torch.utils.data.Subset(val_base,   val_indices)
+    test_dataset  = torch.utils.data.Subset(val_base,   test_indices)   # 不做增強，跟 val 同口徑
 
     # 列印訓練集與驗證集的類別分布
     def print_split_distribution(subset, name):
@@ -1324,8 +1383,10 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         except Exception as e:
             print(f"⚠ Failed to write run log: {e}")
 
-        # Early stopping（acc 相同時以 val_loss 更低為準，確保儲存最佳 checkpoint）
-        if val_acc > best_val_acc or (val_acc == best_val_acc and val_loss < best_val_loss):
+        # Early stopping／最佳 checkpoint 以 val_loss 判定：val 集小，val_acc 在
+        # epoch 之間跳動大，用 acc 挑容易挑到偶然的高點、又在 loss 還在下降時早停
+        # （run_144：第 22 epoch acc 偶然跳高被存下，第 32 epoch loss 更低卻被早停）
+        if val_loss < best_val_loss:
             best_val_acc = val_acc
             best_val_loss = val_loss
             best_val_macro_f1 = val_macro_f1
@@ -1362,6 +1423,50 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         diagnose_keypoint_motion(full_dataset, val_indices, best_val_labels, best_val_preds,
                                  'scratch', 'stop', output_dir=run_results_dir)
 
+    # ── Test 集評估：只在訓練結束後、用最佳 checkpoint 跑一次，不參與任何選擇 ──
+    test_result = None
+    if best_state_dict is not None and test_indices:
+        test_model = ema.ema if USE_EMA_FOR_EVAL else model
+        test_model.load_state_dict(best_state_dict)
+        test_loader = DataLoader(test_dataset, batch_size=eff_batch_size, shuffle=False,
+                                 num_workers=num_workers,
+                                 pin_memory=True if DEVICE.type == 'cuda' else False)
+        t_loss, t_acc, t_f1, t_preds, t_labels, t_pc_f1 = validate(
+            test_model, test_loader, criterion, DEVICE, desc="Test")
+        from sklearn.metrics import recall_score
+        t_recall = recall_score(t_labels, t_preds, average=None,
+                                labels=list(range(NUM_CLASSES)), zero_division=0)
+        test_result = {
+            'test_acc': float(t_acc),
+            'test_macro_f1': float(t_f1),
+            'test_balanced_acc': float(np.mean(t_recall)),
+            'test_loss': float(t_loss),
+            'test_per_class_f1': t_pc_f1.tolist(),
+            'test_per_class_recall': t_recall.tolist(),
+            'test_videos': test_video_count,
+            'test_sequences': len(test_indices),
+        }
+        print(f"\n✓ Test（{test_video_count} 支影片 / {len(test_indices)} 個視窗）："
+              f"acc={t_acc:.4f}  macro_f1={t_f1:.4f}  balanced_acc={np.mean(t_recall):.4f}")
+        _names = [n for n, _ in sorted(BEHAVIOR_PREFIXES.items(), key=lambda kv: kv[1])]
+        print("  " + "  ".join(f"{n}: R={r:.2f}/F1={f:.2f}" for n, r, f in zip(_names, t_recall, t_pc_f1)))
+        plot_confusion_matrix(t_labels, t_preds, run_results_dir,
+                              filename='test_confusion_matrix.png', title='Test Confusion Matrix')
+        # 逐影片誤判清單，方便查是哪幾支拖累 test（只供檢視，不要拿來回頭改資料）
+        try:
+            import csv as _csv
+            with open(os.path.join(run_results_dir, 'test_errors.csv'), 'w', newline='',
+                      encoding='utf-8-sig') as tf:
+                w = _csv.writer(tf)
+                w.writerow(['video_id', 'start_idx', 'start_time', 'true', 'pred'])
+                for i, yt, yp in zip(test_indices, t_labels, t_preds):
+                    if yt != yp:
+                        sq = full_dataset.sequences[i]
+                        w.writerow([sq['video_id'], sq['start_idx'], sq.get('start_time'),
+                                    _names[yt], _names[yp]])
+        except Exception as e:
+            print(f"⚠ Failed to write test_errors.csv: {e}")
+
     # 計算訓練總時長
     training_end_time = datetime.now(timezone.utc)
     training_duration_sec = (training_end_time - training_start_time).total_seconds()
@@ -1378,6 +1483,8 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'best_val_loss': float(best_val_loss),
         'best_val_per_class_f1': best_val_per_class_f1.tolist() if best_val_per_class_f1 is not None else [],
         'model_path': run_model_path,
+        'checkpoint_selection': 'min_val_loss',
+        **(test_result or {}),
     }
     try:
         with open(run_log_path, 'w', encoding='utf-8') as lf:
@@ -1406,12 +1513,19 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
         'label_smoothing': eff_label_smoothing,
         'train_videos': train_video_count,
         'val_videos': val_video_count,
+        'test_videos': test_video_count,
         'train_sequences': len(train_indices),
         'val_sequences': len(val_indices),
+        'test_sequences': len(test_indices),
+        'split_source': split_source,
+        'checkpoint_selection': 'min_val_loss',
         'total_epochs_run': total_epochs_run,
         'best_val_acc': float(best_val_acc),
         'best_val_macro_f1': float(best_val_macro_f1),
         'best_val_loss': float(best_val_loss),
+        'test_acc': test_result['test_acc'] if test_result else None,
+        'test_macro_f1': test_result['test_macro_f1'] if test_result else None,
+        'test_balanced_acc': test_result['test_balanced_acc'] if test_result else None,
         'training_duration_seconds': round(training_duration_sec, 1),
         'training_duration_human': _format_duration(training_duration_sec),
         'model_path': run_model_path,
@@ -1480,8 +1594,9 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     }
 
 
-def plot_confusion_matrix(labels, preds, output_dir):
-    """Plot and save confusion matrix"""
+def plot_confusion_matrix(labels, preds, output_dir, filename='confusion_matrix.png',
+                          title='Confusion Matrix'):
+    """Plot and save confusion matrix（預設是 val；test 用 filename/title 另存一張）"""
     
     cm = confusion_matrix(labels, preds, labels=list(range(NUM_CLASSES)))
     class_names = ["walk", "lick", "scratch", "shake", "stop"]
@@ -1494,7 +1609,7 @@ def plot_confusion_matrix(labels, preds, output_dir):
            yticks=np.arange(cm.shape[0]),
            xticklabels=class_names,
            yticklabels=class_names,
-           title='Confusion Matrix',
+           title=title,
            ylabel='True label',
            xlabel='Predicted label')
     
@@ -1509,7 +1624,7 @@ def plot_confusion_matrix(labels, preds, output_dir):
                    color="white" if cm[i, j] > thresh else "black")
     
     plt.tight_layout()
-    save_path = os.path.join(output_dir, 'confusion_matrix.png')
+    save_path = os.path.join(output_dir, filename)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f"✓ Confusion matrix saved to: {save_path}")
     plt.close()
