@@ -1,0 +1,4 @@
+﻿video_id,start_idx,start_time,true,pred
+stop_175,24,0.8,stop,lick
+stop_175,32,1.0666666666666667,stop,lick
+stop_53,8,0.26666666666666666,stop,lick

@@ -68,10 +68,11 @@ class FieldSearchBar:
         first_tab = next(tab for tab in TAB_ORDER if tab in matches_by_tab)
         matched_keys = matches_by_tab[first_tab]
         self.window._select_tab(first_tab)
-        # 高亮「所有」分頁的符合欄位，不只自動跳過去的第一個分頁——欄位列在各分頁
-        # 建構時就都存在（切分頁只是 pack_forget，widget 不會被銷毀），所以跨分頁
-        # 高亮可以一路保持到搜尋框被清空為止，使用者切到任一有徽章的分頁都看得到
-        # 命中的欄位被框起來，不會「一離開第一個分頁就沒框了」。
+        # 高亮「所有」分頁的符合欄位，不只自動跳過去的第一個分頁——已建好的分頁
+        # 直接套上（切分頁只是 pack_forget，widget 不會被銷毀），還沒建的分頁
+        # （設定視窗的分頁是延遲建立的）由 _ensure_tab_built() 建好時補套，所以跨
+        # 分頁高亮可以一路保持到搜尋框被清空為止，使用者切到任一有徽章的分頁都
+        # 看得到命中的欄位被框起來，不會「一離開第一個分頁就沒框了」。
         all_matched_keys = [k for keys in matches_by_tab.values() for k in keys]
         self.window._highlight_fields(all_matched_keys)
         self.window._scroll_field_into_view(first_tab, matched_keys[0])

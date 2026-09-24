@@ -265,7 +265,11 @@ class SettingsWindow(tk.Tk):
         self._label_col_px = self._font_label.measure("0") * 30
 
         # 每個 json_key -> {"var":..., "widget":..., "badge_var":..., "field":..., ...}
+        # 分頁延遲建立：只有已建好的分頁的欄位會在這裡，讀寫請用 _field()／
+        # _field_if_built()，不要直接存取（見 _build_tabs 開頭說明）。
         self._field_widgets = {}
+        self._dashboard_link_wired = False   # 見 _wire_dashboard_link()
+        self._nodered_autosync_wired = False  # 見 _wire_nodered_endpoint_autosync()
         # 每個 json_key -> app 啟動當下的「生效值」（getattr config.<class>.<attr> 現讀一次快照），
         # 供「載入目前設定」在 env/json 都沒設定時當作預設值錨點，不在別處重複硬編碼字面值。
         self._baseline_effective = {
@@ -295,13 +299,10 @@ class SettingsWindow(tk.Tk):
         self._build_middle_area()
         self._build_bottom_bar()
 
-        self._populate_from_effective_state()
-        # 裝在初次載入「之後」——避免初次載入時逐欄位 set() 觸發下面這個同步邏輯，
-        # 誤判成「使用者剛剛改了 Host/Port」而動到端點欄位（見方法內註解）。
-        self._wire_nodered_endpoint_autosync()
-        # 個體化基線儀表板網址列的綁定與初次刷新也要等欄位都建好、初值都填完之後
-        # （_build_process_bar() 建這條列時 _field_widgets 還是空的）。
-        self._wire_dashboard_link()
+        # 欄位初值的填入、以及欄位之間的連動接線（Node-RED 端點自動同步、儀表板
+        # 網址列）改成每個分頁建好時各自處理，見 _ensure_tab_built()；其餘分頁
+        # 在視窗開好後由背景逐頁補建。
+        self.after(100, self._build_pending_tabs_in_background)
         self._process_manager.poll()
 
         # 到這裡整個視窗的固定佔用區塊（標題/流程列/獨立腳本工具列/資訊列/分頁按鈕列/
@@ -1563,9 +1564,20 @@ class SettingsWindow(tk.Tk):
         TAB_COLORS 上色：選取中＝原色底＋白字，未選取＝同色系的淡色底＋原色字
         （用 _lighten() 混白計算），兩種狀態都看得出屬於哪個分頁。
         """
+        # 分頁內容延遲建立（開啟速度）：這裡只建分頁按鈕與每頁的空殼容器，
+        # 分頁內容（欄位列、說明文件卡片）等到該分頁第一次被需要時才由
+        # _ensure_tab_built() 建出來——被切換到、程式要讀寫它的欄位（見 _field()），
+        # 或視窗開好後由 _build_pending_tabs_in_background() 在背景逐頁補建。
+        # 新增分頁不需要額外處理：照舊在 TAB_ORDER／TAB_COLORS／FIELD_SCHEMA 加上
+        # 即可，延遲建立對所有分頁一體適用。唯一規則：讀寫欄位一律透過
+        # self._field(key)／self._field_if_built(key)，不要直接存取
+        # self._field_widgets（tests/test_settings_window_lazy_tabs_unit.py 會檢查）。
         fields_by_tab = {}
         for field in FIELD_SCHEMA:
             fields_by_tab.setdefault(field["tab"], []).append(field)
+        self._fields_by_tab = fields_by_tab
+        self._tab_of_key = {field["json_key"]: field["tab"] for field in FIELD_SCHEMA}
+        self._tabs_built = set()
 
         # 分頁按鈕列改成可橫向捲動：分頁一多，按鈕排成一列會超出視窗寬度，用
         # Canvas + 橫向 ttk.Scrollbar 包住，滑桿可以拉、滑鼠停在按鈕列上滾輪也能橫向捲。
@@ -1637,7 +1649,7 @@ class SettingsWindow(tk.Tk):
         # 內容是「這個分頁對應哪個模組/核心函式」（見
         # docs/設定分頁模組與核心函式對照表.md），不是逐欄位的 JSON 路徑對照表
         # （那份是 docs/設定視窗欄位對照表.md，這裡沒有用到）。
-        tab_docs = tab_docs_panel.parse(_SCRIPT_DIR / "docs" / "設定分頁模組與核心函式對照表.md")
+        self._tab_docs = tab_docs_panel.parse(_SCRIPT_DIR / "docs" / "設定分頁模組與核心函式對照表.md")
 
         for tab_name in TAB_ORDER:
             emoji, accent = TAB_COLORS.get(tab_name, ("⬜", COLOR_HEADER_BG))
@@ -1651,79 +1663,128 @@ class SettingsWindow(tk.Tk):
             btn.pack(side="left", padx=(0, 4), pady=4)
             self._tab_buttons[tab_name] = btn
 
-            tab = _ScrollableTab(content_area)
-            self._tab_frames[tab_name] = tab
-
-            # 分頁內容區分成左右兩欄：左欄放 banner + 所有欄位列（原本會撐滿整個
-            # tab.body 寬度），右欄目前刻意留空。columnconfigure 用同一個 uniform
-            # 群組名稱("tab_half")讓兩欄強制等寬（各佔 50%），不受左欄內容實際
-            # 需要的寬度影響——如果不用 uniform，Tk 的 pack/grid 預設是依內容需求
-            # 分配寬度，欄位多的分頁左欄會比欄位少的分頁寬，兩欄就不會對齊。
-            columns = tk.Frame(tab.body, bg=COLOR_TAB_BG)
-            columns.pack(fill="both", expand=True)
-            columns.columnconfigure(0, weight=1, uniform="tab_half")
-            columns.columnconfigure(1, weight=1, uniform="tab_half")
-            columns.rowconfigure(0, weight=1)
-
-            left_col = tk.Frame(columns, bg=COLOR_TAB_BG)
-            left_col.grid(row=0, column=0, sticky="nsew")
-            right_col = tk.Frame(columns, bg=COLOR_TAB_BG)
-            right_col.grid(row=0, column=1, sticky="nsew", padx=(14, 0))
-            self._tab_right_columns[tab_name] = right_col
-            docs_result = tab_docs_panel.render(
-                right_col, tab_docs.get(tab_name, []), self, tab_name, content_area
-            )
-            self._tab_docs_resync[tab_name] = docs_result["resync"]
-            self._tab_docs_hscroll[tab_name] = docs_result["hscroll"]
-
-            banner = tk.Frame(left_col, bg=accent)
-            banner.pack(fill="x")
-            tk.Label(
-                banner, text=f"{emoji} {tab_name}", bg=accent, fg="#ffffff",
-                font=self._font_banner, anchor="w",
-            ).pack(fill="x", padx=14, pady=8)
-
-            # 同一分頁內「連續」的同群組欄位，只在第一個欄位前面畫一次群組標題。
-            previous_group = None
-            for field in fields_by_tab.get(tab_name, []):
-                group = field.get("group")
-                if group and group != previous_group:
-                    self._build_group_header(left_col, group, accent)
-                previous_group = group
-                self._build_field_row(left_col, field, accent)
-            if tab_name == "貓咪身份驗證":
-                trainer_box = tk.Frame(left_col, bg=COLOR_TAB_BG)
-                trainer_box.pack(fill="x", padx=14, pady=(10, 4))
-                _trainer_btn = _styled_button(
-                    trainer_box, "🐱 選擇 / 訓練身分認證模型", self._on_open_identity_trainer,
-                    BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE, font=self._font_label,
-                )
-                _trainer_btn.pack(side="left")
-                self._identity_extra_controls.append((_trainer_btn, "normal"))
-                tk.Label(
-                    left_col,
-                    text="開啟專屬視窗：選「我的貓 / 其他貓」影片資料夾 → 自動建立資料集 → 訓練 CNN → "
-                    "一鍵把訓練好的模型設為上面的「身分辨識 CNN 模型檔」。",
-                    bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
-                    anchor="w", justify="left", wraplength=750,
-                ).pack(fill="x", padx=14, pady=(0, 10))
-            if tab_name == "ST-GCN 推論":
-                tk.Label(
-                    left_col,
-                    text="ℹ️ 訓練用參數（SEQUENCE_LENGTH／FEATURE_MODE／NUM_CLASSES）由"
-                    " stgcn_config.yaml 管理，不在此設定視窗顯示或覆寫。",
-                    bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
-                    anchor="w", justify="left", wraplength=750,
-                ).pack(fill="x", padx=14, pady=(6, 10))
+            self._tab_frames[tab_name] = _ScrollableTab(content_area)
 
         # Canvas 不會像 Frame 一樣自動長到內容的高度，按鈕全部排好後量出實際需要的
         # 高度再回填，分頁按鈕列才會剛好一行高，不會被裁切也不會留多餘空白。
         self.update_idletasks()
         tab_canvas.configure(height=tab_bar.winfo_reqheight())
 
-        self._select_tab(TAB_ORDER[0])
+        self._select_tab(TAB_ORDER[0])  # 會先建出第一個分頁的內容（_ensure_tab_built）
+
+    def _build_tab_content(self, tab_name):
+        """建出單一分頁的內容（左欄 banner + 欄位列、右欄說明文件卡片）。只由
+        _ensure_tab_built() 呼叫，每個分頁只會跑一次。"""
+        emoji, accent = TAB_COLORS.get(tab_name, ("⬜", COLOR_HEADER_BG))
+        tab = self._tab_frames[tab_name]
+        # 分頁內容區分成左右兩欄：左欄放 banner + 所有欄位列（原本會撐滿整個
+        # tab.body 寬度），右欄目前刻意留空。columnconfigure 用同一個 uniform
+        # 群組名稱("tab_half")讓兩欄強制等寬（各佔 50%），不受左欄內容實際
+        # 需要的寬度影響——如果不用 uniform，Tk 的 pack/grid 預設是依內容需求
+        # 分配寬度，欄位多的分頁左欄會比欄位少的分頁寬，兩欄就不會對齊。
+        columns = tk.Frame(tab.body, bg=COLOR_TAB_BG)
+        columns.pack(fill="both", expand=True)
+        columns.columnconfigure(0, weight=1, uniform="tab_half")
+        columns.columnconfigure(1, weight=1, uniform="tab_half")
+        columns.rowconfigure(0, weight=1)
+
+        left_col = tk.Frame(columns, bg=COLOR_TAB_BG)
+        left_col.grid(row=0, column=0, sticky="nsew")
+        right_col = tk.Frame(columns, bg=COLOR_TAB_BG)
+        right_col.grid(row=0, column=1, sticky="nsew", padx=(14, 0))
+        self._tab_right_columns[tab_name] = right_col
+        docs_result = tab_docs_panel.render(
+            right_col, self._tab_docs.get(tab_name, []), self, tab_name, self._content_area
+        )
+        self._tab_docs_resync[tab_name] = docs_result["resync"]
+        self._tab_docs_hscroll[tab_name] = docs_result["hscroll"]
+
+        banner = tk.Frame(left_col, bg=accent)
+        banner.pack(fill="x")
+        tk.Label(
+            banner, text=f"{emoji} {tab_name}", bg=accent, fg="#ffffff",
+            font=self._font_banner, anchor="w",
+        ).pack(fill="x", padx=14, pady=8)
+
+        # 同一分頁內「連續」的同群組欄位，只在第一個欄位前面畫一次群組標題。
+        previous_group = None
+        for field in self._fields_by_tab.get(tab_name, []):
+            group = field.get("group")
+            if group and group != previous_group:
+                self._build_group_header(left_col, group, accent)
+            previous_group = group
+            self._build_field_row(left_col, field, accent)
+        if tab_name == "貓咪身份驗證":
+            trainer_box = tk.Frame(left_col, bg=COLOR_TAB_BG)
+            trainer_box.pack(fill="x", padx=14, pady=(10, 4))
+            _trainer_btn = _styled_button(
+                trainer_box, "🐱 選擇 / 訓練身分認證模型", self._on_open_identity_trainer,
+                BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE, font=self._font_label,
+            )
+            _trainer_btn.pack(side="left")
+            self._identity_extra_controls.append((_trainer_btn, "normal"))
+            tk.Label(
+                left_col,
+                text="開啟專屬視窗：選「我的貓 / 其他貓」影片資料夾 → 自動建立資料集 → 訓練 CNN → "
+                "一鍵把訓練好的模型設為上面的「身分辨識 CNN 模型檔」。",
+                bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
+                anchor="w", justify="left", wraplength=750,
+            ).pack(fill="x", padx=14, pady=(0, 10))
+        if tab_name == "ST-GCN 推論":
+            tk.Label(
+                left_col,
+                text="ℹ️ 訓練用參數（SEQUENCE_LENGTH／FEATURE_MODE／NUM_CLASSES）由"
+                " stgcn_config.yaml 管理，不在此設定視窗顯示或覆寫。",
+                bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
+                anchor="w", justify="left", wraplength=750,
+            ).pack(fill="x", padx=14, pady=(6, 10))
+
+    # ── 分頁延遲建立 ─────────────────────────────────────────────────
+
+    def _ensure_tab_built(self, tab_name):
+        """分頁內容還沒建就現在建：建出欄位列 → 填入目前生效值 → 補套搜尋高亮 →
+        接上需要該分頁欄位的連動（_wire_field_links）。已建過就什麼都不做。"""
+        if tab_name in self._tabs_built:
+            return
+        # 先標記再建：建構/填值過程中觸發的回呼若又要求同一個分頁，不會遞迴重建
+        self._tabs_built.add(tab_name)
+        self._build_tab_content(tab_name)
+        fields = self._fields_by_tab.get(tab_name, [])
+        self._populate_fields_from_effective_state(fields)
+        # 搜尋是在 FIELD_SCHEMA 上比對（不需要欄位 widget），所以搜尋命中的欄位可能
+        # 落在還沒建的分頁——分頁建好時把高亮補上
+        tab_keys = {f["json_key"] for f in fields}
+        for key in self._highlighted_field_keys:
+            if key in tab_keys:
+                self._set_field_highlight(self._field_if_built(key), True)
+        self._wire_field_links()
+
+    def _build_pending_tabs_in_background(self):
+        """視窗開好後，在事件迴圈空檔一次補建一個還沒建的分頁，全部建完為止。
+        每建完一頁就把控制權交回事件迴圈，使用者操作不會被整段卡住；使用者先點到
+        還沒建的分頁時，_select_tab() 會直接當場建它，不用等這裡排到。"""
+        pending = next((t for t in TAB_ORDER if t not in self._tabs_built), None)
+        if pending is None:
+            return
+        self._ensure_tab_built(pending)
+        self.after(15, self._build_pending_tabs_in_background)
+
+    def _field(self, key):
+        """取得欄位的 info dict（見 _build_field_row）；欄位所在分頁還沒建就先建。
+        讀寫欄位值（存檔、載入、匯入匯出……）一律走這裡。"""
+        info = self._field_widgets.get(key)
+        if info is None:
+            self._ensure_tab_built(self._tab_of_key[key])
+            info = self._field_widgets[key]
+        return info
+
+    def _field_if_built(self, key):
+        """同 _field()，但分頁還沒建就回傳 None、不會觸發建立——給「欄位存在才需要
+        處理」的地方用（搜尋高亮、連動接線），避免只為了檢查就把分頁建出來。"""
+        return self._field_widgets.get(key)
 
     def _select_tab(self, tab_name):
+        self._ensure_tab_built(tab_name)
         self._active_tab = tab_name
         for name, frame in self._tab_frames.items():
             if name == tab_name:
@@ -1779,8 +1840,13 @@ class SettingsWindow(tk.Tk):
         並在視窗建好、表單填好之後先套用一次目前的狀態。之後不管表單透過
         「載入目前設定／儲存設定／還原預設值」怎麼重新整批填值，都是呼叫
         `info["var"].set(...)`，會自動觸發這裡掛的 trace，不用在每個按鈕
-        handler 裡另外各呼叫一次。"""
-        info = self._field_widgets.get("run_mode.system_mode")
+        handler 裡另外各呼叫一次。
+
+        注意：目前沒有任何地方呼叫這個方法（延遲建立分頁之前就是如此），所以
+        「單貓模式灰掉身份驗證分頁」實際上沒有作用。之後要啟用的話，改成從
+        _wire_field_links() 呼叫（只接一次），並在「貓咪身份驗證」分頁延遲建好時
+        再套用一次 _apply_system_mode_gating()——分頁還沒建時 tab_frame.body 是空的。"""
+        info = self._field_if_built("run_mode.system_mode")
         if info is not None:
             info["var"].trace_add("write", lambda *_a: self._apply_system_mode_gating())
         self._apply_system_mode_gating()
@@ -1798,7 +1864,7 @@ class SettingsWindow(tk.Tk):
         每個欄位自己記錄的 `_controls` 清單），改成一律走「Entry/Checkbutton 還原
         normal，ttk.Combobox 還原 readonly」這個通用規則——本分頁目前的欄位剛好
         都符合，之後這個分頁如果新增其他型別欄位要留意這條假設。"""
-        info = self._field_widgets.get("run_mode.system_mode")
+        info = self._field_if_built("run_mode.system_mode")
         tab_frame = self._tab_frames.get("貓咪身份驗證")
         if info is None or tab_frame is None:
             return
@@ -1825,7 +1891,7 @@ class SettingsWindow(tk.Tk):
                 pass
 
         if not enabled:
-            ev = self._field_widgets.get("cat_identity.enable_identity_verification")
+            ev = self._field_if_built("cat_identity.enable_identity_verification")
             if ev is not None:
                 ev["var"].set(False)
 
@@ -1904,33 +1970,40 @@ class SettingsWindow(tk.Tk):
     def _highlight_fields(self, json_keys):
         """幫指定欄位的外層 container 加高亮外框，並先清掉上一次的高亮——
         FieldSearchBar 每次重新搜尋都會呼叫這個方法（空清單＝單純清掉舊高亮，
-        對應搜尋欄被清空的情況）。json_keys 可以橫跨多個分頁：欄位列在各分頁
-        建構時就都存在（切分頁只是 pack_forget），對目前沒顯示的分頁欄位設定
-        高亮一樣有效，等該分頁被切到就看得到。"""
+        對應搜尋欄被清空的情況）。json_keys 可以橫跨多個分頁：已建好的分頁
+        （切分頁只是 pack_forget）直接套上，等該分頁被切到就看得到；還沒建的
+        分頁由 _ensure_tab_built() 建好時依 self._highlighted_field_keys 補套。"""
         for key in self._highlighted_field_keys:
-            info = self._field_widgets.get(key)
+            info = self._field_if_built(key)
             if info is not None:
-                info["container"].config(highlightthickness=0)
-                info["accent_strip"].config(bg=info["accent_color"], width=4)
+                self._set_field_highlight(info, False)
         self._highlighted_field_keys = list(json_keys)
         for key in json_keys:
-            info = self._field_widgets.get(key)
+            info = self._field_if_built(key)
             if info is not None:
-                # 只改左側色條的顏色/寬度不夠明顯（原本每列本來就有一條分頁代表色的
-                # 細條，改個顏色不容易注意到）；同時加粗外框＋把色條加寬變成高亮色，
-                # 兩個訊號疊加才夠顯眼，一眼就能在一整頁欄位裡找到搜尋命中的是哪一列。
-                info["container"].config(
-                    highlightbackground=SEARCH_HIGHLIGHT_BORDER,
-                    highlightcolor=SEARCH_HIGHLIGHT_BORDER,
-                    highlightthickness=3,
-                )
-                info["accent_strip"].config(bg=SEARCH_HIGHLIGHT_BORDER, width=10)
+                self._set_field_highlight(info, True)
+
+    @staticmethod
+    def _set_field_highlight(info, on):
+        if not on:
+            info["container"].config(highlightthickness=0)
+            info["accent_strip"].config(bg=info["accent_color"], width=4)
+            return
+        # 只改左側色條的顏色/寬度不夠明顯（原本每列本來就有一條分頁代表色的
+        # 細條，改個顏色不容易注意到）；同時加粗外框＋把色條加寬變成高亮色，
+        # 兩個訊號疊加才夠顯眼，一眼就能在一整頁欄位裡找到搜尋命中的是哪一列。
+        info["container"].config(
+            highlightbackground=SEARCH_HIGHLIGHT_BORDER,
+            highlightcolor=SEARCH_HIGHLIGHT_BORDER,
+            highlightthickness=3,
+        )
+        info["accent_strip"].config(bg=SEARCH_HIGHLIGHT_BORDER, width=10)
 
     def _scroll_field_into_view(self, tab_name, json_key):
         """把指定欄位捲進該分頁的可視範圍——算它的 container 相對 tab.body 頂端的
         垂直位置，換算成 ConsolePanel／_ScrollableTab 共用的 canvas.yview_moveto()
         要的 0~1 比例。"""
-        info = self._field_widgets.get(json_key)
+        info = self._field_if_built(json_key)
         tab = self._tab_frames.get(tab_name)
         if info is None or tab is None:
             return
@@ -2367,7 +2440,7 @@ class SettingsWindow(tk.Tk):
         return proposed == "" or (proposed.isdigit() and len(proposed) <= 2)
 
     def _set_field_value(self, key, value):
-        info = self._field_widgets[key]
+        info = self._field(key)
         vt = info["field"]["value_type"]
         if vt == "bool":
             info["var"].set(bool(value) if value is not None else False)
@@ -2416,7 +2489,7 @@ class SettingsWindow(tk.Tk):
 
     def _get_field_value(self, key):
         """回傳 (value, error_or_None)：把表單目前輸入轉成 JSON 可用型別。"""
-        info = self._field_widgets[key]
+        info = self._field(key)
         field = info["field"]
         vt = field["value_type"]
         label = field["label"]
@@ -2490,7 +2563,7 @@ class SettingsWindow(tk.Tk):
         return self._baseline_effective.get(key), "default"
 
     def _apply_source(self, key, source):
-        info = self._field_widgets[key]
+        info = self._field(key)
         field = info["field"]
         badge_var = info["badge_var"]
         badge_widget = info["badge_widget"]
@@ -2515,7 +2588,10 @@ class SettingsWindow(tk.Tk):
             info["env_note_var"].set("")
 
     def _populate_from_effective_state(self):
-        for field in FIELD_SCHEMA:
+        self._populate_fields_from_effective_state(FIELD_SCHEMA)
+
+    def _populate_fields_from_effective_state(self, fields):
+        for field in fields:
             key = field["json_key"]
             value, source = self._resolve_field_display(field)
             self._set_field_value(key, value)
@@ -2526,7 +2602,7 @@ class SettingsWindow(tk.Tk):
         """個體化基線儀表板網址：host 一律 127.0.0.1（本機開啟），port 取「Flask
         與 Node-RED」分頁 flask.port 欄位目前的值；欄位還沒建好、留空或打成非數字
         時回退到 app 啟動當下的生效值（self._baseline_effective），再退到 5000。"""
-        info = self._field_widgets.get("flask.port")
+        info = self._field_if_built("flask.port")
         raw = info["var"].get().strip() if info and "var" in info else ""
         if not raw:
             raw = str(self._baseline_effective.get("flask.port", 5000))
@@ -2542,13 +2618,25 @@ class SettingsWindow(tk.Tk):
         if hasattr(self, "_dashboard_link_var"):
             self._dashboard_link_var.set(self._dashboard_url())
 
+    def _wire_field_links(self):
+        """接上「欄位之間的連動」。每個分頁建好（欄位初值也填完）之後都會被
+        _ensure_tab_built() 呼叫一次；各連動自己檢查需要的欄位建好了沒、只接一次，
+        所以不用管分頁建立的先後順序。"""
+        self._wire_nodered_endpoint_autosync()
+        self._wire_dashboard_link()
+
     def _wire_dashboard_link(self):
         """把儀表板網址連結跟本分頁 flask.port 欄位綁在一起：port 改動就即時重算。
         連結 Label 在 _build_field_row() 畫「flask.baseline_dashboard_enabled」那列
-        時建立，但 trace 綁定與初次以實際欄位值刷新要等所有欄位都建好、初值都填完
-        （__init__ 尾端、_populate_from_effective_state() 之後）才做。"""
-        info = self._field_widgets.get("flask.port")
-        if info is not None and "var" in info:
+        時建立，但 trace 綁定與初次以實際欄位值刷新要等該分頁欄位都建好、初值都填完
+        才做（由 _wire_field_links() 呼叫；分頁還沒建就跳過，建好時會再被呼叫）。"""
+        if self._dashboard_link_wired:
+            return
+        info = self._field_if_built("flask.port")
+        if info is None or not hasattr(self, "_dashboard_link_var"):
+            return
+        self._dashboard_link_wired = True
+        if "var" in info:
             info["var"].trace_add("write", self._refresh_dashboard_link)
         self._refresh_dashboard_link()
 
@@ -2572,22 +2660,29 @@ class SettingsWindow(tk.Tk):
         同步邏輯補回 GUI 層，讓「沒被使用者特別改過」的端點欄位可以繼續跟著
         Host/Port 走，同時不破壞刻意覆寫的情況（`docs/設定視窗欄位對照表.md`
         對照表裡這 3 個端點原本就設計成「可個別覆寫成完全不同的網址」）。
+
+        延遲建立分頁之後：Host/Port 所在的「Flask 與 Node-RED」分頁建好（初值填完）
+        時才接線；端點欄位在「進階設定」分頁，改成 Host/Port 真的改變時才用
+        _field() 取（那時進階設定分頁還沒建就當場建，建好的初值就是目前生效值，
+        跟一開始全部建好的結果相同）。
         """
-        host_info = self._field_widgets.get("nodered.host")
-        port_info = self._field_widgets.get("nodered.port")
+        if self._nodered_autosync_wired:
+            return
+        host_info = self._field_if_built("nodered.host")
+        port_info = self._field_if_built("nodered.port")
         if not host_info or not port_info:
             return
+        self._nodered_autosync_wired = True
         endpoint_suffixes = {
-            "advanced.nodered_endpoint_notify": "python_online",
-            "advanced.nodered_endpoint_result": "yolo_result",
-            "advanced.nodered_endpoint_result_v2": "yolo_result_v2",
+            key: suffix
+            for key, suffix in (
+                ("advanced.nodered_endpoint_notify", "python_online"),
+                ("advanced.nodered_endpoint_result", "yolo_result"),
+                ("advanced.nodered_endpoint_result_v2", "yolo_result_v2"),
+            )
+            if key in self._tab_of_key
         }
-        endpoint_vars = {
-            key: self._field_widgets[key]["var"]
-            for key in endpoint_suffixes
-            if key in self._field_widgets
-        }
-        if not endpoint_vars:
+        if not endpoint_suffixes:
             return
 
         last = {"host": host_info["var"].get(), "port": port_info["var"].get()}
@@ -2598,9 +2693,7 @@ class SettingsWindow(tk.Tk):
             old_host, old_port = last["host"], last["port"]
             if new_host != old_host or new_port != old_port:
                 for key, suffix in endpoint_suffixes.items():
-                    var = endpoint_vars.get(key)
-                    if var is None:
-                        continue
+                    var = self._field(key)["var"]
                     expected_old = f"http://{old_host}:{old_port}/{suffix}"
                     if var.get() == expected_old:
                         var.set(f"http://{new_host}:{new_port}/{suffix}")

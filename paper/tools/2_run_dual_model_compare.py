@@ -110,13 +110,15 @@ STGCN_FEATURE_MODE = "xy"  # checkpoint 讀取失敗時的 fallback 值；正常
                             # 各自 checkpoint 的 bn_input 通道數自動校正為實際的 feature mode
 
 # ── 五個行為資料夾（按 z/x/c/v/b 切換，只有 FOLDER_TEST_MODE='all' 時才有作用）──
-_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
+# 影片放在 模型專用/<split>/<類別>/，每個行為對應 train/val/test 底下同名的類別資料夾
+# （skeleton_splits.video_class_folders），三個 split 的影片合併成同一份清單。
+from utils.skeleton_splits import video_class_folders
 FOLDER_MAP = {
-    'z': (rf"{_BASE}\walk",    "WALK"),
-    'x': (rf"{_BASE}\lick",    "LICK"),
-    'c': (rf"{_BASE}\scratch", "SCRATCH"),
-    'v': (rf"{_BASE}\shake",   "SHAKE"),
-    'b': (rf"{_BASE}\stop",    "STOP"),
+    'z': (video_class_folders(classes="walk"),    "WALK"),
+    'x': (video_class_folders(classes="lick"),    "LICK"),
+    'c': (video_class_folders(classes="scratch"), "SCRATCH"),
+    'v': (video_class_folders(classes="shake"),   "SHAKE"),
+    'b': (video_class_folders(classes="stop"),    "STOP"),
 }
 DEFAULT_FOLDER_KEY = 'z'
 
@@ -821,9 +823,9 @@ def main():
 
     folder_videos: dict = {}
     for fkey, (fpath, fname) in FOLDER_MAP.items():
-        vids = resolve_video_paths([fpath])
+        vids = resolve_video_paths(fpath)
         folder_videos[fkey] = vids
-        print(f"  [{fkey}] {fname}: {len(vids)} 部影片  ({fpath})")
+        print(f"  [{fkey}] {fname}: {len(vids)} 部影片  （{len(fpath)} 個資料夾）")
 
     folder_range: dict = {}
     if VIDEO_PATHS:

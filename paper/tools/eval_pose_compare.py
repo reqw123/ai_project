@@ -2,6 +2,7 @@
 """
 YOLO Pose Model Comparison Benchmark Tool
 比較兩個 YOLO Pose 模型在 Benchmark Dataset 上的量化表現
+（RUN_ONLY_ONE_MODEL = True 時改為只評估 NEW_MODEL_PATH 的單模型模式，省一半推論時間）
 完全背景執行，不開 GUI，輸出 CSV / PNG / TXT / LOG / HTML
 """
 
@@ -80,6 +81,12 @@ OUTPUT_DIR       = r"C:\ai_project\paper\cat_monitoring_system\eval_results\pose
 INFERENCE_DEVICE = "cuda"   # "cuda" 或 "cpu"
 EMA_ALPHA_OLD    = 1.0      # Old model EMA 平滑係數（1.0 = 不平滑；0.5 = 半衰期平滑）
 EMA_ALPHA_NEW    = 1.0      # New model EMA 平滑係數
+
+# True = 單模型評估：只跑 NEW_MODEL_PATH（最新模型寫在這裡；省掉舊模型那一半推論
+# 時間），不產生新舊對比圖表/改善百分比/勝負結論，改輸出單模型報表（CSV + 一張
+# 總覽圖 + 文字報告）。OLD_MODEL_PATH 保持原值即可，不會被讀取；改回 False 就恢復
+# 新舊比較。（eval_gcn_compare.py 也有同名開關，用法相同。）
+RUN_ONLY_ONE_MODEL = False
 
 # 各行為類別的測試影片資料夾（做法比照 eval_gcn_compare.py 的 HARD_VIDEO_*_DIR）。
 # 這幾個常數本身永遠保持定義（不要註解掉），否則下面 BENCHMARK_DIRS 會 NameError。
@@ -446,6 +453,8 @@ def write_video_metrics_csv(csv_dir: Path, results: Dict):
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for mk in ("old", "new"):
+            if mk not in results:   # 單模型評估時沒有 "old"
+                continue
             for b in BEHAVIOR_CLASSES:
                 for vpath, r in zip(results["videos"][b], results[mk][b]):
                     if r is None:
@@ -481,6 +490,8 @@ def write_keypoint_metrics_csv(csv_dir: Path, agg_old: Dict, agg_new: Dict):
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for mk, agg in [("old", agg_old), ("new", agg_new)]:
+            if agg is None:         # 單模型評估時 agg_old 為 None
+                continue
             for i, name in enumerate(KEYPOINT_NAMES):
                 w.writerow({
                     "model": mk, "keypoint_idx": i, "keypoint_name": name,
@@ -1026,6 +1037,120 @@ Benchmark: {total_videos} videos | Weights: Conf {W_CONFIDENCE*100:.0f}% / Jitte
     return p
 
 
+# ─── Single-Model Report（RUN_ONLY_ONE_MODEL = True） ─────────────
+def write_single_model_report(dirs: Dict[str, Path], new_path: str, store: Dict,
+                              class_new: Dict, agg_new: Dict, total_videos: int,
+                              total_elapsed_sec: float, run_ts: str,
+                              logger: logging.Logger):
+    """單模型評估的全部輸出：CSV、一張總覽圖、文字報告、歷史紀錄、主控台表格。
+    只列出有樣本的行為（BENCHMARK_DIRS 註解掉的行為不出現）。沒有比較對象，
+    所以不算改善百分比、不下勝負結論。"""
+    mname = Path(new_path).name
+    ev = [b for b in BEHAVIOR_CLASSES if class_new[b]["n_samples"] > 0]
+
+    # ── CSV ──
+    write_video_metrics_csv(dirs["csv"], store)
+    write_keypoint_metrics_csv(dirs["csv"], None, agg_new)
+    with (dirs["csv"] / "class_summary.csv").open("w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow(["behavior", "n_videos", "mean_confidence", "mean_jitter_px",
+                    "p95_jitter_px", "missing_ratio", "nose_missing_ratio",
+                    "paw_missing_ratio", "tail_missing_ratio", "tail_tip_missing_ratio"])
+        for b, m in [(b, class_new[b]) for b in ev] + [("overall", agg_new)]:
+            w.writerow([b, m["n_samples"], f"{m['mean_confidence']:.4f}", f"{m['mean_jitter_px']:.3f}",
+                        f"{m['p95_jitter_px']:.3f}", f"{m['missing_ratio']:.4f}",
+                        f"{m['nose_missing_ratio']:.4f}", f"{m['paw_missing_ratio']:.4f}",
+                        f"{m['tail_missing_ratio']:.4f}", f"{m['tail_tip_missing_ratio']:.4f}"])
+
+    # ── 總覽圖：各行為 信心/P95 抖動/缺失率 + 17 關鍵點 信心/缺失率 ──
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle(f"Single-Model Evaluation: {mname}", fontsize=14, fontweight="bold")
+    xl = ev + ["Overall"]
+    x = np.arange(len(xl))
+    panels = [
+        (axes[0][0], "Mean Confidence  (↑ better)", [class_new[b]["mean_confidence"] for b in ev] + [agg_new["mean_confidence"]], "{:.3f}"),
+        (axes[0][1], "★ P95 Jitter px  (primary, ↓ better)", [class_new[b]["p95_jitter_px"] for b in ev] + [agg_new["p95_jitter_px"]], "{:.2f}"),
+        (axes[1][0], "Missing Detection Ratio %  (↓ better)", [class_new[b]["missing_ratio"] * 100 for b in ev] + [agg_new["missing_ratio"] * 100], "{:.1f}"),
+    ]
+    for ax, title, vals, fmt in panels:
+        bars = ax.bar(x, vals, 0.6, color=[COLOR_NEW] * len(ev) + ["#888888"], alpha=0.85)
+        ax.set_title(title, fontweight="bold")
+        ax.set_xticks(x)
+        ax.set_xticklabels(xl)
+        ax.grid(axis="y", alpha=0.3, ls="--")
+        for bar, v in zip(bars, vals):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), fmt.format(v),
+                    ha="center", va="bottom", fontsize=9)
+    ax = axes[1][1]
+    kx = np.arange(17)
+    ax.bar(kx - 0.2, agg_new["kpt_mean_confidence"], 0.4, label="Mean Confidence", color=COLOR_NEW, alpha=0.85)
+    ax.bar(kx + 0.2, agg_new["kpt_missing_ratio"], 0.4, label="Missing Ratio", color=COLOR_OLD, alpha=0.85)
+    ax.set_title("Per-Keypoint Confidence / Missing Ratio", fontweight="bold")
+    ax.set_xticks(kx)
+    ax.set_xticklabels(KEYPOINT_NAMES, rotation=60, ha="right", fontsize=8)
+    ax.set_ylim(0, 1.05)
+    ax.legend(fontsize=8)
+    ax.grid(axis="y", alpha=0.3, ls="--")
+    fig.tight_layout()
+    _save(fig, dirs["figures"] / "single_model_overview.png")
+
+    # ── 主控台 + 文字報告（同一份內容） ──
+    W_BEH, W_VID, W_V = 10, 32, 9
+    lines = ["", "=" * 78, f"單模型評估：{mname}（RUN_ONLY_ONE_MODEL = True，未與舊模型比較）",
+             f"影片數：{total_videos}", "=" * 78, "", "逐影片結果",
+             _vlj("行為", W_BEH) + " " + _vlj("影片", W_VID) + " " + _vrj("信心", W_V) + " "
+             + _vrj("平均抖動", W_V) + " " + _vrj("P95抖動", W_V) + " " + _vrj("缺失率", W_V),
+             "-" * 78]
+    for b in ev:
+        for vp, r in zip(store["videos"][b], store["new"][b]):
+            if r is None:
+                lines.append(_vlj(b, W_BEH) + " " + _vlj(vp.name, W_VID) + "  (讀取失敗，略過)")
+                continue
+            lines.append(_vlj(b, W_BEH) + " " + _vlj(vp.name, W_VID) + " "
+                         + _vrj(f"{r['mean_confidence']:.3f}", W_V) + " "
+                         + _vrj(f"{r['mean_jitter_px']:.2f}", W_V) + " "
+                         + _vrj(f"{r['p95_jitter_px']:.2f}", W_V) + " "
+                         + _vrj(f"{r['missing_ratio']*100:.1f}%", W_V))
+    lines += ["", "行為類別摘要（★ 主指標：P95 抖動，越小越穩定）",
+              _vlj("行為", W_BEH) + " " + _vrj("影片數", W_V) + " " + _vrj("信心", W_V) + " "
+              + _vrj("平均抖動", W_V) + " " + _vrj("★P95抖動", W_V) + " " + _vrj("缺失率", W_V) + " "
+              + _vrj("尾尖缺失", W_V),
+              "-" * 78]
+    for b, m in [(b, class_new[b]) for b in ev] + [("整體", agg_new)]:
+        if b == "整體":
+            lines.append("-" * 78)
+        lines.append(_vlj(b, W_BEH) + " " + _vrj(str(m["n_samples"]), W_V) + " "
+                     + _vrj(f"{m['mean_confidence']:.3f}", W_V) + " "
+                     + _vrj(f"{m['mean_jitter_px']:.2f}", W_V) + " "
+                     + _vrj(f"{m['p95_jitter_px']:.2f}", W_V) + " "
+                     + _vrj(f"{m['missing_ratio']*100:.1f}%", W_V) + " "
+                     + _vrj(f"{m['tail_tip_missing_ratio']*100:.1f}%", W_V))
+    lines += ["", f"[參考] 複合分數：{composite_score(agg_new):.2f}",
+              f"總花費時間：{format_elapsed(total_elapsed_sec)}", "=" * 78]
+    for ln in lines:
+        logger.info(ln)
+    (dirs["report"] / "model_report.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # ── 歷史紀錄（跟新舊比較寫進同一個檔案，方便事後對照）──
+    hist = Path(OUTPUT_DIR) / "comparison_history.log"
+    dt_str = datetime.strptime(run_ts, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+    sep = "=" * 60
+    with hist.open("a", encoding="utf-8") as f:
+        f.write("\n".join([
+            sep,
+            f"日期時間　：{dt_str}",
+            f"單模型評估：{mname}（未比較）",
+            f"評估行為　：{', '.join(ev)}",
+            f"P95 抖動　：{agg_new['p95_jitter_px']:.2f}px",
+            f"平均信心值：{agg_new['mean_confidence']:.3f}",
+            f"平均抖動　：{agg_new['mean_jitter_px']:.2f}px",
+            f"缺失比率　：{agg_new['missing_ratio']*100:.1f}%",
+            f"總花費時間：{format_elapsed(total_elapsed_sec)}",
+            sep, "",
+        ]) + "\n")
+    logger.info(f"Appended to comparison history: {hist}")
+
+
 # ─── Main ─────────────────────────────────────────────────────────
 def main():
     run_start_time = time.time()
@@ -1042,7 +1167,8 @@ def main():
     logger = setup_logger(dirs["logs"], run_ts)
     logger.info("=" * 52)
     logger.info(f"YOLO Pose Model Comparison  [{run_ts}]")
-    logger.info(f"  Old : {old_path}")
+    run_old = not RUN_ONLY_ONE_MODEL
+    logger.info(f"  Old : {old_path}" if run_old else "  Old : （略過：RUN_ONLY_ONE_MODEL = True，單模型評估）")
     logger.info(f"  New : {new_path}")
     for b, p in BENCHMARK_DIRS:
         logger.info(f"  Data[{b}]: {p}")
@@ -1050,7 +1176,7 @@ def main():
     logger.info("=" * 52)
 
     # 路徑存在性檢查：讀不到模型路徑就直接報錯中止，不做「跳過其中一個模型」的降級。
-    if not Path(old_path).exists():
+    if run_old and not Path(old_path).exists():
         logger.error(f"Old model not found: {old_path}")
         raise FileNotFoundError(f"YOLO 模型檔案不存在: {old_path}")
     if not Path(new_path).exists():
@@ -1062,8 +1188,9 @@ def main():
         sys.exit(1)
 
     # Load models（load_yolo_model 內部也會檢查路徑；載入失敗直接讓例外往上拋出中止程式）
-    logger.info("Loading old model...")
-    old_model = load_yolo_model(old_path, device)
+    if run_old:
+        logger.info("Loading old model...")
+        old_model = load_yolo_model(old_path, device)
     logger.info("Loading new model...")
     new_model = load_yolo_model(new_path, device)
 
@@ -1078,14 +1205,12 @@ def main():
         logger.error("No videos found. Check BENCHMARK_DIRS paths and folder contents.")
         sys.exit(1)
 
-    # Run inference for both models
-    store = {
-        "old": {b: [] for b in BEHAVIOR_CLASSES},
-        "new": {b: [] for b in BEHAVIOR_CLASSES},
-        "videos": behavior_videos,
-    }
+    # Run inference（單模型評估時只跑 new）
+    model_keys = ("old", "new") if run_old else ("new",)
+    store = {mk: {b: [] for b in BEHAVIOR_CLASSES} for mk in model_keys}
+    store["videos"] = behavior_videos
 
-    for mk, model in (("old", old_model), ("new", new_model)):
+    for mk, model in ((("old", old_model),) if run_old else ()) + (("new", new_model),):
         mpath    = old_path if mk == "old" else new_path
         ema_alpha = EMA_ALPHA_OLD if mk == "old" else EMA_ALPHA_NEW
         mname = Path(mpath).name
@@ -1108,6 +1233,12 @@ def main():
 
     # Aggregate
     logger.info("\nAggregating metrics...")
+    if not run_old:
+        class_new = {b: aggregate([r for r in store["new"][b] if r]) for b in BEHAVIOR_CLASSES}
+        agg_new   = aggregate([r for b in BEHAVIOR_CLASSES for r in store["new"][b] if r])
+        write_single_model_report(dirs, new_path, store, class_new, agg_new, total_videos,
+                                  time.time() - run_start_time, run_ts, logger)
+        return
     class_old = {b: aggregate([r for r in store["old"][b] if r]) for b in BEHAVIOR_CLASSES}
     class_new = {b: aggregate([r for r in store["new"][b] if r]) for b in BEHAVIOR_CLASSES}
     agg_old   = aggregate([r for b in BEHAVIOR_CLASSES for r in store["old"][b] if r])

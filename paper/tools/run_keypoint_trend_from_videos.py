@@ -33,11 +33,12 @@ _TRAIN_MODULE_PATH = Path(__file__).parent / "0_train_gcn.py"
 _COLLECT_MODULE_PATH = Path(__file__).parent / "train_data" / "0_dataset_collect.py"
 
 # 直接執行（不帶任何參數）時用的預設設定：改 CLASS_TO_ANALYZE 這一行就能切換要分析的
-# 類別，DATASET_ROOT 底下要有 scratch/lick/shake/walk/stop 這幾個兄弟資料夾（stop 會
-# 被自動抓去當基準，不用改）。想指定其他路徑/類別就用 --video_folder / --class_name。
-DATASET_ROOT = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
+# 類別。影片在 模型專用/<split>/<類別>/（跟 skeletons/ 同一套 train/val/test 切分），
+# 預設把該類別在 train/val/test 的影片合併分析，stop 基準也取三個 split 的 stop 影片
+# （skeleton_splits.video_class_folders）。想指定其他路徑/類別就用 --video_folder /
+# --class_name（指定資料夾時維持舊行為：只看那一個資料夾、基準找同層的 stop）。
 CLASS_TO_ANALYZE = "scratch"  # scratch / lick / shake / walk
-VIDEO_FOLDER = str(Path(DATASET_ROOT) / CLASS_TO_ANALYZE)
+VIDEO_FOLDER = None           # None＝上面說的預設（該類別所有 split 的資料夾）
 YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_121.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
@@ -48,6 +49,7 @@ if _env_yolo_model:
 
 TARGET_FPS = 30
 sys.path.append(str(Path(__file__).parent.parent))  # config.py 在 paper/ 根目錄
+from cat_monitoring_system.utils.skeleton_splits import video_class_folders  # noqa: E402
 from config import YOLOConfig as _YOLOConfig
 IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（設定視窗 yolo.image_size／環境變數 CAT_MONITORING_YOLO_IMAGE_SIZE，預設 640）
 CONF_THRESHOLD = 0.5  # YOLO 偵測框（bbox）信心門檻（predict 的 conf）；本腳本沒有關鍵點（kp）門檻
@@ -535,14 +537,21 @@ _HTML_TEMPLATE = r"""<title>__CLASS_NAME__ 逐關節動作幅度</title>
 """
 
 
-def process_video_folder(folder, label, dc, tg, pose_extractor, n_joints):
-    """對資料夾內全部影片重新跑姿態估計＋正規化，回傳
-    [(video_stem, per_joint_motion_array), ...]。抽成函式是為了讓 main() 能
-    對「目標類別資料夾」跟「stop 基準資料夾」各呼叫一次，共用同一套流程。"""
-    videos = sorted(
-        (f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS),
+def _list_videos(folders):
+    """一個資料夾或資料夾清單裡的所有影片（不遞迴子資料夾），依檔名排序。"""
+    folders = folders if isinstance(folders, (list, tuple)) else [folders]
+    return sorted(
+        (f for d in folders for f in Path(d).iterdir()
+         if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS),
         key=lambda p: p.name.lower(),
     )
+
+
+def process_video_folder(folder, label, dc, tg, pose_extractor, n_joints):
+    """對資料夾（或資料夾清單）內全部影片重新跑姿態估計＋正規化，回傳
+    [(video_stem, per_joint_motion_array), ...]。抽成函式是為了讓 main() 能
+    對「目標類別資料夾」跟「stop 基準資料夾」各呼叫一次，共用同一套流程。"""
+    videos = _list_videos(folder)
     results = []
     for i, video_path in enumerate(videos, 1):
         print(f"\n[{i}/{len(videos)}] {video_path.name}")
@@ -596,25 +605,31 @@ def main():
                               'keypoint_trend_<class_name>.html；傳空字串 "" 可跳過產生 HTML。')
     args = parser.parse_args()
 
-    video_folder = Path(args.video_folder)
-    if not video_folder.exists():
-        print(f"✗ 資料夾不存在: {video_folder}")
-        return
-    videos = sorted(
-        (f for f in video_folder.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS),
-        key=lambda p: p.name.lower(),
-    )
+    if args.video_folder is None:
+        # 預設：該類別在 train/val/test 的所有資料夾合併分析
+        video_folder = [Path(p) for p in video_class_folders(classes=CLASS_TO_ANALYZE)]
+        if not video_folder:
+            print(f"✗ 找不到 {CLASS_TO_ANALYZE} 的影片資料夾（模型專用/<split>/{CLASS_TO_ANALYZE}/）")
+            return
+        folder_desc = f"{CLASS_TO_ANALYZE}（{len(video_folder)} 個 split 資料夾）"
+        class_name = args.class_name or CLASS_TO_ANALYZE
+    else:
+        video_folder = Path(args.video_folder)
+        if not video_folder.exists():
+            print(f"✗ 資料夾不存在: {video_folder}")
+            return
+        folder_desc = str(video_folder)
+        class_name = args.class_name or video_folder.name.lower()
+    videos = _list_videos(video_folder)
     if not videos:
-        print(f"✗ 資料夾內找不到影片: {video_folder}")
+        print(f"✗ 資料夾內找不到影片: {folder_desc}")
         return
-
-    class_name = args.class_name or video_folder.name.lower()
 
     tg = _load_module(_TRAIN_MODULE_PATH, "_train_gcn")
     dc = _load_module(_COLLECT_MODULE_PATH, "_dataset_collect")
 
     if class_name not in tg.BEHAVIOR_PREFIXES:
-        print(f"  ⚠ 資料夾名稱「{video_folder.name}」不是已知行為類別"
+        print(f"  ⚠ 資料夾名稱「{class_name}」不是已知行為類別"
               f"（{', '.join(tg.BEHAVIOR_PREFIXES)}），仍會以「{class_name}」繼續，"
               f"如果判斷錯了可用 --class_name 指定正確類別。")
 
@@ -629,6 +644,11 @@ def main():
         if not stop_folder.exists():
             print(f"  ⚠ 指定的 stop 基準資料夾不存在: {stop_folder}，將只顯示絕對數值")
             stop_folder = None
+    elif isinstance(video_folder, list):
+        stop_folder = [Path(p) for p in video_class_folders(classes="stop")] or None
+        if stop_folder is None:
+            print("  ⚠ 找不到 stop 基準資料夾（模型專用/<split>/stop/），將只顯示絕對數值。"
+                  "可用 --stop_video_folder 指定正確路徑。")
     else:
         stop_folder = _find_stop_folder(video_folder)
         if stop_folder is None:
@@ -643,7 +663,7 @@ def main():
         html_out_path = Path(args.html_out)
 
     print(f"[類別] {class_name}（{'手動指定' if args.class_name else '取自資料夾名稱'}）"
-          f"　[資料夾] {video_folder}　共 {len(videos)} 部影片")
+          f"　[資料夾] {folder_desc}　共 {len(videos)} 部影片")
     print(f"[YOLO 模型] {args.yolo_model_path}")
 
     pose_extractor = dc.PoseExtractor(
@@ -699,12 +719,13 @@ def main():
     diff_mean = diff_se = None
     stop_n = None
     if stop_folder is not None:
-        stop_videos = [f for f in stop_folder.iterdir()
-                       if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS]
+        stop_videos = _list_videos(stop_folder)
+        stop_desc = (f"stop（{len(stop_folder)} 個 split 資料夾）"
+                     if isinstance(stop_folder, list) else str(stop_folder))
         if not stop_videos:
-            print(f"  ⚠ stop 基準資料夾內找不到影片: {stop_folder}，只顯示絕對數值")
+            print(f"  ⚠ stop 基準資料夾內找不到影片: {stop_desc}，只顯示絕對數值")
         else:
-            print(f"[stop 基準] {stop_folder}　共 {len(stop_videos)} 部影片，重新估計中...")
+            print(f"[stop 基準] {stop_desc}　共 {len(stop_videos)} 部影片，重新估計中...")
             stop_per_video = process_video_folder(stop_folder, 'stop', dc, tg, pose_extractor, n_joints)
             if not stop_per_video:
                 print("  ✗ stop 基準資料夾沒有任何影片產出有效結果，只顯示絕對數值")

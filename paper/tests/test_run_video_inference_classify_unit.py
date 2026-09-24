@@ -118,3 +118,77 @@ def test_classify_messages_and_return_values(fn, tmp_path, capsys):
     v2 = _video(root / "walk", "b.mp4")
     assert fn["classify_video_to_folder"](v2, "lick") is True
     assert "已歸類為 LICK" in capsys.readouterr().out
+
+
+# ── 2026-09-24：分類子資料夾建在「輸入資料夾」底下，不在同層 ─────────────────────
+
+@pytest.fixture
+def with_roots(fn):
+    roots = fn["_CLASSIFY_ROOTS"]
+    roots.clear()
+    yield roots
+    roots.clear()
+
+
+def test_input_folder_named_like_a_class_gets_subfolder_not_sibling(fn, with_roots, tmp_path):
+    """輸入資料夾本身叫 lick（例如 未被選擇的模型影片/lick）：按 Shift+A 搬到 lick/walk/，不是同層的 walk/。"""
+    src = tmp_path / "未被選擇的模型影片" / "lick"
+    with_roots.append(src.resolve())
+    v = _video(src)
+    assert fn["move_video_to_class_folder"](v, "walk") == src / "walk" / "a.mp4"
+    assert not (tmp_path / "未被選擇的模型影片" / "walk").exists()
+
+
+def test_same_class_as_input_folder_name_also_goes_into_subfolder(fn, with_roots, tmp_path):
+    src = tmp_path / "未被選擇的模型影片" / "lick"
+    with_roots.append(src.resolve())
+    v = _video(src)
+    assert fn["move_video_to_class_folder"](v, "lick") == src / "lick" / "a.mp4"
+
+
+def test_video_in_nested_folder_of_input_uses_input_as_root(fn, with_roots, tmp_path):
+    src = tmp_path / "輸入"
+    with_roots.append(src.resolve())
+    v = _video(src / "某批" / "更深")
+    assert fn["move_video_to_class_folder"](v, "shake") == src / "shake" / "a.mp4"
+
+
+def test_closest_input_folder_wins(fn, with_roots, tmp_path):
+    outer = tmp_path / "外"
+    inner = outer / "內"
+    with_roots.extend([outer.resolve(), inner.resolve()])
+    v = _video(inner)
+    assert fn["find_class_root"](v) == inner.resolve()
+
+
+@pytest.fixture(scope="module")
+def resolve(fn):
+    src = SCRIPT.read_text(encoding="utf-8")
+    a = src.index("def resolve_video_paths")
+    body = src.index("\n", a) + 1
+    b = body + re.search(r"^\S", src[body:], re.M).start()
+    exts = re.search(r"^SUPPORTED_VIDEO_EXTS = (\{.*?\})", src, re.M | re.S).group(1)
+    ns = dict(fn)
+    ns.update({"Iterable": list, "_is_stream_url": lambda s: False,
+               "SUPPORTED_VIDEO_EXTS": eval(exts)})
+    exec(src[a:b], ns)
+    return ns["resolve_video_paths"]
+
+
+def test_rescan_skips_classified_subfolders(resolve, with_roots, tmp_path):
+    src = tmp_path / "輸入"
+    _video(src, "left.mp4")
+    _video(src / "walk", "done1.mp4")
+    _video(src / "lick_2", "done2.mp4")
+    _video(src / "其他批次", "keep.mp4")   # 不是行為名稱的子資料夾照樣掃
+    names = sorted(Path(p).name for p in resolve([str(src)]))
+    assert names == ["keep.mp4", "left.mp4"]
+    assert src.resolve() in with_roots
+
+
+def test_input_folder_itself_named_like_class_is_still_scanned(resolve, with_roots, tmp_path):
+    """輸入資料夾本身叫 walk（例如 模型專用/train/walk）：裡面的影片照常播，只略過它底下的分類子資料夾。"""
+    src = tmp_path / "train" / "walk"
+    _video(src, "a.mp4")
+    _video(src / "lick", "moved.mp4")
+    assert [Path(p).name for p in resolve([str(src)])] == ["a.mp4"]

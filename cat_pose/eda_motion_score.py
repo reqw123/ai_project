@@ -36,7 +36,13 @@ CSV_PATH = "eda_keypoint_jitter.csv"
 # 當時所用的 VIDEO_PATH/MODEL_PATH 完全一致，否則 CSV 裡的 frame 編號會對到
 # 錯誤的畫面。目前跟 eda_motion_anomaly.py 目前的預設值保持同步；如果你改了
 # eda_motion_anomaly.py 的影片/模型重新產生 CSV，這裡也要跟著改。
-SOURCE_VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / "paper"))
+from cat_monitoring_system.utils.skeleton_splits import find_video as _find_video
+# 影片會跟著骨架換 split（模型專用/<split>/walk/），依檔名找、不寫死 split。原本寫的 walk_12.mp4
+# 從未存在（資料集裡是 walk12.mp4），找不到時下面的存在檢查會印出錯誤。
+SOURCE_VIDEO_PATH = str(_find_video("walk12.mp4") or "walk12.mp4")
 SOURCE_MODEL_PATH = str(_Path(__file__).resolve().parents[1] / "yolo_models" / "v11s_128.pt")
 
 # 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 SOURCE_VIDEO_PATH，

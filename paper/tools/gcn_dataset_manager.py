@@ -9,7 +9,7 @@ ST-GCN 骨架資料集管理（合併原 eval_window_counts.py 與 make_splits.p
 
   模式 2：train / val / test 切分管理視窗（skeletons/train、val、test）
       切分就是「檔案放在哪個子資料夾」，0_train_gcn.py 直接依資料夾切。
-      0_dataset_collect.py 新抽的骨架本來就直接進 train/。
+      0_dataset_collect.py 新抽的骨架放到影片所在的 split（影片在 模型專用/val/… 就進 val/）。
       視窗分成 train / val / test 三欄（可捲動、可依類別篩選或搜尋、可排序），
       選取限同一個 split：Ctrl＋左鍵加選、Shift＋左鍵選一段、按住左鍵拖曳選一段（Ctrl＋拖＝追加），
       選好後批次移到另一個切分，可「復原上一步」。另有按鈕：
@@ -26,6 +26,78 @@ ST-GCN 骨架資料集管理（合併原 eval_window_counts.py 與 make_splits.p
         3. 整份重切時依類別分層，照 RATIOS 分配（固定的先放好，其餘補足比例）。
         4. 平常「只增不改」：已在子資料夾的檔案不換邊（包括手動拖過的）。
       每次實際搬動都附加記錄到 skeletons/_split_moves_log.csv。
+      原始影片（模型專用/<split>/<類別>/）跟著骨架搬到同一個 split，骨架 JSON 的
+      video_path 同步更新；影片搬動記錄在 模型專用/_video_moves_log.csv。
+
+  模式 3：影片資料夾同步
+      讓 模型專用/ 的影片跟骨架切分一致：影片搬到骨架所在的 split（模型專用/<split>/<類別>/），
+      骨架 JSON 的 video_path 改成新位置；JSON 記的路徑找不到影片時，依檔名在 模型專用/
+      底下找回來（唯一一支才採用）。舊排法（模型專用/<類別>/）裡沒有骨架的新影片搬到 train/。
+      先印預覽，輸入 ok 才搬。平常不用跑——模式 2 搬骨架時影片已經跟著搬；只有在檔案
+      總管手動拖過骨架或影片、或模式 2 提示影片沒跟著搬時才需要。
+
+  模式 4：還原最近一次模式 3 同步（影片搬回原位、JSON 路徑改回去）。
+
+  ══════════════════════════════════════════════════════════════════════
+  在檔案總管手動拖檔的錯誤示範
+  ══════════════════════════════════════════════════════════════════════
+  0_train_gcn.py 訓練前會檢查（check_split_consistency），①～⑦ 都會擋下訓練；本工具一啟動
+  也會先檢查，用同一個警告框一次列出全部問題。
+  切分請一律在模式 2 視窗裡調整：骨架和影片會一起搬、JSON 的影片路徑會更新，
+  也會遵守固定名單與重複組。
+
+  ── ① 只拖骨架 ──────────────────────────────────────── 擋下訓練
+      做法：skeletons/train/walk/walk5.json 拖到 skeletons/val/walk/，影片留在 train
+      訊息：[骨架和影片放在不同的 split] walk5：骨架在 val，影片在 train
+      修正：以骨架為準 → 模式 3（影片搬過去）
+            以影片為準 → 模式 2 把骨架移回 train
+
+  ── ② 只拖影片 ──────────────────────────────────────── 擋下訓練
+      做法：模型專用/train/walk/walk5.mp4 拖到 模型專用/test/walk/
+      訊息：[骨架和影片放在不同的 split] walk5：骨架在 train，影片在 test
+      說明：切分看的是骨架，只拖影片等於沒換 split；跑模式 3 會把影片搬回 train
+
+  ── ③ 拖了被固定的資料 ──────────────────────────────── 擋下訓練
+      做法：lick_8 固定在 train，骨架＋影片一起拖到 test
+      訊息：[固定的資料不在它被固定的 split] lick_8：現在在 test，固定在 train
+      修正：模式 2 按「套用規則／歸位新檔」搬回去；真的要換就先「解除固定」
+
+  ── ④ 同一支影片存了兩份、放在不同 split ──────────────── 擋下訓練
+      做法：shake_32（val）的影片又以 shake_val1 的名字存了一份，抽成骨架後在 train
+      訊息：[檔名不同、骨架內容卻完全相同] shake_32（val） = shake_val1（train）
+      說明：比對的是骨架座標（開頭 60 幀平均差不到 1 像素），跟檔名流水號無關——
+            shake_1、shake_2 只要是不同影片就不會被判成相同。2026-09-23 刪過 9 組、
+            09-24 又抓到 shake_32／shake_val1，實際上發生過
+      修正：留一份就好，刪掉另一支；兩份都要留就用模式 2「套用規則」放到同一邊
+
+  ── ④' 原版和 _hq 高畫質版放在不同 split ──────────────── 擋下訓練
+      做法：lick_8 在 train，lick_8_hq 在 test
+      訊息：[原版和 _hq 高畫質版放在不同 split] lick_8（train） / lick_8_hq（test）
+      說明：唯一看檔名的規則；兩個版本都保留沒關係，但要在同一個 split
+      修正：模式 2「套用規則／歸位新檔」
+
+  ── ⑤ 同一個檔案被複製成多份 ─────────────────────────── 擋下訓練
+      做法：Ctrl+C／Ctrl+V 或按住 Ctrl 拖曳，train 和 val 都有 shake_32.json
+      訊息：[同一個檔案被複製成多份（檔名相同）] shake_32：train/shake / val/shake
+      修正：刪掉多出來的那份。模式 2 視窗在修好之前也會拒絕開啟
+
+  ── ⑥ 放錯類別資料夾 ──────────────────────────────────── 擋下訓練
+      做法：lick_10.json 拖到 skeletons/train/walk/（或 lick_10.mp4 拖到 模型專用/train/walk/）
+      訊息：[放在別的類別資料夾] lick_10：骨架放在 walk/，應該在 lick/
+      說明：檔名開頭就是類別，放進別的類別資料夾就是錯位。影片放錯最危險：抽骨架時用
+            影片所在的資料夾當初始標籤，lick 會被標成 walk
+      修正：骨架 → 模式 2「套用規則／歸位新檔」整理回 train/lick/
+            影片 → 在檔案總管搬回 模型專用/train/lick/，再跑模式 3 更新路徑
+
+  ── ⑦ 骨架記錄的影片檔名跟骨架檔名不同 ─────────────────── 擋下訓練
+      做法：把 walk33.json 複製一份改名成 walk777.json（平常很少發生，測試防呆時出現過）
+      訊息：[骨架裡記錄的影片檔名跟骨架檔名不同] walk777.json 記錄的影片是 walk33.mp4
+      說明：內容跟 walk33 一樣，所以也會同時出現 ④；模式 3 遇到這種骨架不會搬影片
+      修正：刪掉 walk777.json
+
+  ── 合法的手動調整 ─────────────────────────────────────── 不擋
+      做法：骨架和影片一起拖到同一個 split（資料夾就是切分）
+      之後：跑一次模式 3 更新 JSON 裡的影片路徑，否則標記工具打不開影片
 
       為什麼要固定切分：原本每次訓練都用 train_test_split 重抽 val，資料一增減整份 val
       就重新洗牌，不同 run 無法比較；同一份 val 又拿來選 checkpoint 又拿來報成績會高估
@@ -38,6 +110,9 @@ ST-GCN 骨架資料集管理（合併原 eval_window_counts.py 與 make_splits.p
     python gcn_dataset_manager.py --mode 2             # 開啟切分管理視窗
     python gcn_dataset_manager.py --mode 2 --dry_run   # （命令列）只印出套用規則會怎麼搬
     python gcn_dataset_manager.py --mode 2 --rebuild   # （命令列）整份重新切分（會搬動檔案）
+    python gcn_dataset_manager.py --mode 3 --dry_run   # 預覽影片資料夾同步
+    python gcn_dataset_manager.py --mode 3             # 影片資料夾同步（預覽後輸入 ok 才搬）
+    python gcn_dataset_manager.py --mode 4             # 還原最近一次影片資料夾同步
 """
 import argparse
 import contextlib
@@ -61,8 +136,15 @@ CMS_DIR = _TOOLS.parent / "cat_monitoring_system"
 CONFIG_PATH = CMS_DIR / "stgcn_config.yaml"
 sys.path.insert(0, str(CMS_DIR))
 from utils.skeleton_splits import (  # noqa: E402
-    SPLITS, UNASSIGNED, iter_skeleton_files, split_of, canonical_path,
+    SPLITS, UNASSIGNED, iter_skeleton_files, split_of, canonical_path, class_folder_of,
+    VIDEO_ROOT, VIDEO_CLASSES, VIDEO_EXTS, move_video_with_skeleton, video_path_in_split,
+    read_video_path, rewrite_video_path, find_video, split_of_video,
 )
+from utils.console_alert import alert_box  # noqa: E402
+
+# 原始影片的搬動記錄（模式 2 搬骨架時影片跟著搬、模式 3 同步），放在影片資料夾根目錄
+VIDEO_MOVES_LOG = VIDEO_ROOT / "_video_moves_log.csv"
+
 
 RATIOS = {"train": 0.70, "val": 0.20, "test": 0.10}
 SEED = 42
@@ -415,9 +497,27 @@ def plan_split(state, rebuild=False):
     return assign, moves
 
 
+def _log_video_moves(rows):
+    """rows = [(mode, video_id, 舊路徑, 新路徑, 骨架 json)]，附加到 VIDEO_MOVES_LOG。"""
+    if not rows:
+        return
+    new_log = not VIDEO_MOVES_LOG.exists()
+    now = datetime.now().isoformat(timespec="seconds")
+    with open(VIDEO_MOVES_LOG, "a", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        if new_log:
+            w.writerow(["time", "mode", "video_id", "from", "to", "json"])
+        for r in rows:
+            w.writerow([now, *r])
+
+
 def apply_moves(state, moves, mode):
-    """實際搬檔，並附加記錄到 skeletons/_split_moves_log.csv；搬完同步更新 state。"""
+    """實際搬檔，並附加記錄到 skeletons/_split_moves_log.csv；搬完同步更新 state。
+    對應的原始影片跟著搬到同一個 split（見 skeleton_splits.move_video_with_skeleton），
+    影片搬不動（例如正被播放器開著）時骨架照搬、影片留在原位並記進
+    state["video_warnings"]，之後可用模式 3 補同步。"""
     root = state["root"]
+    video_rows, video_warnings = [], []
     for s in SPLITS:
         (root / s).mkdir(exist_ok=True)
     log_path = root / "_split_moves_log.csv"
@@ -435,6 +535,17 @@ def apply_moves(state, moves, mode):
             state["paths"][v] = dst
             state["current"][v] = b
             w.writerow([now, mode, v, a, b])
+            try:
+                moved = move_video_with_skeleton(dst, b)
+            except Exception as e:
+                video_warnings.append(f"{v}：影片沒有跟著搬（{e}）")
+            else:
+                if moved:
+                    video_rows.append((mode, v, *moved, str(dst)))
+    _log_video_moves(video_rows)
+    state["video_warnings"] = video_warnings
+    for msg in video_warnings:
+        print(f"⚠ {msg}")
     return log_path
 
 
@@ -487,6 +598,381 @@ def run_split(rebuild=False, dry_run=False, confirm=False):
         return
     log_path = apply_moves(state, moves, mode)
     print(f"\n✓ 已搬動 {len(moves)} 支，記錄在 {log_path}")
+
+
+# ═══════════════════════ 模式 3：影片資料夾同步 ═══════════════════════
+def check_split_consistency(skeleton_root=None):
+    """訓練前的切分檢查（0_train_gcn.py 呼叫）：抓出在檔案總管手動拖檔造成的問題。回傳 dict：
+      clash    [(檔名, [路徑…])]         同一個檔名出現在多個位置（通常是「複製」而不是「搬移」）
+      foreign  [(檔名, 記錄的影片檔名)]  骨架記錄的影片不是自己的（複製別人的 JSON 再改檔名）
+      video    [(檔名, 骨架 split, 影片 split)]  骨架和原始影片放在不同的 split
+      fixed    [(檔名, 目前 split, 固定 split)]  固定名單裡的資料不在它被固定的 split
+      same_content [[(檔名, 位置)…]]     檔名不同、骨架內容完全相同（同一支影片存了兩份），放在不同 split
+      hq_pair  [[(檔名, 位置)…]]         原版 X 和高畫質版 X_hq 放在不同 split
+      misplaced [(檔名, 骨架/影片, 所在資料夾)]  放在別的類別資料夾（例如 lick_10 放進 walk/）
+      missing  [檔名]                    找不到原始影片（不影響訓練，只提醒）
+    除了 missing 都會讓 0_train_gcn.py 拒絕訓練。所有問題一次列出：同名多份（clash）的每一份
+    也會各自檢查類別資料夾，並參與內容重複比對（例如複製 walk33 改名成 walk777 放到別的 split）。"""
+    root = Path(skeleton_root) if skeleton_root else Path(_load_config()["SKELETON_DATA_FOLDER"])
+    prefixes = list(_load_config()["BEHAVIOR_PREFIXES"].keys())
+    issues = {"clash": [], "foreign": [], "video": [], "fixed": [], "same_content": [], "hq_pair": [],
+              "misplaced": [], "missing": []}
+    by_stem = defaultdict(list)
+    for f in iter_skeleton_files(root):
+        if _class_of(f.stem, prefixes):
+            by_stem[f.stem].append(f)
+    issues["clash"] = [(v, fs) for v, fs in sorted(by_stem.items()) if len(fs) > 1]
+    paths = {v: fs[0] for v, fs in by_stem.items() if len(fs) == 1}
+
+    def split_eff(f):   # 根目錄的「未分配」檔案訓練時當 train，這裡也用 train 比對
+        return "train" if split_of(f) == UNASSIGNED else split_of(f)
+
+    # 檔名開頭就是類別（lick_10 → lick）：放進別的類別資料夾就是放錯（同名多份的每一份都查）
+    for v, fs in sorted(by_stem.items()):
+        for f in fs:
+            if f.parent.parent.name in SPLITS and f.parent.name != class_folder_of(v):
+                issues["misplaced"].append((v, "骨架", f.parent.relative_to(root).as_posix()))
+    current = {v: split_eff(f) for v, f in paths.items()}
+
+    # 同名多份的每一份也要查「記錄的影片是不是自己的」（例如複製 walk33.json 改名成 walk777）
+    for v, fs in issues["clash"]:
+        names = set()
+        for f in fs:
+            try:
+                recorded = read_video_path(f)
+            except Exception:
+                recorded = ""
+            if recorded and Path(recorded).stem.lower() != v.lower():
+                names.add(Path(recorded).name)
+        issues["foreign"] += [(v, n) for n in sorted(names)]
+
+    for v, f in sorted(paths.items()):
+        try:
+            recorded = read_video_path(f)
+        except Exception:
+            recorded = ""
+        if recorded and Path(recorded).stem.lower() != v.lower():
+            # 記錄的是別支影片：影片位置跟這份骨架無關，不做 split／資料夾比對（模式 3 也不會搬它）
+            issues["foreign"].append((v, Path(recorded).name))
+            continue
+        actual = Path(recorded) if recorded else None
+        if actual is None or not actual.exists():
+            actual = find_video(actual.name if actual else f"{v}.mp4")
+        if actual is None:
+            issues["missing"].append(v)
+            continue
+        v_split = split_of_video(actual)
+        # 影片放錯類別資料夾更危險：0_dataset_collect.py 抽骨架時用影片所在資料夾當初始標籤
+        if v_split and actual.parent.name.lower() != class_folder_of(v):
+            issues["misplaced"].append((v, "影片", f"{v_split}/{actual.parent.name}"))
+        if v_split and v_split != current[v]:
+            issues["video"].append((v, current[v], v_split))
+
+    load_rules(root)
+    for v in sorted(paths):
+        fs = fixed_split_of(v)
+        if fs and current[v] != fs:
+            issues["fixed"].append((v, current[v], fs))
+
+    # 內容重複比對：同名多份的每一份都用「檔名@位置」參加，才抓得到「複製 walk33 改名 walk777」
+    cand = dict(paths)
+    where = {v: current[v] for v in paths}
+    for v, fs in issues["clash"]:
+        for f in fs:
+            key = f"{v}@{f.parent.relative_to(root).as_posix()}"
+            cand[key], where[key] = f, split_eff(f)
+    # 判斷方式跟檔名流水號無關：內容相同＝骨架座標比對（build_groups），只有 X／X_hq 看檔名
+    groups, dup_pairs = build_groups(cand, prefixes)
+    members = defaultdict(list)
+    for k, g in groups.items():
+        members[g].append(k)
+    for keys in members.values():
+        bases = {k.split("@")[0] for k in keys}
+        if len(bases) > 1 and len({where[k] for k in keys}) > 1:   # 只有同名多份彼此重複的，clash 已經報了
+            entry = [(k.split("@")[0], k.split("@")[1] if "@" in k else where[k]) for k in sorted(keys)]
+            ks = set(keys)
+            same = any(a in ks and b in ks and a.split("@")[0] != b.split("@")[0] for a, b in dup_pairs)
+            issues["same_content" if same else "hq_pair"].append(entry)
+    return issues
+
+
+def issue_listing(items, limit=15):
+    rows = [f"- {x}" for x in items[:limit]]
+    return rows + ([f"- …其餘 {len(items) - limit} 筆省略"] if len(items) > limit else [])
+
+
+def split_issue_report(issues, skeleton_root):
+    """把 check_split_consistency() 的結果整理成警告框內容，0_train_gcn.py 與本工具共用。
+    回傳 (sections, notes)：sections 給 alert_box（擋下訓練的問題），notes = [(標題, [項目])] 只提醒。"""
+    root = Path(skeleton_root)
+    problems = []   # (標題, [每筆一行], [修正方法], 單位)
+    if issues["clash"]:
+        problems.append(("同一個檔案被複製成多份（檔名相同）",
+                         [f"{v}：{' / '.join(f.parent.relative_to(root).as_posix() for f in fs)}"
+                          for v, fs in issues["clash"]],
+                         ["多半是在檔案總管按了 Ctrl+C／Ctrl+V，或按住 Ctrl 拖曳",
+                          "修正：刪掉多出來的那份，只留一份"], "筆"))
+    if issues["foreign"]:
+        problems.append(("骨架裡記錄的影片檔名跟骨架檔名不同",
+                         [f"{v}.json 記錄的影片是 {name}" for v, name in issues["foreign"]],
+                         ["多半是複製別的 JSON 再改檔名。修正：刪掉這份骨架",
+                          "真的要用這支影片：放好影片後用 0_dataset_collect.py 模式 1 抽骨架"],
+                         "筆"))
+    if issues["video"]:
+        problems.append(("骨架和影片放在不同的 split",
+                         [f"{v}：骨架在 {a}，影片在 {b}" for v, a, b in issues["video"]],
+                         ["修正（以骨架為準）：gcn_dataset_manager.py 模式 3，把影片搬過去",
+                          "修正（以影片為準）：gcn_dataset_manager.py 模式 2，把骨架移過去"], "筆"))
+    if issues["fixed"]:
+        problems.append(("固定的資料不在它被固定的 split",
+                         [f"{v}：現在在 {a}，固定在 {b}" for v, a, b in issues["fixed"]],
+                         ["修正：gcn_dataset_manager.py 模式 2 按「套用規則／歸位新檔」搬回去",
+                          "真的要換 split：先在模式 2「解除固定」再移動"], "筆"))
+    def group_line(grp, sep):
+        # 同名多份合併成一項：walk777（4 份：test/stop、test/walk…）
+        by_name = defaultdict(list)
+        for v, where in grp:
+            by_name[v].append(where)
+        return sep.join(f"{v}（{ws[0]}）" if len(ws) == 1 else f"{v}（{len(ws)} 份：{'、'.join(ws)}）"
+                        for v, ws in by_name.items())
+
+    if issues["same_content"]:
+        problems.append(("檔名不同、骨架內容卻完全相同，放在不同 split",
+                         [group_line(g, " = ") for g in issues["same_content"]],
+                         ["判斷方式：比對骨架座標，跟檔名流水號無關",
+                          "通常是同一支影片存了兩份，不同 split 看到同一段畫面＝資料洩漏",
+                          "修正：留一份就好，刪掉另一支的骨架和影片",
+                          "兩份都要留：gcn_dataset_manager.py 模式 2 按「套用規則」放到同一邊"], "組"))
+    if issues["hq_pair"]:
+        problems.append(("原版和 _hq 高畫質版放在不同 split",
+                         [group_line(g, " / ") for g in issues["hq_pair"]],
+                         ["X 和 X_hq 是同一支影片的兩種畫質，兩份都保留沒關係，但要放在同一個 split",
+                          "修正：gcn_dataset_manager.py 模式 2 按「套用規則／歸位新檔」"], "組"))
+    if issues["misplaced"]:
+        problems.append(("放在別的類別資料夾（檔名開頭就是類別）",
+                         [f"{v}：{kind}放在 {folder}/，應該在 {class_folder_of(v)}/ 資料夾"
+                          for v, kind, folder in issues["misplaced"]],
+                         ["修正（骨架）：gcn_dataset_manager.py 模式 2 按「套用規則／歸位新檔」",
+                          "修正（影片）：在檔案總管搬回正確的類別資料夾，再跑模式 3 更新路徑"], "筆"))
+    sections = [(f"[{i}] {title}：{len(items)} {unit}", issue_listing(items) + [""] + fixes)
+                for i, (title, items, fixes, unit) in enumerate(problems, 1)]
+    notes = [("找不到原始影片", list(issues["missing"]))] if issues["missing"] else []
+    return sections, notes
+
+
+def show_split_issues(pause=True):
+    """啟動時先檢查切分，一次列出所有問題（跟 0_train_gcn.py 訓練前擋下的是同一份清單）。"""
+    root = Path(_load_config()["SKELETON_DATA_FOLDER"])
+    print("檢查 train/val/test 切分（手動搬檔、固定名單、重複組、影片位置、類別資料夾）...")
+    sections, notes = split_issue_report(check_split_consistency(root), root)
+    for title, items in notes:
+        print(f"  ⚠ 提醒（不影響訓練）：{title}，{len(items)} 筆")
+        for line in issue_listing(items, 10):
+            print(f"      {line}")
+    if not sections:
+        print("  ✓ 切分一致\n")
+        return
+    alert_box("警告：train/val/test 切分有問題（訓練會被擋下）", sections,
+              footer="下面的模式可以用來修正：模式 2 切分管理視窗（套用規則／移動）、模式 3 影片資料夾同步。"
+                     "有「同一個檔名出現在多個 split」時，要先刪掉多的那份，模式 2 視窗才能開啟。",
+              pause=pause)
+
+
+def plan_video_sync(skeleton_root):
+    """比對每支骨架目前所在的 split 跟它的原始影片所在位置，回傳同步計畫 dict：
+      moves     [(video_id, json, 影片實際位置, 目的地)]：影片要搬到 VIDEO_ROOT/<骨架 split>/<類別>/
+      relinks   [(video_id, json, JSON 記錄的舊路徑, 影片實際位置)]：影片已在正確位置，
+                只是 JSON 記的路徑過時（例如在檔案總管手動搬過影片），只改 JSON
+      orphans   [(影片, 目的地)]：舊排法（VIDEO_ROOT/<類別>/）裡沒有骨架的影片，搬到 train/<類別>/
+      problems  [文字]：找不到影片、同名影片不只一支、目的地已被佔用等，不處理只列出
+    JSON 記錄的路徑找不到影片時，改用檔名在 VIDEO_ROOT 底下找（唯一一支才採用），
+    依 JSON 裡的影片檔名把對應關係還原回來。"""
+    by_name = defaultdict(list)
+    for p in VIDEO_ROOT.rglob("*"):
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTS:
+            by_name[p.name.lower()].append(p)
+    plan = {"moves": [], "relinks": [], "orphans": [], "problems": []}
+    claimed = set()
+    skeletons = iter_skeleton_files(skeleton_root)
+    stem_count = Counter(js.stem for js in skeletons)
+    for js in skeletons:
+        vid = js.stem
+        if stem_count[vid] > 1:
+            # 同一個檔名有多份骨架（多半是複製而不是搬移）：不知道哪一份才算數，影片不動
+            msg = f"{vid}：有 {stem_count[vid]} 份骨架，先刪掉多出來的那份再同步"
+            if msg not in plan["problems"]:
+                plan["problems"].append(msg)
+            continue
+        recorded = read_video_path(js)
+        if not recorded:
+            plan["problems"].append(f"{vid}：JSON 沒有記錄影片路徑")
+            continue
+        if Path(recorded).stem.lower() != vid.lower():
+            plan["problems"].append(f"{vid}：記錄的影片是 {Path(recorded).name}（不是自己的），不處理")
+            continue
+        actual = Path(recorded)
+        if not actual.exists():
+            cands = by_name.get(actual.name.lower(), [])
+            if len(cands) != 1:
+                plan["problems"].append(
+                    f"{vid}：找不到影片 {actual.name}" if not cands else
+                    f"{vid}：{actual.name} 有 {len(cands)} 支同名影片，無法判斷是哪一支")
+                continue
+            actual = cands[0]
+        try:
+            actual.resolve().relative_to(VIDEO_ROOT.resolve())
+        except ValueError:
+            continue   # 影片不在 模型專用/ 底下（別的來源），不動
+        claimed.add(actual.resolve())
+        dst = video_path_in_split(actual, split_of(js))
+        if actual.resolve() != dst.resolve():
+            if dst.exists():
+                plan["problems"].append(f"{vid}：目的地已有同名影片 {dst}")
+            else:
+                plan["moves"].append((vid, js, actual, dst))
+        elif str(actual) != recorded:
+            plan["relinks"].append((vid, js, recorded, actual))
+    for c in VIDEO_CLASSES:
+        legacy = VIDEO_ROOT / c
+        if legacy.is_dir():
+            for p in sorted(legacy.iterdir()):
+                if p.is_file() and p.suffix.lower() in VIDEO_EXTS and p.resolve() not in claimed:
+                    plan["orphans"].append((p, VIDEO_ROOT / "train" / c / p.name))
+    return plan
+
+
+def run_video_sync(dry_run=False, confirm=True):
+    """模式 3：讓 模型專用/ 的影片跟骨架切分一致（影片放到骨架所在的 split），並把骨架
+    JSON 的 video_path 改成影片的新位置。第一次執行就是把舊排法（模型專用/<類別>/）
+    整理成 模型專用/<split>/<類別>/；之後只有手動拖過骨架或影片時才需要再跑。"""
+    cfg = _load_config()
+    root = Path(cfg["SKELETON_DATA_FOLDER"])
+    plan = plan_video_sync(root)
+    moves, relinks, orphans, problems = plan["moves"], plan["relinks"], plan["orphans"], plan["problems"]
+    print(f"影片資料夾：{VIDEO_ROOT}")
+    print(f"骨架資料夾：{root}")
+    if moves:
+        counts = Counter((split_of(js), d.parent.name) for _, js, _, d in moves)
+        print(f"\n要搬到骨架所在切分的影片：{len(moves)} 支")
+        for sp in SPLITS:
+            row = "  ".join(f"{c} {counts[(sp, c)]}" for c in VIDEO_CLASSES if counts[(sp, c)])
+            if row:
+                print(f"    {sp:<5}：{row}")
+        for vid, _, a, b in moves[:8]:
+            print(f"    例：{vid:<14} {a.relative_to(VIDEO_ROOT)} → {b.relative_to(VIDEO_ROOT)}")
+    if relinks:
+        print(f"\n影片位置正確、只需更新骨架 JSON 記錄的路徑：{len(relinks)} 支")
+    if orphans:
+        print(f"\n舊資料夾裡沒有骨架的影片（新影片），搬到 train/：{len(orphans)} 支")
+        for a, b in orphans[:8]:
+            print(f"    {a.relative_to(VIDEO_ROOT)} → {b.relative_to(VIDEO_ROOT)}")
+    if problems:
+        print(f"\n⚠ 無法處理、需要手動確認：{len(problems)} 筆")
+        for msg in problems[:20]:
+            print(f"    {msg}")
+    if not (moves or relinks or orphans):
+        print("\n✓ 影片資料夾已經跟骨架切分一致，不需要搬動。")
+        return
+    if dry_run:
+        print("\n(dry run，未搬動任何檔案)")
+        return
+    if confirm and input('\n確認執行請輸入 "ok"（其他任意鍵取消）：').strip().lower() != "ok":
+        print("✗ 已取消，未搬動任何檔案。")
+        return
+
+    rows, failed = [], []
+    for vid, js, recorded, actual in relinks:
+        rewrite_video_path(js, recorded, actual)
+        rows.append(("sync_relink", vid, recorded, str(actual), str(js)))
+    for vid, js, actual, dst in moves:
+        recorded = read_video_path(js)
+        try:
+            if str(actual) != recorded:           # JSON 記的是過時路徑：先指到影片實際位置
+                rewrite_video_path(js, recorded, actual)
+            moved = move_video_with_skeleton(js, split_of(js))
+        except Exception as e:
+            failed.append(f"{vid}：{e}")
+            continue
+        if moved:
+            rows.append(("sync", vid, *moved, str(js)))
+    for src, dst in orphans:
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+        except Exception as e:
+            failed.append(f"{src.name}：{e}")
+            continue
+        rows.append(("sync_orphan", dst.stem, str(src), str(dst), ""))
+    _log_video_moves(rows)
+
+    # 每個 split 都建好五個類別資料夾（新影片放 train/<類別>/）；舊排法的類別資料夾清空了就移除
+    for sp in SPLITS:
+        for c in VIDEO_CLASSES:
+            (VIDEO_ROOT / sp / c).mkdir(parents=True, exist_ok=True)
+    removed, kept = [], []
+    for c in VIDEO_CLASSES:
+        legacy = VIDEO_ROOT / c
+        if not legacy.is_dir():
+            continue
+        leftovers = [p.name for p in legacy.iterdir()]
+        if leftovers:   # 還有非影片檔（筆記、desktop.ini…）→ 不動，交給使用者決定
+            kept.append(f"{c}/（還有 {', '.join(leftovers[:3])}）")
+            continue
+        try:
+            legacy.rmdir()
+            removed.append(c)
+        except OSError:  # OneDrive 同步中常會暫時佔住資料夾，不影響結果
+            kept.append(f"{c}/（空資料夾，被其他程式佔用，可手動刪除）")
+    print(f"\n✓ 已處理 {len(rows)} 筆，記錄在 {VIDEO_MOVES_LOG}")
+    if removed:
+        print(f"  已移除清空的舊資料夾：{', '.join(removed)}")
+    if kept:
+        print("  以下舊資料夾沒有移除：" + "；".join(kept))
+    if failed:
+        print(f"⚠ {len(failed)} 筆失敗（檔案可能正被其他程式開著），關掉後重跑模式 3 即可：")
+        for msg in failed[:20]:
+            print(f"    {msg}")
+
+
+def undo_last_video_sync(confirm=True):
+    """還原最近一次模式 3 同步：依 _video_moves_log.csv 把那一批影片搬回原位，骨架 JSON
+    的 video_path 也改回去。只處理模式 3 的紀錄（模式 2 搬骨架連帶搬的影片要從模式 2
+    「復原上一步」撤回，才不會讓影片跟骨架切分對不上）。"""
+    if not VIDEO_MOVES_LOG.exists():
+        print("✗ 沒有影片搬動紀錄。")
+        return
+    with open(VIDEO_MOVES_LOG, newline="", encoding="utf-8-sig") as f:
+        rows = [r for r in csv.DictReader(f) if r["mode"].startswith("sync")]
+    if not rows:
+        print("✗ 紀錄裡沒有模式 3 的同步。")
+        return
+    last = rows[-1]["time"]
+    batch = [r for r in rows if r["time"] == last]
+    print(f"最近一次同步：{last}，共 {len(batch)} 筆")
+    if confirm and input('確認還原請輸入 "ok"（其他任意鍵取消）：').strip().lower() != "ok":
+        print("✗ 已取消。")
+        return
+    done, failed = [], []
+    for r in reversed(batch):
+        src, dst, js = Path(r["from"]), Path(r["to"]), r["json"]
+        try:
+            if r["mode"] != "sync_relink":
+                if not dst.exists() or src.exists():
+                    raise RuntimeError("影片已不在同步後的位置，或原位置已有檔案")
+                src.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(dst), str(src))
+            if js and Path(js).exists():
+                rewrite_video_path(js, str(dst), str(src))
+        except Exception as e:
+            failed.append(f"{r['video_id']}：{e}")
+            continue
+        done.append(("undo_sync", r["video_id"], str(dst), str(src), js))
+    _log_video_moves(done)
+    print(f"✓ 已還原 {len(done)} 筆")
+    if failed:
+        print(f"⚠ {len(failed)} 筆沒有還原：")
+        for msg in failed[:20]:
+            print(f"    {msg}")
 
 
 # ═══════════════════════ 模式 2 GUI：三欄 train / val / test ═══════════════════════
@@ -735,6 +1221,14 @@ class SplitManagerGUI:
         return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", s)]
 
     def refresh(self):
+        warnings = self.state.pop("video_warnings", None)
+        if warnings:
+            from tkinter import messagebox
+            messagebox.showwarning(
+                "影片沒有跟著搬",
+                "骨架已搬到新的切分，但以下影片沒有跟著搬（骨架 JSON 仍指向影片目前的位置，"
+                "不影響訓練）；關掉佔用影片的程式後，用模式 3「影片資料夾同步」補搬：\n\n"
+                + "\n".join(warnings[:20]) + ("\n…" if len(warnings) > 20 else ""))
         cls = self.class_var.get()
         q = self.search_var.get().strip().lower()
         prefixes = self.state["prefixes"]
@@ -865,6 +1359,13 @@ class SplitManagerGUI:
             src = self.state["paths"][v]
             shutil.move(str(src), str(root / src.name))
             self.state["paths"][v], self.state["current"][v] = root / src.name, UNASSIGNED
+            try:
+                moved = move_video_with_skeleton(root / src.name, UNASSIGNED)   # 未分配＝train
+            except Exception as e:
+                self.state.setdefault("video_warnings", []).append(f"{v}：影片沒有跟著搬（{e}）")
+            else:
+                if moved:
+                    _log_video_moves([("gui_undo", v, *moved, str(root / src.name))])
         self.refresh()
         self.status.configure(text=f"↶ 已復原 {len(back)} 支")
 
@@ -1075,26 +1576,36 @@ def _menu():
     print("=" * 60)
     print("1. 統計訓練視窗數（各類別 × train/val/test，含百分比，純讀取）")
     print("2. 切分管理視窗（train/val/test 三欄，批次選取後移到另一個切分）")
-    mode = input("\n請選擇模式 (1/2)：").strip()
+    print("3. 影片資料夾同步（模型專用/ 的影片搬到跟骨架相同的 train/val/test，先預覽再確認）")
+    print("4. 還原最近一次影片資料夾同步")
+    mode = input("\n請選擇模式 (1/2/3/4)：").strip()
     if mode == "1":
         run_window_counts()
     elif mode == "2":
         run_split_gui()
+    elif mode == "3":
+        run_video_sync()
+    elif mode == "4":
+        undo_last_video_sync()
     else:
         print("✗ 未選擇，結束。")
 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="ST-GCN 骨架資料集管理：模式 1=統計訓練視窗數，模式 2=train/val/test 切分管理")
-    ap.add_argument("--mode", choices=["1", "2"], default=None, help="不給則顯示互動選單")
+        description="ST-GCN 骨架資料集管理：模式 1=統計訓練視窗數，模式 2=train/val/test 切分管理，"
+                    "模式 3=影片資料夾同步，模式 4=還原最近一次影片同步")
+    ap.add_argument("--mode", choices=["1", "2", "3", "4"], default=None, help="不給則顯示互動選單")
     ap.add_argument("--skeleton_dir", default=None,
                     help="（模式 1）骨架資料夾；不指定則用 stgcn_config.yaml 的 SKELETON_DATA_FOLDER")
     ap.add_argument("--feature_mode", default="xy_conf_v_bone",
                     help="（模式 1）僅影響特徵張量組裝，不影響視窗數統計（預設 xy_conf_v_bone）")
     ap.add_argument("--rebuild", action="store_true", help="（模式 2，命令列）整份重新切分（會搬動檔案）")
-    ap.add_argument("--dry_run", action="store_true", help="（模式 2，命令列）只印結果，不搬任何檔案")
+    ap.add_argument("--dry_run", action="store_true", help="（模式 2、3）只印結果，不搬任何檔案")
     args = ap.parse_args()
+
+    if args.mode in (None, "2", "3"):
+        show_split_issues(pause=sys.stdin.isatty())
 
     if args.mode == "1":
         run_window_counts(args.skeleton_dir, args.feature_mode)
@@ -1103,6 +1614,10 @@ def main():
             run_split(rebuild=args.rebuild, dry_run=args.dry_run)
         else:
             run_split_gui()
+    elif args.mode == "3":
+        run_video_sync(dry_run=args.dry_run)
+    elif args.mode == "4":
+        undo_last_video_sync()
     else:
         _menu()
 

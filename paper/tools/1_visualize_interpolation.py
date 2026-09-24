@@ -63,7 +63,10 @@ from detectors.keypoint_detector import KeypointDetector
 from models.stgcn_model import interpolate_missing
 
 # ═══════════════════════════════ 使用者設定區 ═══════════════════════════════
-VIDEO_PATH = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk\walk_12.mp4"
+from utils.skeleton_splits import find_video
+# 影片會跟著骨架換 split（模型專用/<split>/walk/），依檔名找、不寫死 split。原本寫的 walk_12.mp4
+# 從未存在（資料集裡是 walk12.mp4），找不到時下面的存在檢查會印出錯誤。
+VIDEO_PATH = str(find_video("walk12.mp4") or "walk12.mp4")
 
 # 若設定 TEST_VIDEO_PATH 環境變數，優先使用該影片路徑（覆蓋上面寫死的 VIDEO_PATH）
 _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()

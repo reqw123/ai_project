@@ -1,5 +1,6 @@
 """
 Compare 2~5 ST-GCN models on up to five labeled videos (walk, lick, scratch, shake, stop).
+只放 1 個模型時為單模型評估模式：只看該模型本身的效能，省去其他模型的推論時間。
 
 Metrics (per model, per class):
   1. Discrete accuracy     — argmax(probs) == true_label       (硬指標)
@@ -87,40 +88,65 @@ DEFAULT_DEVICE  = 'cuda'
 # 多個模型時建議優先看「Δ vs baseline」的相對變化，而非本表的絕對數字。
 PARTIAL_COVERAGE_CLASSES = {'scratch', 'shake'}
 
-# 預設比較清單：2~5 筆皆可，每筆為 {path, name, ema_alpha, seq_len}，
-# 可另外加 smoothing_kind/kalman_process_noise/kalman_measurement_noise
-# （省略則預設 'none'/90.0/70.0，等同這幾個欄位加入前的行為）。
+# ── 模型設定（跟 eval_pose_compare.py 同一套用法）──────────────────────────
+#   NEW_MODEL_PATH      最新模型，永遠會跑。
+#   OLD_MODELS          比較對象 0~4 筆；第一筆是 baseline（「Δ vs baseline」的基準）。
+#   RUN_ONLY_ONE_MODEL  True = 只跑 NEW_MODEL_PATH（單模型評估，省掉 OLD_MODELS 的
+#                       推論時間，報表省略所有比較/勝負結論）；False = OLD_MODELS
+#                       全部 + 最新模型一起比較（共 1~5 個）。OLD_MODELS 不用動。
+# 每筆設定為 {path, name, ema_alpha, seq_len}，可另外加 smoothing_kind/
+# kalman_process_noise/kalman_measurement_noise（省略則預設 'none'/90.0/70.0）。
 # 'name' 可省略：自動從 run 資料夾抓版本編號、從 checkpoint 讀關節數，組成
 # 「Run147_14關節」（見 _short_name()）；要自訂顯示名稱再手動填。
-# --models 等 CLI 參數會整個覆蓋這份清單。
+# --models 等 CLI 參數會整個覆蓋這裡的設定（RUN_ONLY_ONE_MODEL 也不作用）。
 # 比較「不同關鍵點平滑方式訓練出來的模型」時，每筆的 smoothing_kind 要跟
 # 該模型訓練時的 stgcn_config.yaml SMOOTHING_KIND 一致，才是公平比較
 # （見 evaluate_video() 開頭說明）。
+_STGCN_MODELS_DIR = Path(__file__).resolve().parents[2] / "stgcn_models"
 
-HARD_MODELS = [
-    {   # 舊模型、SMOOTHING_KIND 預設值 "ema" 但 kp_ema_alpha=1.0（等同不平滑，
-        # 見 0_train_gcn.py 的 dispatch：0.0 < alpha < 1.0 才真的套用 EMA），
-        # 用 smoothing_kind='none' 評估行為完全等價
-        'path':              str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_124_xy_conf_v_bone_att_on" / "124_best_model.pth"),
-        'ema_alpha':         1.0,
-        'seq_len':           16,
-        'smoothing_kind':    'none',
-    },
-    {   # 新訓練的模型，同樣 kp_ema_alpha=1.0（理由同上，'none' 評估等價）；
-        # infer_num_joints() 會自動從 checkpoint 偵測關節數，14/17 混用不用額外設定
-        'path':              str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_147_xy_conf_v_bone_att_on" / "147_best_model.pth"),
+NEW_MODEL_PATH = str(_STGCN_MODELS_DIR / "run_148_xy_conf_v_bone_att_on" / "148_best_model.pth")
+NEW_MODEL = {   # kp_ema_alpha=1.0 訓練（等同不平滑，見 0_train_gcn.py 的 dispatch：
+                # 0.0 < alpha < 1.0 才真的套用 EMA），用 smoothing_kind='none' 評估行為完全等價；
+                # infer_num_joints() 會自動從 checkpoint 偵測關節數，14/17 混用不用額外設定
+    'path':              NEW_MODEL_PATH,
+    'ema_alpha':         1.0,
+    'seq_len':           16,
+    'smoothing_kind':    'none',
+}
+
+OLD_MODELS = [
+    {   # baseline：SMOOTHING_KIND 預設值 "ema" 但 kp_ema_alpha=1.0，理由同上
+        'path':              str(_STGCN_MODELS_DIR / "run_153_xy_conf_v_bone_att_on" / "153_best_model.pth"),
         'ema_alpha':         1.0,
         'seq_len':           16,
         'smoothing_kind':    'none',
     },
 ]
 
+RUN_ONLY_ONE_MODEL = False
+
+# 實際要跑的清單：舊模型在前（第一筆＝baseline）、最新模型在最後
+HARD_MODELS = [NEW_MODEL] if RUN_ONLY_ONE_MODEL else OLD_MODELS + [NEW_MODEL]
+
+# 這幾個常數本身永遠保持定義（不要註解掉），否則下面 HARD_VIDEO_DIRS 會 NameError。
 HARD_VIDEO_WALK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\walk"
 HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\lick"
 HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
 HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake"
 HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
-HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_results\gcn_compare"
+
+# 實際要跑的行為清單（做法同 eval_pose_compare.py 的 BENCHMARK_DIRS）：只想單獨
+# 比較某個行為時，把不要的行為那一行註解掉即可；全部保留則做綜合比較。
+# 不在清單中或資料夾不存在的行為會被跳過，報表/圖表也只列出有評估到的類別。
+# --video_xxx_dir 命令列參數仍可覆蓋個別類別（包含把被註解掉的類別加回來）。
+HARD_VIDEO_DIRS = [
+    ("walk",    HARD_VIDEO_WALK_DIR),
+    ("lick",    HARD_VIDEO_LICK_DIR),
+    ("scratch", HARD_VIDEO_SCRATCH_DIR),
+    ("shake",   HARD_VIDEO_SHAKE_DIR),
+    ("stop",    HARD_VIDEO_STOP_DIR),
+]
+HARD_OUTPUT_DIR       = r"C:\ai_project\paper\cat_monitoring_system\eval_results\gcn_compare"
 
 # ── 視覺樣式：最多支援 5 個模型，一模型一色 ─────────────────────────────────
 _PALETTE = ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0', '#F44336']  # 藍/橘/綠/紫/紅
@@ -497,7 +523,11 @@ def compute_metrics(preds_by_class: dict,
         'overall': {
             'accuracy':                 float(accuracy_score(y_true, y_pred)),
             'top2_accuracy':            top2_acc,
-            'macro_f1':                 float(f1_score(y_true, y_pred, average='macro', zero_division=0)),
+            # labels 限定為有評估到的類別：只測部分類別（HARD_VIDEO_DIRS 註解掉幾類）時，
+            # 誤判到未評估類別仍算進該類的 FN，但不會多出一堆 F1=0 的空類別稀釋平均；
+            # 5 類全測時跟不指定 labels 結果完全相同。
+            'macro_f1':                 float(f1_score(y_true, y_pred, labels=evaluated,
+                                                       average='macro', zero_division=0)),
             'event_detection_rate':     event_rate,
             'prob_event_detection_rate': prob_event_rate,
         },
@@ -704,9 +734,23 @@ def print_per_video_accuracy(per_video: dict, names: list, classes: list,
         if not rows:
             continue
         cls = classes[cls_idx]
-        valid = [r['accuracy'][0] for r in rows if r['accuracy'][0] is not None]
-        mean_acc = sum(valid) / len(valid) if valid else 0.0
-        lines.append(f'  [{cls}]  baseline({names[0]}) 影片平均準確率 = {mean_acc:.1%}')
+        # 每個模型各自的影片平均準確率（逐影片準確率再取平均，每支影片權重相同，
+        # 跟 window 合併計算的 per-class accuracy 不同）；⚠ 標記仍以 baseline 為準
+        mean_accs = []
+        for mi in range(len(names)):
+            valid = [r['accuracy'][mi] for r in rows if r['accuracy'][mi] is not None]
+            mean_accs.append(sum(valid) / len(valid) if valid else None)
+        mean_acc = mean_accs[0] if mean_accs[0] is not None else 0.0
+        cells = []
+        for mi, ma in enumerate(mean_accs):
+            tag = '(baseline)' if mi == 0 and len(names) > 1 else ''
+            if ma is None:
+                cells.append(f'{names[mi]}{tag}=n/a')
+            elif mi == 0 or mean_accs[0] is None:
+                cells.append(f'{names[mi]}{tag}={ma:.1%}')
+            else:
+                cells.append(f'{names[mi]}={ma:.1%}(Δ{ma - mean_accs[0]:+.1%})')
+        lines.append(f'  [{cls}]  影片平均準確率：' + '   '.join(cells))
         for r in rows:
             cells = []
             for mi, acc in enumerate(r['accuracy']):
@@ -748,7 +792,7 @@ def save_per_video_accuracy_csv(per_video: dict, names: list, classes: list, out
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Visualizations（泛化成 N 個模型，N = 2~5）
+# Visualizations（泛化成 N 個模型，N = 1~5）
 # ═══════════════════════════════════════════════════════════════════════════
 def plot_accuracy_comparison(metrics_list, names, classes, out_path):
     """
@@ -759,8 +803,10 @@ def plot_accuracy_comparison(metrics_list, names, classes, out_path):
     每個 x 位置用 ★ 標出當前最高值的模型（可並列多個 ★）。
     """
     n_models = len(metrics_list)
-    n_cls    = len(classes)
-    x_labels = classes + ['Overall']
+    # 只畫有評估到的類別（HARD_VIDEO_DIRS 註解掉的類別不佔 x 軸，也不拉低 Overall 平均）
+    ev_idx   = [i for i in range(len(classes))
+                if any(m['per_class'][i].get('n_windows', 0) > 0 for m in metrics_list)]
+    x_labels = [classes[i] for i in ev_idx] + ['Overall']
     x        = np.arange(len(x_labels))
     w        = min(0.8 / n_models, 0.28)
     ev_min   = metrics_list[0].get('event_min_windows', EVENT_MIN_WINDOWS)
@@ -768,18 +814,18 @@ def plot_accuracy_comparison(metrics_list, names, classes, out_path):
 
     def _vals(metrics, key):
         pc  = metrics['per_class']
-        out = [pc[i].get(key, 0.0) for i in range(n_cls)]
+        out = [pc[i].get(key, 0.0) for i in ev_idx]
         if key == 'accuracy':
             out.append(metrics['overall']['accuracy'])
         else:
-            out.append(float(np.mean([pc[i].get(key, 0.0) for i in range(n_cls)])))
+            out.append(float(np.mean([pc[i].get(key, 0.0) for i in ev_idx])))
         return out
 
     def _evt(metrics):
         pc  = metrics['per_class']
-        out = [pc[i].get('event_detected', False) for i in range(n_cls)]
+        out = [pc[i].get('event_detected', False) for i in ev_idx]
         out.append(all(pc[i].get('event_detected', False)
-                       for i in range(n_cls) if pc[i].get('n_windows', 0) > 0))
+                       for i in ev_idx if pc[i].get('n_windows', 0) > 0))
         return out
 
     accs  = [_vals(m, 'accuracy')      for m in metrics_list]
@@ -817,8 +863,8 @@ def plot_accuracy_comparison(metrics_list, names, classes, out_path):
                     ax.text(bar.get_x() + bar.get_width() / 2, h + 0.012,
                             f'{h:.0%}', ha='center', va='bottom', fontsize=7)
 
-        # 每個 x 位置標出最高值的模型（可並列）
-        for i in range(len(x_labels)):
+        # 每個 x 位置標出最高值的模型（可並列）；單模型時沒有比較意義，不標
+        for i in (range(len(x_labels)) if n_models > 1 else []):
             vs = [vals_list[mi][i] for mi in range(n_models)]
             best_v = max(vs)
             for mi, v in enumerate(vs):
@@ -944,16 +990,20 @@ def plot_prob_histograms(preds_list, names, classes, out_path):
     可立即看出 Softmax collapse（機率全堆在同一處）或分布健康與否。
     """
     n_models = len(preds_list)
-    n_cls = len(classes)
-    fig, axes = plt.subplots(n_cls, n_models, figsize=(5.2 * n_models, 2.8 * n_cls), constrained_layout=True)
+    # 只畫有評估到的類別（每列一類），被 HARD_VIDEO_DIRS 略過的類別不留空白列
+    ev_idx = [i for i in range(len(classes)) if any(p.get(i) for p in preds_list)]
+    n_rows = max(len(ev_idx), 1)
+    fig, axes = plt.subplots(n_rows, n_models, figsize=(5.2 * n_models, 2.8 * n_rows),
+                             constrained_layout=True, squeeze=False)
     fig.suptitle('True-Class Probability Histogram\n(each row = one behavior class)',
                  fontsize=12, fontweight='bold')
 
     bins = np.linspace(0, 1, 21)
-    for i, cls in enumerate(classes):
+    for row, i in enumerate(ev_idx):
+        cls = classes[i]
         for j in range(n_models):
             preds, name, col = preds_list[j], names[j], _PALETTE[j]
-            ax = axes[i][j]
+            ax = axes[row][j]
             if i not in preds or not preds[i]:
                 ax.set_visible(False)
                 continue
@@ -998,6 +1048,8 @@ def save_summary_csv(metrics_list, names, classes, out_path):
 
     for i, cls in enumerate(classes):
         pcs = [m['per_class'][i] for m in metrics_list]
+        if all(p['n_windows'] == 0 for p in pcs):
+            continue   # 未評估的類別（HARD_VIDEO_DIRS 已略過）不列出
         _row(f'{cls}_accuracy',        [p['accuracy']        for p in pcs], primary=True)
         _row(f'{cls}_event_rate',      [p['event_rate']      for p in pcs])
         _row(f'{cls}_top2_accuracy',   [p['top2_accuracy']   for p in pcs])
@@ -1141,7 +1193,7 @@ def _score_models(metrics_list, names) -> tuple:
 # Final summary（泛化成 N 個模型）
 # ═══════════════════════════════════════════════════════════════════════════
 def print_final_summary(metrics_list, names):
-    """執行結束後在終端列印人類可讀的對比分析，支援 2~5 個模型。"""
+    """執行結束後在終端列印人類可讀的對比分析，支援 1~5 個模型（1 個時省略所有比較/勝負結論）。"""
     classes  = BEHAVIOR_CLASSES
     n_cls    = len(classes)
     n_models = len(metrics_list)
@@ -1160,7 +1212,7 @@ def print_final_summary(metrics_list, names):
         cells = []
         for v in vals:
             s = fmt.format(v)
-            cells.append(('*' + s) if abs(v - best) < 0.005 else (' ' + s))
+            cells.append(('*' + s) if n_models > 1 and abs(v - best) < 0.005 else (' ' + s))
         return f'  {label:<{label_w}}  ' + '  '.join(f'{c:>{col_w}}' for c in cells)
 
     def _cls_label(cls):
@@ -1182,10 +1234,14 @@ def print_final_summary(metrics_list, names):
     primary_winners  = [i for i, v in enumerate(accs) if abs(v - primary_best) < 0.005]
     primary_winner   = '=' if len(primary_winners) > 1 else names[primary_winners[0]]
 
+    # 單模型評估（只放 1 個模型）：只列效能數字，省略所有勝負/Δ/複合分數/建議
+    single = n_models == 1
+    title = ('  SINGLE-MODEL SUMMARY  (無比較對象)' if single
+             else f'  FINAL COMPARISON SUMMARY  ({n_models} models)')
     lines = [
         NL,
         f'╔{BOX}╗',
-        f'║{f"  FINAL COMPARISON SUMMARY  ({n_models} models)":^{len(BOX)}}║',
+        f'║{title:^{len(BOX)}}║',
         f'╚{BOX}╝',
         NL,
         '★★★ 主指標：Accuracy  (argmax == true label) ★★★',
@@ -1206,7 +1262,9 @@ def print_final_summary(metrics_list, names):
         _val_row('Overall', accs),
         NL,
     ]
-    if primary_winner == '=':
+    if single:
+        pass
+    elif primary_winner == '=':
         lines.append(f'  ★ 主指標結論：{len(primary_winners)} 個模型準確率並列最高')
     else:
         lines.append(f'  ★ 主指標結論：{primary_winner} 準確率最高 — 依你指定的主指標，優先選它')
@@ -1241,13 +1299,17 @@ def print_final_summary(metrics_list, names):
     composite_winners = [i for i, s in enumerate(scores) if abs(s - best_score) < 1e-9]
     composite_winner  = '=' if len(composite_winners) > 1 else names[composite_winners[0]]
     score_str = '  '.join(f'{names[i]}={s:.1f}' for i, s in enumerate(scores))
-    lines += [f'  [參考] Composite scores: {score_str}  (/ {max_score:.0f} pts)  → {composite_winner}', NL]
+    if not single:
+        lines += [f'  [參考] Composite scores: {score_str}  (/ {max_score:.0f} pts)  → {composite_winner}', NL]
 
     # ── Per-class accuracy breakdown ──
     lines += ['● Per-Class Accuracy  (argmax == true label)', f'  {SEP}']
     class_wins = [0.0] * n_models
     class_ranges = []
-    for i, cls in enumerate(classes):
+    # 只看有評估到的類別（HARD_VIDEO_DIRS 註解掉的類別不列出，也不當成 worst）
+    ev_idx = [i for i in range(n_cls) if any(per[i]['n_windows'] > 0 for per in per_list)]
+    for i in ev_idx:
+        cls = classes[i]
         vals = [per[i]['accuracy'] for per in per_list]
         best = max(vals)
         winners = [j for j, v in enumerate(vals) if abs(v - best) < 0.005]
@@ -1256,10 +1318,11 @@ def print_final_summary(metrics_list, names):
         class_ranges.append((max(vals) - min(vals), cls, vals))
         lines.append(_val_row(_cls_label(cls), vals))
     lines.append(NL)
-    n_evaluated = sum(1 for i in range(n_cls) if per_list[0][i]['n_windows'] > 0)
-    wins_str = '   '.join(f'{names[j]}: {class_wins[j]:.1f}/{n_evaluated}' for j in range(n_models))
-    lines.append(f'  Class wins → {wins_str}')
-    lines.append(NL)
+    if not single:
+        n_evaluated = len(ev_idx)
+        wins_str = '   '.join(f'{names[j]}: {class_wins[j]:.1f}/{n_evaluated}' for j in range(n_models))
+        lines.append(f'  Class wins → {wins_str}')
+        lines.append(NL)
 
     # ── Per-Class Accuracy Δ vs baseline（names[0]）──────────────────────────
     # 判斷「有沒有改善」用這張表：對 PARTIAL_COVERAGE_CLASSES（見常數定義）而言，
@@ -1283,25 +1346,33 @@ def print_final_summary(metrics_list, names):
 
     # ── Per-class avg true-class probability ──
     lines += ['● Avg True-Class Probability  (model conviction)', f'  {SEP}']
-    for i, cls in enumerate(classes):
+    for i in ev_idx:
         vals = [per[i]['avg_true_prob'] for per in per_list]
-        lines.append(_val_row(cls, vals))
+        lines.append(_val_row(classes[i], vals))
     lines.append(NL)
 
     # ── Biggest gap class ──
     class_ranges.sort(reverse=True)
     biggest_gap, biggest_cls, biggest_vals = class_ranges[0]
     gap_winner = names[int(np.argmax(biggest_vals))]
-    lines.append(f'● Biggest gap: [{biggest_cls}]  Δ={biggest_gap:.1%}  ({gap_winner} leads)')
+    if not single:
+        lines += [f'● Biggest gap: [{biggest_cls}]  Δ={biggest_gap:.1%}  ({gap_winner} leads)', NL]
 
     # ── Per-model profile ──
-    lines += [NL, '● Per-model profile']
+    lines += ['● Per-model profile']
     for j, name in enumerate(names):
-        accs_j  = [(per_list[j][i]['accuracy'], classes[i]) for i in range(n_cls)]
+        accs_j  = [(per_list[j][i]['accuracy'], classes[i]) for i in ev_idx]
         best_j  = max(accs_j)
         worst_j = min(accs_j)
         lines.append(f'  {name:<20}  best={best_j[1]}({best_j[0]:.1%})  worst={worst_j[1]}({worst_j[0]:.1%})')
     lines.append(NL)
+
+    if single:
+        lines.append('  （單模型評估：沒有比較對象，不做勝負判定／複合分數／部署建議。'
+                     '要跟舊模型比，把 RUN_ONLY_ONE_MODEL 改回 False（比較對象寫在 OLD_MODELS）。）')
+        lines.append(NL)
+        print('\n'.join(lines))
+        return
 
     # ── 加權複合計分明細 ──
     lines += ['● [參考] Composite Score  (Weighted, winner-take-all — 非主指標)', f'  {SEP}']
@@ -1368,10 +1439,11 @@ def append_run_history(out_root: Path, run_tag: str, labels: list, total_elapsed
 def main():
     run_start_time = time.time()
     parser = argparse.ArgumentParser(
-        description='Compare 2~5 ST-GCN models on behavior video folders.'
+        description='Compare 1~5 ST-GCN models on behavior video folders (1 = single-model evaluation).'
     )
     parser.add_argument('--models', nargs='+', default=None,
-                        help='2~5 個模型權重路徑；不指定則使用程式內 HARD_MODELS 預設清單')
+                        help='1~5 個模型權重路徑（1 個＝單模型評估）；不指定則使用程式內 '
+                             'OLD_MODELS + NEW_MODEL_PATH（RUN_ONLY_ONE_MODEL=True 時只有 NEW_MODEL_PATH）')
     parser.add_argument('--names', nargs='+', default=None,
                         help='對應 --models 的顯示名稱（需與 --models 數量一致）；省略則自動從檔名推導')
     parser.add_argument('--ema_alphas', nargs='+', type=float, default=None,
@@ -1386,11 +1458,13 @@ def main():
                         help='對應 --models 的 Kalman process_noise（只有該模型 smoothing_kind=kalman 時才會用到）；省略則全部使用 90.0')
     parser.add_argument('--kalman_measurement_noises', nargs='+', type=float, default=None,
                         help='對應 --models 的 Kalman measurement_noise（只有該模型 smoothing_kind=kalman 時才會用到）；省略則全部使用 70.0')
-    parser.add_argument('--video_walk_dir',      default=HARD_VIDEO_WALK_DIR)
-    parser.add_argument('--video_lick_dir',      default=HARD_VIDEO_LICK_DIR)
-    parser.add_argument('--video_scratch_dir',   default=HARD_VIDEO_SCRATCH_DIR)
-    parser.add_argument('--video_shake_dir',     default=HARD_VIDEO_SHAKE_DIR)
-    parser.add_argument('--video_stop_dir',      default=HARD_VIDEO_STOP_DIR,
+    # 預設值取自 HARD_VIDEO_DIRS；該類別在清單中被註解掉時預設為空字串（跳過）
+    _dir_defaults = dict(HARD_VIDEO_DIRS)
+    parser.add_argument('--video_walk_dir',      default=_dir_defaults.get('walk', ''))
+    parser.add_argument('--video_lick_dir',      default=_dir_defaults.get('lick', ''))
+    parser.add_argument('--video_scratch_dir',   default=_dir_defaults.get('scratch', ''))
+    parser.add_argument('--video_shake_dir',     default=_dir_defaults.get('shake', ''))
+    parser.add_argument('--video_stop_dir',      default=_dir_defaults.get('stop', ''),
                         help='stop 類別資料夾（留空則跳過）')
     parser.add_argument('--yolo',                default=DEFAULT_YOLO)
     parser.add_argument('--imgsz',               type=int,   default=DEFAULT_IMGSZ)
@@ -1400,7 +1474,7 @@ def main():
     parser.add_argument('--device',              default=DEFAULT_DEVICE)
     args = parser.parse_args()
 
-    # ── 組出 2~5 個模型的設定清單 ────────────────────────────────────────────
+    # ── 組出 1~5 個模型的設定清單 ────────────────────────────────────────────
     if args.models:
         n = len(args.models)
         names_in   = args.names       if args.names       else [None] * n
@@ -1422,8 +1496,8 @@ def main():
     else:
         models_cfg = HARD_MODELS
 
-    if not (2 <= len(models_cfg) <= 5):
-        parser.error(f'需要 2~5 個模型，目前是 {len(models_cfg)} 個')
+    if not (1 <= len(models_cfg) <= 5):
+        parser.error(f'需要 1~5 個模型，目前是 {len(models_cfg)} 個')
 
     n_models = len(models_cfg)
     names = [cfg.get('name') or _short_name(cfg['path']) for cfg in models_cfg]
@@ -1503,8 +1577,10 @@ def main():
                if not p or not Path(p).is_dir()]
     if skipped:
         for cls_name, p in skipped:
-            reason = '（路徑未設定）' if not p else f'（找不到資料夾: {p}）'
+            reason = '（未列入 HARD_VIDEO_DIRS／路徑未設定）' if not p else f'（找不到資料夾: {p}）'
             print(f"  ⚠ 跳過 [{cls_name}] {reason}")
+    if not dirs:
+        sys.exit('錯誤：沒有任何可用的行為資料夾，HARD_VIDEO_DIRS 至少要保留一個行為。')
 
     # ── Inference ──────────────────────────────────────────────────────────
     # preds_list[model_idx][cls_idx] = [[pred_dict, ...], ...]  （外層 = 每部影片）
@@ -1536,6 +1612,9 @@ def main():
             for mi in range(n_models)
         )
         print(f"  → {nv} videos  |  {counts_str} windows")
+
+    if not any(p for preds in preds_list for vids in preds.values() for p in vids):
+        sys.exit('錯誤：所有行為資料夾都沒有產生任何 window（找不到影片或影片太短），無法計算指標。')
 
     # ── Compute metrics ─────────────────────────────────────────────────────
     metrics_list = [compute_metrics(preds) for preds in preds_list]
@@ -1587,11 +1666,13 @@ def main():
     save_summary_csv(
         metrics_list, labels, BEHAVIOR_CLASSES, out_dir / 'comparison_summary.csv'
     )
-    mcnemar_results = compute_mcnemar_pairs(preds_list, evaluated_cls)
-    save_mcnemar_csv(
-        mcnemar_results, labels, BEHAVIOR_CLASSES, evaluated_cls,
-        out_dir / 'mcnemar_test.csv'
-    )
+    # McNemar 是兩兩配對檢定，單模型評估時沒有對象可比，略過
+    mcnemar_results = compute_mcnemar_pairs(preds_list, evaluated_cls) if n_models >= 2 else None
+    if mcnemar_results is not None:
+        save_mcnemar_csv(
+            mcnemar_results, labels, BEHAVIOR_CLASSES, evaluated_cls,
+            out_dir / 'mcnemar_test.csv'
+        )
     per_video_acc = compute_per_video_accuracy(preds_list, video_names, evaluated_cls)
     save_per_video_accuracy_csv(
         per_video_acc, labels, BEHAVIOR_CLASSES, out_dir / 'per_video_accuracy.csv'
@@ -1611,7 +1692,8 @@ def main():
     print(f'\n✓ All results saved to: {out_dir}')
 
     print_final_summary(metrics_list, labels)
-    print_mcnemar_summary(mcnemar_results, labels, BEHAVIOR_CLASSES, evaluated_cls)
+    if mcnemar_results is not None:
+        print_mcnemar_summary(mcnemar_results, labels, BEHAVIOR_CLASSES, evaluated_cls)
     print_per_video_accuracy(per_video_acc, labels, BEHAVIOR_CLASSES)
 
     total_elapsed_sec = time.time() - run_start_time

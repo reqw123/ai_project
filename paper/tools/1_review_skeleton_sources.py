@@ -36,7 +36,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
-from utils.skeleton_splits import SPLITS, UNASSIGNED, iter_skeleton_files, split_of, class_folder_of  # noqa: E402
+from utils.skeleton_splits import SPLITS, UNASSIGNED, VIDEO_ROOT, iter_skeleton_files, split_of, class_folder_of  # noqa: E402
 from utils.video_name_overlay import draw_video_name_label  # noqa: E402
 from utils.constants import (  # noqa: E402
     EAR_DISTANCE_SKELETON_EDGES, EAR_DISTANCE_EDGE_COLORS, EAR_DISTANCE_KP_COLORS,
@@ -184,8 +184,12 @@ def find_video(item):
     p = item["video_path"]
     if p and os.path.exists(p):
         return p
-    # 影片被搬走時：到原本資料夾的上一層，依類別資料夾找同名檔
+    # 影片被搬走時：先在 模型專用/<split>/<類別>/ 依檔名找（唯一一支才用；正常情況下
+    # gcn_dataset_manager 搬動時會同步更新 JSON，不會走到這裡），再到原本資料夾的上一層找
     name = Path(p).name if p else f"{item['id']}.mp4"
+    cands = list(VIDEO_ROOT.glob(f"*/*/{name}")) if VIDEO_ROOT.exists() else []
+    if len(cands) == 1:
+        return str(cands[0])
     base = Path(p).parent.parent if p else None
     if base and base.exists():
         for cand in [base / item["cls"] / name] + list(base.glob(f"*/{name}")):

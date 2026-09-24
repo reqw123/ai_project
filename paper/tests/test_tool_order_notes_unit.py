@@ -169,7 +169,7 @@ def test_dialog_edit_note_and_save(tk_root):
 
 def test_dialog_note_length_is_capped(tk_root):
     def script(dlg, lb, entry, save):
-        _type(entry, "一二三四五六七八九十甲乙丙丁戊")
+        _type(entry, "一二三四五六七八九十" * 3)   # 一定超過上限（不管上限調成多少都 < 30）
         assert len(entry.get()) == tool_order.NOTE_MAX_LEN
         save()
 

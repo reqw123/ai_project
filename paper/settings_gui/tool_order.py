@@ -38,7 +38,7 @@ from settings_gui.widgets import _styled_button
 
 _ORDER_PATH = Path(__file__).resolve().parent / "tool_order.json"
 
-NOTE_MAX_LEN = 12          # 備註字數上限（設計上只是「簡單造詞提醒」，約 10 字以內）
+NOTE_MAX_LEN = 16          # 備註字數上限：一句話說清楚腳本在做什麼（2026-09-24 由 12 放寬，12 字寫不下輸出格式等關鍵資訊）
 NOTE_SEP = "  ── "        # 下拉選單裡「名稱」與「備註」之間的分隔符
 
 _DIALOG_BG = "#f4f6f8"

@@ -32,10 +32,14 @@ import numpy as np
 if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')  # Windows 主控台預設編碼常是 cp950，會把中文印成亂碼
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cat_monitoring_system"))
+from utils.skeleton_splits import VIDEO_ROOT, video_class_folders  # noqa: E402
+
 BEHAVIOR_ORDER = ['walk', 'lick', 'scratch', 'shake', 'stop']
 
-# 訓練影片來源資料夾（跟 tools/train_data/0_dataset_collect.py 的 VIDEO_FOLDERS 同一批）
-DEFAULT_VIDEO_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
+# 訓練影片來源資料夾（跟 tools/train_data/0_dataset_collect.py 的 VIDEO_FOLDERS 同一批）：
+# 底下是 <split>/<類別>/（train/val/test 合併統計）；舊排法 <類別>/ 也支援
+DEFAULT_VIDEO_BASE = str(VIDEO_ROOT)
 DEFAULT_OUTPUT_DIR = r"C:\ai_project\paper\cat_monitoring_system\eval_results\lighting_distribution"
 
 # 亮度分級門檻（HSV V channel 0-255 均值），純粗略分級用來看分布形狀
@@ -84,11 +88,11 @@ def scan_lighting(video_base: str, n_samples: int):
     base = Path(video_base)
     results = defaultdict(list)
     for cls in BEHAVIOR_ORDER:
-        folder = base / cls
-        if not folder.is_dir():
-            print(f"[Warning] 資料夾不存在，跳過: {folder}")
+        folders = video_class_folders(root=base, classes=cls)
+        if not folders:
+            print(f"[Warning] 找不到 {cls} 的資料夾（{base}/<split>/{cls}/），跳過")
             continue
-        videos = sorted(folder.glob("*.mp4"))
+        videos = sorted((vp for d in folders for vp in Path(d).glob("*.mp4")), key=lambda v: v.name)
         for vp in videos:
             r = sample_video_brightness(vp, n_samples)
             if r is not None:
@@ -181,7 +185,7 @@ def print_and_save_report(results: dict, dark_threshold: float, output_dir: str)
 def main():
     parser = argparse.ArgumentParser(description="檢查訓練影片光照分布，記錄現階段亮度狀況。")
     parser.add_argument('--video_base', default=DEFAULT_VIDEO_BASE,
-                        help="訓練影片來源根目錄（底下要有 walk/lick/scratch/shake/stop 五個子資料夾）")
+                        help="訓練影片來源根目錄（底下是 train/val/test/<類別>/，或舊排法的 <類別>/）")
     parser.add_argument('--output', default=DEFAULT_OUTPUT_DIR)
     parser.add_argument('--n_samples', type=int, default=5, help="每支影片均勻抽樣幾幀計算亮度")
     parser.add_argument('--dark_threshold', type=float, default=60.0,

@@ -46,7 +46,9 @@ from models.stgcn_model import (
 from models.keypoint_kalman import kalman_smooth_sequence
 from utils.skeleton_splits import (
     iter_skeleton_files, split_of, has_split_layout, SPLITS, UNASSIGNED,
+    find_unmarked_skeletons, class_folder_of,
 )
+from utils.console_alert import alert_box
 
 # ==================== Path Config（絕對路徑統一於此管理） ====================
 # 設定檔絕對路徑集中在此常數；可用 STGCN_CONFIG_PATH 環境變數覆寫
@@ -919,6 +921,65 @@ def _legacy_random_split(full_dataset, verbose=True):
     return train_indices, val_indices
 
 
+_marked_folders_checked = set()
+
+
+def require_all_marked(folder=None):
+    """每筆骨架都必須有標記區段（片段或整段）才准訓練；有尚未標記的檔案直接中止。
+    標記方式見 tools/train_data/0_dataset_collect.py 模式 2。同一資料夾每個行程只查一次。"""
+    folder = str(folder or SKELETON_DATA_FOLDER)
+    if folder in _marked_folders_checked:
+        return
+    unmarked = find_unmarked_skeletons(folder)
+    if unmarked:
+        # 依類別分組列出；讀不到的檔案另外一組，原因不同、處理方式也不同
+        groups = {}
+        for path, reason in unmarked:
+            key = class_folder_of(path.stem) if reason == "沒有標記區段" else "讀取失敗"
+            groups.setdefault(key, []).append(f"{split_of(path)}/{path.stem}")
+        sections = [(f"{key}：{len(names)} 筆", [", ".join(names)])
+                    for key, names in sorted(groups.items())]
+        alert_box(f"拒絕訓練：{len(unmarked)} 筆骨架尚未標記區段（片段或整段）", sections,
+                  footer="-> 用 tools/train_data/0_dataset_collect.py 模式 2："
+                         "u 列出、b 批次勾選整段有效，或逐筆標記片段。",
+                  pause=False)   # 程式接著就結束，警告會留在畫面最後；不暫停，消融實驗才不會卡住
+        raise SystemExit(1)
+    _marked_folders_checked.add(folder)
+
+
+_split_folders_checked = set()
+
+
+def require_split_consistency(folder=None):
+    """在檔案總管手動拖過骨架／影片後，切分可能跟規則對不上；有問題就用警告框拒絕訓練。
+    檢查邏輯在 gcn_dataset_manager.check_split_consistency()（跟切分管理視窗共用同一套固定名單與
+    重複組判斷）。同一資料夾每個行程只查一次。"""
+    folder = str(folder or SKELETON_DATA_FOLDER)
+    if folder in _split_folders_checked:
+        return
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "gcn_dataset_manager", Path(__file__).resolve().parent / "gcn_dataset_manager.py")
+    manager = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(manager)
+    print("檢查 train/val/test 切分（手動搬檔、固定名單、重複組、影片位置、類別資料夾）...")
+    issues = manager.check_split_consistency(folder)
+
+    sections, notes = manager.split_issue_report(issues, folder)
+    for title, items in notes:
+        print(f"  ⚠ 提醒（不影響訓練）：{title}，{len(items)} 筆")
+        for line in manager.issue_listing(items, 10):
+            print(f"      {line}")
+    if sections:
+        alert_box("拒絕訓練：train/val/test 切分有問題", sections,
+                  footer="多半是在檔案總管手動搬過檔案。切分請一律在 gcn_dataset_manager.py 模式 2 "
+                         "視窗裡調整，骨架和影片會一起搬、也會遵守固定名單與重複組。",
+                  pause=False)   # 程式接著就結束，警告會留在畫面最後；不暫停，消融實驗才不會卡住
+        raise SystemExit(1)
+    print("  ✓ 切分一致")
+    _split_folders_checked.add(folder)
+
+
 def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
                 shared_models_dir=None, kp_ema_alpha=None, seq_len=None,
                 batch_size=None, learning_rate=None,
@@ -942,6 +1003,8 @@ def train_model(feature_mode=FEATURE_MODE, run_name=None, run_number=None,
     Kalman 參數，只有 params_snapshot.json 的 effective_params 裡看得到
     完整記錄——之後要正式做 Kalman 消融實驗時，這段標記邏輯需要一併擴充。
     """
+    require_all_marked()
+    require_split_consistency()
     in_channels = get_in_channels_for_mode(feature_mode)
     eff_alpha = kp_ema_alpha if kp_ema_alpha is not None else KP_EMA_ALPHA
     alpha_tag = f"_ema{eff_alpha:.2f}" if (eff_alpha is not None and eff_alpha < 1.0) else ""
@@ -2658,6 +2721,8 @@ def run_regularization_ablation(configs=None):
 
 # ==================== Main Entry Point ====================
 if __name__ == "__main__":
+    require_all_marked()
+    require_split_consistency()
     ran = False
     if RUN_KP_EMA_ABLATION:
         run_kp_ema_ablation()

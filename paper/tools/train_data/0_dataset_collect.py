@@ -5,14 +5,16 @@
 #
 #  模式  函式                              作用
 #  ────  ────────────────────────────────  ──────────────────────────────
-#  1     process_all_videos()              批次推論 VIDEO_FOLDERS 五個資料夾
+#  1     process_all_videos()              批次推論 VIDEO_FOLDERS（模型專用/<split>/<類別>/）
 #                                           影片 (YOLO-Pose)，增量、跳過已有
-#                                           JSON，依資料夾名稱自動標記整段
-#                                           （可直接訓練，不需再標註）
+#                                           JSON，frame label 先填資料夾名稱；
+#                                           新檔尚未標記，需到模式 2 勾選整段
+#                                           或逐段標記後才能訓練
 #
 #  2     manual_action_labeling()          連續手動標記 OUTPUT_FOLDER 內多個
-#                                           skeleton JSON，適用影片含多種行
-#                                           為、需精確逐段標記事件區間的情況
+#                                           skeleton JSON；預設只列尚未確認，
+#                                           支援類別/檔名篩選、分頁與批次勾選
+#                                           整段有效，也可逐段標記事件區間
 #
 #  3     reextract_preserve_labels()       重新推論骨架（換新模型後用），依
 #                                           timestamp 對應還原既有
@@ -58,8 +60,8 @@
 #
 #  狀態  說明                                    frame label        需處理
 #  ────  ──────────────────────────────────────  ─────────────────  ──────
-#  1     批次提取（process_all_videos），          全段 = 資料夾名稱   否
-#        從未開啟標注模式                          (walk/lick/…)
+#  1     批次提取（process_all_videos），          全段 = 資料夾名稱   是（尚未標記，
+#        從未開啟標注模式                          (walk/lick/…)       訓練會被擋下）
 #
 #  2     開啟標注模式，有標記至少一個區間           區間內 = 行為標籤   否
 #                                                其餘幀 = unannotated
@@ -70,6 +72,12 @@
 #        不覆寫 frame label）
 # ============================================================
 
+# 2026-09-24 起每筆骨架都必須有標記區段（片段或整段）；判斷規則在
+# utils/skeleton_splits.py 的 annotation_state()，0_train_gcn.py 遇到尚未標記的檔案會拒絕訓練。
+# 人工確認紀錄：annotation_review；舊檔有 action_intervals 即視為已標記。
+# 批次整段確認寫入 [0, len(frames)-1] 區間及每幀 label；手動清空記為 manual_empty。
+# 模式 2：u 尚未確認 / a 清除篩選並展開全部 / c 類別 / /關鍵字 / b 批次勾選 / n,p 翻頁。
+
 import os
 import re
 import json
@@ -77,6 +85,8 @@ import time
 import cv2
 import numpy as np
 import shutil
+import tempfile
+from datetime import datetime
 from pathlib import Path
 from ultralytics import YOLO
 from tqdm import tqdm
@@ -96,15 +106,12 @@ def _natural_sort_key(path):
 
 # ==================== Configuration ====================
 # ==================== Configuration ====================
-VIDEO_FOLDERS = [
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\walk",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\lick",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\scratch",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\shake",
-    r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用\stop",
-]
+# VIDEO_FOLDERS（影片來源）：模型專用/<split>/<類別>/，跟 skeletons/ 同一套 train/val/test
+# 切分、影片的 split 永遠跟它的骨架一致（gcn_dataset_manager 搬骨架時影片跟著搬）。
+# 清單由 skeleton_splits.video_class_folders() 列出所有存在的類別資料夾，在下方 import
+# 之後設定；類別＝影片所在資料夾名稱。新影片放進哪個 模型專用/<split>/<類別>/，骨架就放同一個 split。
 # 骨架資料集根目錄；底下分 train/ val/ test/，每個再分類別資料夾（見 cat_monitoring_system/utils/
-# skeleton_splits.py）。新抽的骨架寫進 train/<類別>/，已存在的檔案重抽時寫回原本所在的子資料夾，
+# skeleton_splits.py）。新抽的骨架寫進影片所在的 split，已存在的檔案重抽時寫回原本所在的子資料夾，
 # 切分調整用 tools/gcn_dataset_manager.py（模式 2）。
 OUTPUT_FOLDER = r"C:\ai_project\paper\skeletons/"
 MODEL_PATH = str(Path(__file__).resolve().parents[3] / "yolo_models" / "v11s_152.pt")  # You can use yolov8s-pose.pt, yolov8m-pose.pt for better accuracy
@@ -121,7 +128,11 @@ sys.path.append(str(Path(__file__).parent.parent.parent))  # config.py 在 paper
 from config import YOLOConfig as _YOLOConfig
 from cat_monitoring_system.utils.skeleton_splits import (
     SPLITS, iter_skeleton_files, skeleton_path_for, find_skeleton, split_of,
+    annotation_state as _annotation_state, find_unmarked_skeletons, format_unmarked,
+    video_class_folders, split_of_video,
 )
+from cat_monitoring_system.utils.console_alert import alert_box as _alert_box
+VIDEO_FOLDERS = video_class_folders()   # 見上方 Configuration 的說明
 IMGSZ = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（設定視窗 yolo.image_size／環境變數 CAT_MONITORING_YOLO_IMAGE_SIZE，預設 640）
 CONF_THRESHOLD = 0.5
 KP_CONF_THRESHOLD = 0.5
@@ -199,9 +210,9 @@ def process_all_videos():
     if skip_list:
         print("  [Skip]", "  ".join(v.name for v in skip_list))
     if todo_list:
-        print("  [Todo]")
+        print("  [Todo]（骨架放到影片所在的 split）")
         for v in todo_list:
-            print(f"    {v.name}")
+            print(f"    {v.name}  -> skeletons/{split_of_video(v) or 'train'}/")
 
     # ── 步驟 2：統計現有 skeleton 資料夾各類別數量 ────────────────────────────
     from collections import Counter
@@ -241,7 +252,7 @@ def process_all_videos():
     for idx, video_path in enumerate(todo_list, 1):
         print(f"[{idx}/{len(todo_list)}] Processing: {video_path.name}")
         video_id    = video_path.stem
-        output_path = skeleton_path_for(OUTPUT_FOLDER, video_id)
+        output_path = skeleton_path_for(OUTPUT_FOLDER, video_id, split=split_of_video(video_path))
 
         # 從資料夾名稱取得行為標籤（walk/lick/scratch/shake/stop）
         label = video_path.parent.name.lower()
@@ -778,7 +789,7 @@ def process_single_video():
         "conf_threshold": CONF_THRESHOLD,
         "kp_conf_threshold": KP_CONF_THRESHOLD
     }
-    output_path = skeleton_path_for(OUTPUT_FOLDER, video_id)
+    output_path = skeleton_path_for(OUTPUT_FOLDER, video_id, split=split_of_video(video_path))
     save_skeleton_data(skeleton_data, output_path, video_metadata)
     print(f"\n✓ Skeleton JSON 已儲存: {output_path}\n可直接用於手動標註模式。\n")
 
@@ -853,130 +864,374 @@ _ANNOT_EDGE_COLORS = [
 ]
 
 
-def _list_json_files_menu(folder: str, last_annotated: str = None):
-    """
-    在終端列出 folder 內所有 skeleton JSON，依行為關鍵字分組顯示標注進度。
-    比對失敗的檔案歸入「未分類」群組（不捨棄）。
-    回傳選中的路徑字串；q 或無可選時回傳 None。
-    """
-    p = Path(folder)
-    if not p.exists():
-        print(f"[Error] 資料夾不存在: {folder}")
-        return None
+# 狀態判斷共用 skeleton_splits.annotation_state()，訓練前檢查用的是同一套規則。
+_ANNOTATION_STATUS_TEXT = {
+    'pending': '尚未人工標記／確認',
+    'full_clip': '已確認整段有效',
+    'manual_intervals': '已手動標記區間',
+    'manual_empty': '已人工清空（無有效區間）',
+    'legacy_intervals': '已有區間標記（舊資料）',
+}
 
-    json_files = sorted(iter_skeleton_files(p), key=_natural_sort_key)
-    if not json_files:
-        print(f"[Error] 找不到任何 JSON 檔案: {folder}")
-        return None
 
-    # 輕量掃描：只讀 action_intervals 與 total_frames
-    file_infos = []
-    for jf in json_files:
-        info = {'path': jf, 'n_intervals': 0, 'total_frames': 0, 'label': '', 'video': ''}
+def _review_record(method, action=None):
+    result = {'status': 'reviewed', 'method': method,
+              'reviewed_at': datetime.now().astimezone().isoformat(timespec='seconds')}
+    if action is not None:
+        result['action'] = action
+    return result
+
+
+def _atomic_write_json(path, data):
+    """在同目錄寫完暫存檔才替換，避免中斷留下半份 JSON。"""
+    path = Path(path)
+    fd, temporary = tempfile.mkstemp(prefix='.' + path.stem + '.', suffix='.tmp',
+                                     dir=str(path.parent))
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _whole_clip_action(data, path):
+    """只有能確定單一行為時才允許批次整段確認；衝突資料改由人工檢查。"""
+    frames = data.get('frames', [])
+    if not isinstance(frames, list) or not frames or not all(isinstance(f, dict) for f in frames):
+        return None, '沒有可標記的 frames'
+    meta = data.get('video_metadata') or {}
+    hints = [Path(path).parent.name.lower(), str(meta.get('label', '')).lower(),
+             _parse_behavior(Path(path).stem)]
+    actions = {a for a in hints if a in _BEHAVIOR_ORDER}
+    frame_labels = {f.get('label') for f in frames} - {None, '', 'unannotated'}
+    if not frame_labels and any(f.get('label') == 'unannotated' for f in frames):
+        # 舊版清空標記後會留下全 unannotated 的檔案，可能是刻意清掉，不能批次救回。
+        return None, '全部幀都是 unannotated（可能曾人工清空），請逐檔確認'
+    if frame_labels - set(_BEHAVIOR_ORDER):
+        return None, '含無法辨識的幀標籤'
+    actions.update(frame_labels)
+    if len(actions) != 1:
+        return None, '類別不明或標籤衝突，請先逐檔檢查'
+    return next(iter(actions)), ''
+
+
+def _scan_annotation_files(folder):
+    infos = []
+    for path in sorted(iter_skeleton_files(folder), key=_natural_sort_key):
+        info = {'path': path, 'behavior': _parse_behavior(path.stem) or 'unknown',
+                'state': 'pending', 'n_intervals': 0, 'total_frames': 0,
+                'action': None, 'error': '', 'batch_reason': ''}
         try:
-            with open(jf, 'r', encoding='utf-8') as f:
-                d = json.load(f)
-            info['n_intervals']  = len(d.get('action_intervals', []))
-            info['total_frames'] = d.get('total_frames', len(d.get('frames', [])))
-            meta = d.get('video_metadata', {})
-            info['label']  = meta.get('label', '') or \
-                             (d['frames'][0].get('label', '') if d.get('frames') else '')
-            info['video']  = Path(meta.get('video_filename', '')).name
-        except Exception:
-            pass
-        # 從檔名抽取行為關鍵字，比對失敗的放入 'unknown'（不捨棄）
-        info['behavior'] = _parse_behavior(jf.stem) or 'unknown'
-        file_infos.append(info)
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            info['state'] = _annotation_state(data)
+            info['n_intervals'] = len(data.get('action_intervals') or [])
+            info['total_frames'] = len(data.get('frames', []))
+            info['action'], info['batch_reason'] = _whole_clip_action(data, path)
+            info['behavior'] = info['action'] or info['behavior']
+        except Exception as exc:
+            info['error'] = str(exc)
+        infos.append(info)
+    order = {b: i for i, b in enumerate(_BEHAVIOR_ORDER + ['unknown'])}
+    return sorted(infos, key=lambda fi: (order[fi['behavior']], _natural_sort_key(fi['path'])))
 
-    # 依行為分組（保留順序：walk/lick/scratch/shake/stop/unknown）
-    groups = {b: [] for b in _BEHAVIOR_ORDER}
-    groups['unknown'] = []
-    for fi in file_infos:
-        groups[fi['behavior']].append(fi)
 
-    total  = len(file_infos)
-    n_done = sum(1 for fi in file_infos if fi['n_intervals'] > 0)
-    sep    = '─' * 72
+def _filter_annotation_files(infos, state):
+    keyword = state.get('keyword', '').casefold()
+    # 「尚未標記」清單要把這次工作階段剛標好的檔案留在原位（前面顯示 ✓），
+    # 否則每標一筆就從清單消失、後面的流水號全部往前移，很難對照。按 u / r 才會真的拿掉。
+    sticky = state.get('sticky', set())
+    return [fi for fi in infos
+            if (not state.get('pending_only', True) or fi['state'] == 'pending'
+                or str(fi['path']) in sticky)
+            and (state.get('behavior', 'all') == 'all' or fi['behavior'] == state['behavior'])
+            and keyword in fi['path'].name.casefold()]
 
-    # 計算上次標注的全域索引
-    last_idx = None
-    last_name = Path(last_annotated).name if last_annotated else None
 
-    print(f"\n{'='*72}")
-    print(f"  Annotation file list   {folder}")
-    print(f"  總進度: {n_done}/{total} 已完成  ({total - n_done} 待標注)")
+def _mark_whole_clip(json_path, expected_action):
+    """只處理仍未人工確認的檔案；每次寫入前重新讀取、檢查。"""
+    path = Path(json_path)
+    with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    if _annotation_state(data) != 'pending':
+        raise ValueError('已有人工標記／確認，已保留原檔')
+    action, reason = _whole_clip_action(data, path)
+    if not action or action != expected_action:
+        raise ValueError(reason or '類別已改變，請重新載入清單')
+    frames = data['frames']
+    for frame in frames:
+        frame['label'] = action
+    data['total_frames'] = len(frames)
+    data['action_intervals'] = [{'action': action, 'start': 0, 'end': len(frames) - 1}]
+    data['annotation_review'] = _review_record('full_clip', action)
+    _atomic_write_json(path, data)
 
-    # 全域流水號（1-based），讓使用者直接輸入
-    global_idx = 0
-    ordered_flat = []   # [(global_1based, fi), ...]
 
-    for behavior in list(_BEHAVIOR_ORDER) + ['unknown']:
-        grp = groups[behavior]
-        if not grp:
-            continue
+def _parse_batch_numbers(raw, count):
+    """終端備援選取；任何錯誤都拒絕整次輸入，避免部分選取造成誤會。"""
+    if raw.lower() == 'all':
+        return set(range(count))
+    chosen = set()
+    for token in raw.replace('，', ',').split(','):
+        token = token.strip()
+        if not re.fullmatch(r'\d+(?:-\d+)?', token):
+            raise ValueError('請輸入編號、範圍（例如 1,3-5）或 all')
+        ends = [int(x) for x in token.split('-')]
+        start, end = min(ends), max(ends)
+        if start < 1 or end > count:
+            raise ValueError(f'編號必須介於 1～{count}')
+        chosen.update(range(start - 1, end))
+    return chosen
 
-        g_done  = sum(1 for fi in grp if fi['n_intervals'] > 0)
-        g_total = len(grp)
 
-        # 各切分支數放在群組標題列（有 train/val/test 子資料夾時才顯示），
-        # 每行在行尾標註所屬切分，不干擾檔名閱讀
+def _choose_whole_clips(candidates):
+    """可捲動的批次勾選視窗；無 Tk 顯示環境時使用終端多選。"""
+    try:
+        import tkinter as tk
+        from tkinter import ttk, messagebox
+        root = tk.Tk()
+    except (ImportError, RuntimeError) as exc:
+        print(f'  無法開啟勾選視窗，改用終端多選：{exc}')
+        root = None
+    except Exception as exc:
+        # 包含無 DISPLAY / Windows Tcl 安裝不完整的 TclError。
+        print(f'  無法開啟勾選視窗，改用終端多選：{exc}')
+        root = None
+    if root is None:
+        for i, fi in enumerate(candidates, 1):
+            print(f"  [ ] {i:3d}. {fi['path'].name} → {fi['action']}  [{split_of(fi['path'])}]")
+        while True:
+            raw = input('  勾選編號 1,3-5 / all 全選 / q 取消：').strip()
+            if not raw or raw.lower() == 'q':
+                return []
+            try:
+                picked = [candidates[i] for i in sorted(_parse_batch_numbers(raw, len(candidates)))]
+                break
+            except ValueError as exc:
+                print(f'  {exc}')
+        print('  本次將整段標記：')
+        for fi in picked:
+            print(f"    [x] {fi['path']} → {fi['action']}")
+        ok = input(f'  共 {len(picked)} 筆；輸入 ok 寫入，其他輸入取消：').strip().lower()
+        return picked if ok == 'ok' else []
+
+    root.title('批次勾選：確認整段都是指定行為')
+    root.geometry('940x600')
+    root.minsize(660, 360)
+    result = []
+    variables = [tk.BooleanVar(value=False) for _ in candidates]
+    selected_count = tk.StringVar()
+
+    def update_count():
+        selected_count.set(f'已勾選 {sum(v.get() for v in variables)} / {len(candidates)} 筆')
+
+    def select_all(value):
+        for var in variables:
+            var.set(value)
+        update_count()
+
+    def confirm():
+        picked = [fi for fi, var in zip(candidates, variables) if var.get()]
+        if not picked:
+            messagebox.showinfo('尚未選取', '請先勾選要確認整段有效的資料。', parent=root)
+            return
         from collections import Counter
-        sp_counts = Counter(split_of(fi['path']) for fi in grp)
-        sp_summary = ('  （' + ' / '.join(f"{sp} {sp_counts[sp]}" for sp in SPLITS) + '）'
-                      if any(sp_counts[sp] for sp in SPLITS) else '')
+        counts = Counter(fi['action'] for fi in picked)
+        summary = '、'.join(f'{a}: {n} 筆' for a, n in sorted(counts.items()))
+        if messagebox.askyesno('確認批次標記',
+                              f'將 {len(picked)} 筆資料的全部幀標為各自顯示的行為。\n'
+                              f'{summary}\n\n寫入整段區間與人工確認紀錄，確定繼續？', parent=root):
+            result.extend(picked)
+            root.destroy()
 
-        print(sep)
-        if behavior == 'unknown':
-            print(f"  ⚠  未分類（檔名無法比對行為關鍵字）  {g_done}/{g_total} 已完成{sp_summary}")
-        else:
-            bar = '█' * g_done + '░' * (g_total - g_done)
-            print(f"  [{behavior.upper():<8}]  {g_done}/{g_total} 已完成  {bar}{sp_summary}")
+    ttk.Label(root, text='只顯示目前篩選範圍內、尚未人工確認且類別明確的資料（含所有頁）。',
+              padding=10).pack(anchor='w')
+    toolbar = ttk.Frame(root, padding=(10, 0, 10, 8))
+    toolbar.pack(fill='x')
+    ttk.Button(toolbar, text='全選此清單', command=lambda: select_all(True)).pack(side='left')
+    ttk.Button(toolbar, text='全部取消勾選', command=lambda: select_all(False)).pack(side='left', padx=8)
+    ttk.Label(toolbar, textvariable=selected_count).pack(side='right')
+    bottom = ttk.Frame(root, padding=10)
+    bottom.pack(side='bottom', fill='x')
+    ttk.Button(bottom, text='確認所選資料整段有效', command=confirm).pack(side='right')
+    ttk.Button(bottom, text='取消', command=root.destroy).pack(side='right', padx=8)
+    area = ttk.Frame(root)
+    area.pack(fill='both', expand=True, padx=10)
+    canvas = tk.Canvas(area, highlightthickness=0)
+    scrollbar = ttk.Scrollbar(area, orient='vertical', command=canvas.yview)
+    canvas.configure(yscrollcommand=scrollbar.set)
+    scrollbar.pack(side='right', fill='y')
+    canvas.pack(side='left', fill='both', expand=True)
+    content = ttk.Frame(canvas)
+    window_id = canvas.create_window((0, 0), window=content, anchor='nw')
+    content.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+    canvas.bind('<Configure>', lambda e: canvas.itemconfigure(window_id, width=e.width))
+    root.bind('<MouseWheel>', lambda e: canvas.yview_scroll(-1 if e.delta > 0 else 1, 'units'))
+    root.bind('<Button-4>', lambda e: canvas.yview_scroll(-1, 'units'))
+    root.bind('<Button-5>', lambda e: canvas.yview_scroll(1, 'units'))
+    for fi, var in zip(candidates, variables):
+        text = f"{fi['path'].name}    → {fi['action']}    {fi['total_frames']} 幀    [{split_of(fi['path'])}]"
+        ttk.Checkbutton(content, text=text, variable=var, command=update_count,
+                        padding=(5, 6)).pack(fill='x', anchor='w')
+    root.protocol('WM_DELETE_WINDOW', root.destroy)
+    update_count()
+    root.mainloop()
+    return result
 
-        for fi in grp:
-            global_idx += 1
-            ordered_flat.append(fi)
-            status   = '✓' if fi['n_intervals'] > 0 else '·'
-            detail   = (f"{fi['n_intervals']} 區間"
-                        if fi['n_intervals'] > 0
-                        else f"{fi['total_frames']} 幀  未標注")
-            vid_hint = f"  ← {fi['video']}" if fi['video'] else ''
-            # 標記「上次標注」的那一行
-            last_mark = '  ← 上次' if (last_name and
-                                        fi['path'].name == last_name) else ''
-            if last_mark and last_idx is None:
-                last_idx = global_idx
-            sp = split_of(fi['path'])
-            sp_tag = f"  [{sp}]" if sp in SPLITS else ""
-            print(f"    [{global_idx:3d}] {status}  {fi['path'].name:<38}  {detail}{vid_hint}{sp_tag}{last_mark}")
 
-    print(sep)
-    if last_idx is not None and last_name:
-        print(f"  上次標注: [{last_idx}]  {last_name}")
-    print("  輸入編號選擇  |  直接 Enter = 自動跳下一個未標注  |  q = 離開")
-
-    while True:
-        choice = input("  > ").strip()
-        if choice.lower() == 'q':
-            return None
-        if choice == '':
-            # 優先從上次標注的位置往後找，找不到就從頭
-            start = (last_idx or 0)          # last_idx 是 1-based
-            candidates = (list(range(start, len(ordered_flat))) +
-                          list(range(0, start)))
-            for i in candidates:
-                if ordered_flat[i]['n_intervals'] == 0:
-                    chosen = ordered_flat[i]
-                    print(f"  → 自動選擇: [{i+1}] {chosen['path'].name}  [{chosen['behavior'].upper()}]")
-                    return str(chosen['path'])
-            print("  所有檔案都已標注完成。")
-            return None
+def _batch_confirm_whole_clips(visible):
+    candidates = [fi for fi in visible if fi['state'] == 'pending' and not fi['error'] and fi['action']]
+    if not candidates:
+        print('  目前範圍沒有可批次確認的資料；類別不明或衝突的資料請逐檔標記。')
+        return
+    picked = _choose_whole_clips(candidates)
+    if not picked:
+        print('  已取消，未修改任何資料。')
+        return
+    succeeded = 0
+    for fi in picked:
         try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(ordered_flat):
-                return str(ordered_flat[idx]['path'])
-            print(f"  請輸入 1～{len(ordered_flat)} 之間的數字")
-        except ValueError:
-            print("  請輸入數字或 q")
+            _mark_whole_clip(fi['path'], fi['action'])
+            succeeded += 1
+            print(f"  ✓ {fi['path'].name}：整段 {fi['action']}")
+        except Exception as exc:
+            print(f"  ✗ {fi['path']}：未寫入（{exc}）")
+    print(f'  批次完成：成功 {succeeded}，未寫入 {len(picked) - succeeded}。')
+
+
+def _remember_queue(state, visible):
+    """記下開檔當下的清單順序（已套用類別／搜尋／尚未標記篩選），標記視窗按 n 時照這個順序往下走。"""
+    state['queue'] = [str(fi['path']) for fi in visible if not fi['error'] and fi['total_frames']]
+
+
+def _next_in_queue(state, current):
+    """目前清單裡 current 的下一筆；「尚未標記」清單會跳過這段期間已標好的檔案。沒有下一筆回傳 None。"""
+    queue = state.get('queue') or []
+    if current not in queue:
+        return None
+    for path in queue[queue.index(current) + 1:]:
+        if not Path(path).exists():
+            continue
+        if state.get('pending_only', True):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    if _annotation_state(json.load(f)) != 'pending':
+                        continue
+            except Exception:
+                continue
+        return path
+    return None
+
+
+def _queue_position(state, json_path):
+    """(第幾筆, 共幾筆)，顯示在標記視窗標題；不在清單裡回傳 (None, None)。"""
+    queue = state.get('queue') or []
+    if json_path in queue:
+        return queue.index(json_path) + 1, len(queue)
+    return None, None
+
+
+def _list_json_files_menu(folder: str, last_annotated: str = None, menu_state=None):
+    """預設只列未確認資料；狀態由呼叫端保留，標完一筆不會重設篩選。"""
+    if not Path(folder).exists():
+        print(f'[Error] 資料夾不存在: {folder}')
+        return None
+    state = menu_state if menu_state is not None else {}
+    for key, value in [('pending_only', True), ('behavior', 'all'), ('keyword', ''),
+                       ('page', 0), ('show_all', False), ('sticky', set())]:
+        state.setdefault(key, value)
+    page_size = 25
+    infos = _scan_annotation_files(folder)
+    while True:
+        if not infos:
+            print(f'[Error] 找不到任何 JSON 檔案: {folder}')
+            return None
+        # 記住出現過的尚未標記檔案；之後標好了也留在清單原位，流水號不變
+        state['sticky'] |= {str(fi['path']) for fi in infos if fi['state'] == 'pending'}
+        visible = _filter_annotation_files(infos, state)
+        kept_done = sum(fi['state'] != 'pending' for fi in visible) if state['pending_only'] else 0
+        done = sum(fi['state'] != 'pending' and not fi['error'] for fi in infos)
+        errors = sum(bool(fi['error']) for fi in infos)
+        pages = max(1, (len(visible) + page_size - 1) // page_size)
+        state['page'] = min(max(0, state['page']), pages - 1)
+        print(f"\n{'=' * 80}\n  標記清單：{folder}")
+        print(f'  全部 {len(infos)} 筆｜已人工標記／確認 {done}｜尚未確認 {len(infos) - done - errors}｜讀取失敗 {errors}')
+        summary = []
+        for behavior in _BEHAVIOR_ORDER + ['unknown']:
+            group = [fi for fi in infos if fi['behavior'] == behavior and not fi['error']]
+            if group:
+                summary.append(f"{behavior}: {sum(fi['state'] == 'pending' for fi in group)}")
+        print('  各類尚未確認：' + '  '.join(summary))
+        scope = '尚未標記／確認' if state['pending_only'] else '全部資料'
+        display_mode = ('完整清單（不分頁）' if state['show_all']
+                        else f"第 {state['page'] + 1}/{pages} 頁")
+        print(f"  顯示：{scope}｜類別 {state['behavior']}｜搜尋 {state['keyword'] or '無'}"
+              f"｜符合 {len(visible)} 筆｜{display_mode}")
+        if kept_done:
+            print(f"  （其中 {kept_done} 筆是這次剛標好的，先留在原位標 ✓；按 u 或 r 重新整理後移除）")
+        start = 0 if state['show_all'] else state['page'] * page_size
+        rows = visible if state['show_all'] else visible[start:start + page_size]
+        for number, fi in enumerate(rows, start + 1):
+            detail = ('讀取失敗：' + fi['error']) if fi['error'] else _ANNOTATION_STATUS_TEXT[fi['state']]
+            if fi['state'] == 'pending' and fi['batch_reason'] and not fi['error']:
+                detail += '；不可批次：' + fi['batch_reason']
+            marker = ' ← 上次開啟' if last_annotated and str(fi['path']) == last_annotated else ''
+            mark = '✗' if fi['error'] else ('·' if fi['state'] == 'pending' else '✓')
+            print(f"  [{number:3d}] {mark} {fi['path'].name}  [{split_of(fi['path'])}]"
+                  f"  {fi['total_frames']} 幀 / {fi['n_intervals']} 區間  {detail}{marker}")
+        if not visible:
+            print('  目前篩選沒有資料，可切換 a 全部資料、c 類別，或 / 清除搜尋。')
+        print('  u 尚未標記清單（分頁，移除已標好的）｜a 完整清單（清除所有篩選、不分頁）｜c 類別篩選')
+        print('  /關鍵字 搜尋（單獨 / 清除）｜b 批次勾選整段有效（目前篩選的所有頁）')
+        print('  n 下一頁｜p 上一頁（恢復分頁）｜r 重新整理｜q 離開')
+        print('  編號 開啟逐段標記｜Enter 下一筆尚未確認；尚未標記的資料會擋下訓練。')
+        choice = input('  > ').strip()
+        command = choice.lower()
+        if command == 'q':
+            return None
+        if command == 'a':
+            state.update(pending_only=False, behavior='all', keyword='', page=0, show_all=True)
+            infos = _scan_annotation_files(folder)
+        elif command == 'u':
+            state.update(pending_only=True, page=0, show_all=False, sticky=set())
+            infos = _scan_annotation_files(folder)
+        elif command == 'c':
+            behavior = input('  類別 walk/lick/scratch/shake/stop/unknown；Enter 或 all 全部：').strip().lower() or 'all'
+            if behavior in _BEHAVIOR_ORDER + ['unknown', 'all']:
+                state.update(behavior=behavior, page=0, show_all=False)
+            else:
+                print('  無此類別，保留原篩選。')
+        elif choice.startswith('/'):
+            state.update(keyword=choice[1:].strip(), page=0, show_all=False)
+        elif command in ('n', 'p'):
+            state['show_all'] = False
+            state['page'] += 1 if command == 'n' else -1
+        elif command == 'b':
+            _batch_confirm_whole_clips(visible)
+            infos = _scan_annotation_files(folder)
+        elif command == 'r':
+            state['sticky'] = set()
+            infos = _scan_annotation_files(folder)
+        elif choice == '':
+            last_idx = next((i for i, fi in enumerate(visible) if str(fi['path']) == last_annotated), -1)
+            for fi in visible[last_idx + 1:] + visible[:last_idx + 1]:
+                if fi['state'] == 'pending' and not fi['error'] and fi['total_frames']:
+                    _remember_queue(state, visible)
+                    return str(fi['path'])
+            print('  此範圍沒有可開啟的尚未確認資料；可切換清單或輸入 q 離開。')
+        elif choice.isdigit() and 1 <= int(choice) <= len(visible):
+            fi = visible[int(choice) - 1]
+            if fi['error'] or not fi['total_frames']:
+                print('  此檔無法讀取或沒有幀，請先檢查資料。')
+            else:
+                _remember_queue(state, visible)
+                return str(fi['path'])
+        else:
+            print('  請輸入清單編號或上方指令。')
 
 
 def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
@@ -1035,10 +1290,11 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
     print("  1/2/3/4/5 切換行為  |  s 標記起點/終點  |  u 撤銷上一個區間")
     print("  a/d 前/後幀  |  [/] 調整步長  |  SPACE 播放/暫停  |  t 跳轉秒數")
     print("  畫面最下方時間軸可點擊/拖曳跳轉、滾輪逐幀微調（拖曳/懸停時正上方會顯示預覽幀號/時間）")
-    print("  ESC 儲存並離開    [未標記片段訓練時自動捨棄]\n")
+    print("  ESC 儲存並回到清單  |  n 儲存並跳到清單下一筆    [未標記片段訓練時自動捨棄]\n")
 
     marking           = False
     intervals_touched = False   # 本次工作階段是否曾新增或撤銷過區間（區分「真的沒動」vs「主動清空」）
+    go_next           = False   # 按 n 離開：存檔後直接開清單下一筆，不回清單
     start_idx         = None
     cur_idx           = 0
     cap               = None
@@ -1391,11 +1647,11 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
                 act_col = ACTION_COLORS.get(current_action, (200, 200, 200))
                 draw_marking_frame(show_img, act_col, sc)
                 line2 = (f"  from frame {start_idx+1} ({s_ts:.1f}s)  ->  now ({c_ts:.1f}s)"
-                         f"  dur={dur_s:.2f}s  |  s=END MARK  u=cancel  ESC=SAVE")
+                         f"  dur={dur_s:.2f}s  |  s=END MARK  u=cancel  ESC=SAVE  n=SAVE+NEXT")
             else:
                 act_col = ACTION_COLORS.get(current_action, (200, 200, 200))
                 line2 = (f"  1=walk 2=lick 3=scratch 4=shake 5=stop  |  "
-                         f"s=START MARK  u=UNDO  a/d=nav  [/]=skip  t=jump  SPACE  ESC=SAVE")
+                         f"s=START MARK  u=UNDO  a/d=nav  [/]=skip  t=jump  SPACE  ESC=SAVE  n=NEXT")
 
             line1 = (f"{play_str}  Frame {cur_idx+1}/{total_frames}  ({t_str})"
                      f"  skip:{skip_n}  |  Intervals:{len(intervals)}"
@@ -1455,6 +1711,9 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
                     break
 
         if key == 27:
+            break
+        elif key == ord('n'):
+            go_next = True
             break
         elif key == ord(' '):
             playing = not playing
@@ -1546,17 +1805,17 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
     if cap:
         cap.release()
 
-    # ── frame label 三種狀態 ────────────────────────────────────────────────────
-    # 狀態 1：批次提取（process_all_videos）、從未開啟標注模式
-    #         → 每幀 label = 資料夾名稱（walk/lick/…），全段有效，無需處理
-    # 狀態 2：開啟標注模式並標記了至少一個區間後儲存
-    #         → 區間內 = 行為標籤，其餘幀 = 'unannotated'（訓練時自動過濾）
-    # 狀態 3：開啟標注模式但本次工作階段完全未按過 s/u 直接儲存（保護機制）
-    #         → 保留原有 frame label 與 action_intervals 皆不覆寫
-    # 狀態 4：開啟標注模式、按過 s/u 但最終撤銷到剩下 0 個區間
-    #         → 視為主動清空，frame label 全部設為 unannotated、action_intervals 清空
-    # ────────────────────────────────────────────────────────────────────────────
+    _save_manual_annotation(json_path, data, intervals, intervals_touched)
+    return 'next' if go_next else 'menu'
 
+
+def _save_manual_annotation(json_path, data, intervals, intervals_touched):
+    """只在確實編輯區間後更新人工確認；單純開啟再關閉不算確認。"""
+    if not intervals_touched:
+        print("  [保護] 本次未變更標記，保留原檔與人工確認狀態。")
+        return False
+    frames = data['frames']
+    total_frames = len(frames)
     # 依行為類別分組並合併各自重疊區段
     from collections import defaultdict
     def merge_intervals_for_action(raw):
@@ -1580,22 +1839,13 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
     action_intervals.sort(key=lambda x: x['start'])
 
     # 產生 frame-level label
-    # 保護：若本次未標記任何區間，保留幀的原有標籤（批次提取的資料整段皆有效）
-    # 只有在有區間標記時才覆寫，避免開啟後直接 q 存檔把批次標籤全清成 unannotated
+    # 無變更已在函式入口直接返回；此處依使用者本次實際編輯更新逐幀標籤。
     all_intervals = sorted(action_intervals, key=lambda x: x['start'])
 
     if not action_intervals:
-        if not intervals_touched:
-            # 本次工作階段完全沒按過 s/u，純粹開啟又關閉：frame label 與
-            # action_intervals 欄位都保留原狀，避免誤觸 q 就清空既有標記進度
-            print("  [保護] 本次未變更任何標記，保留原有 frame label 與 action_intervals（不覆寫）")
-            all_intervals = data.get('action_intervals', [])
-        else:
-            # 使用者主動撤銷到剩下 0 個區間：視為有意清空，frame label 一併
-            # 重設為 unannotated，避免 label 與（已清空的）action_intervals 不一致
-            print("  [清空] 已撤銷所有標記區間，frame label 全部設為 unannotated")
-            for frame in frames:
-                frame['label'] = 'unannotated'
+        print("  [清空] 已撤銷所有標記區間，frame label 全部設為 unannotated")
+        for frame in frames:
+            frame['label'] = 'unannotated'
     else:
         frame_labels = ['unannotated'] * total_frames
         for iv in action_intervals:
@@ -1608,9 +1858,78 @@ def _annotate_single_skeleton(json_path, file_index=None, total_files=None):
     out_json = data.copy()
     out_json['action_intervals'] = all_intervals
     out_json['frames'] = frames
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(out_json, f, indent=2, ensure_ascii=False)
+    out_json['total_frames'] = total_frames
+    out_json['annotation_review'] = _review_record(
+        'manual_intervals' if all_intervals else 'manual_empty')
+    _atomic_write_json(json_path, out_json)
     print(f"\n✓ 已直接覆蓋原標註檔案: {json_path}\n✓ 已自動合併重疊區段，frames 內每一幀都含 label 欄位")
+    return True
+
+
+def _videos_match_skeletons():
+    """模式 2 進場檢查（只警告）：VIDEO_FOLDERS 的影片與 OUTPUT_FOLDER 的骨架應依檔名一一對應
+    （EXCLUDED_STEMS 除外）。用檔名比對而非只比數量，才抓得到「少一支又多一支」互相抵銷。"""
+    from collections import Counter
+    missing_folders = [f for f in VIDEO_FOLDERS if not Path(f).exists()]
+    if missing_folders:
+        _alert_box('警告：找不到影片資料夾，無法核對', [
+            ('以下資料夾不存在（OneDrive 還沒同步？）：', missing_folders),
+        ])
+        return False
+    video_stems = Counter(v.stem for v in _scan_video_files_with_index()
+                          if v.stem not in EXCLUDED_STEMS)
+    skeleton_files = iter_skeleton_files(OUTPUT_FOLDER)
+    skeleton_stems = {p.stem for p in skeleton_files}
+    skeleton_count = Counter(p.stem for p in skeleton_files)
+    skel_dup = sorted(s for s, n in skeleton_count.items() if n > 1)
+    duplicated = sorted(s for s, n in video_stems.items() if n > 1)
+    video_split = {v.stem: split_of_video(v) for v in _scan_video_files_with_index()}
+    split_diff = []
+    for js in iter_skeleton_files(OUTPUT_FOLDER):
+        v_split, s_split = video_split.get(js.stem), split_of(js)
+        if v_split and s_split in SPLITS and v_split != s_split:
+            split_diff.append(f"{js.stem}（骨架 {s_split} / 影片 {v_split}）")
+    no_skeleton = sorted(set(video_stems) - skeleton_stems, key=lambda s: _natural_sort_key(Path(s)))
+    no_video = sorted(skeleton_stems - set(video_stems), key=lambda s: _natural_sort_key(Path(s)))
+    print(f"  來源影片 {sum(video_stems.values())} 支（排除 {len(EXCLUDED_STEMS)} 支）｜骨架 {len(skeleton_stems)} 筆")
+    if not (duplicated or no_skeleton or no_video or split_diff or skel_dup):
+        return True
+    sections = []
+    if skel_dup:
+        sections.append((f'同一個骨架檔名有多份：{len(skel_dup)} 個',
+                         [', '.join(f'{s}（{skeleton_count[s]} 份）' for s in skel_dup),
+                          '-> 多半是複製而不是搬移；gcn_dataset_manager.py 會列出每一份的位置']))
+    if duplicated:
+        sections.append((f'同一檔名出現在多個類別資料夾：{len(duplicated)} 支',
+                         [', '.join(duplicated), '-> 骨架只有一份，會互相覆蓋；請改檔名']))
+    if no_skeleton:
+        sections.append((f'有影片、沒有骨架：{len(no_skeleton)} 支',
+                         [', '.join(no_skeleton), '-> 先跑模式 1 抽骨架；不要的影片加進 EXCLUDED_STEMS']))
+    if split_diff:
+        sections.append((f'骨架和影片放在不同的 split：{len(split_diff)} 支',
+                         [', '.join(split_diff),
+                          '-> 以骨架為準：gcn_dataset_manager.py 模式 3 把影片搬過去',
+                          '-> 以影片為準：gcn_dataset_manager.py 模式 2 把骨架搬過去']))
+    if no_video:
+        sections.append((f'有骨架、找不到來源影片：{len(no_video)} 筆',
+                         [', '.join(no_video), '-> 把影片放回 VIDEO_FOLDERS，或移走這些骨架 JSON']))
+    _alert_box(f'警告：影片 {sum(video_stems.values())} 支 / 骨架 {len(skeleton_stems)} 筆，對不上'
+               if (duplicated or no_skeleton or no_video) else '警告：骨架和影片的 split 不一致', sections,
+               footer=('仍可繼續標記，但沒有骨架的影片不會出現在標記清單裡。' if no_skeleton
+                       else '仍可繼續標記。'))
+    return False
+
+
+def _advance(menu_state, json_path, exit_action):
+    """標記視窗關閉後要開哪一筆：按 n 就回傳清單下一筆，否則 None（回到清單）。"""
+    if exit_action != 'next':
+        return None
+    nxt = _next_in_queue(menu_state, json_path)
+    if nxt is None:
+        print("  已經是目前清單的最後一筆，回到清單。")
+    else:
+        print(f"  -> 下一筆：{Path(nxt).name}")
+    return nxt
 
 
 def manual_action_labeling():
@@ -1620,26 +1939,24 @@ def manual_action_labeling():
     """
     print("\n=== Annotation Mode ===")
     print(f"Folder: {OUTPUT_FOLDER}\n")
+    _videos_match_skeletons()   # 對不上只警告，不阻止標記
 
     last_annotated = None
+    menu_state = {}  # 在本次工作階段保留類別、搜尋與清單篩選。
+    json_path = None
     while True:
-        json_path = _list_json_files_menu(OUTPUT_FOLDER, last_annotated=last_annotated)
-        if not json_path:
-            print("\n[Done] Annotation session ended.")
-            break
+        if json_path is None:
+            json_path = _list_json_files_menu(OUTPUT_FOLDER, last_annotated=last_annotated,
+                                              menu_state=menu_state)
+            if not json_path:
+                print("\n[Done] Annotation session ended.")
+                break
 
-        # 計算在整個 JSON 列表中的位置，供視窗標題顯示進度
-        try:
-            all_jsons   = sorted(iter_skeleton_files(OUTPUT_FOLDER), key=_natural_sort_key)
-            file_index  = next((i + 1 for i, jf in enumerate(all_jsons)
-                                if str(jf) == json_path), None)
-            total_files = len(all_jsons)
-        except Exception:
-            file_index = total_files = None
-
-        _annotate_single_skeleton(json_path,
-                                   file_index=file_index,
-                                   total_files=total_files)
+        # 視窗標題顯示在「目前清單」裡的位置
+        file_index, total_files = _queue_position(menu_state, json_path)
+        exit_action = _annotate_single_skeleton(json_path,
+                                                file_index=file_index,
+                                                total_files=total_files)
 
         # 標記完成後在終端列印明確摘要
         sep = '=' * 62
@@ -1658,7 +1975,8 @@ def manual_action_labeling():
             act_counts = Counter(iv['action'] for iv in ivs)
             act_str    = '  '.join(f"{act}x{cnt}" for act, cnt in sorted(act_counts.items()))
 
-            print(f"  ANNOTATED : {Path(json_path).name}")
+            print(f"  FILE      : {Path(json_path).name}")
+            print(f"  Status    : {_ANNOTATION_STATUS_TEXT[_annotation_state(d)]}")
             print(f"  Intervals : {len(ivs)}   ({act_str if act_str else 'none'})")
             print(f"  Labeled   : {labeled}/{n_frames} frames  ({pct:.1f}%)")
         except Exception as e:
@@ -1666,6 +1984,7 @@ def manual_action_labeling():
             print(f"  (Could not read summary: {e})")
         print(f"{sep}\n")
         last_annotated = json_path   # 供下次列表顯示「上次標記」
+        json_path = _advance(menu_state, json_path, exit_action)
 
     print("\n[Done] All annotation tasks completed.")
 
@@ -1794,21 +2113,19 @@ def label_test_set():
 
         print(f"\nFolder: {TEST_OUTPUT_FOLDER}\n")
         last_annotated = None
+        menu_state = {}
+        json_path = None
         while True:
-            json_path = _list_json_files_menu(TEST_OUTPUT_FOLDER, last_annotated=last_annotated)
-            if not json_path:
-                print("\n[Done] 測試集標註工作階段結束。")
-                break
+            if json_path is None:
+                json_path = _list_json_files_menu(TEST_OUTPUT_FOLDER, last_annotated=last_annotated,
+                                                  menu_state=menu_state)
+                if not json_path:
+                    print("\n[Done] 測試集標註工作階段結束。")
+                    break
 
-            try:
-                all_jsons   = sorted(Path(TEST_OUTPUT_FOLDER).glob("*.json"), key=_natural_sort_key)
-                file_index  = next((i + 1 for i, jf in enumerate(all_jsons)
-                                    if str(jf) == json_path), None)
-                total_files = len(all_jsons)
-            except Exception:
-                file_index = total_files = None
-
-            _annotate_single_skeleton(json_path, file_index=file_index, total_files=total_files)
+            file_index, total_files = _queue_position(menu_state, json_path)
+            exit_action = _annotate_single_skeleton(json_path, file_index=file_index,
+                                                    total_files=total_files)
 
             sep = '=' * 62
             print(f"\n{sep}")
@@ -1831,6 +2148,7 @@ def label_test_set():
                 print(f"  (Could not read summary: {e})")
             print(f"{sep}\n")
             last_annotated = json_path
+            json_path = _advance(menu_state, json_path, exit_action)
 
     # 不論剛剛做了哪個步驟，結束後都自動印出完整報告
     review_test_labels(TEST_OUTPUT_FOLDER)
@@ -1881,6 +2199,8 @@ def reextract_preserve_labels(target_stems: set = None):
     # 讀取所有既有 JSON 的 action_intervals，連同每一幀的真實 timestamp。
     # 用 timestamp（而非 frame index）還原標注，這樣即使新舊抽取的總幀數不同
     # （例如舊資料在補償邏輯上線前抽取、非 30fps 來源），標注依然能正確對應。
+    saved_reviews = {}
+    unreadable_stems = set()
     saved_intervals: dict[str, list] = {}
     saved_frame_labels: dict[str, list] = {}   # video_id -> 舊逐幀 label（依 old timestamp 順序）
     saved_timestamps: dict[str, list] = {}     # video_id -> 舊逐幀 timestamp
@@ -1893,8 +2213,18 @@ def reextract_preserve_labels(target_stems: set = None):
                 ivs = d.get('action_intervals', [])
                 saved_intervals[vf.stem] = ivs
                 old_frames = d.get('frames', [])
-                old_total_f = d.get('total_frames', len(old_frames))
-                old_fps = (d.get('video_metadata', {}) or {}).get('actual_fps') or TARGET_FPS
+                if 'annotation_review' in d:
+                    saved_reviews[vf.stem] = d['annotation_review']
+                # 無區間、無人工確認的舊資料仍按原本整段有效處理，不能全設成 unannotated。
+                # 舊檔若已整段清空，保留其無有效幀的結果，但不猜測是否曾人工確認。
+                legacy_empty = bool(old_frames) and all(
+                    fr.get('label') == 'unannotated' for fr in old_frames)
+                if not ivs and _annotation_state(d) == 'pending' and not legacy_empty:
+                    continue
+                old_total_f = len(old_frames) or d.get('total_frames', 0)
+                old_meta = d.get('video_metadata') or {}
+                old_fps = (old_meta.get('target_fps') if old_meta.get('fps_compensated')
+                           else old_meta.get('actual_fps')) or TARGET_FPS
                 labels = ['unannotated'] * old_total_f
                 for iv in ivs:
                     for i in range(iv['start'], iv['end'] + 1):
@@ -1906,14 +2236,19 @@ def reextract_preserve_labels(target_stems: set = None):
                 saved_frame_labels[vf.stem] = labels
                 saved_timestamps[vf.stem] = timestamps
             except Exception as e:
-                print(f"  [Warning] 無法讀取 {jp.name}: {e}")
+                print(f"  [Warning] 無法讀取 {jp.name}，本次不重抽以保留原檔: {e}")
+                unreadable_stems.add(vf.stem)
 
-    annotated   = [v for v in video_files if saved_intervals.get(v.stem)]
-    unannotated = [v for v in video_files if not saved_intervals.get(v.stem)]
+    video_files = [v for v in video_files if v.stem not in unreadable_stems]
+    if not video_files:
+        print('✗ 沒有可安全重抽的影片。')
+        return
+    annotated = [v for v in video_files if v.stem in saved_frame_labels]
+    unannotated = [v for v in video_files if v.stem not in saved_frame_labels]
 
     print(f"\n影片總數：{len(video_files)}")
-    print(f"  含標注（保留區間）：{len(annotated)}")
-    print(f"  無標注（全段重推）：{len(unannotated)}")
+    print(f"  有標記／清空紀錄（保留）：{len(annotated)}")
+    print(f"  無標記（重抽後仍尚未標記，訓練前需補標）：{len(unannotated)}")
     if annotated:
         print("\n  [含標注]")
         for v in annotated:
@@ -1934,7 +2269,7 @@ def reextract_preserve_labels(target_stems: set = None):
     for idx, video_path in enumerate(video_files, 1):
         print(f"\n[{idx}/{len(video_files)}] {video_path.name}")
         video_id    = video_path.stem
-        output_path = skeleton_path_for(OUTPUT_FOLDER, video_id)
+        output_path = skeleton_path_for(OUTPUT_FOLDER, video_id, split=split_of_video(video_path))
         label       = video_path.parent.name.lower()
 
         result = extract_skeleton_from_video(
@@ -1944,6 +2279,9 @@ def reextract_preserve_labels(target_stems: set = None):
             print("  ✗ 推論失敗，跳過")
             continue
         skeleton_data, actual_fps = result
+        if not skeleton_data:
+            print('  ✗ 沒有抽取到任何幀，保留原檔')
+            continue
 
         # 還原既有標注：用「時間」而非「幀 index」對應。
         # resample_to_target_fps 補償後的幀數只取決於(影片時長, target_fps)，
@@ -1952,7 +2290,23 @@ def reextract_preserve_labels(target_stems: set = None):
         # label，不論新舊總幀數是否相同都能正確對應，資料不會因此報廢。
         old_labels = saved_frame_labels.get(video_id)
         old_ts = saved_timestamps.get(video_id)
-        if old_labels and old_ts:
+        review = saved_reviews.get(video_id) or {}
+        if review.get('status') == 'reviewed' and review.get('method') == 'full_clip':
+            # 整段確認涵蓋整支影片；重取樣後仍延伸至新的最後一幀。
+            full_action = review.get('action')
+            if full_action not in _BEHAVIOR_ORDER:
+                print('  ✗ 整段確認紀錄缺少有效行為，保留原檔')
+                continue
+            for fd in skeleton_data:
+                fd['label'] = full_action
+            new_intervals = [{'action': full_action, 'start': 0, 'end': len(skeleton_data) - 1}]
+            print(f'  ✓ 保留整段人工確認：{full_action}，共 {len(skeleton_data)} 幀')
+        elif review.get('status') == 'reviewed' and review.get('method') == 'manual_empty':
+            for fd in skeleton_data:
+                fd['label'] = 'unannotated'
+            new_intervals = []
+            print('  ✓ 保留人工清空結果：全部幀維持 unannotated')
+        elif old_labels and old_ts:
             old_ts_arr = np.asarray(old_ts, dtype=np.float64)
             # 舊資料的取樣間隔，超過這個間隔找不到對應舊幀就視為原本就沒標注的空窗
             old_gap = float(np.median(np.diff(old_ts_arr))) if len(old_ts_arr) > 1 else (1.0 / TARGET_FPS)
@@ -1983,7 +2337,7 @@ def reextract_preserve_labels(target_stems: set = None):
                 print(f"  ✓ 依 timestamp 還原標注：{len(new_intervals)} 個 action_intervals"
                       f"（舊 {len(old_labels)} 幀 → 新 {len(skeleton_data)} 幀）")
             else:
-                print("  → 舊標注時間範圍與新抽取對不上，frame label 保持資料夾名稱")
+                print("  → 還原後無有效標記區間，全部幀維持 unannotated")
         else:
             new_intervals = []
             print("  → 無既有標注，frame label 保持資料夾名稱")
@@ -2006,8 +2360,15 @@ def reextract_preserve_labels(target_stems: set = None):
             "total_frames": len(skeleton_data),
             "action_intervals": new_intervals,
         }
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(out_data, f, indent=2, ensure_ascii=False)
+        if video_id in saved_reviews:
+            out_data['annotation_review'] = saved_reviews[video_id]
+        elif saved_intervals.get(video_id):
+            # 舊的人工區間即使此次沒有對應新幀，仍保留「曾標記」的狀態。
+            out_data['annotation_review'] = {
+                'status': 'reviewed', 'method': 'manual_intervals',
+                'source': 'legacy_action_intervals',
+            }
+        _atomic_write_json(output_path, out_data)
         print(f"  ✓ 已儲存: {output_path}")
 
     print("\n✓ 全部重新推論完成。")
@@ -2425,12 +2786,26 @@ def check_discarded_files():
     print("\n✓ 檢查完成（純讀取，未修改任何檔案）。")
 
 
+def warn_unmarked(folder=None):
+    """列出尚未標記區段的骨架；有的話提醒，0_train_gcn.py 會因此拒絕訓練。"""
+    folder = folder or OUTPUT_FOLDER
+    if not Path(folder).exists():
+        return []
+    unmarked = find_unmarked_skeletons(folder)
+    if unmarked:
+        print(f"\n⚠ 警告：{len(unmarked)} 筆骨架尚未標記區段（片段或整段），訓練會被擋下。")
+        print(format_unmarked(unmarked))
+        print("  → 模式 2 按 u 列出、b 批次勾選整段有效，或逐筆標記片段。")
+    return unmarked
+
+
 if __name__ == "__main__":
+    warn_unmarked()
     print("\n==== Cat Skeleton 批次推論/手動標註 ====")
     print("1. 批次推論五個資料夾影片 (YOLO-Pose)  [增量，跳過已有 JSON]")
-    print("   → 影片依資料夾名稱 (walk/lick/scratch/shake/stop) 自動標記，可直接訓練")
-    print("2. 連續手動標記多個 skeleton JSON")
-    print("   → 適用影片含多種行為、需精確逐段標記的情況")
+    print("   → 新抽的骨架尚未標記，需到模式 2 勾選整段或逐段標記後才能訓練")
+    print("2. 資料標記管理：尚未標記清單／批次勾選整段有效／逐段標記")
+    print("   → 預設只列尚未人工確認，可篩選類別、搜尋檔名；b 開啟批次勾選視窗")
     print("3. 重新推論骨架（新模型），依時間還原既有 action_intervals 與 frame label")
     print("   → YOLO 模型更換或 fps 補償邏輯更新後皆可使用，標注依 timestamp 對應不受幀數變動影響")
     print("4. 檢查有哪些影片／幀/訓練視窗被捨棄或過濾（未進入訓練資料）")
@@ -2446,14 +2821,18 @@ if __name__ == "__main__":
     mode = input("請選擇模式 (1/2/3/4/5/6/7): ").strip()
     if mode == '1':
         process_all_videos()
+        warn_unmarked()
     elif mode == '2':
         manual_action_labeling()
+        warn_unmarked()
     elif mode == '3':
         reextract_preserve_labels()
+        warn_unmarked()
     elif mode == '4':
         check_discarded_files()
     elif mode == '5':
         reextract_preserve_labels_selected()
+        warn_unmarked()
     elif mode == '6':
         label_test_set()
     elif mode == '7':

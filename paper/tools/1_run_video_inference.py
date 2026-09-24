@@ -51,14 +51,17 @@ from utils.helpers import get_behavior_name
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
 # ── 五個行為資料夾（按 z/x/c/v/b 切換）────────────────────────────────
-_BASE = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\1_貓咪姿勢影片分類\模型專用"
-FOLDER_WALK    = rf"{_BASE}\walk"
-FOLDER_LICK    = rf"{_BASE}\lick"
-FOLDER_SCRATCH = rf"{_BASE}\scratch"
-FOLDER_SHAKE   = rf"{_BASE}\shake"
-FOLDER_STOP    = rf"{_BASE}\stop"
+# 影片放在 模型專用/<split>/<類別>/（跟 skeletons/ 同一套 train/val/test 切分），每個
+# 行為對應 train/val/test 底下同名的類別資料夾（skeleton_splits.video_class_folders），
+# 三個 split 的影片合併成同一份清單。
+from utils.skeleton_splits import video_class_folders
+FOLDER_WALK    = video_class_folders(classes="walk")
+FOLDER_LICK    = video_class_folders(classes="lick")
+FOLDER_SCRATCH = video_class_folders(classes="scratch")
+FOLDER_SHAKE   = video_class_folders(classes="shake")
+FOLDER_STOP    = video_class_folders(classes="stop")
 
-# 按鍵 → (資料夾路徑, 顯示名稱)
+# 按鍵 → (資料夾路徑清單, 顯示名稱)
 FOLDER_MAP = {
     'z': (FOLDER_WALK,    "WALK"),
     'x': (FOLDER_LICK,    "LICK"),
@@ -71,13 +74,14 @@ DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 # ── 模式2 影片分類（Shift+A~E，把目前影片直接移進對應的行為資料夾）───────────
 # 用大寫 A~E（Shift+字母）觸發，避免跟上面 z/x/c/v/b 小寫的資料夾切換鍵衝突。
 # A=walk  B=lick  C=scratch  D=shake  E=stop（依 BEHAVIOR_CLASSES 順序）。
-# 行為資料夾（walk/lick/scratch/shake/stop）建立在影片所屬的「分類根目錄」底下，不分字母資料夾；
-# 只有實際按到的那個類別才會建立（先檢查是否已存在，沒有才建），沒按到的類別不會產生空資料夾：
-# 影片已經在某個行為資料夾裡（例如 …\模型專用\walk\a.mp4）時，分類根目錄就是該行為資料夾的上一層
-# （…\模型專用），改分到別的行為會落在它的兄弟資料夾；否則就是影片所在的資料夾本身。
+# 行為資料夾（walk/lick/scratch/shake/stop）建立在「輸入資料夾」底下，當它的子資料夾（2026-09-24 起，
+# 使用者要求不要建在同層）：例如 SINGLE_FOLDER_PATH＝…\未被選擇的模型影片\lick，按 Shift+A 就搬到
+# …\未被選擇的模型影片\lick\walk\。只有實際按到的那個類別才會建立（先檢查是否已存在，沒有才建）。
+# 輸入資料夾＝影片是從哪個資料夾掃進播放清單的（見 resolve_video_paths / _CLASSIFY_ROOTS）；單一影片檔
+# 等不在任何輸入資料夾裡的影片，沿用舊規則：影片已經在某個行為資料夾裡就用它的上一層，否則用影片所在資料夾。
+# 重開播放清單時，輸入資料夾底下第一層的行為子資料夾（walk/…、walk_2/…）會略過，只剩還沒分類的影片。
 # 「已檢視」資料夾：影片已經在 walk 裡、又按 Shift+A（＝檢視後確認它就是 walk）時，改搬到同層的 walk_2
-# （沒有才建立，已存在就沿用）；lick/scratch/shake/stop 一樣是 lick_2 …。這樣原本的 walk 只剩還沒檢視的影片，
-# 中斷後重開播放清單就是沒看過的那些。影片已經在 walk_2 裡再按 Shift+A 不會搬回 walk。
+# （沒有才建立，已存在就沿用）；影片已經在 walk_2 裡再按 Shift+A 不會搬回 walk。
 REVIEWED_SUFFIX = "_2"
 CLASS_KEYS = {letter: behavior for letter, behavior in zip("ABCDE", BEHAVIOR_CLASSES)}
 
@@ -105,7 +109,7 @@ if _env_yolo_model:
     YOLO_MODEL_PATH = _env_yolo_model
 
 # 相對於這支腳本的位置（paper/tools/ → 專案根目錄 → stgcn_models/），不寫死磁碟機與使用者資料夾
-STGCN_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_147_xy_conf_v_bone_att_on" / "147_best_model.pth")
+STGCN_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "stgcn_models" / "run_153_xy_conf_v_bone_att_on" / "153_best_model.pth")
 import os as _os
 _env_stgcn_model = _os.getenv("CAT_MONITORING_STGCN_MODEL", "").strip()  # 設定視窗「⚙ 額外設定」可覆寫；環境變數名同 config.py 的 ModelPaths.STGCN_MODEL
 if _env_stgcn_model:
@@ -309,6 +313,9 @@ def resolve_video_paths(video_sources: Iterable[str]):
             continue
 
         if p.is_dir():
+            # 記下輸入資料夾：Shift+A~E 分類時，行為子資料夾就建在它底下
+            if p.resolve() not in _CLASSIFY_ROOTS:
+                _CLASSIFY_ROOTS.append(p.resolve())
             try:
                 matched = sorted(
                     [
@@ -319,6 +326,13 @@ def resolve_video_paths(video_sources: Iterable[str]):
             except Exception as e:
                 print(f"⚠ 掃描資料夾出錯，已略過: {p} ({e})")
                 matched = []
+            # 第一層的行為子資料夾（walk/、walk_2/…）是 Shift+A~E 分類出去的影片，不再放進播放清單
+            classified = [f for f in matched
+                          if len(f.relative_to(p).parts) > 1
+                          and _is_behavior_folder_name(f.relative_to(p).parts[0])]
+            if classified:
+                print(f"  （{p.name}：略過已分類到子資料夾的 {len(classified)} 部影片）")
+                matched = [f for f in matched if f not in classified]
             if not matched:
                 print(f"⚠ 資料夾內未找到影片，略過: {p}")
             for f in matched:
@@ -367,11 +381,20 @@ def _is_behavior_folder_name(name):
     return n.endswith(REVIEWED_SUFFIX) and n[: -len(REVIEWED_SUFFIX)] in BEHAVIOR_CLASSES
 
 
+# 播放清單的輸入資料夾（resolve_video_paths 掃描資料夾時登記），分類子資料夾建在這些資料夾底下
+_CLASSIFY_ROOTS: list = []
+
+
 def find_class_root(video_path):
     """影片所屬的「分類根目錄」（行為資料夾要建在它底下）。
 
-    從影片所在位置往上找第一個行為資料夾（名稱等於 walk/lick/…，或已檢視的 walk_2/lick_2/…，不分大小寫），
-    找到就回傳它的上一層；找不到（影片放在沒分類的資料夾）就回傳影片所在的資料夾。"""
+    影片在某個輸入資料夾（_CLASSIFY_ROOTS）裡：回傳最接近的那個輸入資料夾，行為資料夾就是它的子資料夾。
+    不在任何輸入資料夾裡（例如單一影片檔）：從影片所在位置往上找第一個行為資料夾（walk/lick/…，或已檢視的
+    walk_2/lick_2/…，不分大小寫），找到就回傳它的上一層；找不到就回傳影片所在的資料夾。"""
+    here = Path(video_path).resolve()
+    inputs = [r for r in _CLASSIFY_ROOTS if r in here.parents]
+    if inputs:
+        return max(inputs, key=lambda r: len(r.parts))
     parent = Path(video_path).parent
     for folder in (parent, *parent.parents):
         if _is_behavior_folder_name(folder.name):
@@ -1032,9 +1055,9 @@ def main():
     # 解析所有資料夾的影片清單（啟動時一次完成）
     folder_videos: dict = {}
     for fkey, (fpath, fname) in FOLDER_MAP.items():
-        vids = resolve_video_paths([fpath])
+        vids = resolve_video_paths(fpath)
         folder_videos[fkey] = vids
-        print(f"  [{fkey}] {fname}: {len(vids)} 部影片  ({fpath})")
+        print(f"  [{fkey}] {fname}: {len(vids)} 部影片  （{len(fpath)} 個資料夾）")
 
     # 若指定了 VIDEO_PATHS 就用那個；否則依 FOLDER_TEST_MODE 決定播放清單
     folder_range: dict = {}   # all 模式下：fkey -> (start_idx, end_idx) in merged video_paths
