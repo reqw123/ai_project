@@ -15,6 +15,10 @@ set "TARGET=%~dp0run_settings_window.bat"
 set "WORKDIR=%~dp0"
 set "SHORTCUT_NAME=Cat Monitoring Settings.lnk"
 
+rem Icon also lives next to this file; fall back to a built-in Windows icon if it is missing.
+set "ICON=%~dp0cat_monitoring_settings.ico,0"
+if not exist "%~dp0cat_monitoring_settings.ico" set "ICON=C:\Windows\System32\imageres.dll,109"
+
 if not exist "%TARGET%" (
     echo [ERROR] run_settings_window.bat not found:
     echo   %TARGET%
@@ -36,7 +40,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$lnk = $ws.CreateShortcut('%DESKTOP%\%SHORTCUT_NAME%');" ^
     "$lnk.TargetPath = '%TARGET%';" ^
     "$lnk.WorkingDirectory = '%WORKDIR%';" ^
-    "$lnk.IconLocation = 'C:\Windows\System32\imageres.dll,109';" ^
+    "$lnk.IconLocation = '%ICON%';" ^
     "$lnk.Description = 'Cat Monitoring System - Settings Window (launches settings_window.py via Anaconda yolo_new env)';" ^
     "$lnk.Save()"
 
