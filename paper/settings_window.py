@@ -51,6 +51,7 @@ from settings_gui import dialogs  # noqa: E402
 from settings_gui import tab_docs_panel  # noqa: E402
 from settings_gui import tool_order as _tool_order  # noqa: E402
 from settings_gui import ui_state as _ui_state  # noqa: E402
+from settings_gui import recent_paths as _recent_paths  # noqa: E402
 from settings_gui import extra_env as _extra_env  # noqa: E402
 from settings_gui.style import (  # noqa: E402
     BTN_PRIMARY_BG,
@@ -687,26 +688,50 @@ class SettingsWindow(tk.Tk):
         # 不對「填了但腳本不支援」的情況另外提示或報錯。
         tool_row_video = tk.Frame(tool_outer, bg=COLOR_HEADER_BG)
         tool_row_video.pack(fill="x", padx=10, pady=(0, 4))
-        tk.Label(
-            tool_row_video, text="🎬 影片路徑（選填）:", bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
+        video_label = tk.Label(
+            tool_row_video, text="🎬 影片路徑（選填，可拖放）:", bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
             font=self._font_hint,
-        ).pack(side="left")
+        )
+        video_label.pack(side="left")
         # 影片路徑：記住上次填的值（settings_gui/ui_state.json，純 UI 便利記憶）
         self._tool_video_path_var = tk.StringVar(
             value=_ui_state.get("last_tool_video_path", "")
         )
-        # 這排在深色的 COLOR_HEADER_BG 底色上——原生 tk.Entry 不管怎麼配色都是
-        # 方正直角，跟同一排自製的膠囊圓角按鈕（_styled_button/_PillButton）擺
-        # 在一起明顯不搭，第一版只換色沒換形狀使用者仍不滿意。改用
-        # _styled_entry（settings_gui/widgets.py 的 _RoundedEntry）：手繪圓角
-        # 矩形背景＋內嵌真正的 tk.Entry，白底、淡藍邊框，聚焦時邊框換成跟下拉
-        # 選單同一種強調藍，內距也比原生 Entry 鬆，不再侷促。
-        _styled_entry(
-            tool_row_video, self._tool_video_path_var,
-            bg=COLOR_TAB_BG, fg=COLOR_LABEL_FG,
+        # 可以直接打字的下拉選單：下拉清單是「最近使用的影片／資料夾路徑」（含鎖定項目，
+        # 見 settings_gui/recent_paths.py），右邊「🗂 管理」開對話框排序／鎖定／刪除。
+        # 外框沿用上面腳本下拉選單的 _styled_combobox_frame＋ToolScript.TCombobox，
+        # 跟原本的圓角輸入框（_styled_entry）同一套外觀。postcommand 在每次展開前
+        # 重讀清單，管理對話框或其他地方改過之後不用另外通知這裡。
+        video_combo_frame = _styled_combobox_frame(
+            tool_row_video, bg=COLOR_TAB_BG,
             border=COLOR_TOOL_DESC_BORDER, border_focus=TAB_COLORS["模型與輸入來源"][1],
-            font=self._font_hint,
-        ).pack(side="left", fill="x", expand=True, padx=(6, 8))
+        )
+        video_combo_frame.pack(side="left", fill="x", expand=True, padx=(6, 8))
+        video_combo = ttk.Combobox(
+            video_combo_frame, textvariable=self._tool_video_path_var,
+            values=_recent_paths.load()[0], font=self._font_hint, height=12,
+            style="ToolScript.TCombobox",
+            postcommand=lambda: video_combo.configure(values=_recent_paths.load()[0]),
+        )
+        video_combo_frame.embed(video_combo)
+        self._tool_video_combo = video_combo
+        # 鎖定／找不到的列上色：跟腳本下拉選單同一招，掛在 popdown 的 <Map> 事件上
+        # （理由見上面腳本下拉選單的說明與 _style_tool_combo_locked_rows()）。
+        try:
+            _popdown = video_combo.tk.call("ttk::combobox::PopdownWindow", video_combo)
+            _cmd = self.register(self._style_video_combo_rows)
+            self.tk.call("bind", _popdown, "<Map>", f"+{_cmd}")
+        except tk.TclError:
+            pass
+        _styled_button(
+            tool_row_video, "🗂 管理", self._on_manage_recent_videos, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+            font=self._font_hint, compact=True,
+        ).pack(side="left", padx=(0, SPACE_XS))
+        # 從檔案總管拖檔案／資料夾進這一排（標籤、下拉選單、外框都算）＝直接套用＋記進最近清單
+        _recent_paths.enable_file_drop(
+            [tool_row_video, video_label, video_combo_frame, video_combo],
+            self._set_tool_video_path,
+        )
         # 原本是單一「瀏覽...」按鈕彈出選單選「檔案」或「資料夾」——彈出選單本身
         # 是原生元件，不管怎麼配色都不會有實心按鈕那種立體感/一致外觀（見
         # _on_browse_tool_video 原本的說明）。改成直接放兩顆並排的小按鈕，兩個
@@ -1257,12 +1282,62 @@ class SettingsWindow(tk.Tk):
             ],
         )
         if path:
-            self._tool_video_path_var.set(path)
+            self._set_tool_video_path(path)
 
     def _pick_tool_video_folder(self):
         path = filedialog.askdirectory(title="選擇影片資料夾")
         if path:
-            self._tool_video_path_var.set(path)
+            self._set_tool_video_path(path)
+
+    def _set_tool_video_path(self, path):
+        """選檔／選資料夾／拖放進來的路徑：填進輸入框，同時記進最近使用清單。"""
+        path = _recent_paths.normalize(path)
+        if not path:
+            return
+        self._tool_video_path_var.set(path)
+        _recent_paths.record(path)
+        combo = getattr(self, "_tool_video_combo", None)
+        if combo is not None:
+            combo.icursor("end")
+            combo.xview("end")
+
+    def _on_manage_recent_videos(self):
+        _recent_paths.open_dialog(self, on_pick=self._tool_video_path_var.set)
+
+    def _style_video_combo_rows(self):
+        """影片路徑下拉清單展開時：鎖定的列加 🔒＋深橘字、找不到的路徑加「（找不到）」＋暗紅字。
+        只改 popdown listbox 顯示的文字，不動 combo 的 -values（選取時 ttk 讀的是
+        -values，輸入框拿到的仍是乾淨路徑）——同 _style_tool_combo_locked_rows()。"""
+        combo = getattr(self, "_tool_video_combo", None)
+        if combo is None:
+            return
+        try:
+            _popdown = combo.tk.call("ttk::combobox::PopdownWindow", combo)
+            listbox_path = f"{_popdown}.f.l"
+            combo.tk.call("ttk::combobox::ConfigureListbox", combo)
+            values = combo.cget("values")
+        except tk.TclError:
+            return
+        try:
+            _paths, locked = _recent_paths.load()
+        except Exception:
+            locked = []
+        for idx, val in enumerate(values):
+            is_locked = _recent_paths.is_locked(val, locked)
+            missing = not os.path.exists(val)
+            text = f"🔒 {val}" if is_locked else val
+            if missing:
+                text += "  （找不到）"
+            try:
+                combo.tk.call(listbox_path, "delete", idx)
+                combo.tk.call(listbox_path, "insert", idx, text)
+                if is_locked or missing:
+                    combo.tk.call(
+                        listbox_path, "itemconfigure", idx,
+                        "-foreground", _tool_order._LOCKED_FG if is_locked else _recent_paths._MISSING_FG,
+                    )
+            except tk.TclError:
+                pass
 
     def _pick_tool_model_file(self):
         """選 YOLO pose 模型檔（.pt）——跟影片路徑不同，模型路徑目前所有支援的
@@ -1345,6 +1420,7 @@ class SettingsWindow(tk.Tk):
         extra_env = {}
         if video_path:
             extra_env["TEST_VIDEO_PATH"] = video_path
+            _recent_paths.record(video_path)  # 實際拿來跑過的路徑記進最近使用清單
         if model_path:
             extra_env["YOLO_MODEL_PATH"] = model_path
         # 「⚙ 額外設定」裡設定的環境變數（例如 DISPLAY_RESOLUTION）；名稱跟上面兩個不會重疊
