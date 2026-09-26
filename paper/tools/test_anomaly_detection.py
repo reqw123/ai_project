@@ -2,6 +2,7 @@
 靜止偵測測試腳本
 模式 1：背景 CSV  — 自動逐幀處理所有影片，輸出 CSV，無 GUI
 模式 2：GUI 測試  — 互動視窗，骨架 / bbox / 靜止標語，1/2 鍵切換影片
+                    純顯示：不寫 CSV、不做分布分析（數據輸出只在模式 1）
 操作（GUI）：q/ESC=結束  Space=暫停  r=重播  1=上一支  2=下一支  s=套用調整
 終端（GUI）：輸入 'motion <值>' 或 'mean <整數>' 後按 s 套用，停止後自動還原
 """
@@ -157,7 +158,7 @@ def analyze_and_print(csv_path):
         with open(csv_path, newline="", encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 if r["detected"] == "1":
-                    rows.append(r["rolling_mean_px"])
+                    rows.append(r["rolling_mean_norm"])
     except Exception as e:
         print(f"  [分析失敗] {e}")
         return
@@ -177,19 +178,26 @@ def analyze_and_print(csv_path):
     bins = np.linspace(lo, hi, 11)
     counts, _ = np.histogram(arr, bins=bins)
     max_c = max(counts) or 1
-    print("  ASCII 直方圖（rolling_mean px）：")
+    print("  ASCII 直方圖（rolling_mean，body_fraction）：")
     for i, c in enumerate(counts):
         bar = "█" * int(c / max_c * 30)
         print(f"  {bins[i]:6.2f}-{bins[i+1]:6.2f} | {bar} ({c})")
     print()
 
 
-def _write_csv_row(csv_w, frame_idx, anomaly, detected, cur_label):
+def _motion_stats(anomaly):
+    """目前的 (rolling_mean, motion, is_still)——模式 2 畫面標語直接用這個，不經過 CSV。"""
     win          = anomaly._motion_window
     rolling_mean = sum(win) / len(win) if len(win) >= 2 else 0.0
     motion       = anomaly.last_motion_score
     # is_still 跟隨 anomaly 當前的 _still_threshold（可能已被即時調整）
-    is_still_csv = len(win) >= 2 and rolling_mean < anomaly._still_threshold
+    is_still     = len(win) >= 2 and rolling_mean < anomaly._still_threshold
+    return rolling_mean, motion, is_still
+
+
+def _write_csv_row(csv_w, frame_idx, anomaly, detected, cur_label):
+    """模式 1 專用：把目前這一幀的數值寫進 CSV。"""
+    rolling_mean, motion, is_still_csv = _motion_stats(anomaly)
     csv_w.writerow([
         frame_idx,
         f"{motion:.4f}",
@@ -320,7 +328,8 @@ def run_background(videos, detector):
 # ── 模式 2：GUI 測試 ───────────────────────────────────────────────────────────
 
 def run_gui(videos, detector):
-    csv_paths = []
+    # 模式 2 是純 GUI 展示：不建 CSV、不寫逐幀數據、結束後也不做分布分析——
+    # 數據輸出一律只在模式 1（run_background）做，兩種模式嚴格分開。
 
     def open_video(idx, thresh=MOTION_THRESHOLD, win=ROLLING_WINDOW, strd=STRIDE):
         """開啟影片，用傳入的參數建立偵測器（切換影片時保留即時調整值）。"""
@@ -328,15 +337,14 @@ def run_gui(videos, detector):
         cap  = cv2.VideoCapture(path)
         if not cap.isOpened():
             print(f"[ERROR] 無法開啟：{path}")
-            return None, None, None, None, None, "unknown"
+            return None, None, "unknown"
         ano             = AnomalyDetector(still_threshold=thresh,
                                           rolling_window=win,
                                           stride=strd,
                                           kp_conf_thres=KP_CONF_THRES)
-        cf, cw, cp, lbl = open_csv(path)
-        csv_paths.append(cp)
-        print(f"\n[VIDEO] {Path(path).name}  label={lbl}  →  CSV: {cp}")
-        return cap, ano, cf, cw, cp, lbl
+        lbl             = parse_behavior_label(path)
+        print(f"\n[VIDEO] {Path(path).name}  label={lbl}")
+        return cap, ano, lbl
 
     # 啟動終端輸入執行緒
     _gui_running[0] = True
@@ -349,7 +357,7 @@ def run_gui(videos, detector):
         cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     vid_idx = 0
-    cap, anomaly, csv_f, csv_w, _, cur_label = open_video(vid_idx)
+    cap, anomaly, cur_label = open_video(vid_idx)
     frame_idx       = 0
     paused          = False
     _last_switch_t  = 0.0   # 防抖：避免 key repeat 造成連跳兩支影片
@@ -421,12 +429,11 @@ def run_gui(videos, detector):
                 # 切換影片：繼承門檻 / 視窗 / stride 設定，但清空所有偵測狀態
                 t_now, w_now, s_now = anomaly._still_threshold, anomaly._motion_window.maxlen, anomaly._stride
                 cap.release()
-                csv_f.flush(); csv_f.close()
                 vid_idx = switch
-                cap, anomaly, csv_f, csv_w, _, cur_label = open_video(vid_idx,
-                                                                        thresh=t_now,
-                                                                        win=w_now,
-                                                                        strd=s_now)
+                cap, anomaly, cur_label = open_video(vid_idx,
+                                                     thresh=t_now,
+                                                     win=w_now,
+                                                     strd=s_now)
                 # open_video 建立全新 AnomalyDetector，motion_window / prev_kpts 已清空
                 _last_switch_t = time.time()
                 frame_idx = 0
@@ -457,9 +464,7 @@ def run_gui(videos, detector):
                 anomaly.detect(None, None)
                 is_still = False
 
-            rolling_mean, motion = _write_csv_row(csv_w, frame_idx, anomaly, detected, cur_label)
-            if frame_idx % 30 == 0:
-                csv_f.flush()
+            rolling_mean, motion, _ = _motion_stats(anomaly)
 
             if detected:
                 _draw_skeleton(frame, kpts, kpt_conf)
@@ -479,18 +484,9 @@ def run_gui(videos, detector):
         _gui_running[0] = False
         with _pending_lock:
             _pending.clear()
-        cap.release()
-        if csv_f and not csv_f.closed:
-            csv_f.flush()
-            csv_f.close()
+        if cap is not None:
+            cap.release()
         cv2.destroyAllWindows()
-
-    print("\n" + "=" * 60)
-    print("  rolling_mean 分布分析（協助設定 MOTION_THRESHOLD）")
-    print("=" * 60)
-    for cp in csv_paths:
-        print(f"\n  檔案：{Path(cp).name}")
-        analyze_and_print(cp)
 
 
 # ── 主程式 ────────────────────────────────────────────────────────────────────
