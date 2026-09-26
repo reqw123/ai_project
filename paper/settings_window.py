@@ -1433,9 +1433,9 @@ class SettingsWindow(tk.Tk):
             console = getattr(self, "_console_panel", None)
             if note and console is not None:
                 console.append(f"（{note}）\n", tag="muted")  # 讓使用者看得到這次有覆寫什麼
-            if console is not None:
-                # 確認腳本已啟動後，把焦點放到終端機輸入框，有 input() 前置操作的腳本可以直接打字回答
-                console.focus_input_soon()
+            # 刻意不自動把焦點搬到終端機輸入框：43 支工具只有少數會 input()，每次都搶焦點
+            # 反而會跟腳本自己跳出的預覽視窗互搶。改成真的在等輸入時由終端機面板閃爍提醒，
+            # 使用者按 Ctrl+I（或點輸出區）自己過去（見 console_panel.py 的輸入提醒）。
         # 記住「上次使用的腳本 + 影片路徑 + 模型路徑」，下次開視窗自動還原
         self._save_tool_ui_state()
 
@@ -1475,7 +1475,7 @@ class SettingsWindow(tk.Tk):
                 idle_sec = console.seconds_idle() or 0.0
                 self._set_process_status(
                     f"⌨️  {pm.active_label} 疑似卡在等待輸入 · PID {pm.process.pid} · "
-                    f"已 {idle_sec:.0f} 秒沒有新輸出 → 請到下方終端機輸入框輸入",
+                    f"已 {idle_sec:.0f} 秒沒有新輸出 → 按 Ctrl+I 到下方終端機輸入框輸入",
                     "waiting",
                 )
             else:

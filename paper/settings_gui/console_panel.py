@@ -52,6 +52,7 @@ from settings_gui.style import (
     CONSOLE_MIN_HEIGHT,
     SPACE_SM,
 )
+from settings_gui.virtual_keyboard import VirtualKeyboard
 from settings_gui.widgets import _styled_button
 
 
@@ -71,12 +72,17 @@ class ConsolePanel:
         self.log_queue = queue.Queue()
         self._log_reader_thread = None
         self._log_line_count = 0
+        self._cr_pending = False  # 上一段輸出以 "\r" 結尾、還不知道是不是 "\r\n"（見 append()）
         self._reader_label = None  # 目前這條 log reader 對應哪個行程的顯示名稱
 
         # 供「疑似卡在 input() 等待輸入」判斷用（見 likely_waiting_for_input()）：
         # 記錄最後一次收到輸出的時間，以及那次輸出是否以換行結尾。
         self._last_output_monotonic = None
         self._last_chunk_ends_newline = True
+        # 最後一行是 "\r" 覆寫的進度列（tqdm 之類）：沒有換行結尾但不是在等輸入
+        self._last_line_is_progress = False
+        # 「疑似在等輸入」提醒（輸入列邊框閃爍＋提示文字換色）的狀態，見 _update_input_alert()
+        self._input_alert_since = None
 
         self._stdin_handler = None  # process_manager.py 事後用 set_stdin_handler() 掛上來
 
@@ -123,6 +129,39 @@ class ConsolePanel:
             header, textvariable=self._preview_var, bg=COLOR_HEADER_BG, fg=COLOR_HEADER_FG,
             font=self.window._font_hint, anchor="w",
         )
+        # 標題列最右邊的「1」「2」快速回答鈕：很多工具開場問「模式 (1/2)」，點一下＝在輸入框
+        # 打 1／2 再按 Enter（不會動到輸入框裡已經打的字）。放在標題列而不是輸入列，是因為
+        # 收合時也一直看得到。先 pack(side="right")，收合時才 pack 的預覽文字會自動排在它左邊。
+        # 1×1 透明圖片＋compound 讓 tk.Button 的 width/height 以像素計，才能做成正方形。
+        self._quick_btn_px = tk.PhotoImage(width=1, height=1)
+        quick = tk.Frame(header, bg=COLOR_HEADER_BG)
+        quick.pack(side="right", padx=(0, 8))
+        # 最右邊的「⌨」：開關虛擬鍵盤（settings_gui/virtual_keyboard.py），在按鈕正上方彈出、
+        # 一定在主視窗範圍內，按鍵會打進輸入框。鍵盤第一次按才建立。
+        self._vkbd = None
+        self._keyboard_btn = tk.Button(
+            quick, text="⌨", image=self._quick_btn_px, compound="center",
+            width=self._QUICK_BTN_SIZE, height=self._QUICK_BTN_SIZE,
+            command=self.toggle_keyboard,
+            bg=BTN_SECONDARY_BG, fg="#ffffff", activebackground=BTN_SECONDARY_ACTIVE,
+            activeforeground="#ffffff", disabledforeground="#8a96a3",
+            relief="flat", bd=0, highlightthickness=0, cursor="hand2",
+            font=("Segoe UI Symbol", 11), state="disabled",
+        )
+        self._keyboard_btn.pack(side="right", padx=(4, 0), pady=4)
+        self._quick_answer_btns = []
+        for answer in ("2", "1"):  # side="right" 由右往左排，所以先放 2
+            btn = tk.Button(
+                quick, text=answer, image=self._quick_btn_px, compound="center",
+                width=self._QUICK_BTN_SIZE, height=self._QUICK_BTN_SIZE,
+                command=lambda a=answer: self._send_stdin_text(a),
+                bg=BTN_SECONDARY_BG, fg="#ffffff", activebackground=BTN_SECONDARY_ACTIVE,
+                activeforeground="#ffffff", disabledforeground="#8a96a3",
+                relief="flat", bd=0, highlightthickness=0, cursor="hand2",
+                font=(CONSOLE_FONT_FAMILY, 10, "bold"), state="disabled",
+            )
+            btn.pack(side="right", padx=(4, 0), pady=4)
+            self._quick_answer_btns.append(btn)
 
         # 工具列 + Text 輸出區包成一個子容器，收合時整包 pack_forget()，
         # 展開時整包用 before/after 對齊 grip／header 之間的正確順序重新插回。
@@ -187,7 +226,12 @@ class ConsolePanel:
         # 輸入列直接掛在 container（parent）底部、不放進 body：收合時 body 會整包 pack_forget()，
         # 輸入列如果在裡面就跟著消失，使用者得先展開才能回應 input()。掛在 container 底下、
         # 用 side="bottom" + before=body 固定在 body 下方，展開／收合都一直看得到、打得了字。
-        input_row = tk.Frame(parent, bg=COLOR_CONSOLE_BG)
+        # highlightthickness 預留 2px 邊框：平常跟底色同色看不出來，腳本在等輸入時換成
+        # 提醒色閃爍（見 _update_input_alert），不會因為邊框出現而讓版面跳動。
+        input_row = tk.Frame(
+            parent, bg=COLOR_CONSOLE_BG,
+            highlightthickness=2, highlightbackground=COLOR_CONSOLE_BG, highlightcolor=COLOR_CONSOLE_BG,
+        )
         input_row.pack(fill="x", padx=8, pady=(0, 8), side="bottom", before=body)
         self._input_row = input_row
         tk.Label(
@@ -202,16 +246,24 @@ class ConsolePanel:
         )
         self.stdin_entry.pack(side="left", fill="x", expand=True, padx=(6, 6), ipady=3)
         self.stdin_entry.bind("<Return>", lambda _e: self.on_send_stdin())
+        # 使用者已經來到輸入框＝提醒達成目的，停止閃爍
+        self.stdin_entry.bind("<FocusIn>", lambda _e: self._stop_input_alert(), add="+")
         self.send_stdin_btn = _styled_button(
             input_row, "傳送", self.on_send_stdin, BTN_PRIMARY_BG, BTN_PRIMARY_ACTIVE,
             font=self.window._font_hint, compact=True,
         )
         self.send_stdin_btn.config(state="disabled")
         self.send_stdin_btn.pack(side="left")
-        tk.Label(
-            input_row, text="（沒有行程在跑時停用；main.py／腳本停在等待輸入時，在這裡打字後按 Enter 或「傳送」；面板收合時也能輸入）",
+        self._input_hint_label = tk.Label(
+            input_row, text=self._INPUT_HINT_IDLE,
             bg=COLOR_CONSOLE_BG, fg=COLOR_CONSOLE_MUTED_FG, font=self.window._font_hint,
-        ).pack(side="left", padx=(8, 0))
+        )
+        self._input_hint_label.pack(side="left", padx=(8, 0))
+        # Ctrl+I（I＝Input）：從視窗任何地方跳到輸入框。啟動腳本時不再自動搶焦點，改由
+        # 使用者看到提醒後自己按過來。bind_all 同 Ctrl+/- 縮放字級的理由；大寫鎖定時
+        # 送出的是 <Control-I>，兩種都綁。
+        for seq in ("<Control-i>", "<Control-I>"):
+            self.window.bind_all(seq, self._on_focus_input_shortcut)
 
         # 點終端機輸出區任何地方（不是只有輸入框本身）都自動把焦點轉到輸入框，
         # 不用特地瞄準那一小條 Entry 才能打字——但要保留「反白複製訊息」這件事：
@@ -339,8 +391,32 @@ class ConsolePanel:
     # ── 輸出內容 ─────────────────────────────────────────────────────
 
     def append(self, text, tag=None):
+        # 子行程輸出是原始位元組解碼（見 start_log_reader），Windows 上一般換行會以 "\r\n"
+        # 進來，單獨的 "\r" 則是 tqdm 進度條「回到行首重畫」。以前 "\r" 原樣塞進 Text，
+        # 一個 epoch 幾百次進度更新全部接成同一條超長邏輯行，Tk 每插入一次都要重排整條行：
+        # 實測透過本面板跑 0_train_gcn.py，主執行緒 ~77% 時間卡在這裡、畫面最久卡 0.7 秒
+        # （5000 行上限也擋不住——整條進度條只算 1 行）。改成照真的終端機語意：
+        # "\r\n" 當換行；單獨 "\r" 只留它後面的文字、覆寫目前這一行。
+        # 結尾的 "\r" 可能是被 os.read 切開的 "\r\n" 前半，先留到下一次再判斷。
+        if self._cr_pending:
+            text = "\r" + text
+            self._cr_pending = False
+        if text.endswith("\r"):
+            text = text[:-1]
+            self._cr_pending = True
+        text = text.replace("\r\n", "\n")
+        if text or self._cr_pending:
+            # 最後一行有 "\r"（或整段以 "\r" 結尾、留到下次）＝進度列在原地更新
+            self._last_line_is_progress = self._cr_pending or "\r" in text.rsplit("\n", 1)[-1]
+        tags = (tag,) if tag else ()
         self.text.configure(state="normal")
-        self.text.insert("end", text, (tag,) if tag else ())
+        if "\r" in text:
+            segs = text.split("\n")
+            if "\r" in segs[0]:
+                # 第一段接在 Text 目前最後一行後面：覆寫＝先刪掉那一行已有的內容
+                self.text.delete("end-1c linestart", "end-1c")
+            text = "\n".join(s.rsplit("\r", 1)[-1] for s in segs)
+        self.text.insert("end", text, tags)
         # 長時間跑下來輸出量可能很大，Text 內容超過上限就砍掉前面舊的部分，
         # 避免記憶體無限增長——保留「最新」的訊息比保留最舊的更有用。
         self._log_line_count += text.count("\n")
@@ -363,6 +439,8 @@ class ConsolePanel:
         self.text.delete("1.0", "end")
         self.text.configure(state="disabled")
         self._log_line_count = 0
+        self._cr_pending = False
+        self._last_line_is_progress = False
 
     def seconds_idle(self):
         """距離最後一次輸出過了幾秒；本次行程還沒有任何輸出時回傳 None。"""
@@ -382,11 +460,11 @@ class ConsolePanel:
         疑似卡住。只看「太久沒輸出」則會誤判成模型載入、大量幀運算等正常的沉默期
         （這類輸出正常都會以換行收尾，不會誤觸發）。
 
-        已知取捨：用 \\r 覆寫同一行的進度顯示（例如 tqdm）若更新間隔恰好超過
-        idle_threshold，仍可能被誤判成疑似等待輸入。
+        用 \\r 覆寫同一行的進度顯示（例如 tqdm）最後一行也沒有換行，但 append() 會記下
+        「最後一行是進度列」，這種情況不算等待輸入（input() 的提示字不會以 \\r 開頭）。
         """
         idle = self.seconds_idle()
-        if idle is None or self._last_chunk_ends_newline:
+        if idle is None or self._last_chunk_ends_newline or self._last_line_is_progress:
             return False
         return idle >= idle_threshold
 
@@ -514,6 +592,7 @@ class ConsolePanel:
         except queue.Empty:
             pass
         self._flush_pending_text(pending)
+        self._update_input_alert()
         self.window.after(80, self._drain_log_queue)
 
     # ── stdin 輸入 ───────────────────────────────────────────────────
@@ -538,11 +617,6 @@ class ConsolePanel:
             return  # 沒有行程在跑，輸入框本來就停用，搶了焦點也打不了字
         self.stdin_entry.focus_set()
 
-    # 啟動腳本後「搶回輸入焦點」的重試時間點（毫秒）。腳本啟動後常常過一兩秒才跳出自己的
-    # 預覽視窗（cv2／tkinter），新視窗會把系統焦點搶走；所以除了立刻聚焦一次，還要在這段
-    # 時間內補幾次。刻意只補到 1.5 秒左右——再久就可能搶走使用者剛點進預覽視窗的焦點。
-    FOCUS_RETRY_DELAYS_MS = (0, 300, 800, 1500)
-
     def focus_input(self, force=False):
         """把鍵盤焦點放到輸入框並把游標移到最後。輸入框停用（沒有行程在跑）時什麼都不做，
         回傳 False。force=True 時連視窗本身一起拉到前景（Windows 對「不是前景的行程」
@@ -558,51 +632,131 @@ class ConsolePanel:
         except tk.TclError:
             return False  # 視窗已被關閉
 
-    def focus_input_soon(self):
-        """腳本剛啟動後呼叫：立刻聚焦輸入框，並在短時間內重試，讓使用者可以直接打字回答
-        腳本開場的 input() 問題。使用者在這段時間內已經自己在別的元件上操作（焦點在本視窗
-        的別的控制項）、或已經開始在輸入框打字，就不再搶。"""
-        for delay in self.FOCUS_RETRY_DELAYS_MS:
-            self.window.after(delay, self._refocus_input_step)
+    # ── 「疑似在等輸入」提醒 ──────────────────────────────────────────
+    # 啟動腳本時不自動搶焦點（多數工具根本不問問題，搶了反而跟腳本的預覽視窗互搶）；
+    # 改成真的在等輸入時才提醒：輸入列邊框閃爍＋提示文字換成琥珀色，使用者按 Ctrl+I
+    # 或點輸出區過來。判斷沿用 likely_waiting_for_input()，每個 _drain_log_queue tick
+    # （80ms）檢查一次；使用者點進輸入框、有新輸出、行程結束就停。
 
-    def _refocus_input_step(self):
-        try:
-            current = self.window.focus_get()
-        except (tk.TclError, KeyError):
-            current = None  # focus_get 遇到 ttk 彈出視窗（下拉清單）等特殊 widget 會丟 KeyError
-        if current is self.stdin_entry:
-            return  # 已經在輸入框
-        if current is not None and not (
-            current.winfo_toplevel() is self.window and self._focus_is_startup_default(current)
-        ):
-            # 使用者已經點了本視窗別的控制項，或正在操作別的視窗（例如剛開的「額外設定」對話框）：尊重他，不搶。
-            # 只有焦點被別的程式（例如腳本剛跳出的預覽視窗）拿走（focus_get 為 None）、
-            # 或還停在按下啟動鈕後的預設位置時才搶回輸入框。
+    _INPUT_HINT_IDLE = ("（沒有行程在跑時停用；tools/ 腳本停在等待輸入時，在這裡打字後按 Enter 或「傳送」；"
+                        "Ctrl+I 跳到這裡；面板收合時也能輸入）")
+    _INPUT_HINT_ALERT = "⌨️ 腳本好像在等你輸入 → 按 Ctrl+I（或點上方輸出區）到這裡作答，或按標題列右邊的「1」「2」「⌨」"
+    _INPUT_ALERT_COLOR = "#e67e22"   # 跟設定視窗狀態列「疑似卡在等待輸入」同一個琥珀色
+    _INPUT_ALERT_BLINK_SEC = 6.0     # 前幾秒閃爍吸引注意，之後維持常亮，避免一直閃很煩
+    _INPUT_ALERT_BLINK_PERIOD = 0.5
+    _QUICK_BTN_SIZE = 22             # 標題列「1」「2」快速回答鈕的邊長（px）
+
+    def _tint_quick_answer_btns(self, alert):
+        bg = self._INPUT_ALERT_COLOR if alert else BTN_SECONDARY_BG
+        for btn in getattr(self, "_quick_answer_btns", ()):
+            try:
+                btn.config(bg=bg)
+            except tk.TclError:
+                pass
+        self._refresh_keyboard_btn()
+
+    # ── 虛擬鍵盤 ─────────────────────────────────────────────────────
+
+    def toggle_keyboard(self):
+        if str(self.stdin_entry["state"]) == "disabled":
             return
-        self.focus_input(force=True)
+        if self._vkbd is None:
+            self._vkbd = VirtualKeyboard(
+                self.window, self.stdin_entry, self._keyboard_btn, self.on_send_stdin,
+                on_visibility=lambda _v: self._refresh_keyboard_btn(),
+                font_family=CONSOLE_FONT_FAMILY,
+            )
+        self._vkbd.toggle()
 
-    def _focus_is_startup_default(self, widget):
-        """剛按下「▶ 執行所選腳本」／確認對話框關閉後，焦點會落在啟動按鈕、下拉選單或視窗本身，
-        這些都不算「使用者刻意移走焦點」，可以搶回輸入框。"""
-        start_btn = getattr(self.window, "_start_tool_btn", None)
-        combo = getattr(self.window, "_tool_combo", None)
-        return widget is self.window or widget is start_btn or widget is combo
+    def hide_keyboard(self):
+        vkbd = getattr(self, "_vkbd", None)
+        if vkbd is not None:
+            vkbd.hide()
+
+    def _refresh_keyboard_btn(self):
+        """「⌨」鈕底色：鍵盤開著＝綠色；等待輸入提醒中＝琥珀色；其餘＝一般灰藍。"""
+        btn = getattr(self, "_keyboard_btn", None)
+        if btn is None:
+            return
+        vkbd = getattr(self, "_vkbd", None)
+        if vkbd is not None and vkbd.visible:
+            bg = BTN_PRIMARY_BG
+        elif self._input_alert_since is not None:
+            bg = self._INPUT_ALERT_COLOR
+        else:
+            bg = BTN_SECONDARY_BG
+        try:
+            btn.config(bg=bg)
+        except tk.TclError:
+            pass
+
+    def _on_focus_input_shortcut(self, _event=None):
+        self.focus_input()
+        return "break"
+
+    def _input_needs_alert(self):
+        try:
+            if str(self.stdin_entry["state"]) == "disabled":
+                return False
+            if self.window.focus_get() is self.stdin_entry:
+                return False
+        except (tk.TclError, KeyError):
+            pass  # focus_get 遇到 ttk 下拉清單等特殊 widget 會丟 KeyError，當作不在輸入框
+        return self.likely_waiting_for_input()
+
+    def _update_input_alert(self):
+        if not self._input_needs_alert():
+            self._stop_input_alert()
+            return
+        now = time.monotonic()
+        if self._input_alert_since is None:
+            self._input_alert_since = now
+            self._input_hint_label.config(text=self._INPUT_HINT_ALERT, fg=self._INPUT_ALERT_COLOR)
+            self._tint_quick_answer_btns(True)
+        elapsed = now - self._input_alert_since
+        blinking = elapsed < self._INPUT_ALERT_BLINK_SEC
+        lit = not blinking or int(elapsed / self._INPUT_ALERT_BLINK_PERIOD) % 2 == 0
+        color = self._INPUT_ALERT_COLOR if lit else COLOR_CONSOLE_BG
+        self._input_row.config(highlightbackground=color, highlightcolor=color)
+
+    def _stop_input_alert(self):
+        if self._input_alert_since is None:
+            return
+        self._input_alert_since = None
+        try:
+            self._input_row.config(highlightbackground=COLOR_CONSOLE_BG, highlightcolor=COLOR_CONSOLE_BG)
+            self._input_hint_label.config(text=self._INPUT_HINT_IDLE, fg=COLOR_CONSOLE_MUTED_FG)
+        except tk.TclError:
+            pass  # 視窗已關閉
+        self._tint_quick_answer_btns(False)
 
     def set_input_enabled(self, enabled):
         state = "normal" if enabled else "disabled"
         self.stdin_entry.config(state=state)
         self.send_stdin_btn.config(state=state)
+        for btn in getattr(self, "_quick_answer_btns", ()):
+            btn.config(state=state)
+        if getattr(self, "_keyboard_btn", None) is not None:
+            self._keyboard_btn.config(state=state)
+        if not enabled:
+            self.hide_keyboard()  # 行程結束：鍵盤打了也送不出去，收起來
+            self._stop_input_alert()
 
     def on_send_stdin(self):
+        if self._send_stdin_text(self.stdin_var.get()):
+            self.stdin_var.set("")
+
+    def _send_stdin_text(self, text):
+        """把 text 送進子行程 stdin 並在輸出區回顯「> text」；成功回傳 True。
+        輸入框的 Enter／「傳送」和標題列的「1」「2」快速回答鈕共用。"""
         if self._stdin_handler is None:
-            return
-        text = self.stdin_var.get()
+            return False
         ok, err = self._stdin_handler(text)
         if err is not None:
             self.append(f"\n[傳送輸入失敗：{err}]\n", tag="muted")
-            return
+            return False
         if not ok:
-            return  # 沒有行程在跑（guard 失敗），原本就靜默不處理
+            return False  # 沒有行程在跑（guard 失敗），原本就靜默不處理
         self.append(f"> {text}\n")
         self.text.see("end")  # 使用者剛互動過，不管「自動捲動」有沒有勾都捲到底比較符合直覺
-        self.stdin_var.set("")
+        return True
