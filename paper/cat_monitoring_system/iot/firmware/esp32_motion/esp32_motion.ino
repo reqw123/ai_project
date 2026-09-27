@@ -5,6 +5,9 @@
  * 時機：偵測狀態改變時才送 {"active": true/false}；另外每 HEARTBEAT_MS
  *       補送一次目前狀態，避免 hub 錯過邊緣事件。
  *
+ * ※ 備用（2026-09-27 起）：平常用 esp32_room（空氣品質＋光照＋移動偵測合併成一片）；
+ *   感測器要放在不同位置時才燒這支。同一個 SOURCE_ID 不要跟 esp32_room 同時燒。
+ *
  * ── 硬體 / 感測器型號 ──────────────────────────────────────────────
  *   MCU  : Espressif ESP32-WROOM-32 dev board
  *   移動 : HC-SR501 passive infrared (PIR) motion sensor module
@@ -33,6 +36,7 @@ const uint16_t MQTT_PORT  = 1883;
 const char* MQTT_USER     = "";
 const char* MQTT_PASS     = "";
 const char* SOURCE_ID     = "food_area";
+String g_hostname;                    // 網路主機名稱 cat-<種類>-<節點>（setup() 裡組好）
 // ────────────────────────────────────────────────────────────
 
 // ═══ 這支節點的 MQTT 身分與 topic（都集中在這，一眼看完）═══════════
@@ -51,7 +55,7 @@ const unsigned long WARMUP_MS    = 60000;  // HC-SR501 暖機期，期間 OUT �
 const unsigned long WIFI_RETRY_MS = 5000;
 const unsigned long MQTT_RETRY_MS = 3000;
 const uint16_t MQTT_SOCKET_TIMEOUT_SEC = 2;
-const uint16_t MQTT_KEEPALIVE_SEC      = 15;
+const uint16_t MQTT_KEEPALIVE_SEC      = 5;    // 斷電時 broker 約 1.5 倍（7.5 秒）後判定離線（原 15 秒要 22 秒；09-27 改）
 
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
@@ -98,6 +102,11 @@ void setup() {
   Serial.begin(115200);
   pinMode(PIR_PIN, INPUT);
 
+  // 網路上的主機名稱（DHCP）：設定視窗「IoT 子系統」用 DNS 反查這個名稱，才知道哪個 IP 是哪一支。
+  // 格式 cat-<種類>-<節點>；主機名稱不能有底線，換成連字號。要在 WiFi.mode() 之前設。
+  g_hostname = String("cat-motion-") + SOURCE_ID;
+  g_hostname.replace("_", "-");
+  WiFi.setHostname(g_hostname.c_str());
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   mqtt.setServer(MQTT_HOST, MQTT_PORT);

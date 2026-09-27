@@ -36,6 +36,7 @@ const uint16_t MQTT_PORT  = 1883;
 const char* MQTT_USER     = "";
 const char* MQTT_PASS     = "";
 const char* SCALE_ID      = "food_bowl";   // ← 要跟 config.py 的 FOOD_SCALE_IDS 一致
+String g_hostname;                    // 網路主機名稱 cat-<種類>-<節點>（setup() 裡組好）
 const float CALIBRATION_FACTOR = 420.0f;   // ← 用砝碼校正
 // ────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ const unsigned long PUBLISH_INTERVAL_MS = 5000;
 const unsigned long WIFI_RETRY_MS = 5000;
 const unsigned long MQTT_RETRY_MS = 3000;
 const uint16_t MQTT_SOCKET_TIMEOUT_SEC = 2;
-const uint16_t MQTT_KEEPALIVE_SEC      = 15;
+const uint16_t MQTT_KEEPALIVE_SEC      = 5;    // 斷電時 broker 約 1.5 倍（7.5 秒）後判定離線（原 15 秒要 22 秒；09-27 改）
 
 HX711 scale;
 WiFiClient wifiClient;
@@ -109,6 +110,11 @@ void setup() {
   scale.set_scale(CALIBRATION_FACTOR);
   scale.tare();                              // 開機當下的重量視為 0
 
+  // 網路上的主機名稱（DHCP）：設定視窗「IoT 子系統」用 DNS 反查這個名稱，才知道哪個 IP 是哪一支。
+  // 格式 cat-<種類>-<節點>；主機名稱不能有底線，換成連字號。要在 WiFi.mode() 之前設。
+  g_hostname = String("cat-weight-") + SCALE_ID;
+  g_hostname.replace("_", "-");
+  WiFi.setHostname(g_hostname.c_str());
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   mqtt.setServer(MQTT_HOST, MQTT_PORT);

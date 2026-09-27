@@ -66,6 +66,7 @@ const char* password = "110106291208";
 const char* mqtt_server = "192.168.0.171";   // mosquitto / Node-RED 那台
 const int   mqtt_port   = 1883;
 const char* SOURCE_ID   = "carrier";         // 節點名稱 → topic 最後一段
+String g_hostname;                    // 網路主機名稱 cat-<種類>-<節點>（setup() 裡組好）
 
 // ═══ 這支節點用到的 MQTT topic（都集中在這，一眼看完）═══════════════
 const String MQTT_CLIENT_ID  = String("esp32-petbox-") + SOURCE_ID;
@@ -136,7 +137,7 @@ const unsigned long MQTT_RETRY_INTERVAL = 3000;
 // 縮短 socket timeout → connect() 失敗時快速返回；loop() 也改成「先畫 TFT、
 // 再維護連線」，讓螢幕不受重連拖累（見 loop()）。
 const uint16_t MQTT_SOCKET_TIMEOUT_SEC = 2;
-const uint16_t MQTT_KEEPALIVE_SEC      = 15;
+const uint16_t MQTT_KEEPALIVE_SEC      = 5;    // 斷電時 broker 約 1.5 倍（7.5 秒）後判定離線（原 15 秒要 22 秒；09-27 改）
 
 bool ledState = false;
 
@@ -258,7 +259,7 @@ void handleConnections() {
 // =====================================================
 void setupOTA() {
 
-  ArduinoOTA.setHostname("ESP32-OTA");   // OTA 名稱
+  ArduinoOTA.setHostname(g_hostname.c_str());   // OTA 名稱＝網路主機名稱（原本是 ESP32-OTA）
 
   ArduinoOTA.onStart([]() {
     Serial.println("OTA Update Started");
@@ -315,6 +316,11 @@ void setup() {
   client.setKeepAlive(MQTT_KEEPALIVE_SEC);
 
   // WiFi（非阻塞：begin 後直接返回，連線狀態由 handleConnections() 輪詢）
+  // 網路上的主機名稱（DHCP）：設定視窗「IoT 子系統」用 DNS 反查這個名稱，才知道哪個 IP 是哪一支。
+  // 格式 cat-<種類>-<節點>；主機名稱不能有底線，換成連字號。要在 WiFi.mode() 之前設。
+  g_hostname = String("cat-petbox-") + SOURCE_ID;
+  g_hostname.replace("_", "-");
+  WiFi.setHostname(g_hostname.c_str());
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
@@ -329,18 +335,32 @@ void setup() {
 // =====================================================
 // 上傳給 iot/ hub 的兩個 topic（cat/iot/env、cat/iot/bodytemp）
 // =====================================================
+// 讀值失敗（NaN）的欄位直接省略：String(NAN) 會印出小寫 nan，不是合法 JSON（09-27 修）。
+// hub 看到欄位消失會報「XX 感測器可能沒接好」；舊專案 topic 則送 null（見 jsonNum）。
+static void addField(String& json, const char* name, float v, int digits) {
+  if (isnan(v)) return;
+  if (json.length() > 1) json += ",";
+  json += "\"" + String(name) + "\":" + String(v, digits);
+}
+
+static String jsonNum(float v, int digits) {
+  return isnan(v) ? String("null") : String(v, digits);
+}
+
 void publishToHub(float ambient, float object, float humidity, bool dht_ok) {
   if (!client.connected()) return;
 
   String env = "{";
-  env += "\"temp_c\":" + String(ambient, 2);
-  if (dht_ok) env += ",\"humidity_pct\":" + String(humidity, 1);
+  addField(env, "temp_c", ambient, 2);
+  if (dht_ok) addField(env, "humidity_pct", humidity, 1);
   env += "}";
-  client.publish(T_PUB_ENV.c_str(), env.c_str());
+  if (env.length() > 2) client.publish(T_PUB_ENV.c_str(), env.c_str());   // 全部讀不到就不送
 
   if (!isnan(object)) {
-    String body = "{\"surface_temp_c\":" + String(object, 2) +
-                  ",\"ambient_temp_c\":" + String(ambient, 2) + "}";
+    String body = "{";
+    addField(body, "surface_temp_c", object, 2);
+    addField(body, "ambient_temp_c", ambient, 2);
+    body += "}";
     client.publish(T_PUB_BODYTEMP.c_str(), body.c_str());
   }
 }
@@ -409,8 +429,8 @@ void loop() {
     // MQTT 上傳（原專案 topic）
     if (client.connected()) {
       String payload = "{";
-      payload += "\"ambient\":" + String(ambient, 2) + ",";
-      payload += "\"object\":" + String(object, 2) + ",";
+      payload += "\"ambient\":" + jsonNum(ambient, 2) + ",";
+      payload += "\"object\":" + jsonNum(object, 2) + ",";
       payload += dht_ok ? "\"humidity\":" + String(humidity)
                         : "\"humidity\":null";
       payload += "}";
