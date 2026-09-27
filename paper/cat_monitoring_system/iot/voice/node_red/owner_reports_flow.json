@@ -1,0 +1,245 @@
+[
+    {
+        "id": "f4d623f637124c80",
+        "type": "tab",
+        "label": "🎙 飼主語音紀錄（貓咪系統）",
+        "disabled": false,
+        "info": "由 paper/cat_monitoring_system/iot/voice/node_red/build_flow.py 產生，請改那支腳本再重新產生。\n需要：python -m iot.voice（飼主語音紀錄服務）、語音辨識 v7.2 流程（修補 26：先說「我要記錄貓咪」）、P4 修補檔 p4_patch.json（「← 飼主語音紀錄」寫進事件標記、立即更新 P4）。"
+    },
+    {
+        "id": "abc7c80c3cee704d",
+        "type": "comment",
+        "z": "f4d623f637124c80",
+        "name": "語音分頁（link call「owner-report」）⇄ MQTT cat/voice/* ⇄ python -m iot.voice；有紀錄 → 健康監測 P4（← 飼主語音紀錄）",
+        "info": "",
+        "x": 420,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "3374d78ed19c694f",
+        "type": "mqtt-broker",
+        "name": "飼主語音紀錄 broker",
+        "broker": "192.168.0.171",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "2f1065352e08aae2",
+        "type": "link in",
+        "z": "f4d623f637124c80",
+        "name": "owner-report",
+        "links": [],
+        "x": 175,
+        "y": 100,
+        "wires": [
+            [
+                "8232fd2f374d9750"
+            ]
+        ]
+    },
+    {
+        "id": "8232fd2f374d9750",
+        "type": "function",
+        "z": "f4d623f637124c80",
+        "name": "送出一句話 → 紀錄服務",
+        "func": "// 語音分頁送來的一句話（msg.ownerReport = { requestId, text, deviceId, source, mode, ts }）→ MQTT 給紀錄服務\n//   mode \"explicit\"＝飼主先說了「我要記錄貓咪」（v7.2 起語音分頁只送這種）\n// 回應回來時「結果 → 回到語音分頁」節點用 requestId 找回這個 msg，經 link out（return）交回 link call。\nconst r = msg.ownerReport || {};\nconst id = String(r.requestId || msg._msgid);\nif (!flow.get(\"vr_online\")) {   // 服務沒在線：馬上回「沒有記錄」，不讓語音分頁等到逾時\n    msg.ownerResult = { id, ok: false, matched: false, reports: [], error: \"紀錄服務沒有在線（python -m iot.voice）\" };\n    node.status({ fill: \"grey\", shape: \"ring\", text: \"服務離線：\" + String(r.text || \"\").slice(0, 12) });\n    return [null, msg];\n}\nconst pending = flow.get(\"vr_pending\") || {};\nconst now = Date.now();\nfor (const k of Object.keys(pending)) if (now - pending[k].at > 15000) delete pending[k];\npending[id] = { at: now, msg };\nflow.set(\"vr_pending\", pending);\nnode.status({ fill: \"blue\", shape: \"dot\", text: \"送出：\" + String(r.text || \"\").slice(0, 16) });\nreturn [{ topic: \"cat/voice/utterance\", payload: { id, text: String(r.text || \"\"), ts: r.ts || now, mode: r.mode === \"explicit\" ? \"explicit\" : \"\",\n    deviceId: String(r.deviceId || \"\"), source: String(r.source || \"voice\") } }, null];\n",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 470,
+        "y": 100,
+        "wires": [
+            [
+                "792607fde4223e50"
+            ],
+            [
+                "4322a37d4edd0526"
+            ]
+        ]
+    },
+    {
+        "id": "792607fde4223e50",
+        "type": "mqtt out",
+        "z": "f4d623f637124c80",
+        "name": "cat/voice/utterance",
+        "topic": "",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "3374d78ed19c694f",
+        "x": 790,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "dd608bc73912056b",
+        "type": "mqtt in",
+        "z": "f4d623f637124c80",
+        "name": "cat/voice/result",
+        "topic": "cat/voice/result",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "3374d78ed19c694f",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 190,
+        "y": 180,
+        "wires": [
+            [
+                "1979a4015927fd2b"
+            ]
+        ]
+    },
+    {
+        "id": "1979a4015927fd2b",
+        "type": "function",
+        "z": "f4d623f637124c80",
+        "name": "結果 → 回到語音分頁／交給 P4",
+        "func": "// 紀錄服務的結果 → 找回原本的 msg，經 link out（return）交回語音分頁；有紀錄就另外送給健康監測 P4（寫進事件標記）\nconst res = msg.payload || {};\nconst pending = flow.get(\"vr_pending\") || {};\nconst p = pending[res.id];\nif (!p) return [null, null];   // 別台 Node-RED 的請求、或已經逾時\ndelete pending[res.id];\nflow.set(\"vr_pending\", pending);\nconst out = p.msg;\nout.ownerResult = res;\nnode.status({ fill: res.matched ? \"green\" : \"grey\", shape: \"dot\",\n    text: res.matched ? (res.reports || []).map(x => x.label).join(\"、\") : res.cancelled ? \"已取消\" : \"沒有紀錄：\" + String(res.text || \"\").slice(0, 12) });\nconst reports = res.ok && res.matched ? (res.reports || []) : [];\nreturn [out, reports.length ? { target: \"← 飼主語音紀錄\", payload: { text: res.text, ts: res.ts, reports } } : null];\n",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 490,
+        "y": 180,
+        "wires": [
+            [
+                "4322a37d4edd0526"
+            ],
+            [
+                "12b4945cc648c787"
+            ]
+        ]
+    },
+    {
+        "id": "4322a37d4edd0526",
+        "type": "link out",
+        "z": "f4d623f637124c80",
+        "name": "回到語音分頁",
+        "mode": "return",
+        "links": [],
+        "x": 790,
+        "y": 150,
+        "wires": []
+    },
+    {
+        "id": "12b4945cc648c787",
+        "type": "link call",
+        "z": "f4d623f637124c80",
+        "name": "→ 健康監測 P4（依名稱：← 飼主語音紀錄）",
+        "links": [],
+        "linkType": "dynamic",
+        "timeout": "10",
+        "x": 830,
+        "y": 220,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "2540519d793e034f",
+        "type": "catch",
+        "z": "f4d623f637124c80",
+        "name": "寫進 P4 逾時／找不到",
+        "scope": [
+            "12b4945cc648c787"
+        ],
+        "uncaught": false,
+        "x": 820,
+        "y": 260,
+        "wires": [
+            [
+                "52f83f4071dd7915"
+            ]
+        ]
+    },
+    {
+        "id": "52f83f4071dd7915",
+        "type": "function",
+        "z": "f4d623f637124c80",
+        "name": "寫進 P4 失敗",
+        "func": "// 動態 link call 找不到「← 飼主語音紀錄」（健康監測流程沒匯入／沒啟用）或 10 秒沒回應：紀錄已經存進 python -m iot.voice，只是 P4 沒更新\nconst m = String(msg.error && msg.error.message || \"\");\nnode.warn(\"飼主語音紀錄沒寫進健康監測 P4：\" + (/timeout/i.test(m) ? \"10 秒沒回應\" : \"找不到「← 飼主語音紀錄」（健康監測流程要匯入並啟用）\") + \"；紀錄本身已存檔\");\nnode.status({ fill: \"red\", shape: \"ring\", text: \"P4 沒更新：\" + m.slice(0, 20) });\nreturn null;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1080,
+        "y": 260,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ae946a19407f4467",
+        "type": "mqtt in",
+        "z": "f4d623f637124c80",
+        "name": "cat/voice/status",
+        "topic": "cat/voice/status",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "3374d78ed19c694f",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 190,
+        "y": 280,
+        "wires": [
+            [
+                "b4f8250576da8c78"
+            ]
+        ]
+    },
+    {
+        "id": "b4f8250576da8c78",
+        "type": "function",
+        "z": "f4d623f637124c80",
+        "name": "服務狀態",
+        "func": "// 紀錄服務上線／離線（retained；離線是服務設的 MQTT 遺囑）→ 「送出」節點看這個決定要不要等\nconst online = !!(msg.payload && msg.payload.online);\nflow.set(\"vr_online\", online);\nnode.status({ fill: online ? \"green\" : \"red\", shape: \"dot\", text: online ? \"紀錄服務在線\" : \"紀錄服務離線（python -m iot.voice）\" });\nreturn null;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 450,
+        "y": 280,
+        "wires": [
+            []
+        ]
+    }
+]

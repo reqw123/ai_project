@@ -92,6 +92,33 @@ ESP32 / 感測器節點
 
 食盆的 `scale_id` 由 `FOOD_SCALE_IDS`（預設 `food_bowl`，逗號分隔多個）指定。
 
+### 連線／感測器健康警告（只記在 hub 日誌，設定視窗 IoT 紀錄框顯示成紅字；2026-09-27 起）
+
+| 情況 | 怎麼判斷 | 模組 |
+|---|---|---|
+| 整台 ESP32 沒送資料 | 連上 broker 後 `NO_DATA_FIRST_CHECK_SEC`（5 秒）先檢查一次；之後某種感測器超過 `DATA_TIMEOUT_SEC`（60 秒）沒資料 | `ingest/no_data_watchdog.py` |
+| ESP32 在線、某顆感測器沒接好：**欄位消失** | 節點還在送，但某欄位超過 `DATA_TIMEOUT_SEC` 沒值（例：外出包 DHT11 → `humidity_pct`）。`SENSOR_EXPECTED_FIELDS` 列的欄位一開始就沒接也抓得到 | `sensors/health.py` |
+| ESP32 在線、類比感測器沒接好：**卡在極端值** | 連續 `SENSOR_RAIL_CONSECUTIVE`（6）筆是 `SENSOR_RAILS` 的極端值（MQ-135 讀到 0 或滿格、光敏電阻滿格；光照 0 不算，全暗是正常的） | `sensors/health.py` |
+| 同種類有好幾台、**其中一台離線**（例：env 的外出包斷電，esp32_env 還在送） | 那一台超過 `DATA_TIMEOUT_SEC` 沒送、同種類還有別台在送（只剩一台的話由上面「沒送資料」報，不重複） | `sensors/health.py` |
+| 韌體送出 `nan`（Arduino `String(NAN)`，例：MLX90614 沒接） | 當作沒有值、同一筆其他欄位照收（以前整筆丟掉）；必填欄位是 nan 時這筆不能用，但這台仍算在線，由「欄位消失」報 | `sensors/router.py` |
+| hub 自己登入 broker 被拒（帳密錯） | 記 ERROR「broker 拒絕連線」，不會錯怪 ESP32 | `ingest/mqtt_ingestor.py` |
+
+做不到的：PIR 空接跟「沒有動靜」在電氣上分不出來；荷重元斷線但 HX711 還在時送的是亂數。
+
+**終端列印（除錯用，設定視窗「⚙ 參數設定 → 🖨 終端列印間隔」）**：警報通知歸警報通知——門檻告警寫 DB、
+發 MQTT → Discord 照 `ALERT_COOLDOWN_SEC`（15 分鐘）冷卻；終端（hub 日誌）另外設：
+
+| 變數 | 預設 | 印什麼 |
+|---|---|---|
+| `WARN_REPEAT_SEC` | 10 | 所有「異常持續中」——沒收到資料、欄位消失、極端值、nan、門檻告警超標——沒解除時每隔幾秒重印（標「持續中」）；0＝只印一次 |
+| `READING_LOG_INTERVAL_SEC` | 0 | 每個節點最新讀數印一行（看數值有沒有進來）；0＝不印 |
+
+2026-09-27 合併：`NO_DATA_CHECK_INTERVAL_SEC`＋`SENSOR_FIELD_MISSING_SEC` → `DATA_TIMEOUT_SEC`；
+`SENSOR_WARN_REPEAT_SEC`＋`SENSOR_NAN_WARN_SEC`＋`ALERT_LOG_REPEAT_SEC` → `WARN_REPEAT_SEC`。
+設定視窗的覆寫檔裡還有舊名稱時會自動換成新的（`iot_config_overrides.LEGACY`）。
+
+恢復正常都會記一行；日誌的告警一律 WARNING（紅字）。
+
 ---
 
 ## 執行
@@ -110,12 +137,46 @@ python -m iot
 
 Ctrl+C（Windows 也含 Ctrl+Break）會優雅關閉：停止 MQTT 迴圈、關閉 SQLite 連線。
 
+### 從設定視窗啟動（2026-09-27 起）
+
+`settings_window.py` 最後一個分頁「📡 IoT 子系統」是各子系統的啟動口：
+
+- 5 個服務，各自一個背景行程：
+  - 🌡 環境感測（`env`）
+  - 👣 移動偵測（`motion`，PIR）
+  - ⚖ 食盆秤重（`weight`）
+  - 🐾 體表溫度（`bodytemp`）
+  - 🎙 飼主語音紀錄（`python -m iot.voice`）
+- 每個服務都有 ▶ 啟動、■ 停止、📄 紀錄三個按鈕，也有「全部啟動／全部停止」，並顯示 MQTT broker 連不連得到。
+- 可以跟 main.py 同時跑：不佔 main.py 那一套「同一時間一支」的機制。
+- 在 cmd 手動執行的也認得（掃行程指令列）。
+- **關掉設定視窗時，執行中的 IoT 服務會一起強制關閉**（先 terminate、5 秒沒結束就 kill；cmd 手動執行的也算），紀錄檔最後會寫一行「設定視窗關閉，一併停止」。
+- 紀錄檔在 `paper/logs/iot/<服務>.log`。
+- 版面：整個分頁固定填滿「分頁頂端 → 全域終端機上緣」，不跟著外層捲動：
+  - 上半是卡片區（放不下時自己捲）；
+  - 下半是紀錄框，一打開就顯示最新的幾行；往上捲看舊紀錄時，新內容進來也不會跳走，捲回最底就恢復跟隨。
+  - 全域終端機變高時，卡片區和紀錄框一起等比例縮，紀錄框不會被蓋住。
+- 紀錄框的高度與字級：
+  - 高度：拖紀錄框的**標題列**（上緣有一條綠色細條，滑鼠變成上下箭頭，整條都能抓），往上拖變高；雙擊回預設（可用高度的 45%）。
+    - **最高跟全域終端機一樣**（拉到視窗標題列下方）：紀錄框跟全域終端機一樣浮在視窗上，拉得比分頁高時會蓋住卡片、分頁列；
+      切到別的分頁時自動藏起來。要切分頁時先把它拉低或雙擊標題列。
+  - 字級：A＋／A－ 按鈕、Ctrl＋滾輪、Ctrl＋＋／－；Ctrl＋0 或點「字級 N」回預設 12。
+  - 兩者都記在 `ui_state.json`（`iot_log_ratio`＝紀錄框佔的比例、`iot_log_font`），下次開啟沿用。
+  - 舊的 `iot_log_height` 已不再使用：像素高度在全域終端機變高時會把卡片擠掉，所以改記比例。
+- 程式：`paper/settings_gui/iot_services.py`（邏輯，不 import 本套件，只用 subprocess 啟動）、`paper/settings_gui/iot_tab.py`（畫面）。
+
+各感測器分開啟動靠 `CAT_MONITORING_IOT_KINDS`（見下表）：
+- 每種一個 `python -m iot` 行程，client id 自動加上種類（例如 `cat-iot-hub-env`），不會互踢。
+- 只有處理 `weight` 的行程才檢查「多久沒進食」，只開環境感測的行程不會誤報。
+- 手動 `python -m iot`（不設）跟原本一樣，全部感測器在一個行程。
+
 ### 設定（環境變數，統一 `CAT_MONITORING_IOT_*` 前綴）
 
 常用：
 
 | 環境變數 | 預設 | 說明 |
 |---|---|---|
+| `CAT_MONITORING_IOT_KINDS` | 空（全部） | 只處理這幾種感測器，逗號分隔（`env`／`motion`／`weight`／`bodytemp`）；設定視窗分開啟動各感測器用 |
 | `CAT_MONITORING_IOT_MQTT_HOST` / `_PORT` | `192.168.0.171` / `1883` | broker 位置（跟 broker 同機時設 `127.0.0.1`） |
 | `CAT_MONITORING_IOT_MQTT_USERNAME` / `_PASSWORD` | 空（匿名） | broker 帳密 |
 | `CAT_MONITORING_IOT_TOPIC_PREFIX` | `cat/iot` | topic 前綴 |
@@ -134,8 +195,14 @@ Ctrl+C（Windows 也含 Ctrl+Break）會優雅關閉：停止 MQTT 迴圈、關�
 ## 持久化
 
 自己的 SQLite（`iot/data/iot_hub.db`，WAL 模式），跟 `paper/baseline_data/` 完全分開。
-資料表：`env_readings` / `motion_events` / `weight_readings` / `weight_events` / `iot_alerts`。
+資料表：`env_readings` / `bodytemp_readings` / `motion_events` / `weight_readings` / `weight_events` / `iot_alerts`。
 `data/` 已在 `iot/.gitignore`，不進版控。
+
+**資料保留（2026-09-27 起）**：外出包每秒一筆，24 小時連續跑一天約 17 萬筆、一個月約 400 MB，所以原始讀數
+（`env_readings`／`bodytemp_readings`／`motion_events`／`weight_readings`）超過 `DATA_RETENTION_DAYS`（預設 30 天，
+0＝不清理）的定時刪掉：hub 啟動時一次、之後每 6 小時；每個 hub 行程只清自己處理的感測器，分批刪不長時間鎖庫。
+`weight_events`（進食事件，「疑似食慾不振」要用）和 `iot_alerts` 量小又有用，不清。刪掉的空間 SQLite 會重複利用，
+檔案大小會停在穩定值（不會自己變小）。設定視窗 IoT 分頁工具列下方顯示資料庫路徑、大小、保留天數。
 
 ---
 
@@ -163,7 +230,7 @@ pytest paper/cat_monitoring_system/iot/tests
 
 ## 韌體
 
-`iot/firmware/` 有四支 ESP32 Arduino 參考 sketch（環境 / 移動 / 重量 / 外出包體溫），
+`iot/firmware/` 有五支 ESP32 Arduino 參考 sketch（環境＝空氣品質＋光照 / 移動 / 房間＝前兩者合併成一片 / 重量 / 外出包＝溫濕度＋體表溫度），
 只是範本，CI 不會編譯。見 `firmware/README.md`。
 
 `esp32_petbox/` 衍生自舊 Arduino 專案「寵物包/mqtt_all」，用 MLX90614 做非接觸體表

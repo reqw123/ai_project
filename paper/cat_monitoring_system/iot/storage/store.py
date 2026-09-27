@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS bodytemp_readings (
     ambient_temp_c REAL
 );
 CREATE INDEX IF NOT EXISTS ix_bodytemp_source_ts ON bodytemp_readings (source_id, ts);
+CREATE INDEX IF NOT EXISTS ix_bodytemp_ts ON bodytemp_readings (ts);   -- 定時清理用
 
 CREATE TABLE IF NOT EXISTS iot_alerts (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -259,3 +260,37 @@ def recent(table: str, limit: int = 50, db_path: Optional[str] = None) -> list[d
         finally:
             conn.row_factory = None
     return [dict(r) for r in rows]
+
+
+# ── 資料保留（定時清理）──────────────────────────────────────────────────
+
+# 會被清理的原始讀數表（每秒一筆、量最大）。weight_events（進食事件，「疑似食慾不振」要用）
+# 與 iot_alerts（告警紀錄）量很小又有保存價值，不清。
+RAW_TABLES = {
+    "env": "env_readings",
+    "bodytemp": "bodytemp_readings",
+    "motion": "motion_events",
+    "weight": "weight_readings",
+}
+_PURGE_BATCH = 5000
+
+
+def purge_older_than(tables, cutoff_ts: float, db_path: Optional[str] = None) -> dict[str, int]:
+    """刪掉這些原始讀數表裡 ts < cutoff_ts 的資料，回傳 {表: 刪了幾筆}。
+    分批刪（每批 _PURGE_BATCH 筆、每批之間放開鎖），同一個資料庫的其他 hub 行程／執行緒不會被卡太久。"""
+    deleted: dict[str, int] = {}
+    for table in tables:
+        if table not in RAW_TABLES.values():
+            raise ValueError(f"不能清理的資料表: {table!r}")
+        total = 0
+        while True:
+            with _lock, _connect(db_path) as conn:
+                n = conn.execute(
+                    f"DELETE FROM {table} WHERE id IN "
+                    f"(SELECT id FROM {table} WHERE ts < ? LIMIT ?)", (cutoff_ts, _PURGE_BATCH)
+                ).rowcount
+            total += n
+            if n < _PURGE_BATCH:
+                break
+        deleted[table] = total
+    return deleted

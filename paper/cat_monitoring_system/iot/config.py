@@ -69,7 +69,14 @@ class IotHubConfig:
     MQTT_HOST = _env_str("CAT_MONITORING_IOT_MQTT_HOST", "192.168.0.171")
     MQTT_PORT = _env_int("CAT_MONITORING_IOT_MQTT_PORT", 1883)
     MQTT_KEEPALIVE = _env_int("CAT_MONITORING_IOT_MQTT_KEEPALIVE", 60)
-    MQTT_CLIENT_ID = _env_str("CAT_MONITORING_IOT_MQTT_CLIENT_ID", "cat-iot-hub")
+    # 只處理這幾種感測器（逗號分隔，例如 "env,bodytemp"；空＝TOPIC_MAP 全部）。設定視窗「IoT 子系統」分頁
+    # 用它把各感測器分開啟動（每種一個行程，互不影響）；手動 `python -m iot` 不設＝跟原本一樣全部處理。
+    KINDS = tuple(k.strip() for k in _env_str("CAT_MONITORING_IOT_KINDS", "").split(",") if k.strip())
+    # 同一台 broker 上 client id 不能重複（重複會互踢）：只處理部分感測器時自動加上種類
+    MQTT_CLIENT_ID = _env_str(
+        "CAT_MONITORING_IOT_MQTT_CLIENT_ID",
+        "cat-iot-hub" + ("-" + "-".join(KINDS) if KINDS else ""),
+    )
     # 帳密：留空代表匿名連線（mosquitto 預設）。
     MQTT_USERNAME = _env_str("CAT_MONITORING_IOT_MQTT_USERNAME", "")
     MQTT_PASSWORD = _env_str("CAT_MONITORING_IOT_MQTT_PASSWORD", "")
@@ -95,7 +102,12 @@ class IotHubConfig:
     # ``derived/*`` 與 ``alert``，形成回授。
     @classmethod
     def subscribe_topics(cls) -> list[str]:
-        return [f"{cls.TOPIC_PREFIX}/{kind}/#" for kind in cls.TOPIC_MAP]
+        return [f"{cls.TOPIC_PREFIX}/{kind}/#" for kind in cls.active_kinds()]
+
+    @classmethod
+    def active_kinds(cls) -> list[str]:
+        """這個行程要處理的感測器種類（KINDS 裡不認得的種類忽略）。"""
+        return [k for k in cls.TOPIC_MAP if not cls.KINDS or k in cls.KINDS]
 
     @classmethod
     def derived_topic(cls, kind: str) -> str:
@@ -110,6 +122,11 @@ class IotHubConfig:
         "CAT_MONITORING_IOT_DB_PATH",
         str(_PACKAGE_DIR / "data" / "iot_hub.db"),
     )
+    # 原始讀數保留幾天，舊的定時刪掉（0＝不清理）。外出包每秒一筆，24 小時連續跑一天約 17 萬筆、一個月約 400 MB。
+    # 只清原始讀數（env／bodytemp／motion／weight）；進食事件、告警紀錄量小又有用，不清。
+    # hub 啟動時清一次、之後每 DATA_PURGE_EVERY_HOURS 小時一次；每個 hub 行程只清自己處理的感測器（09-27）。
+    DATA_RETENTION_DAYS = _env_float("CAT_MONITORING_IOT_DATA_RETENTION_DAYS", 30.0)
+    DATA_PURGE_EVERY_HOURS = 6.0
 
     # ── 環境感測合理範圍（超出即視為感測器故障，丟棄該筆並記警告）────────
     ENV_TEMP_VALID_RANGE = (-20.0, 60.0)  # °C
@@ -179,6 +196,37 @@ class IotHubConfig:
     PERIODIC_CHECK_INTERVAL_SEC = _env_float(
         "CAT_MONITORING_IOT_PERIODIC_CHECK_INTERVAL_SEC", 300.0
     )
+
+    # ── 偵測條件：多久算異常（ingest/no_data_watchdog.py、sensors/health.py）──────────
+    # 「已連上 broker」只代表 hub→broker 通，ESP32 連不上 broker 時 hub 只會安靜地等，所以要自己計時。
+    # 連上 broker 後第一次檢查（5 秒：使用者要求盡快知道；移動偵測 heartbeat 30 秒、環境 10 秒一筆，
+    # 開機時可能先警告、資料到了記一行「恢復」）。
+    NO_DATA_FIRST_CHECK_SEC = _env_float("CAT_MONITORING_IOT_NO_DATA_FIRST_CHECK_SEC", 5.0)
+    # 多久沒資料算異常：整台 ESP32 某種感測器都沒送、或 ESP32 在送但某欄位（例 DHT11 的 humidity_pct）沒值，
+    # 兩者共用（09-27 合併原本的 NO_DATA_CHECK_INTERVAL_SEC、SENSOR_FIELD_MISSING_SEC）。
+    # 韌體最慢的是移動偵測 heartbeat 30 秒，低於 30 秒會誤報。
+    DATA_TIMEOUT_SEC = _env_float("CAT_MONITORING_IOT_DATA_TIMEOUT_SEC", 60.0)
+
+    # ── 終端列印（除錯用；只影響 hub 日誌，跟 Discord 告警通知無關）──────────────────
+    # 警報通知歸警報通知（Discord 照 ALERT_COOLDOWN_SEC 冷卻）。所有「異常持續中」的訊息——沒收到資料、
+    # 欄位消失、卡在極端值、韌體送 nan、門檻告警超標——沒解除時每幾秒重印一次，0＝只印一次
+    # （09-27 合併原本的 SENSOR_WARN_REPEAT_SEC、SENSOR_NAN_WARN_SEC、ALERT_LOG_REPEAT_SEC）。
+    WARN_REPEAT_SEC = _env_float("CAT_MONITORING_IOT_WARN_REPEAT_SEC", 10.0)
+    # 每個節點最新讀數每幾秒印一行（看數值有沒有進來、對不對）；0＝不印。
+    READING_LOG_INTERVAL_SEC = _env_float("CAT_MONITORING_IOT_READING_LOG_INTERVAL_SEC", 0.0)
+
+    # ── 感測器健康（sensors/health.py）：ESP32 在線、但某顆感測器沒接好 ──────────
+    # 類比感測器連續這麼多筆都是量測範圍的極端值（腳位接地／懸空／滿格）→ 警告（esp32_room 10 秒一筆，6 筆≈1 分鐘）。
+    SENSOR_RAIL_CONSECUTIVE = _env_int("CAT_MONITORING_IOT_SENSOR_RAIL_CONSECUTIVE", 6)
+    # 各欄位的「極端值」(下限, 上限)，None＝不檢查那一端。對應 esp32_room（備用的 esp32_env 相同）的換算：ADC 0→0、4095→滿格。
+    # 光照不檢查 0（全暗是正常的）；MQ-135 加熱中一定有電壓，讀到 0 幾乎就是沒接。
+    SENSOR_RAILS = {"gas_ppm": (0.0, 1000.0), "lux": (None, 2000.0)}
+    # 每個節點「應該要有」的欄位：hub 剛啟動、感測器一開始就沒接時也抓得到（不用先看過一次）。
+    # key＝"<kind>/<source_id>"；沒列的節點就用「看過的欄位」判斷。
+    SENSOR_EXPECTED_FIELDS = {
+        "env/carrier": ("temp_c", "humidity_pct"),      # 外出包：MLX90614 環境溫度＋DHT11 濕度
+        "env/living_room": ("gas_ppm", "lux"),          # esp32_room：MQ-135＋光敏電阻（改它的 SOURCE_ID 這裡也要改）
+    }
 
     # ── log ───────────────────────────────────────────────────────────────
     LOG_LEVEL = _env_str("CAT_MONITORING_IOT_LOG_LEVEL", "INFO")

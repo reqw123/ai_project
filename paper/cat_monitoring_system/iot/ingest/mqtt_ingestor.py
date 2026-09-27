@@ -40,8 +40,12 @@ def _make_client(client_id: str):
 
 
 class MqttIngestor:
-    def __init__(self, on_message: OnMessage, subscribe_topics: list[str] | None = None):
+    def __init__(self, on_message: OnMessage, subscribe_topics: list[str] | None = None,
+                 on_connected: Callable[[], None] | None = None,
+                 on_disconnected: Callable[[], None] | None = None):
         self._on_message = on_message
+        self._on_connected = on_connected          # 給 no_data_watchdog 用（連上才開始計時）
+        self._on_disconnected = on_disconnected
         self._topics = subscribe_topics or _C.subscribe_topics()
         self._client, self._is_v2 = _make_client(_C.MQTT_CLIENT_ID)
         self._started = False
@@ -62,13 +66,33 @@ class MqttIngestor:
     def _handle_connect(self, client, userdata, *args):
         # 1.x: (flags, rc) ; 2.x: (flags, reason_code, properties)
         rc = args[1] if len(args) >= 2 else None
+        # broker 拒絕連線（帳密錯、沒權限…）也會呼叫 on_connect：2.x 的 ReasonCode 有 is_failure，1.x 是整數（0＝成功）。
+        # 09-27 審查修正：以前照樣當成「已連上」、通知 watchdog 開始計時，5 秒後錯怪 ESP32 沒送資料
+        failed = getattr(rc, "is_failure", None)
+        if failed is None:
+            failed = rc not in (None, 0)
+        if failed:
+            _log.error("MQTT broker %s:%s 拒絕連線（rc=%s）：檢查 hub 的 MQTT 帳號、密碼與權限（⚙ 參數設定 → MQTT broker）",
+                       _C.MQTT_HOST, _C.MQTT_PORT, rc)
+            return
         _log.info("已連上 MQTT broker %s:%s（rc=%s），訂閱 %s",
                   _C.MQTT_HOST, _C.MQTT_PORT, rc, self._topics)
         for topic in self._topics:
             client.subscribe(topic, qos=0)
+        self._notify(self._on_connected)
 
     def _handle_disconnect(self, client, userdata, *args):
         _log.warning("與 MQTT broker 中斷連線（%s），paho 會自動重連", args)
+        self._notify(self._on_disconnected)
+
+    @staticmethod
+    def _notify(fn) -> None:
+        if fn is None:
+            return
+        try:
+            fn()
+        except Exception:  # noqa: BLE001 — 絕不讓它中斷 paho 網路迴圈
+            _log.exception("連線狀態 callback 發生未預期例外")
 
     def _handle_message(self, client, userdata, msg):
         try:
