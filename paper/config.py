@@ -237,7 +237,7 @@ class ModelPaths:
             "CAT_MONITORING_YOLO_MODEL",
             _runtime_default(
                 "model_paths.yolo_model",
-                str(Path("yolo_models") / "v11s_147.pt"),
+                str(Path("yolo_models") / "v11s_152.pt"),
                 value_type=str,
             ),
         )
@@ -252,8 +252,8 @@ class ModelPaths:
                 "model_paths.stgcn_model",
                 str(
                     Path("stgcn_models")
-                    / "run_122_xy_conf_v_bone_att_on"
-                    / "122_best_model.pth"
+                    / "run_153_xy_conf_v_bone_att_on"
+                    / "153_best_model.pth"
                 ),
                 value_type=str,
             ),
@@ -514,7 +514,7 @@ class RunModeConfig:
     """
 
     MODE = _env_str(
-        "CAT_MONITORING_RUN_MODE", _runtime_default("run_mode.mode", "server", value_type=str)
+        "CAT_MONITORING_RUN_MODE", _runtime_default("run_mode.mode", "gui", value_type=str)
     )
 
     # 單貓 / 多貓系統模式（跟 MODE 的 server/gui 無關，兩者可自由組合）：
