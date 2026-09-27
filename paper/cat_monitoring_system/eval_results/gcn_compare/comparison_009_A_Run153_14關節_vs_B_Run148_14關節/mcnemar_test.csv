@@ -1,0 +1,7 @@
+pair,scope,b,c,n_discordant,statistic,p_value,method,significant(p<0.05)
+Run153_14關節_vs_Run148_14關節,overall,4,4,8,4.0000,1.0000,exact_binomial,
+Run153_14關節_vs_Run148_14關節,walk,0,4,4,0.0000,0.1250,exact_binomial,
+Run153_14關節_vs_Run148_14關節,lick,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,
+Run153_14關節_vs_Run148_14關節,scratch,3,0,3,0.0000,0.2500,exact_binomial,
+Run153_14關節_vs_Run148_14關節,shake,1,0,1,0.0000,1.0000,exact_binomial,
+Run153_14關節_vs_Run148_14關節,stop,0,0,0,0.0000,1.0000,n/a（兩模型完全一致，無法檢定）,

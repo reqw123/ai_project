@@ -1,34 +1,43 @@
 {
-  "python_ip": "192.168.0.10",
+  "python_ip": "192.168.0.171",
   "v2_today": {
-    "date": "2026/9/24",
+    "date": "2026/9/27",
     "walk": {
-      "count": 0,
-      "time": 0
+      "count": 351,
+      "time": 369.5
     },
     "lick": {
-      "count": 0,
-      "time": 0
+      "count": 142,
+      "time": 1504.7
     },
     "scratch": {
-      "count": 0,
-      "time": 0
+      "count": 49,
+      "time": 255.1
     },
     "shake": {
-      "count": 0,
-      "time": 0
+      "count": 79,
+      "time": 57.7
     },
     "stop": {
-      "count": 0,
-      "time": 0
+      "count": 246,
+      "time": 287.6
     },
-    "active_time": 0,
+    "active_time": 2474.5,
     "low_conf": {
-      "count": 0,
-      "time": 0
+      "count": 873,
+      "time": 671.3
     },
     "not_detected_time": 0,
-    "monitoring_seconds": 0
+    "monitoring_seconds": 3142.9,
+    "cat_visible_time": 3145.8,
+    "total_uptime": 3142.9,
+    "active_non_rest_time": 2187,
+    "active_ratio": 69.59,
+    "rest_ratio": 9.15,
+    "lick_pct_of_day": 47.876,
+    "scratch_pct_of_day": 8.117,
+    "lick_pct_of_active": 68.802,
+    "scratch_pct_of_active": 11.664
   },
   "v2_hourly": {
     "10": {
@@ -1742,6 +1751,56 @@
         "情緒緊張"
       ],
       "note": "嗜睡/活動驟降情境：行走驟減、靜止大增 → 預期 Class B 主導、Moderate"
+    },
+    {
+      "date": "2026/9/27",
+      "tags": [
+        "帶去看醫生",
+        "其他",
+        "情緒緊張",
+        "陌生人來訪",
+        "服藥/治療"
+      ],
+      "note": "🎙 今天帶貓咪去看醫生；🎙 幫我記錄今天幫貓咪洗澡；🎙 記錄貓咪；🎙 幫我記錄貓咪甩；4",
+      "voice": [
+        {
+          "ts": 1790441895.761,
+          "category": "vet",
+          "text": "今天帶貓咪去看醫生"
+        },
+        {
+          "ts": 1790442086.929,
+          "category": "other",
+          "text": "幫我記錄今天幫貓咪洗澡"
+        },
+        {
+          "ts": 1790442093.282,
+          "category": "other",
+          "text": "記錄貓咪"
+        },
+        {
+          "ts": 1790442474.53,
+          "category": "other",
+          "text": "幫我記錄貓咪甩"
+        },
+        {
+          "ts": 1790452985.399,
+          "report_id": 9,
+          "category": "other",
+          "label": "其他",
+          "text": "今天肚子痛"
+        },
+        {
+          "ts": 1790453006.871,
+          "report_id": 10,
+          "category": "other",
+          "label": "其他",
+          "text": "今天一隻摔頭"
+        }
+      ],
+      "counts": {
+        "其他": 2
+      }
     }
   ],
   "v2_excluded_dates": [

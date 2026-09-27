@@ -1,0 +1,3 @@
+pair,scope,b,c,n_discordant,statistic,p_value,method,significant(p<0.05)
+Run147_14關節_vs_Run148_14關節,overall,8,143,151,118.9139,0.0000,chi2_corrected,YES
+Run147_14關節_vs_Run148_14關節,lick,8,143,151,118.9139,0.0000,chi2_corrected,YES
