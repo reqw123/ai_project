@@ -53,6 +53,7 @@ from settings_gui import tool_order as _tool_order  # noqa: E402
 from settings_gui import ui_state as _ui_state  # noqa: E402
 from settings_gui import recent_paths as _recent_paths  # noqa: E402
 from settings_gui import extra_env as _extra_env  # noqa: E402
+from settings_gui import iot_tab as _iot_tab  # noqa: E402
 from settings_gui.style import (  # noqa: E402
     BTN_PRIMARY_BG,
     BTN_PRIMARY_ACTIVE,
@@ -165,6 +166,11 @@ TAB_COLORS = {
     "視覺化與串流顯示":         ("🔷", "#148f77"),
     "進階設定":                 ("🔶", "#af601a"),
 }
+
+# 沒有設定欄位的自訂分頁（不在 settings_manager 的 TAB_ORDER／FIELD_SCHEMA 裡）：分頁名稱 → 建內容的函式
+# build(分頁內容區, 設定視窗)。排在設定分頁後面、不參與背景預先建立（點到才建）。
+_EXTRA_TABS = {_iot_tab.TAB_NAME: _iot_tab.build}   # 📡 IoT 子系統：各感測器、飼主語音紀錄的啟動口
+TAB_COLORS[_iot_tab.TAB_NAME] = (_iot_tab.TAB_EMOJI, _iot_tab.TAB_ACCENT)
 
 
 def _lighten(hex_color: str, factor: float) -> str:
@@ -1207,6 +1213,12 @@ class SettingsWindow(tk.Tk):
                     "關閉設定視窗",
                     f"{pm.active_label} 似乎沒有在預期時間內結束，請自行檢查工作管理員確認狀態。",
                 )
+        # 📡 IoT 子系統（感測器、飼主語音紀錄）：關掉設定視窗時一律強制關閉（09-27 使用者要求）
+        iot_running = _iot_tab.running_titles()
+        if iot_running:
+            self._set_process_status(f"⏳  正在關閉 IoT 服務（{'、'.join(iot_running)}）…", "stopping")
+            self.update_idletasks()
+            _iot_tab.shutdown_services()
         try:
             self._save_tool_ui_state()  # 保留「上次選的腳本 / 影片路徑」到下次開視窗
         except Exception:
@@ -1727,7 +1739,7 @@ class SettingsWindow(tk.Tk):
         # （那份是 docs/設定視窗欄位對照表.md，這裡沒有用到）。
         self._tab_docs = tab_docs_panel.parse(_SCRIPT_DIR / "docs" / "設定分頁模組與核心函式對照表.md")
 
-        for tab_name in TAB_ORDER:
+        for tab_name in list(TAB_ORDER) + list(_EXTRA_TABS):
             emoji, accent = TAB_COLORS.get(tab_name, ("⬜", COLOR_HEADER_BG))
             self._tab_accents[tab_name] = accent
 
@@ -1753,6 +1765,9 @@ class SettingsWindow(tk.Tk):
         _ensure_tab_built() 呼叫，每個分頁只會跑一次。"""
         emoji, accent = TAB_COLORS.get(tab_name, ("⬜", COLOR_HEADER_BG))
         tab = self._tab_frames[tab_name]
+        if tab_name in _EXTRA_TABS:   # 自訂分頁：整頁交給該模組（沒有欄位、沒有右欄說明文件）
+            _EXTRA_TABS[tab_name](tab.body, self)
+            return
         # 分頁內容區分成左右兩欄：左欄放 banner + 所有欄位列（原本會撐滿整個
         # tab.body 寬度），右欄目前刻意留空。columnconfigure 用同一個 uniform
         # 群組名稱("tab_half")讓兩欄強制等寬（各佔 50%），不受左欄內容實際

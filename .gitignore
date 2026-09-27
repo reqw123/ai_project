@@ -3,3 +3,14 @@
 
 # 設定視窗記住的「上次選的腳本／影片／模型路徑／額外設定」，每個人的使用習慣不同，不進版本控制
 paper/settings_gui/ui_state.json
+
+# 設定視窗「📡 IoT 子系統」執行時產生的本機狀態：服務 PID（iot_services_state.json）、
+# 這台電腦的 IoT 參數覆寫（iot_config_overrides.json）、各服務紀錄檔（paper/logs/）
+paper/settings_gui/iot_services_state.json
+paper/settings_gui/iot_config_overrides.json
+paper/logs/
+
+# 骨架訓練資料（數百 MB，只留在本機）：切分後的骨架、切分前的備份、排除掉的重複資料
+paper/skeletons/
+paper/skeletons_backup_*/
+paper/skeletons_excluded_*/

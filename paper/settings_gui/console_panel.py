@@ -178,7 +178,7 @@ class ConsolePanel:
             activeforeground=COLOR_CONSOLE_FG, font=self.window._font_hint, bd=0, highlightthickness=0,
         ).pack(side="left")
         _styled_button(
-            toolbar, "清除", self.clear, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
+            toolbar, "清空", self.clear, BTN_SECONDARY_BG, BTN_SECONDARY_ACTIVE,
             font=self.window._font_hint, compact=True,
         ).pack(side="right")
         _styled_button(
