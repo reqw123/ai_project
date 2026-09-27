@@ -19,8 +19,8 @@
   · "file"：選檔案路徑（輸入框＋「瀏覽...」，`filetypes`／`initialdir` 控制對話框；留空 ＝ 不覆寫）
   · "float"：自由輸入數值，`min`／`max` 限制範圍（留空 ＝ 不覆寫）；存檔時範圍不對會擋下來
   · "stepper"：不能打字，只能用大的 ▲／▼ 按鈕（可按住連續調整）、鍵盤 ↑／↓ 或滾輪在 `min`～`max`、每次 `step` 的固定數值間調整，
-    第一格永遠是「不覆寫」（信心門檻這類 0.1～1.0、每次 0.01 的數值用這個，避免打錯字或填出範圍外的數字）；
-    數值一律補到 step 的小數位數（step=0.01 → "0.10"、"0.11"、…、"1.00"，共 91 格）
+    第一格永遠是「不覆寫」（信心門檻這類 0.0～1.0、每次 0.01 的數值用這個，避免打錯字或填出範圍外的數字）；
+    數值一律補到 step 的小數位數（step=0.01 → "0.00"、"0.01"、…、"1.00"，共 101 格）
 
 儲存位置：`settings_gui/ui_state.json`（純介面便利記憶，跟「上次選的腳本」同一層，鍵名
 `extra_env.<環境變數名>`）；不寫進 runtime_settings.current.json，也不影響 main.py。
@@ -93,12 +93,12 @@ FIELDS = [
         "summary": "低於此值的偵測框（bbox）直接丟掉。",
         "half": True,
         "type": "stepper",
-        "min": 0.1,
+        "min": 0.0,
         "max": 1.0,
         "step": 0.01,
         "hint": "這是「偵測框（bbox）」的信心門檻（YOLO predict 的 conf）：低於此值的整隻貓偵測框直接丟掉，"
                 "值越高越嚴格、越容易漏偵測。不是關鍵點（kp）的信心門檻——那是下面另一個設定。"
-                "點 ▲／▼ 調整 0.1～1.0（每次 0.01）；「不覆寫」＝使用各腳本檔內預設（多數是 0.5，1_skeleton_visualizer 是 0.8）。"
+                "點 ▲／▼ 調整 0.0～1.0（每次 0.01）；「不覆寫」＝使用各腳本檔內預設（多數是 0.5，1_skeleton_visualizer 是 0.8）。"
                 "cat_pose/ 底下的 video_infer_save／tail_bend_detect／pose_single_image_test／0_video_pose_viewer／"
                 "0_compare_two_models_images／eda_motion_anomaly／eda_motion_score／eda_realtime_anomaly_viewer／"
                 "自動標註工具（auto_labeling／auto_labeling_capture／labeling）／tello_drone_archive 也會讀。",
@@ -110,7 +110,7 @@ FIELDS = [
         "summary": "低於此值的關鍵點（kp）不畫、不算位移。",
         "half": True,
         "type": "stepper",
-        "min": 0.1,
+        "min": 0.0,
         "max": 1.0,
         "step": 0.01,
         "hint": "這是「關鍵點（kp）」的信心門檻：信心低於此值的關鍵點不畫、也不拿去算位移。不是偵測框（bbox）的門檻——"
@@ -118,7 +118,7 @@ FIELDS = [
                 "1_run_video_inference／1_skeleton_visualizer／1_visualize_interpolation／1_visualize_three_normalizations／"
                 "2_run_dual_model_compare／test_bone_length_stability／test_pose_jitter_analysis 的骨架顯示門檻"
                 "（DRAW_KP_CONF_THRESHOLD）與 test_anomaly_detection 的 KP_CONF_THRES 會讀。"
-                "點 ▲／▼ 調整 0.1～1.0（每次 0.01）；「不覆寫」＝使用各腳本檔內預設（0.25～0.7 不等）。"
+                "點 ▲／▼ 調整 0.0～1.0（每次 0.01）；「不覆寫」＝使用各腳本檔內預設（0.25～0.7 不等）。"
                 "cat_pose/ 底下的 video_infer_save／tail_bend_detect／pose_single_image_test／0_video_pose_viewer／"
                 "0_compare_two_models_images／eda_motion_anomaly／eda_motion_score／eda_realtime_anomaly_viewer／"
                 "tello_drone_archive 也會讀（自動標註工具沒有 kp 門檻，不受影響）。",

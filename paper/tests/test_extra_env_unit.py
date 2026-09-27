@@ -176,21 +176,21 @@ KP_ENV = "CAT_MONITORING_KP_CONF_THRES"
 MODEL_ENV = "CAT_MONITORING_STGCN_MODEL"
 
 
-def test_confidence_fields_are_steppers_from_0_1_to_1_0_by_0_01():
+def test_confidence_fields_are_steppers_from_0_0_to_1_0_by_0_01():
     by_env = {f["env"]: f for f in extra_env.FIELDS}
-    expected = [f"{0.10 + i * 0.01:.2f}" for i in range(91)]  # 0.10、0.11、…、1.00
+    expected = [f"{i * 0.01:.2f}" for i in range(101)]  # 0.00、0.01、…、1.00（0 也要能設，例如看 YOLO 全部原始輸出）
     for env in (YOLO_ENV, KP_ENV):
         f = by_env[env]
         assert f["type"] == "stepper" and f["step"] == 0.01
         assert extra_env.stepper_values(f) == expected
-        assert expected[0] == "0.10" and expected[-1] == "1.00" and len(expected) == 91
+        assert expected[0] == "0.00" and expected[-1] == "1.00" and len(expected) == 101
 
 
 def test_stepper_accepts_only_the_listed_steps(state_path):
-    for ok, stored in (("0.1", "0.10"), ("0.5", "0.50"), ("0.65", "0.65"), ("0.62", "0.62"), ("1.0", "1.00"), ("0.85", "0.85")):
+    for ok, stored in (("0", "0.00"), ("0.0", "0.00"), ("0.05", "0.05"), ("0.1", "0.10"), ("0.5", "0.50"), ("0.65", "0.65"), ("0.62", "0.62"), ("1.0", "1.00"), ("0.85", "0.85")):
         extra_env.save({YOLO_ENV: ok})
         assert extra_env.collect_for_launch() == {YOLO_ENV: stored}, ok
-    for bad in ("0", "0.0", "0.05", "0.099", "0.625", "1.01", "1.1", "1.5", "-0.1", "abc", "nan", "inf"):
+    for bad in ("0.099", "0.625", "1.01", "1.1", "1.5", "-0.1", "abc", "nan", "inf"):
         extra_env.save({YOLO_ENV: bad})
         assert extra_env.collect_for_launch() == {}, bad
     # 檔案被手動改成非法值：讀出來也當成不覆寫
@@ -275,7 +275,7 @@ def test_dialog_spinboxes_are_readonly_and_start_at_no_override(tk_root, state_p
         for sp in spinboxes:
             assert str(sp.entry.cget("state")) == "readonly"  # 不能打字
             assert sp.get() == extra_env.NO_OVERRIDE_TEXT  # 預設就是「不覆寫」
-            assert sp.values == [extra_env.NO_OVERRIDE_TEXT] + [f"{0.10 + i * 0.01:.2f}" for i in range(91)]
+            assert sp.values == [extra_env.NO_OVERRIDE_TEXT] + [f"{i * 0.01:.2f}" for i in range(101)]
         buttons["取消"]._command()
 
     _drive_dialog_widgets(tk_root, script)
@@ -288,14 +288,14 @@ def test_dialog_arrow_keys_step_the_value(tk_root, state_path):
         dlg.update()
         sp.entry.event_generate("<Up>")
         dlg.update()
-        assert sp.get() == "0.10"         # 從「不覆寫」按 ↑ → 0.10
+        assert sp.get() == "0.00"         # 從「不覆寫」按 ↑ → 0.00
         for _ in range(4):
             sp.entry.event_generate("<Up>")
             dlg.update()
-        assert sp.get() == "0.14"         # 每次 0.01：0.11、0.12、0.13、0.14
+        assert sp.get() == "0.04"         # 每次 0.01：0.01、0.02、0.03、0.04
         sp.entry.event_generate("<Down>")
         dlg.update()
-        assert sp.get() == "0.13"
+        assert sp.get() == "0.03"
         buttons["取消"]._command()
 
     _drive_dialog_widgets(tk_root, script)
@@ -322,13 +322,13 @@ def test_dialog_saves_stepped_confidences_and_model_file(tk_root, state_path, tm
         entries[0].delete(0, "end")
         entries[0].insert(0, str(model))
         for _ in range(3):
-            spinboxes[0].up_btn.invoke()      # bbox：不覆寫 → 0.10 → 0.11 → 0.12
+            spinboxes[0].up_btn.invoke()      # bbox：不覆寫 → 0.00 → 0.01 → 0.02
         for _ in range(8):
-            spinboxes[1].up_btn.invoke()      # kp：→ 0.10 + 7 × 0.01 = 0.17
+            spinboxes[1].up_btn.invoke()      # kp：→ 0.00 + 7 × 0.01 = 0.07
         buttons["✓ 儲存"]._command()
 
     _drive_dialog_widgets(tk_root, script)
-    assert extra_env.collect_for_launch() == {YOLO_ENV: "0.12", KP_ENV: "0.17", MODEL_ENV: str(model)}
+    assert extra_env.collect_for_launch() == {YOLO_ENV: "0.02", KP_ENV: "0.07", MODEL_ENV: str(model)}
 
 
 def test_dialog_reset_all_puts_spinboxes_back_to_no_override(tk_root, state_path):
@@ -391,7 +391,7 @@ def test_stepper_stops_at_both_ends_and_wheel_works(tk_root, state_path):
         for _ in range(3):
             sp.down_btn.invoke()               # 已經是第一格（不覆寫）：往下不會再動
         assert sp.get() == extra_env.NO_OVERRIDE_TEXT
-        for _ in range(100):
+        for _ in range(120):
             sp.up_btn.invoke()                 # 一路往上：停在 1.00，不會循環回「不覆寫」
         assert sp.get() == "1.00"
         sp.entry.event_generate("<MouseWheel>", delta=-120)
@@ -412,13 +412,13 @@ def test_stepper_page_keys_jump_ten_steps(tk_root, state_path):
         dlg.update()
         sp.entry.event_generate("<Prior>")     # PageUp
         dlg.update()
-        assert sp.get() == "0.19"              # 不覆寫 → 第 10 格 = 0.10 + 9 × 0.01
+        assert sp.get() == "0.09"              # 不覆寫 → 第 10 格 = 0.00 + 9 × 0.01
         sp.entry.event_generate("<Prior>")
         dlg.update()
-        assert sp.get() == "0.29"
+        assert sp.get() == "0.19"
         sp.entry.event_generate("<Next>")      # PageDown
         dlg.update()
-        assert sp.get() == "0.19"
+        assert sp.get() == "0.09"
         for _ in range(3):
             sp.entry.event_generate("<Next>")  # 往下到頭停在「不覆寫」
             dlg.update()

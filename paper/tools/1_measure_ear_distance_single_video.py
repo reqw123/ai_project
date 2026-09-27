@@ -949,11 +949,80 @@ def _safe_pref_pct(part_sec, total_sec):
     return 100.0 * part_sec / total_sec
 
 
+# ── 送給 Node-RED /lick_zone_result 的格式（2026-09-26）─────────────────
+# 那個端點（Node-RED「第5層 舔舐部位分析」分頁）在 M3 之後改成 main.py lick_stage 外掛的格式：
+# 先用「驗證 payload schema」節點檢查 v2 契約欄位（schema_version、session_id、frame_state…，valid 要是 boolean），
+# 「舔舐部位分析器」再讀 body_time／fl_hits／current_zone／dist_px… 這些外掛的欄位名稱。
+# 這支腳本原本直接送 CSV 那一列（欄位名稱不同、valid 是 0/1），每一幀都被擋下來並跳 warn「Schema 驗證失敗」。
+# 這裡只在「送出」時轉成外掛 LickResult.to_payload() 的格式；CSV 內容完全不變。
+# 這支腳本沒有 ST-GCN 舔毛判定，所以 frame_state、stgcn_lick_sec、assigned_zone_sec 等契約欄位送 null
+# （schema 允許 null），不捏造數值；時間／次數／佔比用腳本自己的「鼻子接觸」統計（含 TAIL）。
+_NR_SCHEMA_VERSION = "2.0"  # = cat_monitoring_system/plugins/lick_stage/analysis_context.py 的 SCHEMA_VERSION（不 import：會連帶載入整個外掛）
+_NR_SESSION_ID = "ear_tool_" + time.strftime("%Y%m%d_%H%M%S")  # 每次執行一個 session
+_NR_ZONES = ("BODY", "FL", "FR", "HL", "HR", "TAIL")
+_NR_HITS_KEY = {"BODY": "target_entry_count", "FL": "limb_entry_count_fl", "FR": "limb_entry_count_fr",
+                "HL": "limb_entry_count_hl", "HR": "limb_entry_count_hr", "TAIL": "tail_entry_count"}
+
+
+def _nr_num(v, nd):
+    """CSV 列用 "" 表示沒有值 → JSON null；其他轉成數字。"""
+    if v is None or v == "":
+        return None
+    v = float(v)
+    return round(v, nd) if math.isfinite(v) else None
+
+
+def _to_lick_payload(row: dict) -> dict:
+    """把一列 CSV（rows[-1]）轉成 lick_stage 外掛 LickResult.to_payload() 的欄位名稱與型別。"""
+    times = {k: float(row[f"lick_time_{k.lower()}_sec"]) for k in _NR_ZONES}
+    total = sum(times.values())
+    best = max(_NR_ZONES, key=lambda k: times[k]) if total > 1e-9 else LICK_ZONE_NO_TARGET
+    zone = row.get("lick_zone") or LICK_ZONE_NO_TARGET
+    p = {
+        "source": "ear_distance_tool",  # 讓 Node-RED 分得出是這支腳本（不是 main.py）送的
+        "video_path": row.get("video_path", ""),
+        "current_zone": "BODY" if zone == LICK_ZONE_CENTER else zone,  # 腳本的 BODY_CENTER＝外掛的 BODY
+        "best_zone": best,
+        "best_pct": _nr_num(row.get(f"lick_pref_pct_{best.lower()}"), 2) if best != LICK_ZONE_NO_TARGET else None,
+        "total_lick_time": round(total, 2),
+        "face_state": str(row.get("face_state") or "UNKNOWN"),
+        "state_stability": _nr_num(row.get("state_stability"), 3),
+        "valid": bool(int(row.get("valid") or 0)),
+        "frame": int(row.get("frame") or 0),
+        "time_sec": round(float(row.get("time_sec") or 0.0), 2),
+        "dist_px": _nr_num(row.get("distance_px"), 1),
+        "dist_norm": _nr_num(row.get("distance_norm"), 4),
+        "gaze_fwd": _nr_num(row.get("gaze_forward_norm"), 3),
+        "gaze_lat": _nr_num(row.get("gaze_lateral_norm"), 3),
+        "gaze_angle": _nr_num(row.get("gaze_angle_deg"), 1),
+        # v2 契約欄位
+        "schema_version": _NR_SCHEMA_VERSION,
+        "session_id": _NR_SESSION_ID,
+        "source_timestamp": None,
+        "frame_state": None,  # 沒有 ST-GCN，分不出 NOT_LICK／LICK_ASSIGNED…
+        "reason_code": None,
+        "observed_sec": round(float(row.get("time_sec") or 0.0), 2),  # 這支影片目前播到的秒數
+        "valid_observed_sec": None,
+        "no_cat_sec": None,
+        "stgcn_lick_sec": None,
+        "assigned_zone_sec": None,
+        "unassigned_lick_sec": None,
+        "zone_coverage_ratio": None,
+        "unknown_rate": None,
+    }
+    for k in _NR_ZONES:
+        key = k.lower()
+        p[f"{key}_time"] = round(times[k], 2)
+        p[f"{key}_hits"] = int(row.get(_NR_HITS_KEY[k]) or 0)
+        p[f"{key}_pct"] = _nr_num(row.get(f"lick_pref_pct_{key}"), 2)
+    return p
+
+
 def _post_nodered(row: dict) -> None:
     if not NODERED_URL or not _HAS_REQUESTS:
         return
     try:
-        _requests.post(NODERED_URL, json=row, timeout=0.3)
+        _requests.post(NODERED_URL, json=_to_lick_payload(row), timeout=0.3)
     except Exception:
         pass
 
