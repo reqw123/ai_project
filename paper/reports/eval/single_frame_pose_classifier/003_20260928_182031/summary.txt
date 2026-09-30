@@ -1,0 +1,111 @@
+單幀姿態分類  2026-09-28 18:20
+輸出類別：['lick', 'scratch', 'walk', 'other']（原 5 類對應 {'lick': 'lick', 'scratch': 'scratch', 'walk': 'walk', 'shake': 'other', 'stop': 'other'}）；一律人工確認：['lick']
+資料集：C:\Users\homec\Downloads\11.v282i.yolov8
+骨架：C:\ai_project\paper\skeletons
+flip 定義：C:\Users\homec\Downloads\data.yaml  flip_idx=[0, 2, 1, 3, 4, 5, 8, 9, 6, 7, 12, 13, 10, 11, 14, 15, 16]
+特徵 160 維；訓練資料＝原始＋左右鏡像＋遮點（比例＝資料集 v=0 比例 × 1.5）；test／交叉驗證／套用時原姿勢與鏡像機率取平均
+
+最佳超參數（val macro-F1 0.972）：{'learning_rate': 0.05, 'max_iter': 200, 'max_leaf_nodes': 31, 'min_samples_leaf': 200, 'l2_regularization': 1.0}
+
+【test，4 類（34 支影片）】
+  macro-F1 0.893｜balanced acc 0.906
+  類別         precision   recall     F1      樣本
+  lick           0.611    0.759  0.677     323
+  scratch        1.000    1.000  1.000     219
+  walk           1.000    0.991  0.996     335
+  other          0.931    0.873  0.901    1209
+  混淆矩陣（列＝真實、欄＝預測）
+                lick  scratch     walk    other
+  lick           245        0        0       78
+  scratch          0      219        0        0
+  walk             3        0      332        0
+  other          153        0        0     1056
+
+缺點穩健度：test 依資料集缺點比例遮點後 macro-F1 0.888（未遮 0.893）
+
+【交叉驗證 out-of-fold，4 類（全部 378 支影片）】
+  macro-F1 0.929｜balanced acc 0.936
+  類別         precision   recall     F1      樣本
+  lick           0.879    0.893  0.886    8216
+  scratch        0.998    0.998  0.998    2296
+  walk           0.901    0.965  0.932    3582
+  other          0.916    0.886  0.901   12156
+  混淆矩陣（列＝真實、欄＝預測）
+                lick  scratch     walk    other
+  lick          7340        0        4      872
+  scratch          0     2292        0        4
+  walk             5        4     3456      117
+  other         1004        0      377    10775
+
+【交叉驗證 out-of-fold，原 5 類對照（同特徵、同超參數）】
+  macro-F1 0.842｜balanced acc 0.882
+  類別         precision   recall     F1      樣本
+  walk           0.894    0.970  0.931    3582
+  lick           0.883    0.883  0.883    8216
+  scratch        1.000    0.999  1.000    2296
+  shake          0.512    0.893  0.650    2468
+  stop           0.852    0.664  0.746    9688
+  混淆矩陣（列＝真實、欄＝預測）
+                walk     lick  scratch    shake     stop
+  walk          3476        3        0       31       72
+  lick             0     7254        0        0      962
+  scratch          0        0     2294        0        2
+  shake          183        0        0     2203       82
+  stop           227      955        0     2072     6434
+
+【out-of-fold，逐類門檻（目標精確率 95%）】：自動歸類 16227/26250（61.8%），其中正確率 95.9%
+  → lick     門檻 1.01：歸入     0 幀，精確率 —（達不到目標，全部送人工）
+  → other    門檻 0.85：歸入 10572 幀，精確率 95.2%
+  → scratch  門檻 0.34：歸入  2296 幀，精確率 99.8%
+  → walk     門檻 0.94：歸入  3359 幀，精確率 95.3%
+  ※ lick 不套門檻，一律送 _待確認/lick/ 人工確認（MANUAL_REVIEW_CLASSES）
+
+【人工標記 299 張 vs 只用骨架訓練的模型】
+  macro-F1 0.659｜balanced acc 0.749
+  類別         precision   recall     F1      樣本
+  lick           0.900    0.863  0.881      73
+  scratch        0.900    0.857  0.878      21
+  walk           0.963    0.430  0.595     179
+  other          0.171    0.846  0.284      26
+  混淆矩陣（列＝真實、欄＝預測）
+                lick  scratch     walk    other
+  lick            63        1        0        9
+  scratch          0       18        0        3
+  walk             6        1       77       95
+  other            1        0        3       22
+
+【人工標記 5 折交叉驗證，骨架＋人工標記（權重 10）】
+  macro-F1 0.741｜balanced acc 0.808
+  類別         precision   recall     F1      樣本
+  lick           0.943    0.904  0.923      73
+  scratch        0.900    0.857  0.878      21
+  walk           0.975    0.665  0.791     179
+  other          0.241    0.808  0.372      26
+  混淆矩陣（列＝真實、欄＝預測）
+                lick  scratch     walk    other
+  lick            66        1        0        6
+  scratch          0       18        0        3
+  walk             3        0      119       57
+  other            1        1        3       21
+
+【人工標記 out-of-fold，逐類門檻（目標精確率 95%）】：自動歸類 190/299（63.5%），其中正確率 96.8%
+  → lick     門檻 0.57：歸入    68 幀，精確率 95.6%
+  → other    門檻 1.01：歸入     0 幀，精確率 —（達不到目標，全部送人工）
+  → scratch  門檻 1.01：歸入     0 幀，精確率 —（達不到目標，全部送人工）
+  → walk     門檻 0.34：歸入   122 幀，精確率 97.5%
+
+資料集分類結果（3481 張）：
+  _待確認/lick           16
+  _待確認/other         751
+  _待確認/scratch       360
+  _待確認/walk            1
+  lick               893
+  other               26
+  scratch             21
+  walk              1413
+  原因：{'信心達門檻': 2054, '信心不足': 1127, '人工標記': 299, '多隻貓判斷不一致': 1}
+
+分類結果複製到：C:\Users\homec\Downloads\11.v282i.yolov8_4class_2（每類底下 images/ + labels/；predictions.csv 記錄每張的判斷與原因）
+  6 個檔名放進輸出資料夾會超過 Windows 260 字元路徑上限，已截短（保留 .rf.<hash> 結尾），原檔名對照見 predictions.csv 的 saved_as 欄
+
+總花費時間：2100 秒

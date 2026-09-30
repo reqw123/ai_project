@@ -1,0 +1,15 @@
+﻿評估,類別,precision,recall,f1,support
+test,lick,0.7531,0.7554,0.7543,323
+test,scratch,1.0000,1.0000,1.0000,219
+test,other,0.9488,0.9482,0.9485,1544
+test,macro,,,0.9009,
+oof,lick,0.9011,0.8817,0.8913,8216
+oof,scratch,1.0000,0.9965,0.9983,2296
+oof,other,0.9386,0.9496,0.9441,15738
+oof,macro,,,0.9445,
+oof_5class,walk,0.8948,0.9735,0.9325,3582
+oof_5class,lick,0.8914,0.8802,0.8858,8216
+oof_5class,scratch,1.0000,1.0000,1.0000,2296
+oof_5class,shake,0.5110,0.8975,0.6512,2468
+oof_5class,stop,0.8523,0.6694,0.7498,9688
+oof_5class,macro,,,0.8439,

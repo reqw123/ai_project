@@ -1,0 +1,31 @@
+四類姿勢分類（新圖片）  2026-09-29 16:21
+輸入：C:\Users\homec\OneDrive\圖片\Screenshots\cat_test_image（90 張）
+模型：C:\ai_project\paper\reports\eval\pose_classifier_from_tags\018_20260929_161832\model.joblib
+沒有複製圖片（--no-copy）
+
+  lick             4 張
+  other           19 張
+  scratch          1 張
+  walk            65 張
+  _沒偵測到貓           1 張
+
+最高機率 < 0.6（模型沒把握，建議人工看）：3 張；多隻貓：0 張
+⚠ other（躺／坐）是最弱的類別：考卷 recall 0.633，常被判成 walk 或 lick
+
+【對人工答案：C:\Users\homec\OneDrive\圖片\Screenshots\cat_test_image_pose4】計分 88 張（沒有答案或答案不是四類的 2 張不算）
+              precision    recall  f1-score   support
+
+        lick      0.250     1.000     0.400         1
+       other      1.000     0.594     0.745        32
+     scratch      0.000     0.000     0.000         0
+        walk      0.859     1.000     0.924        55
+
+    accuracy                          0.852        88
+   macro avg      0.527     0.648     0.517        88
+weighted avg      0.904     0.852     0.853        88
+
+混淆矩陣（列＝人工、欄＝模型，最後一欄＝沒偵測到貓）
+  lick    [1 0 0 0 0]
+  other   [ 3 19  1  9  0]
+  scratch [0 0 0 0 0]
+  walk    [ 0  0  0 55  0]

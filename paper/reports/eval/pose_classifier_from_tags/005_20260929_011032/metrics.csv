@@ -1,0 +1,9 @@
+﻿評估,類別,precision,recall,f1,support
+eval_tags_only,lick,0.8750,0.9589,0.9150,73
+eval_tags_only,other,0.9897,0.9415,0.9650,205
+eval_tags_only,scratch,0.7917,0.9048,0.8444,21
+eval_tags_only,macro,,,0.9082,
+tag_agreement,lick,0.9784,0.8914,0.9329,967
+tag_agreement,other,0.9143,0.9985,0.9546,1357
+tag_agreement,scratch,0.9753,0.8705,0.9199,363
+tag_agreement,macro,,,0.9358,

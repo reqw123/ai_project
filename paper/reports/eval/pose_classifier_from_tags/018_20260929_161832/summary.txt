@@ -1,0 +1,45 @@
+單幀姿態分類（四類，tag＋骨架抽幀訓練、人工標記評估）  2026-09-29 16:18
+類別：['lick', 'other', 'scratch', 'walk']（walk＝走／站／甩頭、other＝躺／坐）
+tag：walk=11.v282i.yolov8_all_walk、lick=11.v282i.yolov8_train_lick、scratch=11.v282i.yolov8_train_scratch、other=11.v282i.yolov8_stop
+評估：C:\Users\homec\Downloads\11.v282i.yolov8_labeling\image_sort
+tag 訓練圖 2687 張 {'walk': 1357, 'lick': 840, 'scratch': 324, 'other': 166}；人工評估圖 299 張 {'lick': 72, 'scratch': 21, 'other': 30, 'walk': 176}
+評估圖同時在 tag 資料夾：213 張，其中 tag 與人工不同類：0 張
+骨架抽幀：{np.str_('lick'): 240, np.str_('scratch'): 240, np.str_('walk'): 240, np.str_('other'): 380}（每支影片最多 10 幀；來源 {'lick': [('lick', None)], 'scratch': [('scratch', None)], 'walk': [('walk', None), ('shake', None), ('stop', 'not_other')], 'other': [('stop', 'other')]}；額外 {'other': [WindowsPath('C:/Users/homec/Downloads/CLASS_OTHER/OTHER')]}，每支最多 10 幀）；每一折都加入訓練（排除跟該折考題同源的影片），鏡像＋遮點
+交叉驗證：依來源分組 5 折（1395 個來源）
+  第 0 折排除同源骨架影片 76 支、319 幀 {np.str_('lick'): 96, np.str_('other'): 87, np.str_('scratch'): 80, np.str_('walk'): 56}
+  第 1 折排除同源骨架影片 67 支、293 幀 {np.str_('lick'): 87, np.str_('other'): 106, np.str_('scratch'): 60, np.str_('walk'): 40}
+  第 2 折排除同源骨架影片 77 支、307 幀 {np.str_('lick'): 103, np.str_('other'): 102, np.str_('scratch'): 50, np.str_('walk'): 52}
+  第 3 折排除同源骨架影片 65 支、261 幀 {np.str_('lick'): 77, np.str_('other'): 78, np.str_('scratch'): 60, np.str_('walk'): 46}
+  第 4 折排除同源骨架影片 63 支、243 幀 {np.str_('lick'): 108, np.str_('other'): 62, np.str_('scratch'): 40, np.str_('walk'): 33}
+
+最佳超參數（tag 交叉驗證 macro-F1 0.918）：{'learning_rate': 0.05, 'max_iter': 500, 'max_leaf_nodes': 31, 'min_samples_leaf': 100, 'l2_regularization': 1.0}
+
+【主要結果：人工標記 299 張（依來源分組交叉驗證），tag＋骨架抽幀（每支影片最多 10 幀）訓練】
+  macro-F1 0.872｜balanced acc 0.867
+  類別         precision   recall     F1      樣本
+  lick           0.908    0.958  0.932      72
+  other          0.905    0.633  0.745      30
+  scratch        0.792    0.905  0.844      21
+  walk           0.961    0.972  0.966     176
+  混淆矩陣（列＝真實、欄＝預測）
+                lick    other  scratch     walk
+  lick            69        0        2        1
+  other            4       19        1        6
+  scratch          2        0       19        0
+  walk             1        2        2      171
+
+【參考：對 tag 標記的吻合度（2687 張，tag 本身可能有錯；macro-F1 只算 tag 有的類別）】
+  macro-F1 0.918｜balanced acc 0.916
+  類別         precision   recall     F1      樣本
+  lick           0.958    0.950  0.954     840
+  other          0.770    0.765  0.767     166
+  scratch        0.972    0.951  0.961     324
+  walk           0.986    0.997  0.992    1357
+  混淆矩陣（列＝真實、欄＝預測）
+                lick    other  scratch     walk
+  lick           798       28        7        7
+  other           26      127        2       11
+  scratch          8        7      308        1
+  walk             1        3        0     1353
+
+總花費時間：97 秒
