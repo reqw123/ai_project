@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import make_tk_root
+from _tk_helpers import make_tk_root
 from settings_gui.console_panel import ConsolePanel
 
 

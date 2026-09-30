@@ -18,6 +18,17 @@ from pathlib import Path
 
 FIXED_VIDEO = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\walk\7月7日 (8).mp4"
 FRAME_COUNT = 90  # 該影片總共 94 幀（30fps，約 3 秒）；90 幀涵蓋序列 buffer 填滿 + 多次推論
+
+# 快照固定用這組模型產生與比對，不跟著 config.py 的預設模型走：
+# 2026-08-02 的舊快照直接讀 ModelPaths（當時是 v11s_133 + run_122），之後預設模型
+# 換成 v11s_152 + run_153，第 1 幀的 activity_value（純 YOLO 關鍵點位移）就跟著變，
+# 測試變成「每換一次預設模型就壞一次」。改預設模型不該讓這個回歸測試失敗；
+# 要換成新模型當基準，改這兩行後重跑 generate_frame_processor_snapshot.py。
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+SNAPSHOT_YOLO_MODEL = str(_PROJECT_ROOT / "yolo_models" / "v11s_152.pt")
+SNAPSHOT_STGCN_MODEL = str(
+    _PROJECT_ROOT / "stgcn_models" / "run_153_xy_conf_v_bone_att_on" / "153_best_model.pth"
+)
 SNAPSHOT_PATH = (
     Path(__file__).parent / "snapshots" / "frame_processor_process_characterization.json"
 )

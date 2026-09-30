@@ -10,6 +10,7 @@ import tkinter as tk
 
 import pytest
 
+from _tk_helpers import make_tk_root
 from settings_gui import extra_env, ui_state
 
 
@@ -74,10 +75,10 @@ def test_text_field_and_multi_summary(state_path, monkeypatch):
 
 @pytest.fixture(scope="module")
 def tk_root():
-    try:
-        root = tk.Tk()
-    except tk.TclError:
-        pytest.skip("沒有可用的顯示環境")
+    # 用 make_tk_root 的重試：同一個 pytest 行程裡前一個測試檔剛銷毀 Tk 時，直接 tk.Tk() 偶爾會
+    # 暫時失敗，整檔被誤判成沒有顯示環境而略過
+    root = make_tk_root()
+    root.deiconify()  # make_tk_root 預設隱藏根視窗；這裡的對話框測試沿用原本顯示中的根視窗
     root.geometry("40x40+0+0")
     root.update()
     yield root

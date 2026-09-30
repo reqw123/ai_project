@@ -10,7 +10,7 @@ import tkinter as tk
 
 import pytest
 
-from conftest import make_tk_root
+from _tk_helpers import make_tk_root
 from settings_gui.virtual_keyboard import VirtualKeyboard
 
 

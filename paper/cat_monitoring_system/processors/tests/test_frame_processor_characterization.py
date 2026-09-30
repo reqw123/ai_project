@@ -10,7 +10,8 @@ FrameProcessor.process() Characterization / Regression Test
 這裡是 Regression Test，目的是保護「真實系統」的行為，mock 掉核心依賴
 會讓保護網失去意義）。因此本測試：
 
-- 需要真實模型檔（`ModelPaths.YOLO_MODEL` / `ModelPaths.STGCN_MODEL`）與
+- 需要真實模型檔（`_snapshot_utils.SNAPSHOT_YOLO_MODEL` / `SNAPSHOT_STGCN_MODEL`，
+  固定版本、不跟 config.py 預設模型走）與
   固定測試影片（`_snapshot_utils.FIXED_VIDEO`）存在，否則自動跳過。
 - 浮點數（confidence / class_probs）使用容許誤差比較（見下方
   `_FLOAT_TOLERANCE`），不做完全相等比較——GPU 推論結果在不同硬體/驅動/
@@ -34,15 +35,20 @@ from pathlib import Path
 
 import pytest
 
-from config import LoggingConfig, ModelPaths
+from config import LoggingConfig, RunModeConfig
 
-from _snapshot_utils import FIXED_VIDEO, FRAME_COUNT, SNAPSHOT_PATH, capture_process_outputs
+from _snapshot_utils import (
+    FIXED_VIDEO,
+    FRAME_COUNT,
+    SNAPSHOT_PATH,
+    SNAPSHOT_STGCN_MODEL,
+    SNAPSHOT_YOLO_MODEL,
+    capture_process_outputs,
+)
 
 _FLOAT_TOLERANCE = 1e-4  # GPU 浮點數合理誤差；不同硬體/cuDNN 版本可能有極小差異
 
-_MODELS_AVAILABLE = Path(ModelPaths.YOLO_MODEL).exists() and Path(
-    ModelPaths.STGCN_MODEL
-).exists()
+_MODELS_AVAILABLE = Path(SNAPSHOT_YOLO_MODEL).exists() and Path(SNAPSHOT_STGCN_MODEL).exists()
 _VIDEO_AVAILABLE = Path(FIXED_VIDEO).exists()
 
 pytestmark = pytest.mark.skipif(
@@ -78,10 +84,12 @@ def isolated_frame_processor(tmp_path, monkeypatch):
     monkeypatch.setattr(
         LoggingConfig, "TRACKER_STATE_PATH", str(tmp_path / "test_tracker_state.json")
     )
+    # 設定視窗的「影片開始錄影時間」會讓本機影片改用影片時鐘；快照不該隨這個執行設定變動
+    monkeypatch.setattr(RunModeConfig, "VIDEO_START_DATETIME", None)
 
     processor = FrameProcessor(
-        yolo_model_path=ModelPaths.YOLO_MODEL,
-        stgcn_model_path=ModelPaths.STGCN_MODEL,
+        yolo_model_path=SNAPSHOT_YOLO_MODEL,
+        stgcn_model_path=SNAPSHOT_STGCN_MODEL,
         video_path=FIXED_VIDEO,
         nodered_url=None,  # 明確關閉 Node-RED 推送，測試不會發出任何網路請求
         device="cuda",

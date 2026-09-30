@@ -28,12 +28,14 @@ for _p in (_cat_monitoring_system_dir, _paper_dir):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from config import LoggingConfig, ModelPaths  # noqa: E402
+from config import LoggingConfig, RunModeConfig  # noqa: E402
 from processors.frame_processor import FrameProcessor  # noqa: E402
 from _snapshot_utils import (  # noqa: E402
     FIXED_VIDEO,
     FRAME_COUNT,
     SNAPSHOT_PATH,
+    SNAPSHOT_STGCN_MODEL,
+    SNAPSHOT_YOLO_MODEL,
     capture_process_outputs,
 )
 
@@ -54,17 +56,19 @@ def main() -> None:
     LoggingConfig.CSV_PATH = str(scratch_dir / "scratch_cat_monitoring_log.csv")
     LoggingConfig.SEGMENTS_CSV_PATH = str(scratch_dir / "scratch_behavior_segments_log.csv")
     LoggingConfig.TRACKER_STATE_PATH = str(scratch_dir / "scratch_tracker_state.json")
+    # 「影片開始錄影時間」會讓本機影片改用影片時鐘，快照不該隨這個執行設定變動
+    RunModeConfig.VIDEO_START_DATETIME = None
 
     if not Path(FIXED_VIDEO).exists():
         raise FileNotFoundError(f"固定測試影片不存在: {FIXED_VIDEO}")
-    if not Path(ModelPaths.YOLO_MODEL).exists():
-        raise FileNotFoundError(f"YOLO 模型不存在: {ModelPaths.YOLO_MODEL}")
-    if not Path(ModelPaths.STGCN_MODEL).exists():
-        raise FileNotFoundError(f"ST-GCN 模型不存在: {ModelPaths.STGCN_MODEL}")
+    if not Path(SNAPSHOT_YOLO_MODEL).exists():
+        raise FileNotFoundError(f"YOLO 模型不存在: {SNAPSHOT_YOLO_MODEL}")
+    if not Path(SNAPSHOT_STGCN_MODEL).exists():
+        raise FileNotFoundError(f"ST-GCN 模型不存在: {SNAPSHOT_STGCN_MODEL}")
 
     processor = FrameProcessor(
-        yolo_model_path=ModelPaths.YOLO_MODEL,
-        stgcn_model_path=ModelPaths.STGCN_MODEL,
+        yolo_model_path=SNAPSHOT_YOLO_MODEL,
+        stgcn_model_path=SNAPSHOT_STGCN_MODEL,
         video_path=FIXED_VIDEO,
         nodered_url=None,  # 明確關閉 Node-RED 推送，腳本執行期間不會發出任何網路請求
         device="cuda",
@@ -80,6 +84,8 @@ def main() -> None:
         json.dump(
             {
                 "fixed_video": FIXED_VIDEO,
+                "yolo_model": Path(SNAPSHOT_YOLO_MODEL).name,
+                "stgcn_model": Path(SNAPSHOT_STGCN_MODEL).parent.name,
                 "frame_count": len(records),
                 "records": records,
             },
