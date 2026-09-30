@@ -21,6 +21,7 @@ import argparse
 import csv
 import re
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 from collections import deque
 
 import numpy as np
@@ -88,7 +89,7 @@ HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\
 HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
 HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake"
 HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
-HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_results"
+HARD_OUTPUT_DIR        = str(report_dir("eval", "worst_videos"))
 
 POOR_ACC_THRESHOLD       = 0.50  # 低於此準確率的影片在圖表/摘要中標記為表現不佳
 POOR_KPT_CONF_THRESHOLD  = 0.50  # 平均關鍵點信心低於此值，懷疑是 YOLO 偵測品質問題而非分類器問題

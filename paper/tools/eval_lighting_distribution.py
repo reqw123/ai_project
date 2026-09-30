@@ -25,6 +25,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 import cv2
 import numpy as np
@@ -40,7 +41,7 @@ BEHAVIOR_ORDER = ['walk', 'lick', 'scratch', 'shake', 'stop']
 # 訓練影片來源資料夾（跟 tools/train_data/0_dataset_collect.py 的 VIDEO_FOLDERS 同一批）：
 # 底下是 <split>/<類別>/（train/val/test 合併統計）；舊排法 <類別>/ 也支援
 DEFAULT_VIDEO_BASE = str(VIDEO_ROOT)
-DEFAULT_OUTPUT_DIR = r"C:\ai_project\paper\cat_monitoring_system\eval_results\lighting_distribution"
+DEFAULT_OUTPUT_DIR = str(report_dir("eval", "lighting_distribution"))
 
 # 亮度分級門檻（HSV V channel 0-255 均值），純粗略分級用來看分布形狀
 _BINS = [

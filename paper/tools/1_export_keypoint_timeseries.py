@@ -11,6 +11,7 @@ import sys
 import csv
 from datetime import datetime
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 import cv2
 import matplotlib.pyplot as plt
@@ -71,7 +72,7 @@ PLOT_REL_AXIS_UPPER_PCT = 99
 # EMA 設定：與 test_video_inference_ema.py 保持一致
 EMA_ALPHA = 1.0
 
-OUTPUT_DIR = Path(r"C:\ai_project\paper\output\keypoint_timeseries")
+OUTPUT_DIR = report_dir("analysis", "keypoint_timeseries")
 SUMMARY_MD_PATH = OUTPUT_DIR / "keypoint_timeseries_summary.md"
 MOTION_METRICS_CSV_PATH = OUTPUT_DIR / "keypoint_motion_metrics.csv"
 RAW_PLOT_OUTPUT_DIR = OUTPUT_DIR / "raw_plots"

@@ -13,7 +13,7 @@
 輸出：
   <輸出資料夾>/lick_m2_verify.db  （SQLite；另有同名 .lick_events.csv / .lick_window_summary.csv）
   輸出資料夾優先序：環境變數 LICK_VERIFY_OUT_DIR ＞ 預設
-  paper/cat_monitoring_system/plugins/lick_stage/verify_output/
+  paper/reports/verify/lick_stage_m2/
   終端印出每個 session 的事件 / 視窗 / 不變式檢查。
 
 可由 settings_window.py →「🧩 獨立腳本工具」下拉選單選取本檔、填「🎬 影片路徑」、
@@ -25,6 +25,7 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cat_monitoring_system"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -37,13 +38,7 @@ from plugins.lick_stage import LickStagePlugin
 from plugins.lick_stage.ext_body_zones import ExtBodyZonePlugin
 
 _VIDEO_EXTS = (".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm")
-_DEFAULT_OUT_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "cat_monitoring_system"
-    / "plugins"
-    / "lick_stage"
-    / "verify_output"
-)
+_DEFAULT_OUT_DIR = report_dir("verify", "lick_stage_m2")
 
 
 def _resolve_video_source() -> str:

@@ -45,6 +45,7 @@ import sys
 import time
 from collections import deque
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 import cv2
 import numpy as np
@@ -114,7 +115,7 @@ if _env_kp_conf:
         print(f"⚠ 環境變數 CAT_MONITORING_KP_CONF_THRES={_env_kp_conf!r} 不是數字，沿用預設 {KP_CONF_THRESHOLD}")
 
 # ── 模式 1 ──
-OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output" / "keypoint_presence"
+OUTPUT_DIR = report_dir("analysis", "keypoint_presence")
 # 報告同時列出的門檻（主門檻 KP_CONF_THRESHOLD 會自動加入）；0.3 對應抖動統計的 JITTER_CONF_THRESHOLD
 REPORT_THRESHOLDS = (0.3, 0.5, 0.7)
 # 分析來源：留空＝走訪五個行為資料夾（依資料夾、依 ST-GCN 兩種分組都做）；

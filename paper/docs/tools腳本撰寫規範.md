@@ -95,6 +95,9 @@
 13. **要 import 核心模組時，兩個路徑都要加進 `sys.path`**（見下方範本）。
 14. **需要跟主系統一致的參數不要寫死**：YOLO 輸入尺寸讀 `YOLOConfig.IMAGE_SIZE`
     （`from config import YOLOConfig`），推論精度用 FP16（CUDA 上 `quantize=16`，見 `KeypointDetector`）。
+15. **報告（CSV／圖表／摘要）輸出到 `paper/reports/<分類>/<工具>/`**：用
+    `from _report_paths import report_dir` 取得路徑，不要寫死 `C:\...`，也不要寫在腳本旁邊。
+    分類與範圍見 `tools/_report_paths.py` 開頭說明。
 
 ### ✅ 預覽視窗大小（有開影片視窗的腳本）
 
@@ -227,6 +230,7 @@ if __name__ == "__main__":
 - [ ] 需要保存的結果在處理過程中就落盤（停止時不會遺失）
 - [ ] 路徑以 `Path(__file__)` 推算；`sys.path` 加了 `cat_monitoring_system` 與 `paper/`
 - [ ] YOLO 尺寸讀 `YOLOConfig.IMAGE_SIZE`，推論精度 FP16
+- [ ] 報告輸出路徑用 `report_dir(分類, 工具名)`（`paper/reports/` 底下）
 - [ ] 有預覽視窗的腳本，視窗大小用統一的 `DISPLAY_RESOLUTION`／`_DISPLAY_RESOLUTION_PRESETS`／`DISPLAY_SIZE`
 - [ ] 已在 `獨立運行腳本索引.md` 第 5／6 節補一列說明（格式照該文件規定）
 - [ ] 從設定視窗實際啟動一次，確認面板 3～5 秒內出現第一行輸出

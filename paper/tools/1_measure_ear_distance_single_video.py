@@ -21,6 +21,7 @@ import time
 from collections import Counter, deque
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 try:
     import requests as _requests
@@ -87,7 +88,7 @@ if _env_yolo_model:
     YOLO_MODEL_PATH = _env_yolo_model
 
 # 輸出 CSV 路徑（可直接在此處修改）
-OUTPUT_CSV_PATH = r"C:\ai_project\paper\output\ear_distance\left_right_ear_distance.csv"
+OUTPUT_CSV_PATH = str(report_dir("analysis", "ear_distance") / "left_right_ear_distance.csv")
 # Node-RED 即時推送（設為 None 或空字串可停用）
 NODERED_URL = "http://127.0.0.1:1880/lick_zone_result"
 INFERENCE_DEVICE = "cuda"

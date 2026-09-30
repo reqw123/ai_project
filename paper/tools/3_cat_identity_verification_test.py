@@ -44,6 +44,7 @@ import json
 import sys
 from collections import Counter, defaultdict, deque
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 # 讓 print 一律逐行 flush：從 settings_window 啟動時 stdout 是 pipe（非 TTY），
 # Python 預設會區塊緩衝，訊息會卡到緩衝滿或程式結束才一次噴出。逐行緩衝後
@@ -860,7 +861,8 @@ def cmd_verify(sources, show):
         cap.release()
 
         if write_csv:
-            out_path = Path(__file__).parent / f"{video_path.stem}_identity_verify.csv"
+            out_path = report_dir("identity", "verification_test") / f"{video_path.stem}_identity_verify.csv"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             with out_path.open("w", newline="", encoding="utf-8-sig") as f:
                 w = csv.DictWriter(f, fieldnames=["frame", "inst_idx", "track_id", "bbox_conf", "label", *dist_cols, "reason", "bbox"])
                 w.writeheader()

@@ -40,7 +40,7 @@ from utils.constants import BEHAVIOR_CLASSES
 from config import BehaviorTrackingConfig as _BehaviorTrackingConfig
 
 # ==================== 設定 ====================
-SOURCE_FOLDER = r"C:\Users\homec\Downloads\再看看"  # TODO: 待分類影片所在資料夾（單層，不含子資料夾）
+SOURCE_FOLDER = r"C:\Users\homec\Downloads\CLASS_OTHER"  # TODO: 待分類影片所在資料夾（單層，不含子資料夾）
 
 # 五個行為資料夾建立在「來源資料夾」底下的 class/（跟 1_classify_and_sort_images.py 的 image_sort/ 同一套設計），
 # 只需要改上面的 SOURCE_FOLDER；真的想放到別處，把這行改成絕對路徑字串即可。

@@ -19,6 +19,7 @@ import numpy as np
 import time
 from functools import lru_cache
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 from collections import deque
 from collections import defaultdict
 from typing import Iterable
@@ -93,7 +94,7 @@ VARIANTS = {
 
 # 每次分類動作都會 append 一列到這份 CSV，作為人工複審的工作紀錄（可回溯誰在什麼時候
 # 把哪支影片標成什麼）；純附加、不影響分類流程本身，檔案不存在會自動建立含表頭。
-LABEL_LOG_PATH = r"C:\ai_project\paper\cat_monitoring_system\eval_results\manual_variant_review_log.csv"
+LABEL_LOG_PATH = str(report_dir("review", "behavior_variants") / "manual_variant_review_log.csv")
 
 # 推論開關的啟動預設值（可在播放中按 m 鍵即時切換）：True＝跟 1_run_video_inference.py
 # 一樣跑 YOLO+ST-GCN 疊圖輔助判斷；False＝純播放原始畫面，不佔用 GPU／不跑模型。

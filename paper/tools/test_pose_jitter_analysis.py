@@ -69,6 +69,7 @@ import numpy as np
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
 from utils.video_name_overlay import draw_video_name_label
@@ -99,7 +100,7 @@ if _env_test_video:
     VIDEO_PATH = _env_test_video
 
 # ── 輸出根目錄 ──────────────────────────────────────────────────────
-OUTPUT_DIR = Path(r"C:\ai_project\paper\output\jitter_analysis")
+OUTPUT_DIR = report_dir("analysis", "pose_jitter")
 
 # ── Mode 4 / 5 / 6：EMA Alpha 設定 ─────────────────────────────────
 #   *_EMA_ALPHA : 供單張比較圖使用的參考 alpha（須包含在 *_EMA_LIST 中）

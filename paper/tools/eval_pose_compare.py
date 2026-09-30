@@ -14,6 +14,7 @@ import time
 import unicodedata
 from datetime import datetime
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 from typing import Dict, List, Optional, Tuple
 
 import cv2
@@ -77,7 +78,7 @@ def _vrj(s: str, w: int) -> str:
 # ═══════════════════════════════════════════════════════
 OLD_MODEL_PATH   = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_151.pt")
 NEW_MODEL_PATH   = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_152.pt")
-OUTPUT_DIR       = r"C:\ai_project\paper\cat_monitoring_system\eval_results\pose_compare"
+OUTPUT_DIR       = str(report_dir("eval", "pose_compare"))
 INFERENCE_DEVICE = "cuda"   # "cuda" 或 "cpu"
 EMA_ALPHA_OLD    = 1.0      # Old model EMA 平滑係數（1.0 = 不平滑；0.5 = 半衰期平滑）
 EMA_ALPHA_NEW    = 1.0      # New model EMA 平滑係數

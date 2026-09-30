@@ -19,6 +19,7 @@ import numpy as np
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -38,7 +39,7 @@ from config import ModelPaths
 # ── 設定 ──────────────────────────────────────────────────────────────────────
 YOLO_MODEL_PATH  = ModelPaths.YOLO_MODEL
 VIDEO_FOLDER     = r"C:\Users\homec\Downloads\5562"  # 影片資料夾
-CSV_OUTPUT_DIR   = r"C:\ai_project\paper\output\anomaly_detection"
+CSV_OUTPUT_DIR   = str(report_dir("analysis", "anomaly_detection"))
 DEVICE           = "cuda"
 YOLO_IMGSZ       = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（設定視窗 yolo.image_size／環境變數 CAT_MONITORING_YOLO_IMAGE_SIZE，預設 640）
 YOLO_CONF        = 0.5  # YOLO bbox 偵測信心門檻（不是關鍵點 kp 信心門檻）

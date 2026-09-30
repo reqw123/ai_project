@@ -5,13 +5,14 @@ Activity Score 機制視覺化
 用合成位移資料展示 activity_value 與 activity_score 對不同運動模式的反應。
 
 執行：python visualize_activity_score.py
-輸出：C:\ai_project\paper\output\activity_score_visualization\activity_score_visualization.png
+輸出：paper/reports/analysis/activity_score/activity_score_visualization.png
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 # ── 完全對應 config.py 的參數 ────────────────────────────────────────
 EMA_ALPHA             = 1.0    # AnomalyDetectionConfig.EMA_ALPHA（無平滑 = 直接用 motion_score）
@@ -286,7 +287,7 @@ ax_dist.set_title("全場景 activity_value vs score 分佈", fontsize=8, color=
 ax_dist.tick_params(labelsize=6.5, colors=C["muted"])
 ax_dist.legend(fontsize=6.5, facecolor=C["bg"], edgecolor=C["border"], labelcolor=C["muted"], framealpha=0.85)
 
-out_path = Path(r"C:\ai_project\paper\output\activity_score_visualization\activity_score_visualization.png")
+out_path = report_dir("analysis", "activity_score") / "activity_score_visualization.png"
 out_path.parent.mkdir(parents=True, exist_ok=True)
 plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
 print(f"已儲存: {out_path}")

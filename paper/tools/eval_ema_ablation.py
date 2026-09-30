@@ -13,6 +13,7 @@ Output: <HARD_OUTPUT_DIR>/ema_ablation_NNN/
 import re
 import csv
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 from collections import deque
 
 import numpy as np
@@ -60,7 +61,7 @@ HARD_VIDEO_LICK_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\
 HARD_VIDEO_SCRATCH_DIR = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\scratch"
 HARD_VIDEO_SHAKE_DIR   = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\shake"
 HARD_VIDEO_STOP_DIR    = r"C:\Users\homec\OneDrive\圖片\貓咪圖像資料集\主要測試\stop"
-HARD_OUTPUT_DIR        = r"C:\ai_project\paper\cat_monitoring_system\eval_results"
+HARD_OUTPUT_DIR        = str(report_dir("eval", "ema_ablation"))
 
 DEFAULT_YOLO    = str(Path(__file__).resolve().parents[2] / "yolo_models" / "aug_8.pt")
 DEFAULT_IMGSZ   = _YOLOConfig.IMAGE_SIZE  # 跟主系統同步（設定視窗 yolo.image_size／環境變數 CAT_MONITORING_YOLO_IMAGE_SIZE，預設 640）

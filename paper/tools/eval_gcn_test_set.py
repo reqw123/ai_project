@@ -27,13 +27,14 @@ import json
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 
 import numpy as np
 
 _TOOLS = Path(__file__).resolve().parent
 _TRAIN_SCRIPT = _TOOLS / "0_train_gcn.py"
 MODELS_ROOT = Path(__file__).resolve().parents[2] / "stgcn_models"
-OUT_ROOT = _TOOLS.parent / "cat_monitoring_system" / "eval_results" / "gcn_test_set"
+OUT_ROOT = report_dir("eval", "gcn_test_set")
 
 
 def _load_train_module():
@@ -218,7 +219,9 @@ def main():
 
     # ── 存檔 ──
     OUT_ROOT.mkdir(parents=True, exist_ok=True)
-    num = len([p for p in OUT_ROOT.iterdir() if p.is_dir()]) + 1
+    # 取既有最大編號 +1（不是資料夾個數 +1）：舊結果被清掉後才不會重用編號、蓋掉留下的那筆
+    nums = [int(p.name[:3]) for p in OUT_ROOT.iterdir() if p.is_dir() and p.name[:3].isdigit()]
+    num = max(nums, default=0) + 1
     out = OUT_ROOT / f"{num:03d}_{'_vs_'.join(r['name'].replace(' ⚠', '') for r in results)}"
     out.mkdir(parents=True, exist_ok=True)
 

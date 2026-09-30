@@ -175,15 +175,26 @@ def resolve(fn):
     return ns["resolve_video_paths"]
 
 
-def test_rescan_skips_classified_subfolders(resolve, with_roots, tmp_path):
+def test_rescan_only_scans_first_level(resolve, with_roots, tmp_path, capsys):
+    """2026-09-29 起只掃輸入資料夾這一層：分類子資料夾、其他子資料夾的影片都不進播放清單。"""
     src = tmp_path / "輸入"
     _video(src, "left.mp4")
     _video(src / "walk", "done1.mp4")
     _video(src / "lick_2", "done2.mp4")
-    _video(src / "其他批次", "keep.mp4")   # 不是行為名稱的子資料夾照樣掃
+    _video(src / "其他批次", "nested.mp4")
     names = sorted(Path(p).name for p in resolve([str(src)]))
-    assert names == ["keep.mp4", "left.mp4"]
+    assert names == ["left.mp4"]
     assert src.resolve() in with_roots
+    assert "略過已分類到子資料夾的 2 部影片" in capsys.readouterr().out
+
+
+def test_all_classified_folder_reports_done(resolve, with_roots, fn, tmp_path, capsys):
+    src = tmp_path / "輸入"
+    _video(src / "walk", "done1.mp4")
+    _video(src / "stop", "done2.mp4")
+    assert resolve([str(src)]) == []
+    assert "影片都已分類完畢" in capsys.readouterr().out
+    assert fn["_CLASSIFIED_SKIPPED"][src.resolve()] == 2
 
 
 def test_input_folder_itself_named_like_class_is_still_scanned(resolve, with_roots, tmp_path):

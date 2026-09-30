@@ -75,9 +75,9 @@ UNKNOWN_COLOR = (120, 120, 120)
 
 # ── 輸出 ──
 import pathlib as _pathlib
-OUTPUT_ROOT = _pathlib.Path(
-    r"C:\ai_project\paper\tools\train_data\cat_identity\infer"
-)
+# 本檔刻意不 import 專案模組，所以不走 tools/_report_paths.py，直接照同一套分層推算：
+# paper/reports/identity/infer_video/
+OUTPUT_ROOT = _pathlib.Path(__file__).resolve().parents[2] / "reports" / "identity" / "infer_video"
 SAVE_ANNOTATED_VIDEO = True    # 每支影片輸出一份疊好框的 mp4
 SAVE_CSV = True               # 每支影片輸出逐幀 CSV
 

@@ -27,6 +27,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 from collections import deque
 
 import numpy as np
@@ -146,7 +147,7 @@ HARD_VIDEO_DIRS = [
     ("shake",   HARD_VIDEO_SHAKE_DIR),
     ("stop",    HARD_VIDEO_STOP_DIR),
 ]
-HARD_OUTPUT_DIR       = r"C:\ai_project\paper\cat_monitoring_system\eval_results\gcn_compare"
+HARD_OUTPUT_DIR       = str(report_dir("eval", "gcn_compare"))
 
 # ── 視覺樣式：最多支援 5 個模型，一模型一色 ─────────────────────────────────
 _PALETTE = ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0', '#F44336']  # 藍/橘/綠/紫/紅

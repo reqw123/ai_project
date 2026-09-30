@@ -13,6 +13,7 @@ import numpy as np
 import time
 from functools import lru_cache
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 from collections import deque
 from collections import defaultdict
 from typing import Iterable
@@ -79,7 +80,8 @@ DEFAULT_FOLDER_KEY = 'z'   # 啟動時預設進入的資料夾
 # …\未被選擇的模型影片\lick\walk\。只有實際按到的那個類別才會建立（先檢查是否已存在，沒有才建）。
 # 輸入資料夾＝影片是從哪個資料夾掃進播放清單的（見 resolve_video_paths / _CLASSIFY_ROOTS）；單一影片檔
 # 等不在任何輸入資料夾裡的影片，沿用舊規則：影片已經在某個行為資料夾裡就用它的上一層，否則用影片所在資料夾。
-# 重開播放清單時，輸入資料夾底下第一層的行為子資料夾（walk/…、walk_2/…）會略過，只剩還沒分類的影片。
+# 輸入資料夾只掃第一層的影片、不遞迴進子資料夾，所以分類出去的 walk/…、walk_2/… 重開時不會再出現，
+# 只剩還沒分類的影片；清單分完會顯示「已分類完畢」。
 # 「已檢視」資料夾：影片已經在 walk 裡、又按 Shift+A（＝檢視後確認它就是 walk）時，改搬到同層的 walk_2
 # （沒有才建立，已存在就沿用）；影片已經在 walk_2 裡再按 Shift+A 不會搬回 walk。
 REVIEWED_SUFFIX = "_2"
@@ -173,7 +175,7 @@ LOOP_PLAYBACK = True  # 是否循環播放
 ENABLE_AUDIO_PLAYBACK = False   # 是否播放外部音訊檔
 AUDIO_PATH = r"C:\Users\homec\Downloads\7月2日.mp3"  # 從影片抽出的音訊檔路徑（mp3/wav），留空則不播放
 
-REPORT_OUTPUT_PATH = r"C:\ai_project\paper\output\inference_analysis_report_ema.csv"  # 最終 CSV 報告
+REPORT_OUTPUT_PATH = str(report_dir("analysis", "video_inference") / "inference_analysis_report_ema.csv")  # 最終 CSV 報告
 RUN_MODE = 0  # 0: 啟動時選擇, 1: 只生成統計, 2: 只做視窗測試
 
 # ===== 信心值門檻設定（bbox conf / keypoint conf，集中管理）=====
@@ -288,7 +290,7 @@ def open_video_capture_with_retry(path, retries=5, delay=3):
 
 
 def resolve_video_paths(video_sources: Iterable[str]):
-    """將來源清單展開成影片檔路徑；來源可為影片檔或資料夾。"""
+    """將來源清單展開成影片檔路徑；來源可為影片檔或資料夾（資料夾只取第一層的影片，不遞迴）。"""
     resolved = []
     seen = set()
 
@@ -316,25 +318,27 @@ def resolve_video_paths(video_sources: Iterable[str]):
             # 記下輸入資料夾：Shift+A~E 分類時，行為子資料夾就建在它底下
             if p.resolve() not in _CLASSIFY_ROOTS:
                 _CLASSIFY_ROOTS.append(p.resolve())
+            # 只掃輸入資料夾這一層的影片（2026-09-29 起，不再遞迴）：子資料夾裡的影片——尤其是
+            # Shift+A~E 分類出去的 walk/、walk_2/…——一律不進播放清單，避免把分過的影片又分一次
             try:
                 matched = sorted(
-                    [
-                        f for f in p.rglob("*")
-                        if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS
-                    ]
+                    f for f in p.iterdir()
+                    if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS
+                )
+                classified = sum(
+                    1 for d in p.iterdir() if d.is_dir() and _is_behavior_folder_name(d.name)
+                    for f in d.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_VIDEO_EXTS
                 )
             except Exception as e:
                 print(f"⚠ 掃描資料夾出錯，已略過: {p} ({e})")
-                matched = []
-            # 第一層的行為子資料夾（walk/、walk_2/…）是 Shift+A~E 分類出去的影片，不再放進播放清單
-            classified = [f for f in matched
-                          if len(f.relative_to(p).parts) > 1
-                          and _is_behavior_folder_name(f.relative_to(p).parts[0])]
-            if classified:
-                print(f"  （{p.name}：略過已分類到子資料夾的 {len(classified)} 部影片）")
-                matched = [f for f in matched if f not in classified]
-            if not matched:
+                matched, classified = [], 0
+            _CLASSIFIED_SKIPPED[p.resolve()] = classified
+            if not matched and classified:
+                print(f"✅ {p.name}：影片都已分類完畢（{classified} 部在分類子資料夾），沒有待分類影片")
+            elif not matched:
                 print(f"⚠ 資料夾內未找到影片，略過: {p}")
+            elif classified:
+                print(f"  （{p.name}：略過已分類到子資料夾的 {classified} 部影片）")
             for f in matched:
                 key = str(f.resolve()).lower()
                 if key not in seen:
@@ -383,6 +387,8 @@ def _is_behavior_folder_name(name):
 
 # 播放清單的輸入資料夾（resolve_video_paths 掃描資料夾時登記），分類子資料夾建在這些資料夾底下
 _CLASSIFY_ROOTS: list = []
+# 各輸入資料夾底下已分類（在行為子資料夾裡）的影片數，main() 用來分辨「全部分完」跟「路徑錯了」
+_CLASSIFIED_SKIPPED: dict = {}
 
 
 def find_class_root(video_path):
@@ -518,6 +524,28 @@ def draw_no_cat_overlay(frame, text="No cat detected"):
     cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), outline, cv2.LINE_AA)
     cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), thickness, cv2.LINE_AA)
     return frame
+
+
+def show_all_classified_screen(hold_ms=2500):
+    """Shift+A~E 把清單最後一部也分類掉之後，在預覽視窗顯示「已分類完畢」畫面停留一下再關窗
+    （cv2.putText 畫不出中文，畫面用英文；終端機另外印中文訊息）。按任意鍵可提早結束。"""
+    w, h = DISPLAY_SIZE
+    frame = np.zeros((h, w, 3), dtype=np.uint8)
+    ui_scale = compute_ui_scale(w, h)
+    for text, y_ratio, fs, color in (
+        ("ALL VIDEOS CLASSIFIED", 0.46, 1.6, (80, 220, 120)),
+        ("No videos left in this folder", 0.58, 0.8, (220, 220, 220)),
+    ):
+        fs *= ui_scale
+        th = scale_px(3, ui_scale, min_px=2)
+        (tw, _), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, fs, th)
+        cv2.putText(frame, text, ((w - tw) // 2, int(h * y_ratio)),
+                    cv2.FONT_HERSHEY_SIMPLEX, fs, color, th, cv2.LINE_AA)
+    try:
+        cv2.imshow(WINDOW_NAME, frame)
+        cv2.waitKey(hold_ms)
+    except cv2.error:
+        pass  # 視窗已被使用者關掉就不顯示
 
 
 _PANEL_LAYOUT_CACHE: dict = {}
@@ -1087,7 +1115,10 @@ def main():
         print(f"[FOLDER_TEST_MODE=single] {SINGLE_FOLDER_PATH}  共 {len(video_paths)} 部影片")
 
     if not video_paths:
-        print("❌ 找不到可用影片，請確認 FOLDER_MAP / VIDEO_PATHS 的路徑")
+        if sum(_CLASSIFIED_SKIPPED.values()):
+            print("✅ 已分類完畢：輸入資料夾第一層沒有待分類影片（分過的都在行為子資料夾裡）")
+        else:
+            print("❌ 找不到可用影片，請確認 FOLDER_MAP / VIDEO_PATHS 的路徑")
         return
 
     # 記住每個資料夾上次的播放位置（切回去時能續播）
@@ -2226,7 +2257,11 @@ def main():
             new_idx = drop_video_at(current_video_idx, current_folder_key)
             if new_idx is None:
                 print("\n✅ 這份清單的影片都已分類完畢，沒有剩餘影片，結束。")
+                if display_window:
+                    show_all_classified_screen()
                 break
+            if is_all_mode and folder_range[current_folder_key][0] == folder_range[current_folder_key][1]:
+                print(f"\n✅ {FOLDER_MAP[current_folder_key][1]} 資料夾的影片都已分類完畢，換下一個資料夾")
             current_video_idx = new_idx
             switch_delta = 0
             switch_folder_key = ""

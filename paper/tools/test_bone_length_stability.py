@@ -92,6 +92,7 @@ import csv
 import json
 from collections import deque
 from pathlib import Path
+from _report_paths import report_dir  # 報告輸出位置統一定義在 tools/_report_paths.py
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "cat_monitoring_system"))
@@ -196,7 +197,7 @@ if _env_stgcn_model:
 STGCN_NORMALIZE = True
 BEHAVIOR_MIN_CONFIDENCE = BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
 
-OUTPUT_DIR = Path(r"C:\ai_project\paper\output\bone_length_stability")
+OUTPUT_DIR = report_dir("analysis", "bone_length_stability")
 
 SEQUENCE_LENGTH = 16          # 跟 ST-GCN 實際推論窗口一致（T=16）
 BONE_CONF_THRESHOLD = 0.3     # 骨段兩端關鍵點信心低於此值，該幀不納入該項計算

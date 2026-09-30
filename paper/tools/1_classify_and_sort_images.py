@@ -1,7 +1,7 @@
 """
 單張圖片手動姿態分類與歸檔工具
 =======================================================
-讀取 SOURCE_FOLDER 底下所有圖片，用 YOLO-Pose 畫出骨架/bbox 作為人工判斷
+讀取 SOURCE_FOLDER 第一層的圖片（不遞迴，分類過的 image_sort/ 不會重複列入），用 YOLO-Pose 畫出骨架/bbox 作為人工判斷
 的視覺輔助（單張圖片沒有時間序列可用，不會像 1_classify_and_sort_videos.py
 那樣跑 ST-GCN 自動分類），開啟 GUI 逐張顯示；使用者依畫面判斷貓咪姿態後，
 按 A/B/C/D/E（對應 BEHAVIOR_CLASSES 順序：walk/lick/scratch/shake/stop）
@@ -40,7 +40,7 @@ from utils.constants import (
 )
 
 # ==================== 使用者設定區 ====================
-SOURCE_FOLDER = r"C:\Users\homec\OneDrive\圖片\Screenshots\f"  # 待分類圖片所在資料夾（單層，不含子資料夾）
+SOURCE_FOLDER = str(Path.home() / "Downloads" / "11.v282i.yolov8_labeling")  # 待分類圖片所在資料夾（單層，不含子資料夾）
 
 # 若設定 TEST_VIDEO_PATH 環境變數且指向資料夾，優先使用該資料夾（覆蓋上面寫死的
 # SOURCE_FOLDER，對應 settings_window.py 的「🎬 影片路徑」欄位；本腳本處理的是圖片
@@ -49,7 +49,7 @@ _env_test_video = os.getenv("TEST_VIDEO_PATH", "").strip()
 if _env_test_video and os.path.isdir(_env_test_video):
     SOURCE_FOLDER = _env_test_video
 
-YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_149.pt")
+YOLO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "yolo_models" / "v11s_152.pt")
 
 # 若設定 YOLO_MODEL_PATH 環境變數，優先使用該模型路徑（覆蓋上面寫死的 YOLO_MODEL_PATH，
 # 對應 settings_window.py 的「🧠 模型路徑」欄位）
@@ -109,9 +109,20 @@ def run_optional_rename_window(dest_folders, exts, fresh_files):
 
 # ==================== 工具函式 ====================
 def list_images(folder):
+    """只列來源資料夾這一層的圖片，不遞迴：分類過的圖片都在 image_sort/<behavior>/ 子資料夾裡，
+    不會再被列進來重複分類。"""
     p = Path(folder)
     files = [f for f in p.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_IMAGE_EXTS]
     return sorted(files, key=lambda f: f.name.lower())
+
+
+def count_sorted_images(folder):
+    """<folder>/image_sort/<behavior>/ 裡已分類的圖片張數（每個行為資料夾只看一層）。"""
+    sort_root = Path(folder) / IMAGE_SORT_FOLDER_NAME
+    return sum(
+        len(list_images(sort_root / name))
+        for name in BEHAVIOR_CLASSES if (sort_root / name).is_dir()
+    )
 
 
 def move_image_to_behavior_folder(image_path, behavior_name):
@@ -282,7 +293,7 @@ def launch_sort_gui(image_paths, keypoint_detector):
 
         path = current_path()
         if path is None:
-            image_label.configure(image="", text="所有圖片已分類完成")
+            image_label.configure(image="", text="✅ 所有圖片已分類完畢\n\n按 Esc 或關閉視窗結束")
             source_label.configure(text="")
             summary = "  ".join(f"{name}:{sorted_counts[name]}" for name in BEHAVIOR_CLASSES)
             status_label.configure(text=f"完成！本次分類統計 → {summary}")
@@ -408,16 +419,29 @@ def main():
         print(f"❌ 來源資料夾不存在: {SOURCE_FOLDER}")
         return
 
+    # 來源資料夾本身就是分類結果（…/image_sort/walk）時不處理，否則會把分過的圖片又分進
+    # …/image_sort/walk/image_sort/<behavior>/
+    if IMAGE_SORT_FOLDER_NAME in (part.lower() for part in src.resolve().parts):
+        print(f"❌ 來源資料夾在 {IMAGE_SORT_FOLDER_NAME} 底下（已分類過的結果），不重複分類: {SOURCE_FOLDER}")
+        return
+
     images = list_images(src)
+    already_sorted = count_sorted_images(src)
     if not images:
-        print(f"❌ 找不到圖片: {SOURCE_FOLDER}")
+        if already_sorted:
+            print(f"✅ 已分類完畢：{SOURCE_FOLDER} 第一層沒有待分類圖片"
+                  f"（{already_sorted} 張已在 {IMAGE_SORT_FOLDER_NAME}\\<behavior> 裡）")
+        else:
+            print(f"❌ 找不到圖片: {SOURCE_FOLDER}")
         return
 
     print("=" * 60)
     print("圖片姿態手動分類工具")
     print("=" * 60)
     print(f"來源資料夾: {SOURCE_FOLDER}")
-    print(f"待分類圖片共 {len(images)} 張")
+    print(f"待分類圖片共 {len(images)} 張（只掃這一層）")
+    if already_sorted:
+        print(f"略過已分類的 {already_sorted} 張（在 {IMAGE_SORT_FOLDER_NAME}\\<behavior> 裡）")
     print(f"分類搬檔位置: {src / IMAGE_SORT_FOLDER_NAME}\\<behavior>")
     print("按鍵對應：" + "　".join(f"{k}={v}" for k, v in LETTER_TO_BEHAVIOR.items()))
     print("=" * 60)
@@ -432,9 +456,13 @@ def main():
         (src / IMAGE_SORT_FOLDER_NAME / name).mkdir(parents=True, exist_ok=True)
 
     moved_files = launch_sort_gui(images, keypoint_detector)
-    print("\n✓ 分類作業結束。")
     if moved_files is None:  # 分類 GUI 沒能開起來，不需要接著開命名視窗
+        print("\n✓ 分類作業結束。")
         return
+    if len(moved_files) == len(images):
+        print("\n✅ 已分類完畢：來源資料夾的圖片都分完了。")
+    else:
+        print(f"\n✓ 分類作業結束，還有 {len(images) - len(moved_files)} 張未分類（下次執行會接著分）。")
 
     print(f"本次歸檔 {len(moved_files)} 張。開啟批次序號命名視窗（直接關閉視窗即跳過）...")
     run_optional_rename_window(
