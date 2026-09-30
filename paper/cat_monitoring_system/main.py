@@ -261,11 +261,19 @@ def run_gui_mode():
     frame_step_size = 1  # a/d 單次跳幀幀數，z/x 調整
     last_frame = None  # 暫停時重複顯示用；一開始尚未讀過畫面時為 None
 
+    media_day_finished = False  # 本機錄影播完只寫一次多天歷史
     try:
         while True:
             if not paused or last_frame is None:
                 ret, frame = processor.read_raw_frame()
                 if not ret:
+                    # 本機錄影（影片時鐘模式）播完：把那一天寫進多天歷史；其他來源 no-op
+                    if not media_day_finished and not processor.is_stream_source():
+                        media_day_finished = True
+                        try:
+                            processor.finish_media_day()
+                        except Exception as e:
+                            print(f"⚠ 影片播完寫入多天歷史失敗：{e}")
                     time.sleep(0.01)
                     continue
                 last_frame, *_ = processor.process(frame)

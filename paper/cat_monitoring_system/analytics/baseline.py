@@ -78,6 +78,10 @@ class DailyRecord:
     Node-RED's ``v2_daily_history`` global array."""
 
     day: date
+    # 分母定義（2026-09-29 起統一）：
+    #   run_seconds        = 系統運行時間（有在處理畫面的時間，逐幀累加）
+    #   monitoring_seconds = 貓在畫面時間（五類行為 + low_conf），比例指標與收錄門檻都用這個
+    #   not_detected_time  = 貓不在畫面時間（= run_seconds − monitoring_seconds）
     monitoring_seconds: float = 0.0
     walk_time: float = 0.0
     walk_count: int = 0
@@ -90,6 +94,17 @@ class DailyRecord:
     shake_count: int = 0
     active_time: float = 0.0
     rest_time: float = 0.0
+    run_seconds: float = 0.0
+    not_detected_time: float = 0.0
+    # low_conf（貓在畫面但行為無法判定）拆成三種來源：暖機（窗口未滿）、
+    # 模型信心不足、骨架品質檢查（SQA）不通過；三者加總 = low_conf_time
+    low_conf_time: float = 0.0
+    low_conf_warmup_time: float = 0.0
+    low_conf_uncertain_time: float = 0.0
+    low_conf_sqa_time: float = 0.0
+    # 四個 6 小時時段（00-06/06-12/12-18/18-24）各自的時長彙總，欄位同 Node-RED
+    # v2_daily_history 的 periods；舊資料沒有這個維度 → 空 dict
+    periods: dict = field(default_factory=dict)
 
 
 @dataclass

@@ -168,3 +168,49 @@ def test_excluded_dates_feed_directly_into_compute_baseline(db_path):
         history, min_days=7, excluded_dates=excluded_dates
     )
     assert baseline_excl.days_count == 7
+
+
+# ── 2026-09-29：曝露時間欄位、low_conf 來源、periods（JSON）與舊資料庫遷移 ──────
+
+
+def test_new_exposure_fields_and_periods_round_trip(db_path):
+    periods = {"18-24": {"walk": 12.5, "monitoring_sec": 3600.0, "visible_sec": 1800.0}}
+    record = _mk(
+        date(2026, 1, 2),
+        run_seconds=3600.0,
+        not_detected_time=1800.0,
+        low_conf_time=90.0,
+        low_conf_warmup_time=30.0,
+        low_conf_uncertain_time=50.0,
+        low_conf_sqa_time=10.0,
+        periods=periods,
+    )
+    daily_store.save_day(record, db_path=db_path)
+    assert daily_store.load_history(db_path=db_path) == [record]
+
+
+def test_old_database_without_new_columns_is_migrated(tmp_path):
+    """新增欄位前建立的 daily_history.db：開啟時自動補欄，舊列新欄位讀成預設值。"""
+    import sqlite3
+
+    path = str(tmp_path / "old.db")
+    old_fields = ("monitoring_seconds", "walk_time", "walk_count")
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE daily_history (day TEXT PRIMARY KEY, monitoring_seconds REAL, "
+        "walk_time REAL, walk_count INTEGER)"
+    )
+    conn.execute("INSERT INTO daily_history VALUES ('2026-01-01', 7200.0, 100.0, 5)")
+    conn.commit()
+    conn.close()
+    try:
+        history = daily_store.load_history(db_path=path)
+        assert len(history) == 1
+        old = history[0]
+        assert (old.monitoring_seconds, old.walk_time, old.walk_count) == (7200.0, 100.0, 5)
+        assert old.run_seconds == 0.0 and old.low_conf_sqa_time == 0.0 and old.periods == {}
+        # 遷移後照常可以寫入含新欄位的紀錄
+        daily_store.save_day(_mk(date(2026, 1, 2), run_seconds=10.0), db_path=path)
+        assert daily_store.load_history(db_path=path)[1].run_seconds == 10.0
+    finally:
+        daily_store.close_connection(path)

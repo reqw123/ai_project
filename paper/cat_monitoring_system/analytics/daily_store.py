@@ -30,6 +30,7 @@ Node-RED 的 ``global.json`` 或任何 Node-RED context——資料來源是
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import threading
@@ -51,7 +52,17 @@ _FIELDS = (
     "shake_count",
     "active_time",
     "rest_time",
+    # 2026-09-29 新增（舊資料庫開啟時自動 ALTER TABLE 補欄，舊列為 NULL → 讀出為 0）
+    "run_seconds",
+    "not_detected_time",
+    "low_conf_time",
+    "low_conf_warmup_time",
+    "low_conf_uncertain_time",
+    "low_conf_sqa_time",
 )
+_INT_FIELDS = ("walk_count", "stop_count", "lick_count", "scratch_count", "shake_count")
+# periods（四時段彙總 dict）以 JSON 字串存在 TEXT 欄位
+_JSON_FIELDS = ("periods",)
 
 _lock = threading.RLock()
 
@@ -75,14 +86,21 @@ def _open_connection(path: str) -> sqlite3.Connection:
     # 追蹤迴圈）存活，sqlite3 預設的同執行緒限制在這裡不適用；安全性由上面
     # 的模組級 _lock 保證同一時間只有一個呼叫端在用這個連線。
     conn = sqlite3.connect(path, timeout=10.0, check_same_thread=False)
+    col_types = {f: ("INTEGER" if f in _INT_FIELDS else "REAL") for f in _FIELDS}
+    col_types.update({f: "TEXT" for f in _JSON_FIELDS})
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS daily_history (
             day TEXT PRIMARY KEY,
-            {", ".join(f"{f} REAL" if f not in ("walk_count", "stop_count", "lick_count", "scratch_count", "shake_count") else f"{f} INTEGER" for f in _FIELDS)}
+            {", ".join(f"{f} {t}" for f, t in col_types.items())}
         )
         """
     )
+    # 舊資料庫（新增欄位之前建立的）補上缺的欄位；既有列的新欄位為 NULL
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(daily_history)")}
+    for f, t in col_types.items():
+        if f not in existing:
+            conn.execute(f"ALTER TABLE daily_history ADD COLUMN {f} {t}")
     # 獨立小表，只記錄「這天要不要排除」——刻意不在 daily_history 上加
     # 一個 excluded 欄位：exclude/include 是使用者對既有天數的編輯決策，
     # 跟「這天原始統計數字是多少」是兩件不同性質的事，分開存也方便日後
@@ -143,11 +161,14 @@ def close_connection(db_path: Optional[str] = None) -> None:
 def save_day(record: DailyRecord, db_path: Optional[str] = None) -> None:
     """把一天的彙整資料寫入（upsert，同一天重複寫入會覆蓋，方便補寫/修正）。"""
     with _lock, _connect(db_path) as conn:
-        cols = ("day",) + _FIELDS
+        data_cols = _FIELDS + _JSON_FIELDS
+        cols = ("day",) + data_cols
         placeholders = ", ".join("?" for _ in cols)
-        updates = ", ".join(f"{f}=excluded.{f}" for f in _FIELDS)
-        values = (record.day.isoformat(),) + tuple(
-            getattr(record, f) for f in _FIELDS
+        updates = ", ".join(f"{f}=excluded.{f}" for f in data_cols)
+        values = (
+            (record.day.isoformat(),)
+            + tuple(getattr(record, f) for f in _FIELDS)
+            + tuple(json.dumps(getattr(record, f) or {}) for f in _JSON_FIELDS)
         )
         conn.execute(
             f"""
@@ -169,7 +190,7 @@ def load_history(
 
     with _lock, _connect(db_path) as conn:
         cur = conn.execute(
-            f"SELECT day, {', '.join(_FIELDS)} FROM daily_history ORDER BY day ASC"
+            f"SELECT day, {', '.join(_FIELDS + _JSON_FIELDS)} FROM daily_history ORDER BY day ASC"
         )
         rows = cur.fetchall()
     if limit_days is not None and limit_days > 0:
@@ -178,8 +199,11 @@ def load_history(
     for row in rows:
         day = _dt.date.fromisoformat(row[0])
         kwargs = {"day": day}
-        for name, value in zip(_FIELDS, row[1:]):
-            kwargs[name] = value
+        for name, value in zip(_FIELDS, row[1 : 1 + len(_FIELDS)]):
+            if value is not None:  # 新增欄位之前的舊列是 NULL → 沿用 DailyRecord 預設 0
+                kwargs[name] = value
+        for name, value in zip(_JSON_FIELDS, row[1 + len(_FIELDS) :]):
+            kwargs[name] = json.loads(value) if value else {}
         records.append(DailyRecord(**kwargs))
     return records
 

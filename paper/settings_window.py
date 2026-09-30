@@ -213,9 +213,13 @@ class _ScrollableTab(tk.Frame):
         self.canvas = canvas  # 存成屬性，讓外部（例如欄位搜尋跳轉後的捲動定位）能直接操作
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
         self.body = tk.Frame(canvas, bg=COLOR_TAB_BG)
-        self.body.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        # 捲動範圍底部多留的空白（像素）：終端機面板是浮在表單上的（place），會蓋住捲動區
+        # 最下面一截，最後一列永遠捲不到它上面、被遮住一半。多留一段跟「被蓋住高度」
+        # 一樣長的捲動範圍就捲得上去——由 SettingsWindow._update_tab_bottom_padding()
+        # 依終端機目前位置即時調整。刻意不在 body 裡塞一塊空白元件：自訂分頁
+        # （_EXTRA_TABS）自己決定 body 的版面，混用 pack/grid 會直接出錯。
+        self._extra_bottom = 0
+        self.body.bind("<Configure>", lambda e: self._refresh_scrollregion())
         _body_window = canvas.create_window((0, 0), window=self.body, anchor="nw")
         # 把 body 的寬度綁定到 Canvas 目前的可見寬度：沒有這行，body 的寬度完全由
         # 「目前顯示內容裡最寬的那一行」決定——像影像來源欄位切換「本機檔案」／
@@ -241,6 +245,19 @@ class _ScrollableTab(tk.Frame):
 
         self.bind("<Enter>", _on_enter)
         self.bind("<Leave>", _on_leave)
+
+    def _refresh_scrollregion(self):
+        bbox = self.canvas.bbox("all")
+        if bbox:
+            x0, y0, x1, y1 = bbox
+            self.canvas.configure(scrollregion=(x0, y0, x1, y1 + self._extra_bottom))
+
+    def set_bottom_padding(self, px):
+        """設定捲動範圍底部多留的空白（見 __init__ 的 _extra_bottom 說明）。"""
+        px = max(0, int(px))
+        if px != self._extra_bottom:
+            self._extra_bottom = px
+            self._refresh_scrollregion()
 
 
 class SettingsWindow(tk.Tk):
@@ -1643,7 +1660,7 @@ class SettingsWindow(tk.Tk):
         # place() 之前就先掛好這個回呼，之後不管是這裡、拖拉、收合展開、或
         # __init__ 最後的 apply_sane_default_height() 觸發的每一次 place()，
         # 都會自動補這次重新定位，不用另外在每個呼叫點各自記得呼叫一次。
-        self._console_panel.set_on_resize(self._reposition_active_docs_hscroll)
+        self._console_panel.set_on_resize(self._on_console_or_area_resize)
         self._console_panel.place(CONSOLE_DEFAULT_HEIGHT)
 
     def _build_tabs(self, parent):
@@ -1705,7 +1722,7 @@ class SettingsWindow(tk.Tk):
         # 不然縮放後會跟右欄對不齊。終端機面板尺寸改變不會觸發這個事件（place()
         # 是獨立於 pack/grid 版面協商之外的疊加層，不會連帶讓 content_area 觸發
         # <Configure>），那邊另外用 ConsolePanel.set_on_resize() 掛回呼處理。
-        content_area.bind("<Configure>", lambda _e: self._reposition_active_docs_hscroll())
+        content_area.bind("<Configure>", lambda _e: self._on_console_or_area_resize())
 
         self._tab_buttons = {}
         self._tab_frames = {}
@@ -1914,7 +1931,7 @@ class SettingsWindow(tk.Tk):
         if old_hscroll is not None:
             old_hscroll.place_forget()
         self._active_docs_hscroll = self._tab_docs_hscroll.get(tab_name)
-        self.after_idle(self._reposition_active_docs_hscroll)
+        self.after_idle(self._on_console_or_area_resize)
 
     # ── 系統模式（單貓 / 多貓）連動：single 時整個「貓咪身份驗證」分頁灰掉 ──
     @staticmethod
@@ -1997,6 +2014,28 @@ class SettingsWindow(tk.Tk):
             btn.config(text=f"{emoji} 貓咪身份驗證{disabled_tag}{search_suffix}")
         if getattr(self, "_active_tab", None) is not None:
             self._select_tab(self._active_tab)
+
+    def _on_console_or_area_resize(self):
+        """終端機面板移動／縮放、或分頁內容區尺寸改變時要重新對齊的兩件事。"""
+        self._reposition_active_docs_hscroll()
+        self._update_tab_bottom_padding()
+
+    def _update_tab_bottom_padding(self):
+        """讓每個分頁的捲動範圍底部多留「被終端機蓋住的高度」，最後一列才捲得到終端機
+        上方（終端機是浮在表單上的，見 _ScrollableTab._extra_bottom）。
+
+        用目前分頁的 Canvas 量（沒顯示的分頁 Canvas 沒有實際尺寸），所有分頁共用同一個
+        內容區，量到的高度套用到全部分頁。再多留 24px：右欄說明文件的浮動橫向捲軸貼在
+        終端機正上方，也會蓋住一小截。"""
+        console = getattr(self, "_console_panel", None)
+        tab = self._tab_frames.get(getattr(self, "_active_tab", None)) if hasattr(self, "_tab_frames") else None
+        if console is None or tab is None:
+            return
+        self.update_idletasks()
+        canvas_bottom = tab.canvas.winfo_rooty() + tab.canvas.winfo_height()
+        overlap = max(0, canvas_bottom - console.container.winfo_rooty())
+        for t in self._tab_frames.values():
+            t.set_bottom_padding(overlap + 24 if overlap else 0)
 
     def _reposition_active_docs_hscroll(self):
         """把目前分頁的說明文件橫向捲軸（`self._active_docs_hscroll`）用
@@ -2296,6 +2335,75 @@ class SettingsWindow(tk.Tk):
             mm_entry.bind("<KeyPress>", _mm_backspace)
             hh_entry.bind("<FocusOut>", _normalize)
             mm_entry.bind("<FocusOut>", _normalize)
+        elif vt == "datetime":
+            # 挖空式日期時間：[年]年[月]月[日]日 [時]:[分]，跟上面 hhmm 同一套做法——
+            # 「年／月／日／:」是 Label 不是輸入字元，使用者只在格子裡打數字。
+            # info["var"] 是對外的邏輯值："" 或 "YYYY-MM-DD HH:MM"（格子沒填齊時組出
+            # 不完整的字串，存檔驗證會擋下並提示）；各格的原始輸入放在 _dt_parts。
+            var = tk.StringVar()
+            info["var"] = var
+            spec = (("年", 4, None), ("月", 2, (1, 12)), ("日", 2, (1, 31)),
+                    (":", 2, (0, 23)), ("", 2, (0, 59)))
+            part_vars, entries = [], []
+            mask = tk.Frame(control, bg=COLOR_TAB_BG)
+            mask.pack(side="left")
+            for i, (sep, width, _rng) in enumerate(spec):
+                pv = tk.StringVar()
+                vcmd = (self.register(lambda p, n=width: p == "" or (p.isdigit() and len(p) <= n)), "%P")
+                ent = tk.Entry(
+                    mask, textvariable=pv, width=width, justify="center", font=self._font_label,
+                    validate="key", validatecommand=vcmd,
+                )
+                ent.pack(side="left", padx=(8 if i == 3 else 0, 0))  # 日期與時間中間空一點
+                if sep:
+                    tk.Label(
+                        mask, text=sep, bg=COLOR_TAB_BG, fg=COLOR_INFO_FG, font=self._font_label_bold,
+                    ).pack(side="left", padx=1)
+                part_vars.append(pv)
+                entries.append(ent)
+            info["_dt_parts"] = tuple(part_vars)
+            tk.Label(
+                control, text="  （限本機影片；留空＝電腦時鐘）",
+                bg=COLOR_TAB_BG, fg=COLOR_HINT_FG, font=self._font_hint,
+            ).pack(side="left")
+
+            def _sync_dt(*_a, pvs=part_vars, out=var):
+                y, mo, d, h, mi = (p.get() for p in pvs)
+                if not any((y, mo, d, h, mi)):
+                    out.set("")
+                    return
+                pad = lambda s: s.zfill(2) if s else ""  # noqa: E731
+                out.set(f"{y}-{pad(mo)}-{pad(d)} {pad(h)}:{pad(mi)}")
+
+            for idx, (pv, ent) in enumerate(zip(part_vars, entries)):
+                pv.trace_add("write", _sync_dt)
+                width = spec[idx][1]
+                nxt = entries[idx + 1] if idx + 1 < len(entries) else None
+                prv = entries[idx - 1] if idx > 0 else None
+
+                def _advance(evt, v=pv, n=width, target=nxt):
+                    # 打滿這一格自動跳下一格；方向鍵／Tab／Backspace 不觸發
+                    if target is None or evt.keysym in (
+                        "BackSpace", "Delete", "Left", "Right", "Tab", "Home", "End"):
+                        return
+                    if len(v.get()) == n:
+                        target.focus_set()
+                        target.icursor("end")
+
+                def _back(evt, v=pv, target=prv):
+                    # 這一格已空還按 Backspace → 跳回上一格繼續刪
+                    if target is not None and evt.keysym == "BackSpace" and not v.get():
+                        target.focus_set()
+                        target.icursor("end")
+
+                def _normalize_part(_evt=None, v=pv, rng=spec[idx][2]):
+                    # 離開焦點：月日時分補零並夾回合理範圍（年照打的留著，驗證會檢查）
+                    if rng is not None and v.get():
+                        v.set(f"{min(max(int(v.get()), rng[0]), rng[1]):02d}")
+
+                ent.bind("<KeyRelease>", _advance)
+                ent.bind("<KeyPress>", _back)
+                ent.bind("<FocusOut>", _normalize_part)
         elif vt == "enum":
             var = tk.StringVar()
             ttk.Combobox(control, textvariable=var, values=field.get("choices", []), state="readonly", width=18).pack(side="left")
@@ -2542,6 +2650,18 @@ class SettingsWindow(tk.Tk):
             h, _, m = s.partition(":") if ":" in s else (s, "", "")
             hh_var.set(f"{min(int(h), 23):02d}" if h.strip().isdigit() else "")
             mm_var.set(f"{min(int(m), 59):02d}" if m.strip().isdigit() else "")
+        elif vt == "datetime":
+            # 把 "" / "YYYY-MM-DD HH:MM[:SS]"（日期時間中間可用空白或 T）拆進五格；
+            # 秒數格子裡沒有，會被捨去。解析不了的值整個清空（等於不啟用）。
+            import re as _re
+
+            m = _re.match(
+                r"^\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})",
+                "" if value is None else str(value),
+            )
+            parts = [m.group(1)] + [g.zfill(2) for g in m.groups()[1:]] if m else [""] * 5
+            for pv, p in zip(info["_dt_parts"], parts):
+                pv.set(p)
         elif vt == "video_input":
             # 依值的型別/格式自動判斷該切到哪個模式：int → 攝影機索引；
             # rtsp/http(s):// 開頭 → URL；其餘一律當成本機路徑。三個模式各自的
@@ -2600,7 +2720,7 @@ class SettingsWindow(tk.Tk):
                 return None, f"{label}：必須是數字"
         if vt in ("str", "file", "folder", "enum"):
             return info["var"].get(), None
-        if vt == "hhmm":
+        if vt in ("hhmm", "datetime"):
             return info["var"].get().strip(), None
         if vt == "video_input":
             mode = info["mode_var"].get()
@@ -2847,7 +2967,7 @@ class SettingsWindow(tk.Tk):
             dialogs.show_error(self, "匯出設定", "以下欄位輸入格式有誤，請修正後再試：\n\n" + "\n".join(errors))
             return
         # 預設檔名帶上「匯出當下」的時間戳記（YYYYMMDD_HHMMSS，跟專案裡
-        # eval_results/ 底下既有的時間戳記資料夾同一種格式，不用另外發明新格式）
+        # reports/ 底下既有的時間戳記資料夾同一種格式，不用另外發明新格式）
         # 當流水編號：每次匯出檔名自然不同，不會互相覆蓋，檔名本身照字面排序就是
         # 照時間排序，方便直接比對不同時間點匯出的版本差異。使用者仍可以在存檔
         # 對話框裡自己改檔名，這裡只是給一個不用手動想名字的預設值。

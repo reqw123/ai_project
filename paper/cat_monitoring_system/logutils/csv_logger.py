@@ -50,13 +50,13 @@ class CSVLogger:
     def __exit__(self, *args):
         self.close()
 
-    def log(self, frame_idx, behavior, confidence, is_still, motion_score):
-        """寫入一列逐幀紀錄並立即 flush。"""
+    def log(self, frame_idx, behavior, confidence, is_still, motion_score, timestamp=None):
+        """寫入一列逐幀紀錄並立即 flush。timestamp＝這一幀的時間（本機錄影用影片時間）；None＝現在。"""
         with self._lock:
             self.csv_writer.writerow(
                 [
                     frame_idx,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    (timestamp or datetime.now()).strftime("%Y-%m-%d %H:%M:%S"),
                     behavior,
                     f"{confidence:.4f}",
                     "YES" if is_still else "NO",
@@ -112,9 +112,9 @@ class BehaviorSegmentLogger:
             self._file.flush()
         atexit.register(self._atexit_close)
 
-    def log_segment(self, behavior_id, behavior_name, duration_sec, activity=0):
-        """寫入一筆已結束行為段落的紀錄並立即 flush。"""
-        now = datetime.now()
+    def log_segment(self, behavior_id, behavior_name, duration_sec, activity=0, timestamp=None):
+        """寫入一筆已結束行為段落的紀錄並立即 flush。timestamp＝段落結束時間（本機錄影用影片時間）；None＝現在。"""
+        now = timestamp or datetime.now()
         with self._lock:
             self._writer.writerow(
                 [

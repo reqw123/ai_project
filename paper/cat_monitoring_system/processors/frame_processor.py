@@ -6,6 +6,7 @@ import os
 import threading
 import time
 from collections import deque
+from datetime import datetime
 
 import cv2
 import numpy as np
@@ -372,6 +373,10 @@ class FrameProcessor:
         )
         self._plugin_sessions_started = False
         self._plugin_sessions_finished = False
+        # ── 本機錄影改用影片時間（docs/錄影推論改用影片時間-待辦.md）──
+        # None＝電腦時鐘；有值＝錄影開始時間（epoch 秒），行為統計時鐘＝它＋影片播放位置
+        self._media_clock_start = None
+        self._setup_media_clock(resolved_video_path)
         # 關鍵點 EMA：用於 overlay 顯示與異常偵測（不進入 ST-GCN buffer）
         self.kp_ema_alpha = kp_ema_alpha
         self._ema_kpts = None
@@ -404,6 +409,9 @@ class FrameProcessor:
         self._last_behavior_id = LOW_CONF_ID
         self._last_confidence = 0.0
         self._last_class_probs = [0.0] * STGCNConfig.NUM_CLASSES
+        # _last_behavior_id 是 LOW_CONF_ID 時的來源（trackers.behavior_tracker.LOW_CONF_REASONS）：
+        # 還沒做過推論（窗口未滿）＝"warmup"；推論信心不足＝"uncertain"；SQA 不通過＝"sqa"
+        self._last_low_conf_reason = "warmup"
 
         # 貓咪偵測消失容忍：YOLO 連續漏偵測沒超過 CAT_MISSING_TOLERANCE_FRAMES
         # 前，沿用最後一次偵測到的姿態，避免單幀漏偵測就整個中斷分類/顯示
@@ -630,14 +638,17 @@ class FrameProcessor:
                 new_bid, new_conf, new_probs = self.behavior_classifier.classify(
                     seq_array, conf_arr
                 )
+                new_low_conf_reason = None
                 if new_bid is None:
                     new_bid = LOW_CONF_ID
                     new_conf = 0.0
+                    new_low_conf_reason = "uncertain"
                 elif (
                     new_conf
                     < BehaviorTrackingConfig.STGCN_BEHAVIOR_LABEL_CONFIDENCE_THRESHOLD
                 ):
                     new_bid = LOW_CONF_ID
+                    new_low_conf_reason = "uncertain"
 
                 # === Skeleton Quality Assessment（GCN 分類為主、幾何判斷為輔）===
                 # 用跟 ST-GCN 同一個窗口的「原始（未插值）」關鍵點座標
@@ -659,10 +670,14 @@ class FrameProcessor:
                         if not _sqa_reliable:
                             new_bid = LOW_CONF_ID
                             new_conf = 0.0
+                            new_low_conf_reason = "sqa"
                     except Exception:
                         pass
 
                 # 更新持久化結果，本幀也立即採用
+                self._last_low_conf_reason = (
+                    new_low_conf_reason if new_bid == LOW_CONF_ID else None
+                )
                 self._last_behavior_id = new_bid
                 self._last_confidence = new_conf
                 self._last_class_probs = (
@@ -679,7 +694,9 @@ class FrameProcessor:
 
             # === 行為追蹤 ===
             len_before = len(self.tracker.behavior_history)
-            self.tracker.update(behavior_id, activity_value)
+            self.tracker.update(
+                behavior_id, activity_value, low_conf_reason=self._last_low_conf_reason
+            )
             if self.segment_logger and len(self.tracker.behavior_history) > len_before:
                 rec = list(self.tracker.behavior_history)[-1]
                 if rec["gcn_behavior_id"] != LOW_CONF_ID:
@@ -688,15 +705,16 @@ class FrameProcessor:
                         BEHAVIOR_TEXT_MAP.get(rec["gcn_behavior_id"], rec["behavior"]),
                         rec["duration"],
                         rec.get("activity", 0),
+                        timestamp=rec.get("timestamp"),  # 事件結束時刻（本機錄影是影片時間）
                     )
 
             # === Node-RED 資料推送（顯示用「目前行為」走 hysteresis 後的結果，
             # today_stats/behavior_log 等統計仍在 tracker 內部用未經處理的即時結果累積）===
             now = time.time()
+            # （系統運行／貓在畫面時間改由 tracker.update() 逐幀累加，不再依賴推送間隔）
             if self.nodered and (
                 now - self.last_send_time >= NodeRedConfig.PUSH_INTERVAL
             ):
-                self.tracker.add_monitoring_seconds(now - self.last_send_time)
                 self.nodered.send_data(
                     self._build_nodered_payload(
                         self._display_behavior_id, self._display_confidence
@@ -722,6 +740,7 @@ class FrameProcessor:
                     confidence,
                     is_still,
                     self.anomaly_detector.last_motion_score,
+                    timestamp=self._clock_now(),
                 )
 
             # === Overlay 畫圖（走 hysteresis 後的顯示結果，避免單一視窗誤判閃爍）===
@@ -763,6 +782,7 @@ class FrameProcessor:
             self._infer_frame_count = 0
             self.keypoints_buffer.clear()
             self._last_behavior_id = LOW_CONF_ID
+            self._last_low_conf_reason = "warmup"  # 貓重新出現後要重新湊滿窗口
             self._last_confidence = 0.0
             self._last_class_probs = [0.0] * STGCNConfig.NUM_CLASSES
             # 同步更新本幀的區域變數，否則本幀回傳的 behavior_id/confidence 仍
@@ -819,6 +839,62 @@ class FrameProcessor:
                 )
             except Exception:
                 pass
+
+    def _setup_media_clock(self, resolved_video_path) -> None:
+        """輸入是本機影片檔且設了 RunModeConfig.VIDEO_START_DATETIME → tracker 改用影片時間；
+        即時攝影機／串流一律維持電腦時鐘。本機影片沒設起始時間只印警告、行為不變。"""
+        is_local_file = (
+            self._grabber is None
+            and isinstance(resolved_video_path, str)
+            and os.path.isfile(resolved_video_path)
+        )
+        if not is_local_file:
+            return
+        start = RunModeConfig.VIDEO_START_DATETIME
+        if start is None:
+            print(
+                "⚠ 輸入是本機影片，但沒有設定「影片開始錄影時間」：行為統計用電腦時鐘，"
+                "時長／時段／日期會跟著處理速度與處理日期走，不能當基線資料"
+                "（設定視窗「執行模式與排程」，或環境變數 CAT_MONITORING_VIDEO_START_TIME）"
+            )
+            return
+        self._media_clock_start = start.timestamp()
+        self.tracker.enable_media_clock(self._media_now_ts)
+        print(
+            f"🎞 本機影片改用影片時間計時：錄影開始 {start:%Y-%m-%d %H:%M:%S}"
+            "（時長／時段／日期照影片時間，跟處理快慢無關；播完寫入那一天）"
+        )
+
+    def _media_now_ts(self) -> float:
+        """影片時鐘：錄影開始時間 + 目前影片位置（秒）。"""
+        return self._media_clock_start + self._current_source_timestamp()
+
+    def _clock_now(self) -> datetime:
+        """顯示／CSV 用的「現在」：本機錄影是影片時間，其他來源是電腦時鐘。"""
+        if self._media_clock_start is not None:
+            return datetime.fromtimestamp(self._media_now_ts())
+        return datetime.now()
+
+    def finish_media_day(self) -> None:
+        """本機影片播畢時呼叫（server/streaming.py）：影片時鐘模式下，先把最後的統計推給
+        Node-RED（推送是每 PUSH_INTERVAL 一次，最後一段可能還沒送），再把這一天寫進
+        daily_history.db。電腦時鐘模式什麼都不做（跨日封存照舊）。"""
+        if self._media_clock_start is None:
+            return
+        try:
+            if self.nodered:
+                self.nodered.send_data(
+                    self._build_nodered_payload(
+                        self._display_behavior_id, self._display_confidence
+                    )
+                )
+        except Exception as e:
+            print(f"⚠ 影片播完時推送最後統計給 Node-RED 失敗（不影響寫入多天歷史）：{e}")
+        day = self.tracker.finish_media_day()
+        if day is not None:
+            print(f"✅ 影片播完：{day} 已寫入多天歷史（daily_history.db）")
+        else:
+            print("⚠ 影片播完，但這一天沒有累積任何時間或寫入失敗，沒有寫入多天歷史")
 
     def finish_plugin_sessions(self, end_source_timestamp=None) -> None:
         """來源播畢 / 管線關閉時呼叫：讓外掛結算最後一段未結束的 bout。"""
@@ -1099,7 +1175,7 @@ class FrameProcessor:
                 "text": NOT_VISIBLE_DISPLAY_TEXT,
                 "behavior": NOT_VISIBLE_TEXT,
                 "emoji": NOT_VISIBLE_EMOJI,
-                "timestamp": time.strftime("%H:%M:%S"),
+                "timestamp": self._clock_now().strftime("%H:%M:%S"),
             }
             gcn_confidence = 0.0
         else:
@@ -1113,7 +1189,7 @@ class FrameProcessor:
                     "text": LOW_CONF_TEXT,
                     "behavior": LOW_CONF_TEXT,
                     "emoji": LOW_CONF_EMOJI,
-                    "timestamp": time.strftime("%H:%M:%S"),
+                    "timestamp": self._clock_now().strftime("%H:%M:%S"),
                 }
             else:
                 current = {
@@ -1125,7 +1201,7 @@ class FrameProcessor:
                         else "unknown"
                     ),
                     "emoji": BEHAVIOR_EMOJI_MAP.get(behavior_id, "❓"),
-                    "timestamp": time.strftime("%H:%M:%S"),
+                    "timestamp": self._clock_now().strftime("%H:%M:%S"),
                 }
             gcn_confidence = round(float(confidence), 3)
 

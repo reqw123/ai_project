@@ -47,6 +47,12 @@ def main() -> None:
     # 攔截正式的 tracker_state.json 路徑，避免讀到/寫到真實累積資料
     # （記憶體內暫時覆寫，腳本結束後沒有任何殘留效果，不影響 config.py 原始碼）。
     LoggingConfig.TRACKER_STATE_PATH = str(scratch_dir / "scratch_tracker_state.json")
+    LoggingConfig.DAILY_HISTORY_DB_PATH = str(scratch_dir / "scratch_daily_history.db")
+    # 跟 conftest.py 的 autouse fixture 一致：腳本每步最長 12 秒，不能被當成中斷
+    from conftest import SCENARIO_MAX_FRAME_GAP_SECONDS
+    from config import BehaviorTrackingConfig
+
+    BehaviorTrackingConfig.MAX_FRAME_GAP_SECONDS = SCENARIO_MAX_FRAME_GAP_SECONDS
 
     clock = FakeClock(datetime(2026, 1, 1, 8, 0, 0))
     # 直接覆寫模組層級的 time/datetime 名稱（跟 conftest 內 pytest monkeypatch

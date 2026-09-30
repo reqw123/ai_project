@@ -1,6 +1,6 @@
 [
     {
-        "id": "29b236f5e061aa9a",
+        "id": "5065d3ea51a6c396",
         "type": "tab",
         "label": "😺 貓咪健康監測系統",
         "disabled": false,
@@ -8,9 +8,9 @@
         "env": []
     },
     {
-        "id": "95a9b99e467b7682",
+        "id": "b4fce5d781bdc15e",
         "type": "group",
-        "z": "29b236f5e061aa9a",
+        "z": "5065d3ea51a6c396",
         "style": {
             "stroke": "#999999",
             "stroke-opacity": "1",
@@ -21,45 +21,48 @@
             "color": "#a4a4a4"
         },
         "nodes": [
-            "6212099f21c6c050",
-            "ed25c59fba4c444e",
-            "29ea536b7afbaded",
-            "4eaaaf788541668b",
-            "4d08de851552230e",
-            "f8beae0476ec99c5",
-            "eb95bf27aa373c1f",
-            "a4712441671139c1",
-            "593d4080b69d1c14",
-            "5d0c9d3bb84b4dcf",
-            "94211a0faa048bac",
-            "4b1cecacce02b681",
-            "73d6c21ea838328b",
-            "2894ade52c8aa0ba",
-            "129799ba26274594",
-            "5a606ccda3e43838",
-            "122d7c821936d71e",
-            "947dfc68c00a79fc",
-            "e2d0c504323fdb08",
-            "e66f368b75836e01",
-            "a3455857b2422f22",
-            "13c867e2a1a0dc52",
-            "ed22f673e2dcb120",
-            "2dc5cd8165ad3f57",
-            "c247893250ed55b6",
-            "ecde63d01ad47833",
-            "8c7834b573688d85",
-            "9c7b112f5b48879c"
+            "91c774e2a9b95ead",
+            "eb12c2ec6a69a9b3",
+            "f385089d54db2ba3",
+            "0af571bb94dba4b7",
+            "de4640392c5cda41",
+            "b204466187732c1c",
+            "c61411a7e9f51d34",
+            "d5fee29b0c26bc16",
+            "e4427c6654aa6b5c",
+            "9521c9c08f46872a",
+            "7f3d53cdee88f4a2",
+            "d336ef128cb69764",
+            "043c522289ebc9ba",
+            "aa73d6263b696e09",
+            "6db54b71d354cb37",
+            "4d771f8cb26ffbe1",
+            "a4103099dbda270a",
+            "68dde24d7d1a1598",
+            "acad1749586bd98d",
+            "69bb9360631274f8",
+            "b10220a87f4895b3",
+            "34542cf8488118db",
+            "b78f3b013449275b",
+            "7b5504273f3f6afd",
+            "783d72e160dfe904",
+            "870f0aaa552d0e6a",
+            "8648f6ac8737f13a",
+            "3b2d005027b85447",
+            "2aaefaf3fc9a5158",
+            "b930583b2311477e",
+            "939f8c17d8dee577"
         ],
-        "x": 244,
+        "x": 154,
         "y": 99,
-        "w": 1112,
+        "w": 1202,
         "h": 742
     },
     {
-        "id": "6212099f21c6c050",
+        "id": "91c774e2a9b95ead",
         "type": "http in",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "python_online",
         "url": "/python_online",
         "method": "post",
@@ -70,15 +73,15 @@
         "y": 540,
         "wires": [
             [
-                "ed25c59fba4c444e"
+                "eb12c2ec6a69a9b3"
             ]
         ]
     },
     {
-        "id": "ed25c59fba4c444e",
+        "id": "eb12c2ec6a69a9b3",
         "type": "json",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "parse_json",
         "property": "payload",
         "action": "obj",
@@ -87,15 +90,15 @@
         "y": 540,
         "wires": [
             [
-                "eb95bf27aa373c1f"
+                "c61411a7e9f51d34"
             ]
         ]
     },
     {
-        "id": "29ea536b7afbaded",
+        "id": "f385089d54db2ba3",
         "type": "inject",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "發送訊息到discord",
         "props": [
             {
@@ -109,19 +112,19 @@
         "topic": "",
         "payload": "這是一則來自 Node-RED 的測試通知！",
         "payloadType": "str",
-        "x": 390,
-        "y": 740,
+        "x": 750,
+        "y": 800,
         "wires": [
             [
-                "4d08de851552230e"
+                "de4640392c5cda41"
             ]
         ]
     },
     {
-        "id": "4eaaaf788541668b",
+        "id": "0af571bb94dba4b7",
         "type": "http request",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "送到 Discord",
         "method": "POST",
         "ret": "txt",
@@ -141,10 +144,10 @@
         ]
     },
     {
-        "id": "4d08de851552230e",
+        "id": "de4640392c5cda41",
         "type": "function",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "組成 Discord Webhook 格式",
         "func": "\n\n// Discord Python 上線通知\n// =========================\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.url = \"https://discord.com/api/webhooks/1507070766271959061/bAa1Pf55ixg0bJmqeoJTQVdPt2ScMyITxYr4ukHof8IfBUC6hCaQqysnqkn8paCXQcjO\";\n\n// =========================\n// IP\n// =========================\nlet ip = msg.payload?.ip || \"未知IP\";\n\n// 保存 IP 到持久化全域 context，讓重連/重啟後仍可取用\ntry {\n    global.get(\"gfile\").set(\"python_ip\", ip);\n} catch (e) {\n    global.set(\n        \"python_ip\",\n        ip\n    );\n}\n\n// =========================\n// Discord Payload\n// =========================\nmsg.payload = {\n\n    username:\n        \"Cat Health Monitor\",\n\n    embeds: [\n\n        {\n\n            title:\n                \"🟢 Python AI 已上線\",\n\n            description:\n                `偵測到 Python 推論系統啟動`,\n\n            color:\n                65280,\n\n            fields: [\n\n                {\n                    name: \"Python IP\",\n                    value: String(ip),\n                    inline: false\n                }\n\n            ],\n\n            footer: {\n\n                text:\n                    new Date()\n                        .toLocaleString()\n\n            }\n\n        }\n\n    ]\n};\n\nreturn msg;\n\n",
         "outputs": 1,
@@ -157,27 +160,27 @@
         "y": 800,
         "wires": [
             [
-                "4eaaaf788541668b"
+                "0af571bb94dba4b7"
             ]
         ]
     },
     {
-        "id": "f8beae0476ec99c5",
+        "id": "b204466187732c1c",
         "type": "http response",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "response_200",
         "statusCode": "200",
         "headers": {},
-        "x": 1020,
+        "x": 1060,
         "y": 620,
         "wires": []
     },
     {
-        "id": "eb95bf27aa373c1f",
+        "id": "c61411a7e9f51d34",
         "type": "function",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "build_response",
         "func": "let ip = null;\ntry {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"gfile\").get(\"python_ip\") || global.get(\"python_ip\") || null);\n} catch (e) {\n    ip = (msg.payload && msg.payload.ip) ? msg.payload.ip : (global.get(\"python_ip\") || null);\n}\nif (ip) {\n    try {\n        global.get(\"gfile\").set(\"python_ip\", ip);\n    } catch (e) {\n        global.set(\"python_ip\", ip);\n    }\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = ip ? `http://${ip}:5000/stream` : \"\";\nnode.warn(\"python_online received IP: \" + (ip || 'null'));\nreturn msg;",
         "outputs": 1,
@@ -186,22 +189,22 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 810,
+        "x": 780,
         "y": 540,
         "wires": [
             [
-                "4d08de851552230e",
-                "f8beae0476ec99c5",
-                "122d7c821936d71e",
-                "c247893250ed55b6"
+                "de4640392c5cda41",
+                "b204466187732c1c",
+                "a4103099dbda270a",
+                "783d72e160dfe904"
             ]
         ]
     },
     {
-        "id": "a4712441671139c1",
+        "id": "d5fee29b0c26bc16",
         "type": "inject",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "啟動時發送串流",
         "props": [
             {
@@ -219,15 +222,15 @@
         "y": 640,
         "wires": [
             [
-                "593d4080b69d1c14"
+                "e4427c6654aa6b5c"
             ]
         ]
     },
     {
-        "id": "593d4080b69d1c14",
+        "id": "e4427c6654aa6b5c",
         "type": "function",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "從持久化context恢復串流",
         "func": "let ip = null;\ntry {\n    ip = global.get(\"gfile\").get(\"python_ip\") || global.get(\"python_ip\") || null;\n} catch (e) {\n    ip = global.get(\"python_ip\") || null;\n}\nif (!ip) {\n    return null;\n}\nmsg.payload = { ip: ip };\nmsg.stream_url = `http://${ip}:5000/stream`;\nreturn msg;",
         "outputs": 1,
@@ -240,16 +243,16 @@
         "y": 640,
         "wires": [
             [
-                "122d7c821936d71e",
-                "c247893250ed55b6"
+                "a4103099dbda270a",
+                "783d72e160dfe904"
             ]
         ]
     },
     {
-        "id": "5d0c9d3bb84b4dcf",
+        "id": "9521c9c08f46872a",
         "type": "http in",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "接收Python數據",
         "url": "/yolo_result",
         "method": "post",
@@ -260,16 +263,16 @@
         "y": 220,
         "wires": [
             [
-                "4b1cecacce02b681",
-                "94211a0faa048bac"
+                "d336ef128cb69764",
+                "7f3d53cdee88f4a2"
             ]
         ]
     },
     {
-        "id": "94211a0faa048bac",
+        "id": "7f3d53cdee88f4a2",
         "type": "http response",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "回應200",
         "statusCode": "200",
         "headers": {},
@@ -278,10 +281,10 @@
         "wires": []
     },
     {
-        "id": "4b1cecacce02b681",
+        "id": "d336ef128cb69764",
         "type": "json",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "解析JSON",
         "property": "payload",
         "action": "obj",
@@ -290,15 +293,15 @@
         "y": 220,
         "wires": [
             [
-                "73d6c21ea838328b"
+                "043c522289ebc9ba"
             ]
         ]
     },
     {
-        "id": "73d6c21ea838328b",
+        "id": "043c522289ebc9ba",
         "type": "function",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "數據分發器",
         "func": "let data = msg.payload;\nif (!data) return null;\n\nif (!data.current)     data.current     = {};\nif (!data.today_stats) data.today_stats = {};\n\nlet stats = data.today_stats;\nstats.walk             = stats.walk             || 0;\nstats.walk_time        = stats.walk_time        || 0;\nstats.lick             = stats.lick             || 0;\nstats.lick_time        = stats.lick_time        || 0;\nstats.scratch          = stats.scratch          || 0;\nstats.scratch_time     = stats.scratch_time     || 0;\nstats.shake            = stats.shake            || 0;\nstats.shake_time       = stats.shake_time       || 0;\nstats.stop             = stats.stop             || 0;\nstats.stop_time        = stats.stop_time        || 0;\nstats.not_detected_time = stats.not_detected_time || 0;\nstats.active_time      = stats.active_time      || 0;\nstats.low_conf         = stats.low_conf         || 0;\nstats.low_conf_time     = stats.low_conf_time     || 0;\n\nif (Array.isArray(data.behavior_log)) {\n    data.behavior_log = data.behavior_log.map(function(item) {\n        return {\n            behavior: item.behavior || 'unknown',\n            time:     item.time     || '--:--',\n            duration: item.duration || 0,\n            emoji:    getEmoji(item.behavior)\n        };\n    });\n} else {\n    data.behavior_log = [];\n}\n\nif (!data.current.emoji)     data.current.emoji     = getEmoji(data.current.behavior);\nif (!data.current.timestamp) data.current.timestamp = new Date().toLocaleTimeString();\n\n\n\n// 行為開始時間追蹤（供時間軸進行中計時器使用）\nlet _curBeh = (data.current && data.current.behavior) || null;\nlet _prevBeh = flow.get('tl_cur_behavior');\nlet _startMs  = flow.get('tl_start_ms') || Date.now();\nif (_curBeh !== _prevBeh) {\n    _startMs = Date.now();\n    flow.set('tl_cur_behavior', _curBeh);\n    flow.set('tl_start_ms', _startMs);\n}\nif (data.current) data.current.start_epoch_ms = _startMs;\n\n// 今日各行為平均時長（供時間軸風險評估）\ndata.avg_duration = {};\nfor (let _b of ['walk','lick','scratch','shake','stop']) {\n    let _cnt = stats[_b] || 0;\n    let _t   = stats[_b + '_time'] || 0;\n    data.avg_duration[_b] = _cnt >= 2 ? Math.round(_t / _cnt * 10) / 10 : 0;\n}\n\nmsg.payload = data;\n\n// CSV：每 5 分鐘寫一次（與 v2 flow 一致）\nlet now     = Date.now();\nlet lastCsv = flow.get('last_csv_write') || 0;\nlet doCsv   = (now - lastCsv) >= 300000;\nif (doCsv) flow.set('last_csv_write', now);\n\nlet csvMsg = doCsv ? { payload: {\n    timestamp:         (function(){var d=new Date(),p=function(n){return String(n).padStart(2,\"0\")};return d.getFullYear()+\"-\"+p(d.getMonth()+1)+\"-\"+p(d.getDate())+\" \"+p(d.getHours())+\":\"+p(d.getMinutes())+\":\"+p(d.getSeconds());})(),\n    walk:              stats.walk,              walk_time:         stats.walk_time,\n    lick:              stats.lick,              lick_time:         stats.lick_time,\n    scratch:           stats.scratch,           scratch_time:      stats.scratch_time,\n    shake:             stats.shake,             shake_time:        stats.shake_time,\n    stop:              stats.stop,              stop_time:         stats.stop_time,\n    active_time:       stats.active_time,\n    low_conf:          stats.low_conf,\n    low_conf_time:     stats.low_conf_time,\n    not_detected_time: stats.not_detected_time,\n    activity_score:    data.activity_score || 0\n}} : null;\n\nreturn [\n    msg,\n    msg,\n    msg,\n    { payload: data.activity_score || 0 },\n    msg,\n    csvMsg,\n    msg\n];\n\nfunction getEmoji(behavior) {\n    switch (behavior) {\n        case 'scratch': return '🐾';\n        case 'lick':    return '🧼';\n        case 'walk':    return '🚶';\n        case 'shake':   return '🔄';\n        case 'stop':    return '⏹';\n        case 'not':     return '📷';\n        default:        return '🐱';\n    }\n}",
         "outputs": 7,
@@ -311,31 +314,31 @@
         "y": 220,
         "wires": [
             [
-                "947dfc68c00a79fc"
+                "68dde24d7d1a1598"
             ],
             [
-                "e2d0c504323fdb08"
+                "acad1749586bd98d"
             ],
             [
-                "e66f368b75836e01"
+                "69bb9360631274f8"
             ],
             [
-                "5a606ccda3e43838"
+                "4d771f8cb26ffbe1"
             ],
             [],
             [
-                "2894ade52c8aa0ba"
+                "aa73d6263b696e09"
             ],
             [
-                "13c867e2a1a0dc52"
+                "34542cf8488118db"
             ]
         ]
     },
     {
-        "id": "2894ade52c8aa0ba",
+        "id": "aa73d6263b696e09",
         "type": "csv",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "建立CSV",
         "sep": ",",
         "hdrin": false,
@@ -351,15 +354,15 @@
         "y": 480,
         "wires": [
             [
-                "129799ba26274594"
+                "6db54b71d354cb37"
             ]
         ]
     },
     {
-        "id": "129799ba26274594",
+        "id": "6db54b71d354cb37",
         "type": "file",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "儲存CSV",
         "filename": "CAT_MONITORING_NODA_DATA_CSV_PATH",
         "filenameType": "env",
@@ -374,10 +377,10 @@
         ]
     },
     {
-        "id": "9c7b112f5b48879c",
+        "id": "3b2d005027b85447",
         "type": "comment",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "⚠️ 個體化基線 CSV／狀態檔路徑改用環境變數（2026-08-26）",
         "info": "# 個體化基線相關路徑改用環境變數\n\n這個節點（「儲存CSV」）跟 `cat_health_v3_flow.json` 裡的 `baseline.csv`／`daily_history.csv`／`deviation_log.csv` 3 個 file 節點，`filenameType` 都已經從寫死字串（`str`）改成 `env`，實際路徑改由下面這些環境變數提供：\n\n| 環境變數名稱 | 目前值 | 用在哪個節點 |\n|---|---|---|\n| `CAT_MONITORING_NODA_DATA_CSV_PATH` | `C:\\a\\noda_data.csv` | 本節點「儲存CSV」 |\n| `CAT_MONITORING_BASELINE_CSV_PATH` | `C:\\a\\baseline.csv` | cat_health_v3_flow.json：baseline.csv |\n| `CAT_MONITORING_NODERED_DAILY_HISTORY_CSV_PATH` | `C:\\a\\daily_history.csv` | cat_health_v3_flow.json：daily_history.csv |\n| `CAT_MONITORING_DEVIATION_LOG_CSV_PATH` | `C:\\a\\deviation_log.csv` | cat_health_v3_flow.json：deviation_log.csv |\n| `CAT_MONITORING_TRACKER_STATE_PATH`（可選，程式碼已有 fallback） | `C:\\ai_project\\paper\\baseline_data\\tracker_state.json` | 本分頁「事件時間軸引擎」function node |\n| `CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH`（2026-08-27 新增，程式碼已有 fallback） | `C:\\ai_project\\paper\\baseline_data\\global.json` | **settings.js** 的 `functionGlobalContext.gfile`（不是 flow 節點，見下方特別說明） |\n\n**設定指令（PowerShell，User 層級，不需要系統管理員權限）：**\n```powershell\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_NODA_DATA_CSV_PATH', 'C:\\a\\noda_data.csv', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_BASELINE_CSV_PATH', 'C:\\a\\baseline.csv', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_NODERED_DAILY_HISTORY_CSV_PATH', 'C:\\a\\daily_history.csv', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_DEVIATION_LOG_CSV_PATH', 'C:\\a\\deviation_log.csv', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_TRACKER_STATE_PATH', 'C:\\ai_project\\paper\\baseline_data\\tracker_state.json', 'User')\n[Environment]::SetEnvironmentVariable('CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH', 'C:\\ai_project\\paper\\baseline_data\\global.json', 'User')\n```\n或用 Win 鍵搜尋「編輯帳戶的環境變數」，在「使用者變數」區塊按「新增」，手動逐一輸入上面 6 組名稱／值。\n\n**這些值可以設定在兩個地方（前 5 個兩邊擇一即可，兩邊都設也不衝突；最後一個只能用方法 2，見下方特別說明）：**\n1. 使用者設置 → 環境配置（全局環境變數面板，存在 `flows.json` 的 global-config 節點）\n2. Windows 使用者環境變數（上面那段指令／手動新增，**需要登出重登或重開機後新啟動的行程才讀得到**，重新部署 flow 不會讓已經在跑的 Node-RED 行程重新讀取）\n\n**⚠️ `CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH` 只能用方法 2，方法 1 對它沒用**：這個環境變數是 `settings.js`（Node-RED 啟動時就載入的檔案，早於任何 flow／global-config 節點）在讀，只認得到 Node.js 原生 `process.env`，讀不到「全局環境變數」面板（那個存在 flow 執行期才載入的 `global-config` 節點裡）。\n\n**⚠️ 換機器/搬遷時**：只要在新機器上比照設定這 6 個環境變數指到新位置即可，**不需要**改這些節點本身的設定（`CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH` 這個還要額外改 settings.js 的 fallback，或確保環境變數一定有設）。\n\n**⚠️ 沒設環境變數會怎樣**：前 4 個 CSV 節點沒有 fallback，環境變數沒設時 `filename` 會解析成空字串，該節點會跳出「未指定檔名」警告並跳過寫入（不會讓 Node-RED 崩潰，但那筆資料會遺失）；`CAT_MONITORING_TRACKER_STATE_PATH`／`CAT_MONITORING_NODERED_GLOBAL_CONTEXT_PATH` 因為寫在程式碼裡（`env.get(...) || fallback` / `process.env... || fallback`）沒設也不會壞，會退回舊路徑。\n\n詳細背景見 repo 內 `paper/docs/資料層架構現況與統一管理評估.md` 第十四、十五節。",
         "x": 580,
@@ -385,10 +388,10 @@
         "wires": []
     },
     {
-        "id": "5a606ccda3e43838",
+        "id": "4d771f8cb26ffbe1",
         "type": "ui_gauge",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "活動力儀表",
         "group": "group_gauge_cat",
         "order": 5,
@@ -414,10 +417,10 @@
         "wires": []
     },
     {
-        "id": "122d7c821936d71e",
+        "id": "a4103099dbda270a",
         "type": "ui_template",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "group": "group_stream_cat",
         "name": "影像串流",
         "order": 6,
@@ -429,17 +432,17 @@
         "resendOnRefresh": true,
         "templateScope": "local",
         "className": "",
-        "x": 1020,
-        "y": 680,
+        "x": 880,
+        "y": 640,
         "wires": [
             []
         ]
     },
     {
-        "id": "947dfc68c00a79fc",
+        "id": "68dde24d7d1a1598",
         "type": "ui_template",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "group": "group_status_cat",
         "name": "即時狀態卡片",
         "order": 1,
@@ -458,10 +461,10 @@
         ]
     },
     {
-        "id": "e2d0c504323fdb08",
+        "id": "acad1749586bd98d",
         "type": "ui_template",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "group": "group_timeline_cat",
         "name": "行為時間紀錄",
         "order": 2,
@@ -480,10 +483,10 @@
         ]
     },
     {
-        "id": "e66f368b75836e01",
+        "id": "69bb9360631274f8",
         "type": "ui_template",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "group": "group_stats_cat",
         "name": "詳細統計",
         "order": 3,
@@ -502,10 +505,10 @@
         ]
     },
     {
-        "id": "a3455857b2422f22",
+        "id": "b10220a87f4895b3",
         "type": "ui_template",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "group": "f8a33fa465d44876",
         "name": "健康警示",
         "order": 4,
@@ -524,26 +527,26 @@
         ]
     },
     {
-        "id": "ecde63d01ad47833",
+        "id": "870f0aaa552d0e6a",
         "type": "link in",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "來自 cat_health_v3 行為偏差融合引擎（2026-08-09 分工明確：僅供顯示，不重算）",
         "links": [],
         "x": 1125,
         "y": 320,
         "wires": [
             [
-                "a3455857b2422f22",
-                "8c7834b573688d85"
+                "b10220a87f4895b3",
+                "8648f6ac8737f13a"
             ]
         ]
     },
     {
-        "id": "8c7834b573688d85",
+        "id": "8648f6ac8737f13a",
         "type": "debug",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "🧪 健康警示除錯（暫時，確認無誤可刪）",
         "active": true,
         "tosidebar": true,
@@ -558,10 +561,10 @@
         "wires": []
     },
     {
-        "id": "13c867e2a1a0dc52",
+        "id": "34542cf8488118db",
         "type": "function",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "name": "事件時間軸引擎",
         "func": "// fs loaded via node libs: {\"var\":\"fs\",\"module\":\"fs\"}\nconst TRACKER_PATH = env.get('CAT_MONITORING_TRACKER_STATE_PATH') || 'C:\\\\ai_project\\\\paper\\\\baseline_data\\\\tracker_state.json';\n\nlet data = msg.payload;\nif (!data || !data.current) return null;\n\nlet curBeh = data.current.behavior;\nif (!curBeh || curBeh === 'not') return null;\n\n// ── Read tracker_state.json (authoritative daily totals) ──────────\nlet tracker = {};\ntry {\n    tracker = JSON.parse(fs.readFileSync(TRACKER_PATH, 'utf8'));\n} catch(e) {\n    node.warn('tracker_state.json: ' + e.message);\n}\n\n// ── Date helpers ─────────────────────────────────────────────────\nfunction pad(n){ return String(n).padStart(2,'0'); }\nfunction fmtTime(d){\n    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+\n           ' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());\n}\nlet now      = new Date();\nlet nowMs    = now.getTime();\nlet nowStr   = fmtTime(now);\nlet todayStr = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());\nlet isToday  = (tracker.date === todayStr);\n\n// Derive start_time from Python's end_time (HH:MM:SS) and duration (sec)\nfunction deriveStart(endHMS, durSec) {\n    let pts = (endHMS||'00:00:00').split(':').map(Number);\n    let endSec   = (pts[0]||0)*3600 + (pts[1]||0)*60 + (pts[2]||0);\n    let startSec = Math.max(0, endSec - Math.round(durSec));\n    return todayStr+' '+pad(Math.floor(startSec/3600))+':'+\n           pad(Math.floor((startSec%3600)/60))+':'+pad(startSec%60);\n}\n\n// ── Accumulate Python's behavior_log (deduplicate by time+beh+dur) ─\nlet sessionEvents = flow.get('evt_session') || [];\nlet sessionKeys   = new Set(flow.get('evt_keys') || []);\nlet sessionDate   = flow.get('evt_date') || '';\n\nif (sessionDate && sessionDate !== todayStr) {\n    sessionEvents = [];\n    sessionKeys   = new Set();\n}\nflow.set('evt_date', todayStr);\n\nlet inLog   = data.behavior_log || [];\nlet changed = false;\nfor (let i = 0; i < inLog.length; i++) {\n    let rec = inLog[i];\n    if (!rec || !rec.behavior || rec.behavior === 'not' || !rec.time) continue;\n    let dur = Math.max(1, Math.round(rec.duration || 1));\n    let key = rec.time + '|' + rec.behavior + '|' + dur;\n    if (sessionKeys.has(key)) continue;\n    sessionKeys.add(key);\n    let nextId = sessionEvents.length > 0 ? sessionEvents[sessionEvents.length-1].event_id + 1 : 1;\n    sessionEvents.push({\n        event_id:   nextId,\n        behavior:   rec.behavior,\n        end_time:   todayStr + ' ' + rec.time,\n        start_time: deriveStart(rec.time, rec.duration || 0),\n        duration:   dur\n    });\n    changed = true;\n}\nif (changed) {\n    if (sessionEvents.length > 500) {\n        // trim oldest keys too\n        let trimmed = sessionEvents.slice(-500);\n        let keptKeys = new Set(trimmed.map(function(e){\n            return e.end_time.slice(11,19)+'|'+e.behavior+'|'+e.duration;\n        }));\n        sessionKeys = keptKeys;\n        sessionEvents = trimmed;\n    }\n    flow.set('evt_session', sessionEvents);\n    flow.set('evt_keys', Array.from(sessionKeys));\n}\n\n// ── Merge adjacent same-behavior events (Python sends ~2s segments) ─\n// Adjacent = gap ≤ 2s between end_time of one and start_time of the next\nfunction _tsec(dt) {\n    var t = dt.slice(11,19).split(':').map(Number);\n    return t[0]*3600 + t[1]*60 + t[2];\n}\nlet mergedEvents = (function(evts) {\n    if (evts.length < 2) return evts.slice();\n    var res = [{ event_id:evts[0].event_id, behavior:evts[0].behavior,\n                 start_time:evts[0].start_time, end_time:evts[0].end_time,\n                 duration:evts[0].duration }];\n    for (var i = 1; i < evts.length; i++) {\n        var prev = res[res.length-1], cur = evts[i];\n        if (prev.behavior === cur.behavior &&\n            _tsec(cur.start_time) - _tsec(prev.end_time) <= 2) {\n            prev.end_time = cur.end_time;\n            prev.duration = _tsec(cur.end_time) - _tsec(prev.start_time);\n        } else {\n            res.push({ event_id:cur.event_id, behavior:cur.behavior,\n                       start_time:cur.start_time, end_time:cur.end_time,\n                       duration:cur.duration });\n        }\n    }\n    return res;\n})(sessionEvents);\n\n// ── Current event live timer (Node-RED side) ──────────────────────\nlet currentEvt = flow.get('evt_cur') || null;\nif (!currentEvt || currentEvt.behavior !== curBeh) {\n    currentEvt = { behavior: curBeh, start_time: nowStr, start_ms: nowMs };\n}\nif (!currentEvt.start_ms) currentEvt.start_ms = nowMs;\ncurrentEvt.duration_running = Math.max(0, Math.round((nowMs - currentEvt.start_ms) / 1000));\nflow.set('evt_cur', currentEvt);\n\n// ── Per-behavior stats: tracker_state.json for count/total/avg ────\n// IQR / mode / max / min derived from accumulated session events\nlet bCount = (isToday && tracker.behavior_count) ? tracker.behavior_count : {};\nlet bTime  = (isToday && tracker.behavior_time)  ? tracker.behavior_time  : {};\n\n// 優先用 HTTP payload（每 2s 更新），避免等 30s 存檔才反映\nlet _statsMinMax = (data.today_stats) || {};\nlet minDur = _statsMinMax.behavior_min_duration\n             || ((isToday && tracker.behavior_min_duration) ? tracker.behavior_min_duration : {});\nlet maxDur = _statsMinMax.behavior_max_duration\n             || ((isToday && tracker.behavior_max_duration) ? tracker.behavior_max_duration : {});\n\nlet stats = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let count  = Math.round(bCount[b] || 0);\n    let totSec = bTime[b] || 0;\n    if (count === 0) {\n        stats[b] = { count:0, total_duration:0, avg_duration:0,\n                     max_duration:0, min_duration:0,\n                     mode_duration:null, mode_count:0,\n                     outlier_high:null, outlier_low:null };\n        return;\n    }\n    let durs = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .map(function(e){ return e.duration; });\n\n    let outlierHigh = null, outlierLow = null;\n    if (durs.length >= 5) {\n        let sorted = durs.slice().sort(function(a,b){ return a-b; });\n        let n  = sorted.length;\n        let q1 = sorted[Math.floor(n * 0.25)];\n        let q3 = sorted[Math.floor(n * 0.75)];\n        let iqr = q3 - q1;\n        if (iqr > 0) {\n            outlierHigh = Math.round(q3 + 1.5 * iqr);\n            outlierLow  = Math.max(1, Math.round(q1 - 1.5 * iqr));\n        }\n    }\n    let modeKey = null, modeCnt = 0;\n    if (durs.length >= 2) {\n        let buckets = {};\n        durs.forEach(function(d){\n            buckets[d] = (buckets[d]||0) + 1;\n        });\n        Object.keys(buckets).forEach(function(k){\n            if (buckets[k] > modeCnt) { modeCnt = buckets[k]; modeKey = Number(k); }\n        });\n    }\n    stats[b] = {\n        count:         count,\n        total_duration: Math.round(totSec),\n        avg_duration:   Math.round(totSec / count * 10) / 10,\n        max_duration:   maxDur[b] != null ? Math.max(1, Math.round(maxDur[b])) : (durs.length > 0 ? Math.max.apply(null, durs) : 0),\n        min_duration:   minDur[b] != null ? Math.max(1, Math.round(minDur[b])) : (durs.length > 0 ? Math.min.apply(null, durs) : 0),\n        mode_duration:  modeCnt >= 2 ? modeKey : null,\n        mode_count:     modeCnt >= 2 ? modeCnt : 0,\n        outlier_high:   outlierHigh,\n        outlier_low:    outlierLow\n    };\n});\n\n// ── Per-behavior event arrays with outlier flag ───────────────────\nlet byBehavior = {};\n['walk','lick','scratch','shake','stop'].forEach(function(b) {\n    let s = stats[b];\n    byBehavior[b] = mergedEvents\n        .filter(function(e){ return e.behavior === b; })\n        .slice(-20).reverse()\n        .map(function(ev) {\n            let outlier = null;\n            if (s.outlier_high !== null && ev.duration > s.outlier_high) outlier = 'high';\n            else if (s.outlier_low !== null && ev.duration < s.outlier_low) outlier = 'low';\n            return { event_id:ev.event_id, behavior:ev.behavior,\n                     start_time:ev.start_time, end_time:ev.end_time,\n                     duration:ev.duration, outlier:outlier };\n        });\n});\n\nlet todayTotal = Object.values(bCount).reduce(function(a,v){ return a+Math.round(v||0); }, 0);\n\nmsg.payload = {\n    current_event: {\n        behavior:         currentEvt.behavior,\n        start_time:       currentEvt.start_time,\n        duration_running: currentEvt.duration_running,\n        status:           'running'\n    },\n    event_table:       mergedEvents.slice(-20).reverse(),\n    event_by_behavior: byBehavior,\n    event_stats:       stats,\n    total_events:      todayTotal\n};\nreturn msg;",
         "outputs": 1,
@@ -579,15 +582,15 @@
         "y": 540,
         "wires": [
             [
-                "ed22f673e2dcb120"
+                "b78f3b013449275b"
             ]
         ]
     },
     {
-        "id": "ed22f673e2dcb120",
+        "id": "b78f3b013449275b",
         "type": "ui_template",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "group": "666843c1cebdbb7c",
         "name": "行為事件分析",
         "order": 1,
@@ -606,10 +609,10 @@
         ]
     },
     {
-        "id": "2dc5cd8165ad3f57",
+        "id": "7b5504273f3f6afd",
         "type": "ui_template",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "group": "",
         "name": "🎨 Dashboard Global Theme",
         "order": 0,
@@ -628,26 +631,78 @@
         ]
     },
     {
-        "id": "c247893250ed55b6",
+        "id": "783d72e160dfe904",
         "type": "ui_template",
-        "z": "29b236f5e061aa9a",
-        "g": "95a9b99e467b7682",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
         "group": "",
         "name": "懸浮影像（全域）",
         "order": 0,
         "width": "",
         "height": "",
-        "format": "<div id=\"gfv-nr-anchor\" style=\"display:none;height:0;width:0;overflow:hidden;position:absolute;pointer-events:none;\"></div>\n<script>\n(function(){\n  if(window.__gfvReady) return;\n  window.__gfvReady = true;\n\n  var fr = document.createElement('iframe');\n  fr.id  = 'gfv_host_iframe';\n  fr.setAttribute('allowtransparency','true');\n  fr.style.cssText =\n    'position:fixed!important;top:0!important;left:0!important;'+\n    'width:100vw!important;height:100vh!important;'+\n    'border:none!important;background:transparent!important;'+\n    'z-index:2147483647!important;'+\n    'pointer-events:auto!important;'+\n    'overflow:hidden!important;';\n  document.body.appendChild(fr);\n\n  /* 超級迷你化：還原鈕放在父頁面，收合後底層頁面可正常操作。 */\n  var tiny = document.createElement('button');\n  tiny.id = 'gfv_restore_button';\n  tiny.type = 'button';\n  tiny.title = '恢復串流視窗（可拖曳移動）';\n  tiny.setAttribute('aria-label','恢復串流視窗');\n  tiny.style.cssText =\n    'all:initial!important;box-sizing:border-box!important;'+\n    'position:fixed!important;display:none!important;'+\n    'width:44px!important;height:44px!important;'+\n    'padding:0!important;margin:0!important;border-radius:50%!important;'+\n    'border:1px solid rgba(0,255,136,.55)!important;'+\n    'background:#070b0f!important;color:#00ff88!important;'+\n    'box-shadow:0 4px 16px rgba(0,0,0,.45)!important;'+\n    'align-items:center!important;justify-content:center!important;'+\n    'z-index:2147483647!important;pointer-events:auto!important;'+\n    'cursor:grab!important;touch-action:none!important;user-select:none!important;';\n  tiny.innerHTML = '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#00ff88\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\" style=\"width:22px!important;height:22px!important;pointer-events:none!important;\"><rect x=\"3\" y=\"6\" width=\"12\" height=\"12\" rx=\"3\"/><path d=\"m15 10 6-3v10l-6-3z\"/></svg>';\n  document.body.appendChild(tiny);\n\n  var tinyStyles = document.createElement('style');\n  tinyStyles.textContent =\n    '#gfv_restore_button:hover{background:#0b261a!important;border-color:#00ff88!important;}'+\n    '#gfv_restore_button:focus-visible{outline:2px solid #a3ffd0!important;outline-offset:3px!important;}';\n  document.head.appendChild(tinyStyles);\n\n  /* z-index 永遠不動；收合另外控制可見性，不卸載 iframe 或串流。 */\n  /* unlocked = pointer-events:none（串流可見，底層可點） */\n  /* locked   = pointer-events:auto（panel 可操作）        */\n  var _unlocked = false;\n  var _superMini = false, _visible = true;\n  var tinyX = 20, tinyY = 20;\n\n  function applyState(){\n    var panelVisible = _visible && !_superMini;\n    fr.style.setProperty('visibility',panelVisible?'visible':'hidden','important');\n    tiny.style.setProperty('display',_visible&&_superMini?'flex':'none','important');\n    if(_unlocked || !panelVisible){\n      /* 解鎖：整個 iframe pointer-events:none\n         → 滑鼠事件穿透到底層 Dashboard\n         → panel 內的按鈕也點不到（但串流畫面還在）\n         這是預期行為：要操作 panel 就再按一次鎖回來 */\n      fr.style.setProperty('pointer-events','none','important');\n    } else {\n      fr.style.setProperty('pointer-events','auto','important');\n    }\n    /* 通知 iframe 更新按鈕樣式 */\n    try{ fr.contentWindow.postMessage({type:'gfv-lockstate', unlocked:_unlocked},'*'); }catch(e){}\n  }\n\n  function positionTiny(x,y){\n    tinyX = Math.max(0,Math.min(x,Math.max(0,window.innerWidth-44)));\n    tinyY = Math.max(0,Math.min(y,Math.max(0,window.innerHeight-44)));\n    tiny.style.setProperty('left',tinyX+'px','important');\n    tiny.style.setProperty('top',tinyY+'px','important');\n  }\n\n  function restorePanel(){\n    _superMini = false;\n    applyState();\n    try{ fr.contentWindow.postMessage({type:'gfv-restored'},'*'); }catch(e){}\n  }\n\n  /* 小圓鈕可拖曳；拖曳放開不會誤觸還原。鍵盤 Enter / Space 也可還原。 */\n  var tinyDrag = null, tinyMoved = false;\n  tiny.addEventListener('pointerdown',function(e){\n    if(!e.isPrimary || (e.pointerType==='mouse'&&e.button!==0)) return;\n    tinyMoved = false;\n    tinyDrag = {id:e.pointerId,x:e.clientX,y:e.clientY,left:tinyX,top:tinyY};\n    tiny.setPointerCapture(e.pointerId);\n  });\n  tiny.addEventListener('pointermove',function(e){\n    if(!tinyDrag || e.pointerId!==tinyDrag.id) return;\n    var dx=e.clientX-tinyDrag.x, dy=e.clientY-tinyDrag.y;\n    if(Math.hypot(dx,dy)>5) tinyMoved=true;\n    if(!tinyMoved) return;\n    tiny.style.setProperty('cursor','grabbing','important');\n    positionTiny(tinyDrag.left+dx,tinyDrag.top+dy);\n    e.preventDefault();\n  });\n  function endTinyDrag(e){\n    if(!tinyDrag || e.pointerId!==tinyDrag.id) return;\n    tinyDrag = null;\n    if(tiny.hasPointerCapture(e.pointerId)) tiny.releasePointerCapture(e.pointerId);\n    tiny.style.setProperty('cursor','grab','important');\n  }\n  tiny.addEventListener('pointerup',endTinyDrag);\n  tiny.addEventListener('pointercancel',function(e){tinyMoved=true;endTinyDrag(e);});\n  tiny.addEventListener('lostpointercapture',endTinyDrag);\n  tiny.addEventListener('click',function(e){\n    e.stopPropagation();\n    if(tinyMoved && e.detail!==0){tinyMoved=false;return;}\n    tinyMoved=false;\n    restorePanel();\n  });\n  window.addEventListener('resize',function(){positionTiny(tinyX,tinyY);});\n\n  var doc = fr.contentDocument || fr.contentWindow.document;\n  doc.open();\n  doc.write(`<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>\n*{box-sizing:border-box;margin:0;padding:0;}\nhtml,body{width:100%;height:100%;background:transparent;overflow:hidden;font-family:system-ui,sans-serif;}\n#overlay{position:fixed;inset:0;background:transparent;}\n#pnl{\n  position:fixed;bottom:24px;right:20px;\n  width:240px;height:160px;\n  min-width:200px;min-height:120px;\n  background:#070b0f;\n  border:1px solid rgba(0,255,136,.28);\n  border-radius:14px;overflow:hidden;\n  display:flex;flex-direction:column;\n  box-shadow:0 16px 48px rgba(0,0,0,.9);\n  transition:border-color .25s;\n}\n#pnl.unlocked{border-color:rgba(255,167,38,.55)!important;}\n#bar{\n  height:40px;flex-shrink:0;\n  display:flex;align-items:center;\n  padding:0 4px 0 10px;gap:4px;\n  background:linear-gradient(90deg,rgba(0,16,9,.97),rgba(0,22,12,.97));\n  border-bottom:1px solid rgba(0,255,136,.1);\n  user-select:none;cursor:grab;\n}\n#bar.dragging{cursor:grabbing!important;}\n#dot{width:9px;height:9px;border-radius:50%;background:#444;flex-shrink:0;transition:background .4s,box-shadow .4s;}\n#title{font-size:10px;font-weight:700;color:rgba(0,255,136,.72);letter-spacing:.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n#btns{display:flex;align-items:center;gap:2px;flex-shrink:0;}\n.ib{\n  width:32px;height:32px;border-radius:7px;\n  padding:0;\n  display:flex;align-items:center;justify-content:center;\n  cursor:pointer;font-size:14px;\n  border:1px solid rgba(255,255,255,.09);\n  background:rgba(255,255,255,.05);color:rgba(255,255,255,.55);\n  transition:background .15s,color .15s,border-color .15s,transform .1s;\n  user-select:none;-webkit-tap-highlight-color:transparent;flex-shrink:0;\n}\n.ib:hover{background:rgba(255,255,255,.2)!important;color:#fff!important;border-color:rgba(255,255,255,.28)!important;transform:scale(1.08);}\n.ib:active{transform:scale(0.88)!important;}\n.ib:focus-visible{outline:2px solid #a3ffd0;outline-offset:1px;}\n.ib.on{background:rgba(0,255,136,.18)!important;color:#00ff88!important;border-color:rgba(0,255,136,.4)!important;}\n#btn-lock.locked{color:#ffa726!important;border-color:rgba(255,167,38,.4)!important;background:rgba(255,167,38,.1)!important;}\n#btn-lock.unlocked-state{color:#81c784!important;border-color:rgba(76,175,80,.4)!important;background:rgba(76,175,80,.1)!important;}\n#drag-icon{font-size:12px;cursor:grab;display:flex;align-items:center;justify-content:center;width:24px;height:32px;color:rgba(255,255,255,.3);flex-shrink:0;}\n#drag-icon:hover{color:rgba(0,255,136,.8);}\n#drag-icon.on{color:#00ff88;}\n#offline{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:rgba(255,255,255,.22);font-size:10px;}\n#off-ico{font-size:24px;opacity:.28;}\n#sv-img{flex:1;width:100%;min-height:0;display:none;background:#000;object-fit:contain;}\n#rh-e{position:absolute;top:14px;bottom:14px;right:0;width:8px;cursor:e-resize;border-radius:0 14px 14px 0;transition:background .15s;}\n#rh-e:hover,#rh-e.active{background:rgba(0,255,136,.25);}\n#rh-e::after{content:'';position:absolute;top:50%;left:2px;transform:translateY(-50%);width:2px;height:28px;background:rgba(0,255,136,.35);border-radius:2px;opacity:0;transition:opacity .15s;}\n#rh-e:hover::after,#rh-e.active::after{opacity:1;}\n#rh-s{position:absolute;left:14px;right:14px;bottom:0;height:8px;cursor:s-resize;border-radius:0 0 14px 14px;transition:background .15s;}\n#rh-s:hover,#rh-s.active{background:rgba(0,255,136,.25);}\n#rh-s::after{content:'';position:absolute;left:50%;top:2px;transform:translateX(-50%);height:2px;width:28px;background:rgba(0,255,136,.35);border-radius:2px;opacity:0;transition:opacity .15s;}\n#rh-s:hover::after,#rh-s.active::after{opacity:1;}\n</style></head><body>\n<div id=\"overlay\"></div>\n<div id=\"pnl\">\n  <div id=\"bar\">\n    <div id=\"dot\"></div>\n    <span id=\"title\">stream</span>\n    <div id=\"btns\">\n      <div class=\"ib\" id=\"btn-s\" title=\"stream\">&#9654;</div>\n      <div class=\"ib locked\" id=\"btn-lock\" title=\"解鎖：讓底層可操作（串流仍可見）\">&#128274;</div>\n      <div class=\"ib\" id=\"btn-m\" title=\"size\">&#9633;</div>\n      <button type=\"button\" class=\"ib\" id=\"btn-super-mini\" title=\"超級迷你化：收成獨立小按鈕\" aria-label=\"超級迷你化\">&#8722;</button>\n    </div>\n    <div id=\"drag-icon\" title=\"drag\">&#10035;</div>\n  </div>\n  <div id=\"offline\"><div id=\"off-ico\">&#128249;</div><div>click &#9654; to stream</div></div>\n  <img id=\"sv-img\" alt=\"\">\n  <div id=\"rh-e\"></div>\n  <div id=\"rh-s\"></div>\n</div>\n<script>\nvar pnl=document.getElementById('pnl');\nvar bar=document.getElementById('bar');\nvar dot=document.getElementById('dot');\nvar offline=document.getElementById('offline');\nvar img=document.getElementById('sv-img');\nvar btnS=document.getElementById('btn-s');\nvar btnM=document.getElementById('btn-m');\nvar btnSuperMini=document.getElementById('btn-super-mini');\nvar btnLock=document.getElementById('btn-lock');\nvar dragIcon=document.getElementById('drag-icon');\nvar overlay=document.getElementById('overlay');\nvar rhE=document.getElementById('rh-e');\nvar rhS=document.getElementById('rh-s');\n\nvar _url='',_on=false,_mini=true;\nvar NW=480,NH=300,MW=240,MH=160;\nvar MIN_W=200,MIN_H=120;\n\n/* 只收合顯示，不變更視窗幾何、大小模式或串流連線。 */\nbtnSuperMini.addEventListener('click',function(e){\n  e.stopPropagation();\n  var r=pnl.getBoundingClientRect();\n  parent.postMessage({type:'gfv-super-mini',x:r.right-44,y:r.top},'*');\n});\n\n/* overlay 穿透（原版不動） */\noverlay.addEventListener('pointerdown',function(e){\n  if(!pnl.contains(e.target)){\n    parent.postMessage({type:'gfv-passthrough',x:e.clientX,y:e.clientY},'*');\n    e.preventDefault();\n  }\n});\n\n/* 🔒/🔓 按鈕：只送訊號，由父頁面切 pointer-events */\nbtnLock.addEventListener('click',function(e){\n  e.stopPropagation();\n  parent.postMessage({type:'gfv-toggle-lock'},'*');\n});\n\n/* 父頁面回傳目前鎖定狀態 → 更新按鈕樣式 */\nwindow.addEventListener('message',function(e){\n  if(e.source!==parent || !e.data) return;\n  if(e.data.type==='gfv-restored'){\n    btnSuperMini.focus({preventScroll:true});\n  }\n  if(e.data.type==='gfv-url'){\n    _url=e.data.url;\n    dot.style.background='#f5a623';\n    dot.style.boxShadow='0 0 4px rgba(245,166,35,.5)';\n  }\n  if(e.data.type==='gfv-toggle'){\n    var show=pnl.style.display==='none';\n    pnl.style.display=show?'flex':'none';\n    parent.postMessage({type:'gfv-visible',on:show},'*');\n  }\n  if(e.data.type==='gfv-open'){\n    pnl.style.display='flex';\n    parent.postMessage({type:'gfv-visible',on:true},'*');\n  }\n  if(e.data.type==='gfv-lockstate'){\n    if(e.data.unlocked){\n      btnLock.className='ib unlocked-state';\n      btnLock.innerHTML='&#128275;';\n      btnLock.title='已解鎖（點此鎖回，恢復panel操作）';\n      pnl.classList.add('unlocked');\n    } else {\n      btnLock.className='ib locked';\n      btnLock.innerHTML='&#128274;';\n      btnLock.title='解鎖：讓底層可操作（串流仍可見）';\n      pnl.classList.remove('unlocked');\n    }\n  }\n});\n\nfunction streamOn(){\n  if(!_url)return;\n  _on=true;img.style.display='block';offline.style.display='none';\n  img.onload=function(){dot.style.background='#00ff88';dot.style.boxShadow='0 0 5px #00ff88';};\n  img.onerror=function(){streamOff();};\n  img.src=_url+'?t='+Date.now();\n  btnS.innerHTML='&#9646;&#9646;';btnS.classList.add('on');\n}\nfunction streamOff(){\n  _on=false;img.src='';img.style.display='none';offline.style.display='flex';\n  dot.style.background=_url?'#f5a623':'#444';\n  dot.style.boxShadow=_url?'0 0 4px rgba(245,166,35,.5)':'none';\n  btnS.innerHTML='&#9654;';btnS.classList.remove('on');\n}\nbtnS.addEventListener('click',function(e){e.stopPropagation();_on?streamOff():streamOn();});\nbtnM.addEventListener('click',function(e){\n  e.stopPropagation();\n  if(_mini){pnl.style.width=NW+'px';pnl.style.height=NH+'px';_mini=false;btnM.innerHTML='&#8861;';}\n  else{NW=pnl.offsetWidth||NW;NH=pnl.offsetHeight||NH;pnl.style.width=MW+'px';pnl.style.height=MH+'px';_mini=true;btnM.innerHTML='&#9633;';}\n});\n\n/* 拖曳（原版不動） */\nvar da=false,ox=0,oy=0,pid=null;\nfunction isDragTarget(el){return el===dragIcon||dragIcon.contains(el)||el===bar||el===dot||el.id==='title';}\nfunction dragStart(e){\n  if(e.pointerType==='mouse'&&e.button!==0)return;\n  if(e.target===rhE||e.target===rhS)return;\n  if(!isDragTarget(e.target))return;\n  da=true;pid=e.pointerId;\n  var r=pnl.getBoundingClientRect();ox=e.clientX-r.left;oy=e.clientY-r.top;\n  pnl.setPointerCapture(e.pointerId);bar.classList.add('dragging');dragIcon.classList.add('on');\n  e.preventDefault();e.stopPropagation();\n}\nfunction dragMove(e){\n  if(!da||e.pointerId!==pid)return;\n  var x=Math.max(0,Math.min(e.clientX-ox,window.innerWidth-pnl.offsetWidth));\n  var y=Math.max(0,Math.min(e.clientY-oy,window.innerHeight-pnl.offsetHeight));\n  pnl.style.left=x+'px';pnl.style.top=y+'px';pnl.style.right='auto';pnl.style.bottom='auto';\n  e.preventDefault();\n}\nfunction dragEnd(e){\n  if(!da||e.pointerId!==pid)return;\n  da=false;pid=null;pnl.releasePointerCapture(e.pointerId);bar.classList.remove('dragging');dragIcon.classList.remove('on');\n}\npnl.addEventListener('pointerdown',dragStart);pnl.addEventListener('pointermove',dragMove);\npnl.addEventListener('pointerup',dragEnd);pnl.addEventListener('pointercancel',dragEnd);\n\n/* Resize 右（原版不動） */\nvar reW=false,reWpid=null,reWSX=0,reWW0=0;\nrhE.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.button!==0)return;e.stopPropagation();e.preventDefault();reW=true;reWpid=e.pointerId;reWSX=e.clientX;reWW0=pnl.offsetWidth;rhE.setPointerCapture(e.pointerId);rhE.classList.add('active');});\nrhE.addEventListener('pointermove',function(e){if(!reW||e.pointerId!==reWpid)return;pnl.style.width=Math.max(MIN_W,Math.min(reWW0+(e.clientX-reWSX),window.innerWidth-pnl.getBoundingClientRect().left))+'px';e.preventDefault();});\nrhE.addEventListener('pointerup',function(e){if(!reW||e.pointerId!==reWpid)return;reW=false;reWpid=null;rhE.releasePointerCapture(e.pointerId);rhE.classList.remove('active');NW=pnl.offsetWidth;_mini=false;btnM.innerHTML='&#8861;';});\nrhE.addEventListener('pointercancel',function(e){reW=false;reWpid=null;rhE.classList.remove('active');});\n\n/* Resize 下（原版不動） */\nvar reH=false,reHpid=null,reHSY=0,reHH0=0;\nrhS.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.button!==0)return;e.stopPropagation();e.preventDefault();reH=true;reHpid=e.pointerId;reHSY=e.clientY;reHH0=pnl.offsetHeight;rhS.setPointerCapture(e.pointerId);rhS.classList.add('active');});\nrhS.addEventListener('pointermove',function(e){if(!reH||e.pointerId!==reHpid)return;pnl.style.height=Math.max(MIN_H,Math.min(reHH0+(e.clientY-reHSY),window.innerHeight-pnl.getBoundingClientRect().top))+'px';e.preventDefault();});\nrhS.addEventListener('pointerup',function(e){if(!reH||e.pointerId!==reHpid)return;reH=false;reHpid=null;rhS.releasePointerCapture(e.pointerId);rhS.classList.remove('active');NH=pnl.offsetHeight;_mini=false;btnM.innerHTML='&#8861;';});\nrhS.addEventListener('pointercancel',function(e){reH=false;reHpid=null;rhS.classList.remove('active');});\n<\\/script></body></html>`);\n  doc.close();\n\n  window.gfvSetUrl = function(url){\n    if(!url) return;\n    fr.contentWindow.postMessage({type:'gfv-url', url:url},'*');\n  };\n  window.gfvToggle = function(){\n    fr.contentWindow.postMessage({type:'gfv-toggle'},'*');\n  };\n  window.gfvOpen = function(){\n    _superMini = false;\n    _visible = true;\n    _unlocked = false;\n    applyState();\n    fr.contentWindow.postMessage({type:'gfv-open'},'*');\n  };\n\n  window.addEventListener('message', function(e){\n    if(e.source!==fr.contentWindow || !e.data) return;\n    if(e.data.type === 'gfv-super-mini'){\n      _superMini = true;\n      positionTiny(e.data.x,e.data.y);\n      applyState();\n      tiny.focus({preventScroll:true});\n    }\n    /* 🔒/🔓 切換：只動 pointer-events，z-index 永遠不動 */\n    if(e.data.type === 'gfv-toggle-lock'){\n      _unlocked = !_unlocked;\n      applyState();\n    }\n    /* 原版 passthrough（不動） */\n    if(e.data.type === 'gfv-passthrough'){\n      /* 解鎖狀態下 iframe 已是 pointer-events:none，不需要再處理 passthrough */\n      if(_unlocked || _superMini || !_visible) return;\n      fr.style.setProperty('pointer-events','none','important');\n      var el = document.elementFromPoint(e.data.x, e.data.y);\n      if(el){\n        el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,clientX:e.data.x,clientY:e.data.y}));\n        el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:e.data.x,clientY:e.data.y}));\n      }\n      setTimeout(applyState, 50);\n    }\n    if(e.data.type === 'gfv-visible'){\n      _visible = !!e.data.on;\n      applyState();\n    }\n  });\n\n})();\n</script>\n",
+        "format": "<div id=\"gfv-nr-anchor\" style=\"display:none;height:0;width:0;overflow:hidden;position:absolute;pointer-events:none;\"></div>\n<script>\n(function(){\n  if(window.__gfvReady) return;\n  window.__gfvReady = true;\n\n  var fr = document.createElement('iframe');\n  fr.id  = 'gfv_host_iframe';\n  fr.setAttribute('allowtransparency','true');\n  fr.style.cssText =\n    'position:fixed!important;top:0!important;left:0!important;'+\n    'width:100vw!important;height:100vh!important;'+\n    'border:none!important;background:transparent!important;'+\n    'z-index:2147483647!important;'+\n    'pointer-events:auto!important;'+\n    'overflow:hidden!important;';\n  document.body.appendChild(fr);\n\n  /* 超級迷你化：還原鈕放在父頁面，收合後底層頁面可正常操作。 */\n  var tiny = document.createElement('button');\n  tiny.id = 'gfv_restore_button';\n  tiny.type = 'button';\n  tiny.title = '恢復串流視窗（可拖曳移動）';\n  tiny.setAttribute('aria-label','恢復串流視窗');\n  tiny.style.cssText =\n    'all:initial!important;box-sizing:border-box!important;'+\n    'position:fixed!important;display:none!important;'+\n    'width:44px!important;height:44px!important;'+\n    'padding:0!important;margin:0!important;border-radius:50%!important;'+\n    'border:1px solid rgba(0,255,136,.55)!important;'+\n    'background:#070b0f!important;color:#00ff88!important;'+\n    'box-shadow:0 4px 16px rgba(0,0,0,.45)!important;'+\n    'align-items:center!important;justify-content:center!important;'+\n    'z-index:2147483647!important;pointer-events:auto!important;'+\n    'cursor:grab!important;touch-action:none!important;user-select:none!important;';\n  tiny.innerHTML = '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#00ff88\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\" style=\"width:22px!important;height:22px!important;pointer-events:none!important;\"><rect x=\"3\" y=\"6\" width=\"12\" height=\"12\" rx=\"3\"/><path d=\"m15 10 6-3v10l-6-3z\"/></svg>';\n  document.body.appendChild(tiny);\n\n  var tinyStyles = document.createElement('style');\n  tinyStyles.textContent =\n    '#gfv_restore_button:hover{background:#0b261a!important;border-color:#00ff88!important;}'+\n    '#gfv_restore_button:focus-visible{outline:2px solid #a3ffd0!important;outline-offset:3px!important;}';\n  document.head.appendChild(tinyStyles);\n\n  /* z-index 永遠不動；收合另外控制可見性，不卸載 iframe 或串流。 */\n  /* unlocked = pointer-events:none（串流可見，底層可點） */\n  /* locked   = pointer-events:auto（panel 可操作）        */\n  var _unlocked = false;\n  /* 預設收成迷你小按鈕（右下角），按一下才展開串流視窗 */\n  var _superMini = true, _visible = true;\n  var tinyX = 20, tinyY = 20;\n\n  function applyState(){\n    var panelVisible = _visible && !_superMini;\n    fr.style.setProperty('visibility',panelVisible?'visible':'hidden','important');\n    tiny.style.setProperty('display',_visible&&_superMini?'flex':'none','important');\n    if(_unlocked || !panelVisible){\n      /* 解鎖：整個 iframe pointer-events:none\n         → 滑鼠事件穿透到底層 Dashboard\n         → panel 內的按鈕也點不到（但串流畫面還在）\n         這是預期行為：要操作 panel 就再按一次鎖回來 */\n      fr.style.setProperty('pointer-events','none','important');\n    } else {\n      fr.style.setProperty('pointer-events','auto','important');\n    }\n    /* 通知 iframe 更新按鈕樣式 */\n    try{ fr.contentWindow.postMessage({type:'gfv-lockstate', unlocked:_unlocked},'*'); }catch(e){}\n  }\n\n  function positionTiny(x,y){\n    tinyX = Math.max(0,Math.min(x,Math.max(0,window.innerWidth-44)));\n    tinyY = Math.max(0,Math.min(y,Math.max(0,window.innerHeight-44)));\n    tiny.style.setProperty('left',tinyX+'px','important');\n    tiny.style.setProperty('top',tinyY+'px','important');\n  }\n\n  function restorePanel(){\n    _superMini = false;\n    applyState();\n    try{ fr.contentWindow.postMessage({type:'gfv-restored'},'*'); }catch(e){}\n  }\n\n  /* 小圓鈕可拖曳；拖曳放開不會誤觸還原。鍵盤 Enter / Space 也可還原。 */\n  var tinyDrag = null, tinyMoved = false;\n  tiny.addEventListener('pointerdown',function(e){\n    if(!e.isPrimary || (e.pointerType==='mouse'&&e.button!==0)) return;\n    tinyMoved = false;\n    tinyDrag = {id:e.pointerId,x:e.clientX,y:e.clientY,left:tinyX,top:tinyY};\n    tiny.setPointerCapture(e.pointerId);\n  });\n  tiny.addEventListener('pointermove',function(e){\n    if(!tinyDrag || e.pointerId!==tinyDrag.id) return;\n    var dx=e.clientX-tinyDrag.x, dy=e.clientY-tinyDrag.y;\n    if(Math.hypot(dx,dy)>5) tinyMoved=true;\n    if(!tinyMoved) return;\n    tiny.style.setProperty('cursor','grabbing','important');\n    positionTiny(tinyDrag.left+dx,tinyDrag.top+dy);\n    e.preventDefault();\n  });\n  function endTinyDrag(e){\n    if(!tinyDrag || e.pointerId!==tinyDrag.id) return;\n    tinyDrag = null;\n    if(tiny.hasPointerCapture(e.pointerId)) tiny.releasePointerCapture(e.pointerId);\n    tiny.style.setProperty('cursor','grab','important');\n  }\n  tiny.addEventListener('pointerup',endTinyDrag);\n  tiny.addEventListener('pointercancel',function(e){tinyMoved=true;endTinyDrag(e);});\n  tiny.addEventListener('lostpointercapture',endTinyDrag);\n  tiny.addEventListener('click',function(e){\n    e.stopPropagation();\n    if(tinyMoved && e.detail!==0){tinyMoved=false;return;}\n    tinyMoved=false;\n    restorePanel();\n  });\n  window.addEventListener('resize',function(){positionTiny(tinyX,tinyY);});\n  /* 初始位置：右下角，對齊展開後面板的右下角（right:20px; bottom:24px） */\n  positionTiny(window.innerWidth-20-44, window.innerHeight-24-44);\n  applyState();\n\n  var doc = fr.contentDocument || fr.contentWindow.document;\n  doc.open();\n  doc.write(`<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>\n*{box-sizing:border-box;margin:0;padding:0;}\nhtml,body{width:100%;height:100%;background:transparent;overflow:hidden;font-family:system-ui,sans-serif;}\n#overlay{position:fixed;inset:0;background:transparent;}\n#pnl{\n  position:fixed;bottom:24px;right:20px;\n  width:240px;height:160px;\n  min-width:200px;min-height:120px;\n  background:#070b0f;\n  border:1px solid rgba(0,255,136,.28);\n  border-radius:14px;overflow:hidden;\n  display:flex;flex-direction:column;\n  box-shadow:0 16px 48px rgba(0,0,0,.9);\n  transition:border-color .25s;\n}\n#pnl.unlocked{border-color:rgba(255,167,38,.55)!important;}\n#bar{\n  height:40px;flex-shrink:0;\n  display:flex;align-items:center;\n  padding:0 4px 0 10px;gap:4px;\n  background:linear-gradient(90deg,rgba(0,16,9,.97),rgba(0,22,12,.97));\n  border-bottom:1px solid rgba(0,255,136,.1);\n  user-select:none;cursor:grab;\n}\n#bar.dragging{cursor:grabbing!important;}\n#dot{width:9px;height:9px;border-radius:50%;background:#444;flex-shrink:0;transition:background .4s,box-shadow .4s;}\n#title{font-size:10px;font-weight:700;color:rgba(0,255,136,.72);letter-spacing:.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n#btns{display:flex;align-items:center;gap:2px;flex-shrink:0;}\n.ib{\n  width:32px;height:32px;border-radius:7px;\n  padding:0;\n  display:flex;align-items:center;justify-content:center;\n  cursor:pointer;font-size:14px;\n  border:1px solid rgba(255,255,255,.09);\n  background:rgba(255,255,255,.05);color:rgba(255,255,255,.55);\n  transition:background .15s,color .15s,border-color .15s,transform .1s;\n  user-select:none;-webkit-tap-highlight-color:transparent;flex-shrink:0;\n}\n.ib:hover{background:rgba(255,255,255,.2)!important;color:#fff!important;border-color:rgba(255,255,255,.28)!important;transform:scale(1.08);}\n.ib:active{transform:scale(0.88)!important;}\n.ib:focus-visible{outline:2px solid #a3ffd0;outline-offset:1px;}\n.ib.on{background:rgba(0,255,136,.18)!important;color:#00ff88!important;border-color:rgba(0,255,136,.4)!important;}\n#btn-lock.locked{color:#ffa726!important;border-color:rgba(255,167,38,.4)!important;background:rgba(255,167,38,.1)!important;}\n#btn-lock.unlocked-state{color:#81c784!important;border-color:rgba(76,175,80,.4)!important;background:rgba(76,175,80,.1)!important;}\n#drag-icon{font-size:12px;cursor:grab;display:flex;align-items:center;justify-content:center;width:24px;height:32px;color:rgba(255,255,255,.3);flex-shrink:0;}\n#drag-icon:hover{color:rgba(0,255,136,.8);}\n#drag-icon.on{color:#00ff88;}\n#offline{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:rgba(255,255,255,.22);font-size:10px;}\n#off-ico{font-size:24px;opacity:.28;}\n#sv-img{flex:1;width:100%;min-height:0;display:none;background:#000;object-fit:contain;}\n#rh-e{position:absolute;top:14px;bottom:14px;right:0;width:8px;cursor:e-resize;border-radius:0 14px 14px 0;transition:background .15s;}\n#rh-e:hover,#rh-e.active{background:rgba(0,255,136,.25);}\n#rh-e::after{content:'';position:absolute;top:50%;left:2px;transform:translateY(-50%);width:2px;height:28px;background:rgba(0,255,136,.35);border-radius:2px;opacity:0;transition:opacity .15s;}\n#rh-e:hover::after,#rh-e.active::after{opacity:1;}\n#rh-s{position:absolute;left:14px;right:14px;bottom:0;height:8px;cursor:s-resize;border-radius:0 0 14px 14px;transition:background .15s;}\n#rh-s:hover,#rh-s.active{background:rgba(0,255,136,.25);}\n#rh-s::after{content:'';position:absolute;left:50%;top:2px;transform:translateX(-50%);height:2px;width:28px;background:rgba(0,255,136,.35);border-radius:2px;opacity:0;transition:opacity .15s;}\n#rh-s:hover::after,#rh-s.active::after{opacity:1;}\n</style></head><body>\n<div id=\"overlay\"></div>\n<div id=\"pnl\">\n  <div id=\"bar\">\n    <div id=\"dot\"></div>\n    <span id=\"title\">stream</span>\n    <div id=\"btns\">\n      <div class=\"ib\" id=\"btn-s\" title=\"stream\">&#9654;</div>\n      <div class=\"ib locked\" id=\"btn-lock\" title=\"解鎖：讓底層可操作（串流仍可見）\">&#128274;</div>\n      <div class=\"ib\" id=\"btn-m\" title=\"size\">&#9633;</div>\n      <button type=\"button\" class=\"ib\" id=\"btn-super-mini\" title=\"超級迷你化：收成獨立小按鈕\" aria-label=\"超級迷你化\">&#8722;</button>\n    </div>\n    <div id=\"drag-icon\" title=\"drag\">&#10035;</div>\n  </div>\n  <div id=\"offline\"><div id=\"off-ico\">&#128249;</div><div id=\"off-txt\">click &#9654; to stream</div></div>\n  <img id=\"sv-img\" alt=\"\">\n  <div id=\"rh-e\"></div>\n  <div id=\"rh-s\"></div>\n</div>\n<script>\nvar pnl=document.getElementById('pnl');\nvar bar=document.getElementById('bar');\nvar dot=document.getElementById('dot');\nvar offline=document.getElementById('offline');\nvar img=document.getElementById('sv-img');\nvar btnS=document.getElementById('btn-s');\nvar btnM=document.getElementById('btn-m');\nvar btnSuperMini=document.getElementById('btn-super-mini');\nvar btnLock=document.getElementById('btn-lock');\nvar dragIcon=document.getElementById('drag-icon');\nvar overlay=document.getElementById('overlay');\nvar rhE=document.getElementById('rh-e');\nvar rhS=document.getElementById('rh-s');\n\nvar _url='',_on=false,_mini=true,_pendingPlay=false;\nvar offTxt=document.getElementById('off-txt');\nvar OFF_TXT_DEFAULT=offTxt.innerHTML;\nvar NW=480,NH=300,MW=240,MH=160;\nvar MIN_W=200,MIN_H=120;\n\n/* 只收合顯示，不變更視窗幾何、大小模式或串流連線。 */\nbtnSuperMini.addEventListener('click',function(e){\n  e.stopPropagation();\n  var r=pnl.getBoundingClientRect();\n  parent.postMessage({type:'gfv-super-mini',x:r.right-44,y:r.top},'*');\n});\n\n/* overlay 穿透（原版不動） */\noverlay.addEventListener('pointerdown',function(e){\n  if(!pnl.contains(e.target)){\n    parent.postMessage({type:'gfv-passthrough',x:e.clientX,y:e.clientY},'*');\n    e.preventDefault();\n  }\n});\n\n/* 🔒/🔓 按鈕：只送訊號，由父頁面切 pointer-events */\nbtnLock.addEventListener('click',function(e){\n  e.stopPropagation();\n  parent.postMessage({type:'gfv-toggle-lock'},'*');\n});\n\n/* 父頁面回傳目前鎖定狀態 → 更新按鈕樣式 */\nwindow.addEventListener('message',function(e){\n  if(e.source!==parent || !e.data) return;\n  if(e.data.type==='gfv-restored'){\n    btnSuperMini.focus({preventScroll:true});\n  }\n  if(e.data.type==='gfv-url'){\n    _url=e.data.url;\n    offTxt.innerHTML=OFF_TXT_DEFAULT;\n    if(_pendingPlay){_pendingPlay=false;streamOn();}\n    dot.style.background='#f5a623';\n    dot.style.boxShadow='0 0 4px rgba(245,166,35,.5)';\n  }\n  if(e.data.type==='gfv-url-missing' && _pendingPlay){\n    _pendingPlay=false;\n    offTxt.textContent='找不到串流位址（Python 端尚未上線？）';\n  }\n  if(e.data.type==='gfv-toggle'){\n    var show=pnl.style.display==='none';\n    pnl.style.display=show?'flex':'none';\n    parent.postMessage({type:'gfv-visible',on:show},'*');\n  }\n  if(e.data.type==='gfv-open'){\n    pnl.style.display='flex';\n    parent.postMessage({type:'gfv-visible',on:true},'*');\n  }\n  if(e.data.type==='gfv-lockstate'){\n    if(e.data.unlocked){\n      btnLock.className='ib unlocked-state';\n      btnLock.innerHTML='&#128275;';\n      btnLock.title='已解鎖（點此鎖回，恢復panel操作）';\n      pnl.classList.add('unlocked');\n    } else {\n      btnLock.className='ib locked';\n      btnLock.innerHTML='&#128274;';\n      btnLock.title='解鎖：讓底層可操作（串流仍可見）';\n      pnl.classList.remove('unlocked');\n    }\n  }\n});\n\nfunction streamOn(){\n  if(!_url)return;\n  _on=true;img.style.display='block';offline.style.display='none';\n  img.onload=function(){dot.style.background='#00ff88';dot.style.boxShadow='0 0 5px #00ff88';};\n  img.onerror=function(){streamOff();};\n  img.src=_url+'?t='+Date.now();\n  btnS.innerHTML='&#9646;&#9646;';btnS.classList.add('on');\n}\nfunction streamOff(){\n  _on=false;img.src='';img.style.display='none';offline.style.display='flex';\n  dot.style.background=_url?'#f5a623':'#444';\n  dot.style.boxShadow=_url?'0 0 4px rgba(245,166,35,.5)':'none';\n  btnS.innerHTML='&#9654;';btnS.classList.remove('on');\n}\nbtnS.addEventListener('click',function(e){\n  e.stopPropagation();\n  if(_on){streamOff();return;}\n  if(!_url){\n    _pendingPlay=true;\n    offTxt.textContent='取得串流位址中…';\n    parent.postMessage({type:'gfv-need-url'},'*');\n    return;\n  }\n  streamOn();\n});\nbtnM.addEventListener('click',function(e){\n  e.stopPropagation();\n  if(_mini){pnl.style.width=NW+'px';pnl.style.height=NH+'px';_mini=false;btnM.innerHTML='&#8861;';}\n  else{NW=pnl.offsetWidth||NW;NH=pnl.offsetHeight||NH;pnl.style.width=MW+'px';pnl.style.height=MH+'px';_mini=true;btnM.innerHTML='&#9633;';}\n});\n\n/* 拖曳（原版不動） */\nvar da=false,ox=0,oy=0,pid=null;\nfunction isDragTarget(el){return el===dragIcon||dragIcon.contains(el)||el===bar||el===dot||el.id==='title';}\nfunction dragStart(e){\n  if(e.pointerType==='mouse'&&e.button!==0)return;\n  if(e.target===rhE||e.target===rhS)return;\n  if(!isDragTarget(e.target))return;\n  da=true;pid=e.pointerId;\n  var r=pnl.getBoundingClientRect();ox=e.clientX-r.left;oy=e.clientY-r.top;\n  pnl.setPointerCapture(e.pointerId);bar.classList.add('dragging');dragIcon.classList.add('on');\n  e.preventDefault();e.stopPropagation();\n}\nfunction dragMove(e){\n  if(!da||e.pointerId!==pid)return;\n  var x=Math.max(0,Math.min(e.clientX-ox,window.innerWidth-pnl.offsetWidth));\n  var y=Math.max(0,Math.min(e.clientY-oy,window.innerHeight-pnl.offsetHeight));\n  pnl.style.left=x+'px';pnl.style.top=y+'px';pnl.style.right='auto';pnl.style.bottom='auto';\n  e.preventDefault();\n}\nfunction dragEnd(e){\n  if(!da||e.pointerId!==pid)return;\n  da=false;pid=null;pnl.releasePointerCapture(e.pointerId);bar.classList.remove('dragging');dragIcon.classList.remove('on');\n}\npnl.addEventListener('pointerdown',dragStart);pnl.addEventListener('pointermove',dragMove);\npnl.addEventListener('pointerup',dragEnd);pnl.addEventListener('pointercancel',dragEnd);\n\n/* Resize 右（原版不動） */\nvar reW=false,reWpid=null,reWSX=0,reWW0=0;\nrhE.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.button!==0)return;e.stopPropagation();e.preventDefault();reW=true;reWpid=e.pointerId;reWSX=e.clientX;reWW0=pnl.offsetWidth;rhE.setPointerCapture(e.pointerId);rhE.classList.add('active');});\nrhE.addEventListener('pointermove',function(e){if(!reW||e.pointerId!==reWpid)return;pnl.style.width=Math.max(MIN_W,Math.min(reWW0+(e.clientX-reWSX),window.innerWidth-pnl.getBoundingClientRect().left))+'px';e.preventDefault();});\nrhE.addEventListener('pointerup',function(e){if(!reW||e.pointerId!==reWpid)return;reW=false;reWpid=null;rhE.releasePointerCapture(e.pointerId);rhE.classList.remove('active');NW=pnl.offsetWidth;_mini=false;btnM.innerHTML='&#8861;';});\nrhE.addEventListener('pointercancel',function(e){reW=false;reWpid=null;rhE.classList.remove('active');});\n\n/* Resize 下（原版不動） */\nvar reH=false,reHpid=null,reHSY=0,reHH0=0;\nrhS.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.button!==0)return;e.stopPropagation();e.preventDefault();reH=true;reHpid=e.pointerId;reHSY=e.clientY;reHH0=pnl.offsetHeight;rhS.setPointerCapture(e.pointerId);rhS.classList.add('active');});\nrhS.addEventListener('pointermove',function(e){if(!reH||e.pointerId!==reHpid)return;pnl.style.height=Math.max(MIN_H,Math.min(reHH0+(e.clientY-reHSY),window.innerHeight-pnl.getBoundingClientRect().top))+'px';e.preventDefault();});\nrhS.addEventListener('pointerup',function(e){if(!reH||e.pointerId!==reHpid)return;reH=false;reHpid=null;rhS.releasePointerCapture(e.pointerId);rhS.classList.remove('active');NH=pnl.offsetHeight;_mini=false;btnM.innerHTML='&#8861;';});\nrhS.addEventListener('pointercancel',function(e){reH=false;reHpid=null;rhS.classList.remove('active');});\n<\\/script></body></html>`);\n  doc.close();\n\n  window.gfvSetUrl = function(url){\n    if(!url) return;\n    fr.contentWindow.postMessage({type:'gfv-url', url:url},'*');\n  };\n  /* 不依賴貓咪健康監測 tab 的「影像串流」widget（沒開過那個 tab 它不會執行、不會送 URL）：\n     自己向 Node-RED 要串流位址；啟動時抓一次，面板按 ▶ 還沒有 URL 時再抓 */\n  var _urlFetching = false;\n  function fetchStreamUrl(){\n    if(_urlFetching) return;\n    _urlFetching = true;\n    fetch('/cat-stream-url',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){\n      if(d && d.url) window.gfvSetUrl(d.url);\n      else fr.contentWindow.postMessage({type:'gfv-url-missing'},'*');\n    }).catch(function(){\n      fr.contentWindow.postMessage({type:'gfv-url-missing'},'*');\n    }).then(function(){ _urlFetching = false; });\n  }\n  fetchStreamUrl();\n  window.gfvToggle = function(){\n    fr.contentWindow.postMessage({type:'gfv-toggle'},'*');\n  };\n  window.gfvOpen = function(){\n    _superMini = false;\n    _visible = true;\n    _unlocked = false;\n    applyState();\n    fr.contentWindow.postMessage({type:'gfv-open'},'*');\n  };\n\n  window.addEventListener('message', function(e){\n    if(e.source!==fr.contentWindow || !e.data) return;\n    if(e.data.type === 'gfv-need-url'){\n      fetchStreamUrl();\n    }\n    if(e.data.type === 'gfv-super-mini'){\n      _superMini = true;\n      positionTiny(e.data.x,e.data.y);\n      applyState();\n      tiny.focus({preventScroll:true});\n    }\n    /* 🔒/🔓 切換：只動 pointer-events，z-index 永遠不動 */\n    if(e.data.type === 'gfv-toggle-lock'){\n      _unlocked = !_unlocked;\n      applyState();\n    }\n    /* 原版 passthrough（不動） */\n    if(e.data.type === 'gfv-passthrough'){\n      /* 解鎖狀態下 iframe 已是 pointer-events:none，不需要再處理 passthrough */\n      if(_unlocked || _superMini || !_visible) return;\n      fr.style.setProperty('pointer-events','none','important');\n      var el = document.elementFromPoint(e.data.x, e.data.y);\n      if(el){\n        el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,clientX:e.data.x,clientY:e.data.y}));\n        el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:e.data.x,clientY:e.data.y}));\n      }\n      setTimeout(applyState, 50);\n    }\n    if(e.data.type === 'gfv-visible'){\n      _visible = !!e.data.on;\n      applyState();\n    }\n  });\n\n})();\n</script>\n",
         "storeOutMessages": false,
         "fwdInMessages": true,
         "resendOnRefresh": true,
         "templateScope": "global",
         "className": "",
-        "x": 1020,
-        "y": 740,
+        "x": 950,
+        "y": 720,
         "wires": [
             []
         ]
+    },
+    {
+        "id": "b930583b2311477e",
+        "type": "http in",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
+        "name": "懸浮影像取串流位址",
+        "url": "/cat-stream-url",
+        "method": "get",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 270,
+        "y": 720,
+        "wires": [
+            [
+                "2aaefaf3fc9a5158"
+            ]
+        ]
+    },
+    {
+        "id": "2aaefaf3fc9a5158",
+        "type": "function",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
+        "name": "讀 python_ip → 串流位址",
+        "func": "// 懸浮影像（全域）在任何 tab 都能自己取得串流位址，不必先開貓咪健康監測 tab\n// 讀法同「從持久化context恢復串流」\nlet ip = null;\ntry {\n    ip = global.get(\"gfile\").get(\"python_ip\") || global.get(\"python_ip\") || null;\n} catch (e) {\n    ip = global.get(\"python_ip\") || null;\n}\nmsg.statusCode = 200;\nmsg.headers = { \"Cache-Control\": \"no-store\" };\nmsg.payload = { ip: ip, url: ip ? `http://${ip}:5000/stream` : \"\" };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 490,
+        "y": 720,
+        "wires": [
+            [
+                "939f8c17d8dee577"
+            ]
+        ]
+    },
+    {
+        "id": "939f8c17d8dee577",
+        "type": "http response",
+        "z": "5065d3ea51a6c396",
+        "g": "b4fce5d781bdc15e",
+        "name": "回傳串流位址",
+        "statusCode": "",
+        "headers": {},
+        "x": 720,
+        "y": 720,
+        "wires": []
     },
     {
         "id": "group_gauge_cat",
@@ -736,7 +791,7 @@
         "hidden": false
     },
     {
-        "id": "0c41c30ce393e9a4",
+        "id": "5e463871ce773f3e",
         "type": "global-config",
         "env": [],
         "modules": {

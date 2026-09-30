@@ -12,6 +12,43 @@ from datetime import datetime
 
 from config import BehaviorTrackingConfig, LoggingConfig
 
+# 真正的 datetime 類別：影片時鐘模式要用 fromtimestamp() 把影片時間換成日期時間
+# （測試會把模組層級的 `datetime` 名稱換成假時鐘，這個別名不受影響）
+_RealDatetime = datetime
+
+# low_conf（貓在畫面但行為無法判定）的三種來源，由 frame_processor 傳入：
+#   warmup    — 貓剛出現／剛啟動，關鍵點窗口還沒滿 SEQUENCE_LENGTH 幀，ST-GCN 還不能推論
+#   uncertain — ST-GCN 有推論，但最高類別機率低於門檻（姿態可能清楚，只是行為不確定，
+#               例如動作轉換、五類以外的行為）
+#   sqa       — 骨架品質檢查（SQA）判定這個窗口的骨架幾何不可信（遮擋、關鍵點亂跳）
+LOW_CONF_REASONS = ("warmup", "uncertain", "sqa")
+
+# 四個 6 小時時段，跟 Node-RED「每日統計彙整」的 PERIOD_HOURS 一致
+PERIOD_HOURS = {
+    "00-06": ("00", "01", "02", "03", "04", "05"),
+    "06-12": ("06", "07", "08", "09", "10", "11"),
+    "12-18": ("12", "13", "14", "15", "16", "17"),
+    "18-24": ("18", "19", "20", "21", "22", "23"),
+}
+_PERIOD_TIME_KEYS = ("monitoring_sec", "visible_sec", "not_detected_sec", "low_conf_sec")
+
+
+def summarize_periods(hourly_distribution):
+    """把每小時分布加總成四個時段；每時段含五類行為秒數、total（五類加總）與
+    monitoring_sec（系統運行）/visible_sec（貓在畫面）/not_detected_sec/low_conf_sec。"""
+    behaviors = list(BehaviorTrackingConfig.BEHAVIOR_CATEGORIES.values())
+    periods = {}
+    for name, hours in PERIOD_HOURS.items():
+        acc = {k: 0.0 for k in behaviors + list(_PERIOD_TIME_KEYS)}
+        for h in hours:
+            bucket = hourly_distribution.get(h) or {}
+            for k in acc:
+                acc[k] += float(bucket.get(k, 0.0) or 0.0)
+        acc = {k: round(v, 1) for k, v in acc.items()}
+        acc["total"] = round(sum(acc[b] for b in behaviors), 1)
+        periods[name] = acc
+    return periods
+
 
 class ImprovedBehaviorTracker:
     """累積每日行為時長/次數統計、行為轉移矩陣、活動力分數與警報判斷；
@@ -20,6 +57,10 @@ class ImprovedBehaviorTracker:
     def __init__(self):
         _behaviors = list(BehaviorTrackingConfig.BEHAVIOR_CATEGORIES.values())
         self._lock = threading.RLock()
+        # 時鐘：None＝電腦時鐘（即時來源）；enable_media_clock() 換成影片時間（本機錄影）
+        self._clock = None
+        # 是否讀寫 tracker_state.json；影片時鐘模式關閉（錄影推論可重跑，不跟即時監測混）
+        self._persist_state = True
         self.behavior_time = {b: 0.0 for b in _behaviors}
         self.behavior_count = {b: 0 for b in _behaviors}
         self.low_conf_time = (
@@ -33,31 +74,88 @@ class ImprovedBehaviorTracker:
         self.behavior_history = deque(maxlen=BehaviorTrackingConfig.MAX_HISTORY_SIZE)
         self.current_behavior = None
         self.current_gcn_id = None  # 正在進行的行為對應的 GCN ID
-        self.behavior_start_time = time.time()
+        self.behavior_start_time = self._now_ts()
         self.current_event_start_time = (
-            time.time()
+            self._now_ts()
         )  # 真實事件開始時間，只在行為切換時重置
         self.last_update_time = (
-            time.time()
+            self._now_ts()
         )  # 用於計算逐幀時間差；同時也是「監測結束時間」
         # （最後一次收到有效幀的時刻）給 Dashboard 顯示用
         self.today_start_time = (
-            time.time()
+            self._now_ts()
         )  # 今日監測開始時間（第一次啟動或跨日重置的當下）；
         # 同一天內重啟程式會從 load_state() 還原，不會被重置
-        self.last_reset = datetime.now().date()
+        self.last_reset = self._now_dt().date()
         self.activity_window = deque(maxlen=BehaviorTrackingConfig.ACTIVITY_WINDOW_SIZE)
         self.transition_matrix = {}  # {"walk->lick": 3, ...}
-        self.hourly_distribution = {}  # {"08": {"walk": 120.0, ...}, ...}
+        # {"08": {"walk": 120.0, ..., "monitoring_sec": 系統運行, "visible_sec": 貓在畫面,
+        #         "not_detected_sec": 不在畫面, "low_conf_sec": 無法判定}, ...}
+        self.hourly_distribution = {}
+        # 三個逐幀累加的計時器（同一個 dt，恆等式：run = 在畫面 + 不在畫面）：
+        #   run_seconds        系統運行時間（有在處理畫面的時間；中斷見 MAX_FRAME_GAP_SECONDS）
+        #   monitoring_seconds 貓在畫面時間（五類行為 + low_conf）——歷史欄位名稱沿用，
+        #                      比例指標的分母、基線收錄門檻都用這個
+        #   not_detected_time  貓不在畫面時間（見上方宣告）
+        self.run_seconds = 0.0
         self.monitoring_seconds = 0.0
+        self.low_conf_breakdown = {r: 0.0 for r in LOW_CONF_REASONS}
         self._last_valid_behavior = None
         self._last_save_time = 0.0
         self.behavior_min_duration = {b: None for b in _behaviors}
         self.behavior_max_duration = {b: None for b in _behaviors}
         self.load_state()
 
+    # ── 時鐘 ────────────────────────────────────────────────────────────
+    def _now_ts(self):
+        """目前時間（epoch 秒）：預設電腦時鐘；影片時鐘模式＝錄影開始時間＋影片位置。"""
+        return self._clock() if self._clock is not None else time.time()
+
+    def _now_dt(self):
+        """目前時間（datetime，本機時區），跟 _now_ts() 同一個時鐘。"""
+        if self._clock is not None:
+            return _RealDatetime.fromtimestamp(self._clock())
+        return datetime.now()
+
+    def enable_media_clock(self, clock_fn):
+        """本機錄影改用影片時間：之後所有時長、每小時分桶、日期、中斷判定都照 clock_fn()
+        （epoch 秒＝錄影開始時間＋影片播放到的位置）計算，跟處理快慢、哪天處理無關。
+
+        從乾淨狀態開始：__init__ 的 load_state() 可能還原了今天的即時監測資料，那份
+        留在 tracker_state.json 不動（本模式不讀寫存檔），記憶體裡的統計全部清空，
+        免得錄影與即時監測混在同一天。錄影推論可以整段重跑，所以不需要續算。"""
+        with self._lock:
+            self._clock = clock_fn
+            self._persist_state = False
+            now = self._now_ts()
+            self._clear_counters_locked()
+            self.behavior_history.clear()
+            self.activity_window.clear()
+            self.current_behavior = None
+            self.current_gcn_id = None
+            self.behavior_start_time = now
+            self.current_event_start_time = now
+            self.last_update_time = now
+            self.today_start_time = now
+            self.last_reset = self._now_dt().date()
+
+    def finish_media_day(self):
+        """本機錄影播完：結算進行中的事件，把這一天寫進多天歷史（daily_history.db）。
+
+        影片錄到 24:00 就結束，之後沒有下一幀能觸發跨日，所以播完當下就寫。統計不
+        歸零（Dashboard 繼續顯示最後結果；這個行程要處理下一支影片得重開）。
+        回傳寫入的日期；沒有任何時間可寫或寫入失敗回傳 None。"""
+        with self._lock:
+            self._settle_current_behavior(self.last_update_time, 0.0)
+            day = self.last_reset
+            snapshot = self._snapshot_locked()
+        return day if self._persist_daily_record(day, snapshot) else None
+
     def save_state(self):
-        """將當日累積統計寫入 LoggingConfig.TRACKER_STATE_PATH，供重啟後還原。"""
+        """將當日累積統計寫入 LoggingConfig.TRACKER_STATE_PATH，供重啟後還原。
+        影片時鐘模式不寫（見 enable_media_clock）。"""
+        if not self._persist_state:
+            return
         try:
             with self._lock:
                 state = {
@@ -72,6 +170,8 @@ class ImprovedBehaviorTracker:
                         h: dict(v) for h, v in self.hourly_distribution.items()
                     },
                     "monitoring_seconds": self.monitoring_seconds,
+                    "run_seconds": self.run_seconds,
+                    "low_conf_breakdown": dict(self.low_conf_breakdown),
                     "_last_valid_behavior": self._last_valid_behavior,
                     "behavior_min_duration": dict(self.behavior_min_duration),
                     "behavior_max_duration": dict(self.behavior_max_duration),
@@ -95,14 +195,23 @@ class ImprovedBehaviorTracker:
             logging.warning("TrackerState save failed: %s", e)
 
     def load_state(self):
-        """還原當日累積統計；若存檔日期非今天則略過（避免跨日資料污染）。"""
+        """還原當日累積統計；若存檔日期非今天則不還原（避免跨日資料污染），
+        但會先把那一天補寫進多天歷史——程式在午夜前就關掉時，check_daily_reset()
+        沒機會觸發，這是那一天唯一能進 daily_history.db 的時機。"""
         try:
             path = LoggingConfig.TRACKER_STATE_PATH
             if not os.path.exists(path):
                 return
             with open(path, encoding="utf-8") as f:
                 state = json.load(f)
-            if state.get("date") != str(datetime.now().date()):
+            if state.get("date") != str(self._now_dt().date()):
+                if self._persist_stale_state(state):
+                    # 補寫完就把舊存檔改名封存，之後不會再被補寫第二次。不改名的話，
+                    # 影片時鐘模式（不寫存檔）下這份舊檔會一直留著，每次啟動都重新
+                    # 補寫一次，把同一天後來寫進 DB 的錄影紀錄蓋回舊資料（upsert）。
+                    archived = f"{path}.persisted-{state.get('date')}"
+                    os.replace(path, archived)
+                    logging.info("TrackerState: 舊存檔已封存為 %s", archived)
                 return  # 不同天的存檔，不還原
             with self._lock:
                 self.behavior_time = {
@@ -122,6 +231,10 @@ class ImprovedBehaviorTracker:
                     for h, v in state.get("hourly_distribution", {}).items()
                 }
                 self.monitoring_seconds = float(state.get("monitoring_seconds", 0.0))
+                self.run_seconds = float(state.get("run_seconds", 0.0))
+                for r, v in (state.get("low_conf_breakdown") or {}).items():
+                    if r in self.low_conf_breakdown:
+                        self.low_conf_breakdown[r] = float(v)
                 self._last_valid_behavior = state.get("_last_valid_behavior", None)
                 for b in self.behavior_min_duration:
                     v = state.get("behavior_min_duration", {}).get(b)
@@ -156,7 +269,17 @@ class ImprovedBehaviorTracker:
         呼叫進一步累積新一天的資料，讀 `self.*` 會拿到錯誤的資料，一定要
         用重置當下鎖內拍下的快照。失敗時只記警告、不拋出，避免持久化問題
         影響即時監測本身（跟 save_state() 的容錯原則一致）。
+
+        2026-09-30：那天完全沒有累積任何時間（系統沒運行，例如只開著 Flask、管線整天
+        暫停就跨日）不寫——跟 Node-RED「有運行過就封存」同一條規則，兩本日記才一致；
+        要不要進基線由 baseline.compute_baseline() 的貓在畫面門檻決定。
+        回傳是否真的寫入。
         """
+        if (
+            snapshot.get("run_seconds", 0.0) + snapshot.get("monitoring_seconds", 0.0)
+            + snapshot.get("not_detected_time", 0.0) + sum(snapshot["behavior_time"].values())
+        ) <= 0:
+            return False
         try:
             from analytics import daily_store
             from analytics.baseline import DailyRecord
@@ -170,9 +293,17 @@ class ImprovedBehaviorTracker:
                 + behavior_time["shake"]
                 + behavior_time["stop"]
             )
+            breakdown = snapshot.get("low_conf_breakdown") or {}
             record = DailyRecord(
                 day=day,
                 monitoring_seconds=snapshot["monitoring_seconds"],
+                run_seconds=snapshot.get("run_seconds", 0.0),
+                not_detected_time=snapshot.get("not_detected_time", 0.0),
+                low_conf_time=snapshot.get("low_conf_time", 0.0),
+                low_conf_warmup_time=breakdown.get("warmup", 0.0),
+                low_conf_uncertain_time=breakdown.get("uncertain", 0.0),
+                low_conf_sqa_time=breakdown.get("sqa", 0.0),
+                periods=summarize_periods(snapshot.get("hourly_distribution") or {}),
                 walk_time=behavior_time["walk"],
                 walk_count=behavior_count["walk"],
                 stop_time=behavior_time["stop"],
@@ -189,8 +320,58 @@ class ImprovedBehaviorTracker:
                 rest_time=behavior_time["stop"],
             )
             daily_store.save_day(record)
+            return True
         except Exception as e:
             logging.warning("Daily history persist failed (day=%s): %s", day, e)
+            return False
+
+    def _snapshot_locked(self):
+        """呼叫端必須已持有 self._lock。拍下寫入多天歷史所需的當日累積統計。"""
+        return {
+            "behavior_time": dict(self.behavior_time),
+            "behavior_count": dict(self.behavior_count),
+            "monitoring_seconds": self.monitoring_seconds,
+            "run_seconds": self.run_seconds,
+            "not_detected_time": self.not_detected_time,
+            "low_conf_time": self.low_conf_time,
+            "low_conf_breakdown": dict(self.low_conf_breakdown),
+            "hourly_distribution": {
+                h: dict(v) for h, v in self.hourly_distribution.items()
+            },
+        }
+
+    def _persist_stale_state(self, state):
+        """把「不是今天」的 tracker_state 存檔補寫成那一天的多天歷史紀錄。
+
+        程式在午夜前關掉（例如只錄 18:00~23:xx）時 check_daily_reset() 沒機會觸發，
+        下次啟動 load_state() 讀到舊日期的存檔，原本直接丟掉 → 那一天永遠不會進
+        daily_history.db。save_day 是 upsert，同一天重複補寫只會覆蓋成同樣的數字。
+        完全沒有累積任何時間的存檔（剛啟動就關）不寫，避免產生空白天。"""
+        try:
+            from datetime import date as _date
+
+            day = _date.fromisoformat(str(state.get("date")))
+        except (TypeError, ValueError):
+            return
+        behaviors = list(BehaviorTrackingConfig.BEHAVIOR_CATEGORIES.values())
+        snapshot = {
+            "behavior_time": {
+                b: float((state.get("behavior_time") or {}).get(b, 0.0)) for b in behaviors
+            },
+            "behavior_count": {
+                b: int((state.get("behavior_count") or {}).get(b, 0)) for b in behaviors
+            },
+            "monitoring_seconds": float(state.get("monitoring_seconds", 0.0)),
+            "run_seconds": float(state.get("run_seconds", 0.0)),
+            "not_detected_time": float(state.get("not_detected_time", 0.0)),
+            "low_conf_time": float(state.get("low_conf_time", 0.0)),
+            "low_conf_breakdown": dict(state.get("low_conf_breakdown") or {}),
+            "hourly_distribution": dict(state.get("hourly_distribution") or {}),
+        }
+        if self._persist_daily_record(day, snapshot):
+            logging.info("TrackerState: 前次存檔日期 %s 已補寫進多天歷史", day)
+            return True
+        return False
 
     def _reset_if_new_day_locked(self):
         """呼叫端必須已持有 self._lock。若日期已跨天，重置所有當日累積統計
@@ -207,17 +388,20 @@ class ImprovedBehaviorTracker:
         整條即時影像管線被卡住長達 10 秒。拆開後，這裡只做快速的記憶體
         重置，真正可能慢的 I/O 交給呼叫端在鎖外處理。
         """
-        today = datetime.now().date()
+        today = self._now_dt().date()
         if today == self.last_reset:
             return None, None
         prev_date = self.last_reset
         # 先更新 last_reset 防止兩個執行緒同時通過 != 判斷造成雙重 reset
         self.last_reset = today
-        snapshot = {
-            "behavior_time": dict(self.behavior_time),
-            "behavior_count": dict(self.behavior_count),
-            "monitoring_seconds": self.monitoring_seconds,
-        }
+        snapshot = self._snapshot_locked()
+        self._clear_counters_locked()
+        self.today_start_time = self._now_ts()  # 跨日重置：新的一天，重新起算監測開始時間
+        return prev_date, snapshot
+
+    def _clear_counters_locked(self):
+        """呼叫端必須已持有 self._lock。把當日累積統計全部歸零（跨日重置與
+        enable_media_clock 共用）。"""
         self.behavior_time = {k: 0.0 for k in self.behavior_time}
         self.behavior_count = {k: 0 for k in self.behavior_count}
         self.low_conf_time = 0.0
@@ -227,11 +411,11 @@ class ImprovedBehaviorTracker:
         self.transition_matrix = {}
         self.hourly_distribution = {}
         self.monitoring_seconds = 0.0
+        self.run_seconds = 0.0
+        self.low_conf_breakdown = {r: 0.0 for r in LOW_CONF_REASONS}
         self._last_valid_behavior = None
         self.behavior_min_duration = {k: None for k in self.behavior_min_duration}
         self.behavior_max_duration = {k: None for k in self.behavior_max_duration}
-        self.today_start_time = time.time()  # 跨日重置：新的一天，重新起算監測開始時間
-        return prev_date, snapshot
 
     def check_daily_reset(self):
         """公開介面：若日期已跨天，重置所有當日累積統計並把前一天的資料
@@ -252,7 +436,7 @@ class ImprovedBehaviorTracker:
         提示，正確性仍然由鎖內的二次確認保證，不會因為讀到瞬間髒值而重複
         重置或漏掉重置（CPython 的 GIL 保證 `date` 物件屬性讀取不會撕裂）。
         """
-        if datetime.now().date() == self.last_reset:
+        if self._now_dt().date() == self.last_reset:
             return
         with self._lock:
             prev_date, snapshot = self._reset_if_new_day_locked()
@@ -303,7 +487,9 @@ class ImprovedBehaviorTracker:
             {
                 "behavior": self.current_behavior,
                 "gcn_behavior_id": self.current_gcn_id,
-                "timestamp": datetime.now(),
+                "timestamp": (  # 事件結束時刻（中斷時是上一幀，不是現在）
+                    _RealDatetime.fromtimestamp(now) if self._clock is not None else datetime.now()
+                ),
                 "duration": dur_r,
                 "activity": next_activity_value,
             }
@@ -312,8 +498,11 @@ class ImprovedBehaviorTracker:
         self.current_gcn_id = None
         return True
 
-    def update(self, behavior_id, activity_value):
-        """以本幀的行為 ID 與活動力數值更新累積統計、轉移矩陣與活動視窗。"""
+    def update(self, behavior_id, activity_value, low_conf_reason=None):
+        """以本幀的行為 ID 與活動力數值更新累積統計、轉移矩陣與活動視窗。
+
+        low_conf_reason：behavior_id == -1（貓在畫面但行為無法判定）時的來源，
+        LOW_CONF_REASONS 其中之一；沒給或不認得的值歸到 "uncertain"。"""
         # check_daily_reset() 刻意放在下面的主鎖之外呼叫：它內部的
         # _persist_daily_record()（可能慢的 SQLite 寫入）本來就設計成鎖外
         # 執行，如果在這裡先進了 `with self._lock:` 才呼叫，self._lock 是
@@ -322,19 +511,34 @@ class ImprovedBehaviorTracker:
         self.check_daily_reset()
         _event_completed = False
         with self._lock:
-            now = time.time()
-            dt = now - self.last_update_time
+            now = self._now_ts()
+            prev_time = self.last_update_time
+            dt = now - prev_time
             self.last_update_time = now
 
-            # 每小時監控時間（所有狀態都累積，用於判斷時段是否有被監控）
-            hour_key = datetime.now().strftime("%H")
+            if dt < 0 or dt > BehaviorTrackingConfig.MAX_FRAME_GAP_SECONDS:
+                # 中斷（排程暫停、串流卡住、時鐘倒退…）：這段空白不算系統運行，也不算
+                # 任何狀態；進行中的行為事件在上一幀就結束，不把空白灌進它的時長。
+                if self._settle_current_behavior(prev_time, 0.0):
+                    _event_completed = True
+                self._in_low_conf = False
+                dt = 0.0
+
+            # 系統運行時間：所有狀態都累積（每小時的 monitoring_sec 同義，用於判斷時段是否有被監控）
+            self.run_seconds += dt
+            hour_key = self._now_dt().strftime("%H")
             if hour_key not in self.hourly_distribution:
                 self.hourly_distribution[hour_key] = {
                     b: 0.0 for b in BehaviorTrackingConfig.BEHAVIOR_CATEGORIES.values()
                 }
-            self.hourly_distribution[hour_key]["monitoring_sec"] = (
-                self.hourly_distribution[hour_key].get("monitoring_sec", 0.0) + dt
-            )
+            bucket = self.hourly_distribution[hour_key]
+            bucket["monitoring_sec"] = bucket.get("monitoring_sec", 0.0) + dt
+            if behavior_id == -2:
+                bucket["not_detected_sec"] = bucket.get("not_detected_sec", 0.0) + dt
+            else:
+                # 貓在畫面時間（五類行為 + low_conf）
+                self.monitoring_seconds += dt
+                bucket["visible_sec"] = bucket.get("visible_sec", 0.0) + dt
 
             if behavior_id == -2:
                 # YOLO 未偵測到貓（behavior_id == -2）：累積到 not_detected_time，
@@ -346,10 +550,13 @@ class ImprovedBehaviorTracker:
                 if self._settle_current_behavior(now, 0.0):
                     _event_completed = True
             elif behavior_id == -1:
-                # 信心不足時（behavior_id == -1）：YOLO 有偵測到但 ST-GCN 信心未達門檻，
-                # 獨立累積到 low_conf_time/low_conf_count，不歸入任何行為統計（也不算「休息」——
-                # 「休息」由 stop 行為本身的次數/時長全權代表，此處純粹是模型不確定，性質不同）
+                # 信心不足時（behavior_id == -1）：貓在畫面，但行為無法判定（來源見
+                # LOW_CONF_REASONS）。獨立累積到 low_conf_time/low_conf_count，不歸入任何
+                # 行為統計（也不算「休息」——「休息」由 stop 行為本身的次數/時長全權代表）
                 self.low_conf_time += dt
+                reason = low_conf_reason if low_conf_reason in LOW_CONF_REASONS else "uncertain"
+                self.low_conf_breakdown[reason] += dt
+                bucket["low_conf_sec"] = bucket.get("low_conf_sec", 0.0) + dt
                 if not self._in_low_conf:
                     self.low_conf_count += 1
                     self._in_low_conf = True
@@ -408,7 +615,7 @@ class ImprovedBehaviorTracker:
         with self._lock:
             if len(self.activity_window) == 0:
                 return 0
-            now = time.time()
+            now = self._now_ts()
             recent = [
                 r
                 for r in self.activity_window
@@ -448,15 +655,22 @@ class ImprovedBehaviorTracker:
                 "active_time": round(total_active, 1),
                 "low_conf": self.low_conf_count,
                 "low_conf_time": round(self.low_conf_time, 1),
+                "low_conf_breakdown": {
+                    r: round(v, 1) for r, v in self.low_conf_breakdown.items()
+                },
                 "not_detected_time": round(self.not_detected_time, 1),
+                # 分母定義（逐幀累加，run_seconds = monitoring_seconds + not_detected_time）：
+                # monitoring_seconds = 貓在畫面時間（比例指標分母、基線收錄門檻）
+                # run_seconds        = 系統運行時間
                 "monitoring_seconds": round(self.monitoring_seconds, 1),
-                # 供 Dashboard 直接顯示，不在前端 JS 重算：
-                # cat_visible_time = 貓出現時長（五類行為 + low_conf）
-                # total_uptime     = 系統真正運行時長（含貓不在畫面的時間）
-                "cat_visible_time": round(total_active + self.low_conf_time, 1),
-                "total_uptime": round(
-                    self.monitoring_seconds + self.not_detected_time, 1
-                ),
+                "run_seconds": round(self.run_seconds, 1),
+                # 供 Dashboard 直接顯示，不在前端 JS 重算（跟上面兩個同值，保留舊鍵名）：
+                # cat_visible_time = 貓在畫面時長（五類行為 + low_conf）
+                # total_uptime     = 系統運行時長（含貓不在畫面的時間）
+                "cat_visible_time": round(self.monitoring_seconds, 1),
+                "total_uptime": round(self.run_seconds, 1),
+                # 統計所屬日期（ISO），Node-RED 用它判斷跨日，不再靠收到資料的當下時間
+                "date": self.last_reset.isoformat(),
                 "transition_matrix": dict(self.transition_matrix),
                 "hourly_distribution": {
                     h: dict(v) for h, v in self.hourly_distribution.items()
@@ -475,11 +689,6 @@ class ImprovedBehaviorTracker:
                 "last_update_time": self.last_update_time,
             }
         return stats
-
-    def add_monitoring_seconds(self, seconds: float) -> None:
-        """累加系統實際運行監測的秒數（供 total_uptime 統計使用）。"""
-        with self._lock:
-            self.monitoring_seconds += seconds
 
     def get_alerts(self):
         """依累積統計比對各項警戒門檻，回傳需要提醒使用者的警報清單。"""

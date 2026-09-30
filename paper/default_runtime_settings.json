@@ -36,7 +36,8 @@
     "mode": "gui",
     "auto_start_processing": true,
     "scheduled_start_time": "06:00",
-    "scheduled_end_time": "12:00"
+    "scheduled_end_time": "12:00",
+    "video_start_time": ""
   },
   "flask": {
     "host": "0.0.0.0",

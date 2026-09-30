@@ -42,7 +42,8 @@ BACKUP_SETTINGS_PATH = _PAPER_DIR / "runtime_settings.previous.json"
 #   attr       (class 名稱, attribute 名稱)，GUI 用 getattr(config.<class>, <attr>) 現讀生效值
 #   tab        GUI 分頁名稱
 #   label      GUI 顯示用中文標籤
-#   value_type "bool"/"int"/"float"/"str"/"file"/"folder"/"video_input"/"size"/"hhmm"/"enum"
+#   value_type "bool"/"int"/"float"/"str"/"file"/"folder"/"video_input"/"size"/"hhmm"/"datetime"/"enum"
+#              （datetime＝挖空式「年 月 日 時:分」輸入，存成 "YYYY-MM-DD HH:MM" 或 ""）
 #   validate   驗證規則 tag（見 _VALIDATORS）
 #   choices    僅 value_type == "enum" 使用
 #   browse_filter 僅 file 型別使用，(說明文字, 副檔名 pattern)
@@ -222,6 +223,12 @@ FIELD_SCHEMA = [
         "json_key": "run_mode.scheduled_end_time", "env_var": "CAT_MONITORING_SCHEDULED_END_TIME",
         "attr": ("RunModeConfig", "SCHEDULED_END_TIME"), "tab": "執行模式與排程",
         "label": "排程結束時間（HH:MM，留空=不設限）", "value_type": "hhmm", "validate": "hhmm",
+    },
+    {
+        "json_key": "run_mode.video_start_time", "env_var": "CAT_MONITORING_VIDEO_START_TIME",
+        "attr": ("RunModeConfig", "VIDEO_START_TIME"), "tab": "執行模式與排程",
+        "label": "影片開始錄影時間",
+        "value_type": "datetime", "validate": "video_start",
     },
     # ── Flask 與 Node-RED ────────────────────────────────────────────
     {
@@ -796,6 +803,29 @@ def _validate_hhmm(v, label):
     return None
 
 
+_VIDEO_START_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M")
+
+
+def _validate_video_start(v, label):
+    """影片開始錄影時間：空字串（不啟用）或 config._parse_video_start 接受的格式。"""
+    if not isinstance(v, str):
+        return f"{label}：必須是字串（目前為 {type(v).__name__}）"
+    if v.strip() == "":
+        return None
+    import datetime as _dt
+
+    for fmt in _VIDEO_START_FORMATS:
+        try:
+            _dt.datetime.strptime(v.strip(), fmt)
+            return None
+        except ValueError:
+            continue
+    return (
+        f"{label}：年、月、日、時、分要全部填上（或全部留空），而且要是存在的日期時間；"
+        f"環境變數格式為 YYYY-MM-DD HH:MM[:SS]（目前為 {_redact(v)!r}）"
+    )
+
+
 def _validate_str(v, label):
     if not isinstance(v, str):
         return f"{label}：必須是字串（目前為 {type(v).__name__}）"
@@ -891,6 +921,7 @@ _SIMPLE_VALIDATORS = {
     "jpeg_quality": _validate_jpeg_quality,
     "esp32cam_quality": _validate_esp32cam_quality,
     "hhmm": _validate_hhmm,
+    "video_start": _validate_video_start,
     "str": _validate_str,
     "bool": _validate_bool,
     "required_file": _validate_required_file,

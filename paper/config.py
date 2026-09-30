@@ -122,6 +122,24 @@ def _parse_hhmm(value: str) -> tuple[int, int] | None:
     return (int(match.group(1)), int(match.group(2)))
 
 
+_VIDEO_START_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M")
+
+
+def _parse_video_start(value: str) -> "_datetime.datetime | None":
+    """解析「影片開始錄影時間」（'YYYY-MM-DD HH:MM' 或 'YYYY-MM-DD HH:MM:SS'，本機時區）；
+    空字串／格式錯誤回傳 None（格式錯誤另印警告，不讓整個 config 載入失敗）。
+    settings_manager.py 的 _validate_video_start 接受同一組格式。"""
+    if not value or not value.strip():
+        return None
+    for fmt in _VIDEO_START_FORMATS:
+        try:
+            return _datetime.datetime.strptime(value.strip(), fmt)
+        except ValueError:
+            continue
+    print(f"⚠ 影片開始錄影時間格式錯誤（{value!r}），應為 YYYY-MM-DD HH:MM[:SS]；本次忽略，改用電腦時鐘")
+    return None
+
+
 def _runtime_default(json_key: str, fallback, value_type=None):
     """JSON 執行期覆寫層的「預設值」來源：settings_manager.get_runtime_value() 讀
     runtime_settings.current.json，欄位缺漏/檔案不存在時直接回傳 fallback（原本寫死的
@@ -566,6 +584,18 @@ class RunModeConfig:
     )  # "12:00"
     SCHEDULED_END_HHMM = _parse_hhmm(SCHEDULED_END_TIME)
 
+    # 影片開始錄影時間（"YYYY-MM-DD HH:MM[:SS]"，本機時區；留空＝不啟用）。
+    # 只對「本機影片檔」生效：有設時，行為統計的時鐘改成「這個時間 + 影片播放到的位置」
+    # （影片時間），時長、每小時分桶、日期都照錄影當時算，跟處理快慢、哪天處理無關；
+    # 影片播完就把那一天寫進多天歷史。即時攝影機／串流一律用電腦時鐘，不受影響。
+    # 本機影片沒設時沿用電腦時鐘並印警告（統計不能當基線資料）。
+    # 見 docs/錄影推論改用影片時間-待辦.md。
+    VIDEO_START_TIME = _env_str(
+        "CAT_MONITORING_VIDEO_START_TIME",
+        _runtime_default("run_mode.video_start_time", "", value_type=str),
+    )  # "2026-09-30 18:00"
+    VIDEO_START_DATETIME = _parse_video_start(VIDEO_START_TIME)
+
     @classmethod
     def is_within_active_window(cls, now: _datetime.datetime | None = None) -> bool:
         """判斷「現在」是否落在排程允許處理的時間內。
@@ -962,6 +992,15 @@ class BehaviorTrackingConfig:
     CAT_MISSING_TOLERANCE_FRAMES = _env_int(
         "CAT_MONITORING_CAT_MISSING_TOLERANCE_FRAMES",
         _runtime_default("behavior_tracking.cat_missing_tolerance_frames", 5, value_type=int),
+    )
+
+    # 幀間隔上限（秒）：tracker 每幀用「距上一幀的時間差」累加系統運行／貓在畫面／不在畫面時間。
+    # 超過這個值代表中間沒有在處理畫面（排程時段外暫停、串流卡住、影片播完後重開…），
+    # 那段空白不算任何時間，正在進行的行為事件也在上一幀結束——否則排程隔天恢復時，
+    # 第一幀會把十幾個小時灌進當下那一小時的統計。
+    MAX_FRAME_GAP_SECONDS = _env_float(
+        "CAT_MONITORING_MAX_FRAME_GAP_SECONDS",
+        _runtime_default("behavior_tracking.max_frame_gap_seconds", 5.0, value_type=float),
     )
 
     # 警報門檻

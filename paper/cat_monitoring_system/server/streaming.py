@@ -100,6 +100,16 @@ class SharedFrameStreamer:
                                 _finish()
                             except Exception:
                                 pass
+                        # 本機錄影（影片時鐘模式）播完就把那一天寫進多天歷史——影片錄到
+                        # 24:00 結束，之後沒有下一幀能觸發跨日（見 docs/錄影推論改用影片時間-待辦.md）
+                        _finish_day = getattr(
+                            self.frame_processor, "finish_media_day", None
+                        )
+                        if _finish_day is not None:
+                            try:
+                                _finish_day()
+                            except Exception as e:
+                                logging.error("finish_media_day 失敗：%s", e)
                     continue
 
                 raw_frame_count += 1
