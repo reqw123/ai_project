@@ -1,43 +1,50 @@
 {
   "python_ip": "192.168.0.171",
   "v2_today": {
-    "date": "2026/9/27",
+    "date": "2026/9/30",
     "walk": {
-      "count": 351,
-      "time": 369.5
+      "count": 131,
+      "time": 266.6
     },
     "lick": {
-      "count": 142,
-      "time": 1504.7
+      "count": 49,
+      "time": 1022.8
     },
     "scratch": {
-      "count": 49,
-      "time": 255.1
+      "count": 18,
+      "time": 193.3
     },
     "shake": {
-      "count": 79,
-      "time": 57.7
+      "count": 18,
+      "time": 27.4
     },
     "stop": {
-      "count": 246,
-      "time": 287.6
+      "count": 89,
+      "time": 213.9
     },
-    "active_time": 2474.5,
+    "active_time": 1724,
     "low_conf": {
-      "count": 873,
-      "time": 671.3
+      "count": 307,
+      "time": 462
     },
     "not_detected_time": 0,
-    "monitoring_seconds": 3142.9,
-    "cat_visible_time": 3145.8,
-    "total_uptime": 3142.9,
-    "active_non_rest_time": 2187,
-    "active_ratio": 69.59,
-    "rest_ratio": 9.15,
-    "lick_pct_of_day": 47.876,
-    "scratch_pct_of_day": 8.117,
-    "lick_pct_of_active": 68.802,
-    "scratch_pct_of_active": 11.664
+    "monitoring_seconds": 2187.5,
+    "cat_visible_time": 2187.5,
+    "total_uptime": 2187.5,
+    "run_seconds": 2187.5,
+    "low_conf_breakdown": {
+      "warmup": 3.5,
+      "uncertain": 188.6,
+      "sqa": 269.9
+    },
+    "visible_ratio": 100,
+    "active_non_rest_time": 1510.1000000000001,
+    "active_ratio": 69.03,
+    "rest_ratio": 9.78,
+    "lick_pct_of_day": 46.757,
+    "scratch_pct_of_day": 8.837,
+    "lick_pct_of_active": 67.731,
+    "scratch_pct_of_active": 12.8
   },
   "v2_hourly": {
     "10": {
@@ -1690,6 +1697,149 @@
           "total": 0
         }
       }
+    },
+    {
+      "date": "2026/9/27",
+      "lick_count": 142,
+      "lick_time": 1504.7,
+      "scratch_count": 49,
+      "scratch_time": 255.1,
+      "shake_count": 79,
+      "shake_time": 57.7,
+      "walk_count": 351,
+      "walk_time": 369.5,
+      "stop_count": 246,
+      "stop_time": 287.6,
+      "active_time": 2474.5,
+      "low_conf_count": 873,
+      "low_conf_time": 671.3,
+      "not_detected_time": 0,
+      "monitoring_seconds": 3142.9,
+      "monitoring_hours": 0.87,
+      "cat_visible_seconds": 3142.9,
+      "stop_ratio": 0.116,
+      "active_non_rest_time": 2187,
+      "active_ratio": 69.59,
+      "rest_ratio": 9.15,
+      "lick_pct_of_day": 47.876,
+      "scratch_pct_of_day": 8.117,
+      "lick_pct_of_active": 68.802,
+      "scratch_pct_of_active": 11.664,
+      "periods": {
+        "00-06": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "06-12": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "12-18": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "18-24": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        }
+      },
+      "risk": null
+    },
+    {
+      "date": "2026/9/29",
+      "lick_count": 160,
+      "lick_time": 1970.3,
+      "scratch_count": 55,
+      "scratch_time": 338.1,
+      "shake_count": 55,
+      "shake_time": 51,
+      "walk_count": 400,
+      "walk_time": 499.3,
+      "stop_count": 274,
+      "stop_time": 375.3,
+      "active_time": 3234.1,
+      "low_conf_count": 948,
+      "low_conf_time": 841.5,
+      "low_conf_warmup_time": 3.7,
+      "low_conf_uncertain_time": 211.5,
+      "low_conf_sqa_time": 307.6,
+      "not_detected_time": 0,
+      "run_seconds": 2494.8,
+      "run_hours": 0.69,
+      "monitoring_seconds": 4075.4,
+      "monitoring_hours": 1.13,
+      "cat_visible_seconds": 4075.4,
+      "visible_ratio": 163.36,
+      "stop_ratio": 0.116,
+      "active_non_rest_time": 2858.7,
+      "active_ratio": 70.15,
+      "rest_ratio": 9.21,
+      "lick_pct_of_day": 48.346,
+      "scratch_pct_of_day": 8.296,
+      "lick_pct_of_active": 68.923,
+      "scratch_pct_of_active": 11.827,
+      "periods": {
+        "00-06": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "06-12": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "12-18": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "18-24": {
+          "walk": 499.46295714378357,
+          "lick": 1968.6519582271576,
+          "scratch": 340.1721177101135,
+          "shake": 51.044532775878906,
+          "stop": 375.3715786933899,
+          "monitoring_sec": 4076.167853832245,
+          "visible_sec": 2494.8134591579437,
+          "not_detected_sec": 0,
+          "low_conf_sec": 522.7941884994507,
+          "total": 3234.7031445503235
+        }
+      },
+      "risk": null
     }
   ],
   "v2_user_settings": {
@@ -1761,27 +1911,31 @@
         "陌生人來訪",
         "服藥/治療"
       ],
-      "note": "🎙 今天帶貓咪去看醫生；🎙 幫我記錄今天幫貓咪洗澡；🎙 記錄貓咪；🎙 幫我記錄貓咪甩；4",
+      "note": "4",
       "voice": [
         {
           "ts": 1790441895.761,
           "category": "vet",
-          "text": "今天帶貓咪去看醫生"
+          "text": "今天帶貓咪去看醫生",
+          "label": "帶去看醫生"
         },
         {
           "ts": 1790442086.929,
           "category": "other",
-          "text": "幫我記錄今天幫貓咪洗澡"
+          "text": "幫我記錄今天幫貓咪洗澡",
+          "label": "其他"
         },
         {
           "ts": 1790442093.282,
           "category": "other",
-          "text": "記錄貓咪"
+          "text": "記錄貓咪",
+          "label": "其他"
         },
         {
           "ts": 1790442474.53,
           "category": "other",
-          "text": "幫我記錄貓咪甩"
+          "text": "幫我記錄貓咪甩",
+          "label": "其他"
         },
         {
           "ts": 1790452985.399,
@@ -1799,8 +1953,23 @@
         }
       ],
       "counts": {
-        "其他": 2
-      }
+        "帶去看醫生": 1,
+        "其他": 5,
+        "情緒緊張": 1,
+        "陌生人來訪": 1,
+        "服藥/治療": 1
+      },
+      "manual": [
+        {
+          "ts": null,
+          "tags": [
+            "情緒緊張",
+            "陌生人來訪",
+            "服藥/治療"
+          ],
+          "legacy": true
+        }
+      ]
     }
   ],
   "v2_excluded_dates": [
@@ -1809,261 +1978,262 @@
     "2026/9/5",
     "2026/9/6",
     "2026/9/7",
-    "2026/9/8"
+    "2026/9/8",
+    "2026/9/29"
   ],
   "v2_baseline": {
-    "computed_at": "2026-09-09T09:45:58.485Z",
+    "computed_at": "2026-09-29T16:14:51.847Z",
     "baseline_period": "all",
     "period_hours": null,
     "count_metrics_available": true,
-    "days_count": 14,
+    "days_count": 15,
     "required_days": 7,
     "confidence": "Medium",
     "required_periods": [],
     "period_coverage": {
       "00-06": {
         "covered": 14,
-        "total": 14
+        "total": 15
       },
       "06-12": {
         "covered": 14,
-        "total": 14
+        "total": 15
       },
       "12-18": {
         "covered": 14,
-        "total": 14
+        "total": 15
       },
       "18-24": {
         "covered": 14,
-        "total": 14
+        "total": 15
       }
     },
     "layer1": {
       "walk_duration": {
-        "mean": 3919.02,
-        "median": 3774.4,
-        "std": 486.71,
-        "iqr": 896.65,
-        "q1": 3487.25,
-        "q3": 4383.9,
-        "sample_count": 14,
-        "rolling_mean": 3843.01,
-        "rolling_std": 447.02,
-        "last_update": "2026-09-09T09:45:58.484Z"
+        "mean": 3810.43,
+        "median": 3701.1,
+        "std": 621.43,
+        "iqr": 885.6,
+        "q1": 3436,
+        "q3": 4321.6,
+        "sample_count": 15,
+        "rolling_mean": 3610.09,
+        "rolling_std": 550.13,
+        "last_update": "2026-09-29T16:14:51.845Z"
       },
       "walk_count": {
-        "mean": 31.93,
+        "mean": 144.67,
         "median": 33,
-        "std": 3.99,
-        "iqr": 6.5,
-        "q1": 28.25,
-        "q3": 34.75,
-        "sample_count": 14,
-        "rolling_mean": 31.46,
-        "rolling_std": 3.63,
-        "last_update": "2026-09-09T09:45:58.484Z"
+        "std": 421.84,
+        "iqr": 7,
+        "q1": 28.5,
+        "q3": 35.5,
+        "sample_count": 15,
+        "rolling_mean": 285.19,
+        "rolling_std": 371.26,
+        "last_update": "2026-09-29T16:14:51.845Z"
       },
       "low_conf_duration": {
-        "mean": 941.42,
-        "median": 973.85,
-        "std": 143.22,
-        "iqr": 154.92,
-        "q1": 871.63,
-        "q3": 1026.55,
-        "sample_count": 14,
-        "rolling_mean": 928.26,
-        "rolling_std": 133.69,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 1049.85,
+        "median": 991.2,
+        "std": 428.66,
+        "iqr": 148.5,
+        "q1": 894.65,
+        "q3": 1043.15,
+        "sample_count": 15,
+        "rolling_mean": 1174.2,
+        "rolling_std": 382.33,
+        "last_update": "2026-09-29T16:14:51.845Z"
       },
       "inactive_duration": {
-        "mean": 15355.61,
-        "median": 15416.9,
-        "std": 1704.49,
-        "iqr": 2787.85,
-        "q1": 14159.92,
-        "q3": 16947.78,
-        "sample_count": 14,
-        "rolling_mean": 15430.35,
-        "rolling_std": 1810.1,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 14396.03,
+        "median": 14945.7,
+        "std": 3950,
+        "iqr": 3224.7,
+        "q1": 13658.45,
+        "q3": 16883.15,
+        "sample_count": 15,
+        "rolling_mean": 13260.1,
+        "rolling_std": 3625.04,
+        "last_update": "2026-09-29T16:14:51.845Z"
       },
       "stop_count": {
-        "mean": 42.5,
+        "mean": 86.2,
         "median": 43,
-        "std": 4.59,
-        "iqr": 6.25,
-        "q1": 39.75,
-        "q3": 46,
-        "sample_count": 14,
-        "rolling_mean": 42.31,
-        "rolling_std": 4.4,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "std": 163.57,
+        "iqr": 6.5,
+        "q1": 40.5,
+        "q3": 47,
+        "sample_count": 15,
+        "rolling_mean": 140.66,
+        "rolling_std": 143.97,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "active_ratio": {
-        "mean": 94.01,
-        "median": 93.83,
-        "std": 0.8,
-        "iqr": 0.79,
-        "q1": 93.56,
-        "q3": 94.36,
-        "sample_count": 14,
-        "rolling_mean": 94.05,
-        "rolling_std": 0.79,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 93.19,
+        "median": 93.81,
+        "std": 3.14,
+        "iqr": 0.83,
+        "q1": 93.4,
+        "q3": 94.22,
+        "sample_count": 15,
+        "rolling_mean": 92.21,
+        "rolling_std": 2.8,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "daily_monitoring": {
-        "mean": 22564.45,
-        "median": 22485.35,
-        "std": 1943.12,
-        "iqr": 3229.33,
-        "q1": 21020.82,
-        "q3": 24250.15,
-        "sample_count": 14,
-        "rolling_mean": 22595.06,
-        "rolling_std": 2116.76,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 21991.26,
+        "median": 22223.6,
+        "std": 2850.2,
+        "iqr": 3277.95,
+        "q1": 20813.25,
+        "q3": 24091.2,
+        "sample_count": 15,
+        "rolling_mean": 21300.79,
+        "rolling_std": 2787.11,
+        "last_update": "2026-09-29T16:14:51.846Z"
       }
     },
     "layer2": {
       "lick_frequency": {
-        "mean": 14.43,
+        "mean": 42.73,
         "median": 14,
-        "std": 2.29,
-        "iqr": 4.75,
-        "q1": 12.25,
+        "std": 105.93,
+        "iqr": 4.5,
+        "q1": 12.5,
         "q3": 17,
-        "sample_count": 14,
-        "rolling_mean": 14.81,
-        "rolling_std": 2.1,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "sample_count": 15,
+        "rolling_mean": 78.44,
+        "rolling_std": 93.12,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "lick_duration": {
-        "mean": 1812.79,
-        "median": 1792.2,
-        "std": 212.93,
-        "iqr": 319.88,
-        "q1": 1643.5,
-        "q3": 1963.38,
-        "sample_count": 14,
-        "rolling_mean": 1848.19,
-        "rolling_std": 238.62,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 2139.43,
+        "median": 1816.8,
+        "std": 1239.39,
+        "iqr": 398.75,
+        "q1": 1649.6,
+        "q3": 2048.35,
+        "sample_count": 15,
+        "rolling_mean": 2577.84,
+        "rolling_std": 1092.17,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "scratch_frequency": {
-        "mean": 4.21,
+        "mean": 19.6,
         "median": 4,
-        "std": 1.52,
+        "std": 57.59,
         "iqr": 3,
         "q1": 3,
         "q3": 6,
-        "sample_count": 14,
-        "rolling_mean": 4,
-        "rolling_std": 1.46,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "sample_count": 15,
+        "rolling_mean": 38.65,
+        "rolling_std": 50.72,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "scratch_duration": {
-        "mean": 114.56,
-        "median": 116.8,
-        "std": 34.2,
-        "iqr": 67.45,
-        "q1": 81.33,
-        "q3": 148.78,
-        "sample_count": 14,
-        "rolling_mean": 122.38,
-        "rolling_std": 34.03,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 193.57,
+        "median": 120.9,
+        "std": 297.49,
+        "iqr": 71.45,
+        "q1": 82.15,
+        "q3": 153.6,
+        "sample_count": 15,
+        "rolling_mean": 298.99,
+        "rolling_std": 260.49,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "head_shake_frequency": {
-        "mean": 3,
+        "mean": 18.4,
         "median": 3,
-        "std": 1.13,
+        "std": 57.63,
         "iqr": 2,
         "q1": 2,
         "q3": 4,
-        "sample_count": 14,
-        "rolling_mean": 2.77,
-        "rolling_std": 1.02,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "sample_count": 15,
+        "rolling_mean": 37.46,
+        "rolling_std": 50.76,
+        "last_update": "2026-09-29T16:14:51.846Z"
       }
     },
     "layer3_hourly": {
       "00-06": {
-        "mean": 1805.16,
-        "median": 1798.85,
-        "std": 155.45,
-        "iqr": 258.33,
-        "q1": 1681.67,
-        "q3": 1940,
-        "sample_count": 14,
-        "rolling_mean": 1807.61,
-        "rolling_std": 169.34,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 1684.81,
+        "median": 1777.9,
+        "std": 474.67,
+        "iqr": 262.25,
+        "q1": 1665.05,
+        "q3": 1927.3,
+        "sample_count": 15,
+        "rolling_mean": 1536.46,
+        "rolling_std": 429.12,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "06-12": {
-        "mean": 6092.41,
-        "median": 6071.05,
-        "std": 524.63,
-        "iqr": 871.95,
-        "q1": 5675.63,
-        "q3": 6547.57,
-        "sample_count": 14,
-        "rolling_mean": 6100.68,
-        "rolling_std": 571.52,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 5686.25,
+        "median": 6000.4,
+        "std": 1602.01,
+        "iqr": 885.05,
+        "q1": 5619.6,
+        "q3": 6504.65,
+        "sample_count": 15,
+        "rolling_mean": 5185.58,
+        "rolling_std": 1448.29,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "12-18": {
-        "mean": 9477.07,
-        "median": 9443.85,
-        "std": 816.1,
-        "iqr": 1356.27,
-        "q1": 8828.77,
-        "q3": 10185.05,
-        "sample_count": 14,
-        "rolling_mean": 9489.92,
-        "rolling_std": 889.03,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 8845.27,
+        "median": 9333.9,
+        "std": 2492.01,
+        "iqr": 1376.7,
+        "q1": 8741.6,
+        "q3": 10118.3,
+        "sample_count": 15,
+        "rolling_mean": 8066.44,
+        "rolling_std": 2252.89,
+        "last_update": "2026-09-29T16:14:51.846Z"
       },
       "18-24": {
-        "mean": 5189.83,
-        "median": 5171.6,
-        "std": 446.93,
-        "iqr": 742.73,
-        "q1": 4834.82,
-        "q3": 5577.55,
-        "sample_count": 14,
-        "rolling_mean": 5196.87,
-        "rolling_std": 486.87,
-        "last_update": "2026-09-09T09:45:58.485Z"
+        "mean": 4843.84,
+        "median": 5111.4,
+        "std": 1364.68,
+        "iqr": 753.95,
+        "q1": 4787.05,
+        "q3": 5541,
+        "sample_count": 15,
+        "rolling_mean": 4417.34,
+        "rolling_std": 1233.73,
+        "last_update": "2026-09-29T16:14:51.846Z"
       }
     },
     "metrics": {
       "lick_count": {
-        "mean": 14.43,
-        "std": 2.29,
+        "mean": 42.73,
+        "std": 105.93,
         "median": 14,
-        "iqr": 4.75
+        "iqr": 4.5
       },
       "lick_time": {
-        "mean": 1812.79,
-        "std": 212.93,
-        "median": 1792.2,
-        "iqr": 319.88
+        "mean": 2139.43,
+        "std": 1239.39,
+        "median": 1816.8,
+        "iqr": 398.75
       },
       "scratch_count": {
-        "mean": 4.21,
-        "std": 1.52,
+        "mean": 19.6,
+        "std": 57.59,
         "median": 4,
         "iqr": 3
       },
       "scratch_time": {
-        "mean": 114.56,
-        "std": 34.2,
-        "median": 116.8,
-        "iqr": 67.45
+        "mean": 193.57,
+        "std": 297.49,
+        "median": 120.9,
+        "iqr": 71.45
       },
       "shake_count": {
-        "mean": 3,
-        "std": 1.13,
+        "mean": 18.4,
+        "std": 57.63,
         "median": 3,
         "iqr": 2
       },
@@ -2074,28 +2244,28 @@
         "iqr": 0
       },
       "walk_time": {
-        "mean": 3919.02,
-        "std": 486.71,
-        "median": 3774.4,
-        "iqr": 896.65
+        "mean": 3810.43,
+        "std": 621.43,
+        "median": 3701.1,
+        "iqr": 885.6
       },
       "walk_count": {
-        "mean": 31.93,
-        "std": 3.99,
+        "mean": 144.67,
+        "std": 421.84,
         "median": 33,
-        "iqr": 6.5
+        "iqr": 7
       },
       "stop_time": {
-        "mean": 15355.61,
-        "std": 1704.49,
-        "median": 15416.9,
-        "iqr": 2787.85
+        "mean": 14396.03,
+        "std": 3950,
+        "median": 14945.7,
+        "iqr": 3224.7
       },
       "stop_count": {
-        "mean": 42.5,
-        "std": 4.59,
+        "mean": 86.2,
+        "std": 163.57,
         "median": 43,
-        "iqr": 6.25
+        "iqr": 6.5
       },
       "lick_pct_day": {
         "mean": 8.06,
@@ -16516,5 +16686,20 @@
     "sanity_warnings": [
       "Lick Duration 個體基線（20.1 min/day）遠低於群體參考值（~60 min/day）。監控時間可能不足或模型漏偵。"
     ]
+  },
+  "v2_hourly_persist": {
+    "date": "2026/9/30",
+    "hourly": {
+      "00": {
+        "walk": 268.95700788497925,
+        "lick": 1022.0745711326599,
+        "scratch": 193.57891726493835,
+        "shake": 27.432105779647827,
+        "stop": 213.46737790107727,
+        "monitoring_sec": 2187.4621131420135,
+        "visible_sec": 2187.4621131420135,
+        "low_conf_sec": 461.95213317871094
+      }
+    }
   }
 }
