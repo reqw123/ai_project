@@ -10,8 +10,8 @@ FrameProcessor.process() Characterization / Regression Test
 這裡是 Regression Test，目的是保護「真實系統」的行為，mock 掉核心依賴
 會讓保護網失去意義）。因此本測試：
 
-- 需要真實模型檔（`_snapshot_utils.SNAPSHOT_YOLO_MODEL` / `SNAPSHOT_STGCN_MODEL`，
-  固定版本、不跟 config.py 預設模型走）與
+- 需要測試基準模型（`_test_models.py`：`yolo_models/test_baseline.pt`、
+  `stgcn_models/test_baseline/test_baseline.pth`，不跟 config.py 預設模型走）與
   固定測試影片（`_snapshot_utils.FIXED_VIDEO`）存在，否則自動跳過。
 - 浮點數（confidence / class_probs）使用容許誤差比較（見下方
   `_FLOAT_TOLERANCE`），不做完全相等比較——GPU 推論結果在不同硬體/驅動/
@@ -37,18 +37,17 @@ import pytest
 
 from config import LoggingConfig, RunModeConfig
 
-from _snapshot_utils import (
-    FIXED_VIDEO,
-    FRAME_COUNT,
-    SNAPSHOT_PATH,
-    SNAPSHOT_STGCN_MODEL,
-    SNAPSHOT_YOLO_MODEL,
-    capture_process_outputs,
+from _snapshot_utils import FIXED_VIDEO, FRAME_COUNT, SNAPSHOT_PATH, capture_process_outputs
+from _test_models import (
+    TEST_STGCN_MODEL,
+    TEST_YOLO_MODEL,
+    fingerprint_mismatch_message,
+    models_available,
 )
 
 _FLOAT_TOLERANCE = 1e-4  # GPU 浮點數合理誤差；不同硬體/cuDNN 版本可能有極小差異
 
-_MODELS_AVAILABLE = Path(SNAPSHOT_YOLO_MODEL).exists() and Path(SNAPSHOT_STGCN_MODEL).exists()
+_MODELS_AVAILABLE = models_available()
 _VIDEO_AVAILABLE = Path(FIXED_VIDEO).exists()
 
 pytestmark = pytest.mark.skipif(
@@ -88,8 +87,8 @@ def isolated_frame_processor(tmp_path, monkeypatch):
     monkeypatch.setattr(RunModeConfig, "VIDEO_START_DATETIME", None)
 
     processor = FrameProcessor(
-        yolo_model_path=SNAPSHOT_YOLO_MODEL,
-        stgcn_model_path=SNAPSHOT_STGCN_MODEL,
+        yolo_model_path=TEST_YOLO_MODEL,
+        stgcn_model_path=TEST_STGCN_MODEL,
         video_path=FIXED_VIDEO,
         nodered_url=None,  # 明確關閉 Node-RED 推送，測試不會發出任何網路請求
         device="cuda",
@@ -114,6 +113,9 @@ def _load_snapshot() -> dict:
 def test_process_output_matches_characterization_snapshot(isolated_frame_processor):
     """對固定影片的固定幀數逐一呼叫 process()，輸出需與已凍結的基準快照一致。"""
     snapshot = _load_snapshot()
+    mismatch = fingerprint_mismatch_message(snapshot, "generate_frame_processor_snapshot.py")
+    if mismatch:
+        pytest.fail(mismatch)
     baseline_records = snapshot["records"]
 
     current_records = capture_process_outputs(isolated_frame_processor, FRAME_COUNT)

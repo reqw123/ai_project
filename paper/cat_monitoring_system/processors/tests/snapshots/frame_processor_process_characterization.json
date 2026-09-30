@@ -1,7 +1,9 @@
 {
   "fixed_video": "C:\\Users\\homec\\OneDrive\\圖片\\貓咪圖像資料集\\主要測試\\walk\\7月7日 (8).mp4",
-  "yolo_model": "v11s_152.pt",
-  "stgcn_model": "run_153_xy_conf_v_bone_att_on",
+  "test_models": {
+    "yolo_sha256": "ee30ea287855af26",
+    "stgcn_sha256": "d0423d05c6d986f3"
+  },
   "frame_count": 90,
   "records": [
     {

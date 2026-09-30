@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from config import LoggingConfig, ModelPaths
+from config import LoggingConfig, RunModeConfig
 from logutils import csv_logger as csv_logger_module
 from trackers import behavior_tracker as behavior_tracker_module
 
@@ -34,13 +34,17 @@ from _golden_dataset_utils import (
     process_video_golden,
     read_csv_rows,
 )
+from _test_models import (
+    TEST_STGCN_MODEL,
+    TEST_YOLO_MODEL,
+    fingerprint_mismatch_message,
+    models_available,
+)
 
 _FLOAT_TOLERANCE = 1e-4  # GPU 浮點數合理誤差
 _FIXED_START = __import__("datetime").datetime(2026, 1, 1, 8, 0, 0)
 
-_MODELS_AVAILABLE = Path(ModelPaths.YOLO_MODEL).exists() and Path(
-    ModelPaths.STGCN_MODEL
-).exists()
+_MODELS_AVAILABLE = models_available()
 _VIDEOS_AVAILABLE = all(Path(p).exists() for p, _ in GOLDEN_VIDEOS.values())
 
 pytestmark = pytest.mark.skipif(
@@ -65,7 +69,11 @@ def _load_snapshot(behavior_name: str) -> dict:
             "確認輸出合理後，把產生的快照檔一併提交，測試才有比較基準。"
         )
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        snapshot = json.load(f)
+    mismatch = fingerprint_mismatch_message(snapshot, "generate_golden_dataset_snapshot.py")
+    if mismatch:
+        pytest.fail(f"[{behavior_name}] {mismatch}")
+    return snapshot
 
 
 @pytest.fixture
@@ -86,10 +94,12 @@ def golden_result(request, tmp_path, monkeypatch):
     monkeypatch.setattr(LoggingConfig, "CSV_PATH", str(csv_path))
     monkeypatch.setattr(LoggingConfig, "SEGMENTS_CSV_PATH", str(segments_path))
     monkeypatch.setattr(LoggingConfig, "TRACKER_STATE_PATH", str(tmp_path / "tracker_state.json"))
+    # 「影片開始錄影時間」會讓本機影片改用影片時鐘、蓋過 GoldenClock；快照不該隨這個執行設定變動
+    monkeypatch.setattr(RunModeConfig, "VIDEO_START_DATETIME", None)
 
     processor = FrameProcessor(
-        yolo_model_path=ModelPaths.YOLO_MODEL,
-        stgcn_model_path=ModelPaths.STGCN_MODEL,
+        yolo_model_path=TEST_YOLO_MODEL,
+        stgcn_model_path=TEST_STGCN_MODEL,
         video_path=video_path,
         nodered_url=None,
         device="cuda",

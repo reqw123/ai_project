@@ -7,7 +7,7 @@
 快照做比較，不會自動重新產生——否則測試會失去偵測「行為被意外改變」的
 能力。
 
-執行方式（需要真實 YOLO/ST-GCN 模型檔 + yolo_new conda 環境，且需要
+執行方式（需要測試基準模型（見 _test_models.py） + yolo_new conda 環境，且需要
 FIXED_VIDEO 指到的影片檔存在）：
 
     python processors/tests/generate_frame_processor_snapshot.py
@@ -34,10 +34,9 @@ from _snapshot_utils import (  # noqa: E402
     FIXED_VIDEO,
     FRAME_COUNT,
     SNAPSHOT_PATH,
-    SNAPSHOT_STGCN_MODEL,
-    SNAPSHOT_YOLO_MODEL,
     capture_process_outputs,
 )
+from _test_models import TEST_STGCN_MODEL, TEST_YOLO_MODEL, model_fingerprint  # noqa: E402
 
 
 def main() -> None:
@@ -61,14 +60,14 @@ def main() -> None:
 
     if not Path(FIXED_VIDEO).exists():
         raise FileNotFoundError(f"固定測試影片不存在: {FIXED_VIDEO}")
-    if not Path(SNAPSHOT_YOLO_MODEL).exists():
-        raise FileNotFoundError(f"YOLO 模型不存在: {SNAPSHOT_YOLO_MODEL}")
-    if not Path(SNAPSHOT_STGCN_MODEL).exists():
-        raise FileNotFoundError(f"ST-GCN 模型不存在: {SNAPSHOT_STGCN_MODEL}")
+    if not Path(TEST_YOLO_MODEL).exists():
+        raise FileNotFoundError(f"YOLO 模型不存在: {TEST_YOLO_MODEL}")
+    if not Path(TEST_STGCN_MODEL).exists():
+        raise FileNotFoundError(f"ST-GCN 模型不存在: {TEST_STGCN_MODEL}")
 
     processor = FrameProcessor(
-        yolo_model_path=SNAPSHOT_YOLO_MODEL,
-        stgcn_model_path=SNAPSHOT_STGCN_MODEL,
+        yolo_model_path=TEST_YOLO_MODEL,
+        stgcn_model_path=TEST_STGCN_MODEL,
         video_path=FIXED_VIDEO,
         nodered_url=None,  # 明確關閉 Node-RED 推送，腳本執行期間不會發出任何網路請求
         device="cuda",
@@ -84,8 +83,7 @@ def main() -> None:
         json.dump(
             {
                 "fixed_video": FIXED_VIDEO,
-                "yolo_model": Path(SNAPSHOT_YOLO_MODEL).name,
-                "stgcn_model": Path(SNAPSHOT_STGCN_MODEL).parent.name,
+                "test_models": model_fingerprint(),
                 "frame_count": len(records),
                 "records": records,
             },

@@ -37,7 +37,7 @@ for _p in (_cat_monitoring_system_dir, _paper_dir):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from config import LoggingConfig, ModelPaths  # noqa: E402
+from config import LoggingConfig, RunModeConfig  # noqa: E402
 from logutils import csv_logger as csv_logger_module  # noqa: E402
 from processors.frame_processor import FrameProcessor  # noqa: E402
 from trackers import behavior_tracker as behavior_tracker_module  # noqa: E402
@@ -49,6 +49,7 @@ from _golden_dataset_utils import (  # noqa: E402
     process_video_golden,
     read_csv_rows,
 )
+from _test_models import TEST_STGCN_MODEL, TEST_YOLO_MODEL, model_fingerprint  # noqa: E402
 
 _FIXED_START = __import__("datetime").datetime(2026, 1, 1, 8, 0, 0)
 
@@ -72,10 +73,12 @@ def _run_one_behavior(behavior_name: str, video_path: str, frame_count: int, scr
     LoggingConfig.CSV_PATH = str(behavior_dir / "cat_monitoring_log.csv")
     LoggingConfig.SEGMENTS_CSV_PATH = str(behavior_dir / "behavior_segments_log.csv")
     LoggingConfig.TRACKER_STATE_PATH = str(behavior_dir / "tracker_state.json")
+    # 「影片開始錄影時間」會讓本機影片改用影片時鐘、蓋過 GoldenClock
+    RunModeConfig.VIDEO_START_DATETIME = None
 
     processor = FrameProcessor(
-        yolo_model_path=ModelPaths.YOLO_MODEL,
-        stgcn_model_path=ModelPaths.STGCN_MODEL,
+        yolo_model_path=TEST_YOLO_MODEL,
+        stgcn_model_path=TEST_STGCN_MODEL,
         video_path=video_path,
         nodered_url=None,  # 明確關閉 Node-RED 推送，不會發出任何網路請求
         device="cuda",
@@ -100,6 +103,7 @@ def _run_one_behavior(behavior_name: str, video_path: str, frame_count: int, scr
     return {
         "behavior": behavior_name,
         "video": video_path,
+        "test_models": model_fingerprint(),
         "frame_count": len(predictions),
         "prediction": predictions,
         "statistics": statistics,
@@ -110,10 +114,10 @@ def _run_one_behavior(behavior_name: str, video_path: str, frame_count: int, scr
 
 
 def main() -> None:
-    if not Path(ModelPaths.YOLO_MODEL).exists():
-        raise FileNotFoundError(f"YOLO 模型不存在: {ModelPaths.YOLO_MODEL}")
-    if not Path(ModelPaths.STGCN_MODEL).exists():
-        raise FileNotFoundError(f"ST-GCN 模型不存在: {ModelPaths.STGCN_MODEL}")
+    if not Path(TEST_YOLO_MODEL).exists():
+        raise FileNotFoundError(f"YOLO 模型不存在: {TEST_YOLO_MODEL}")
+    if not Path(TEST_STGCN_MODEL).exists():
+        raise FileNotFoundError(f"ST-GCN 模型不存在: {TEST_STGCN_MODEL}")
 
     scratch_dir = _processors_tests_dir / "_scratch_golden"
     SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
