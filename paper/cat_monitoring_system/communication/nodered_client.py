@@ -41,9 +41,20 @@ class _EndpointWorker:
             except queue.Full:
                 pass
 
-    def close(self) -> None:
-        """送出停止訊號（None），讓 worker 結束迴圈。"""
-        self.put(None)  # type: ignore[arg-type]
+    def close(self, wait: float = 0.0) -> None:
+        """送出停止訊號（None），讓 worker 結束迴圈。
+
+        wait=0（預設）：用 put() 的丟舊值規則，佇列裡還沒送的資料會被停止訊號取代。
+        wait>0：排在未送資料之後（佇列滿就等 worker 取走），再等 worker 送完結束，
+        各最多 wait 秒——程式要結束但最後一筆統計不能掉時使用。"""
+        if wait <= 0:
+            self.put(None)  # type: ignore[arg-type]
+            return
+        try:
+            self._q.put(None, timeout=wait)
+        except queue.Full:
+            self.put(None)  # type: ignore[arg-type]
+        self._thread.join(timeout=wait)
 
     def _run(self) -> None:
         while True:
@@ -81,7 +92,7 @@ class NodeRedClient:
             worker.put(data)
         return True
 
-    def close(self) -> None:
-        """通知所有 worker 結束（程式關閉時呼叫）。"""
+    def close(self, wait: float = 0.0) -> None:
+        """通知所有 worker 結束（程式關閉時呼叫）；wait>0 時等最後一筆送出，見 _EndpointWorker.close。"""
         for worker in self._workers:
-            worker.close()
+            worker.close(wait=wait)

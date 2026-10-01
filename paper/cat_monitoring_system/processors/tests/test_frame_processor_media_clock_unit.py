@@ -103,6 +103,26 @@ def test_finish_media_day_only_in_video_clock_mode(video_file, monkeypatch):
     assert fp.tracker.finished is True
 
 
+def test_finish_media_day_marks_last_push_as_media_finished(video_file, monkeypatch):
+    """影片播完的最後一筆推送帶 media_finished，儀表板收到就停在真實值、不再補算顯示。"""
+    sent = []
+
+    class _FakeNodeRed:
+        def send_data(self, payload):
+            sent.append(payload)
+
+    fp = _shell()
+    fp.nodered = _FakeNodeRed()
+    fp._display_behavior_id = 0
+    fp._display_confidence = 0.9
+    fp._build_nodered_payload = lambda bid, conf: {"today_stats": {"total_uptime": 12.3}}
+    monkeypatch.setattr(RunModeConfig, "VIDEO_START_DATETIME", START)
+    fp._setup_media_clock(video_file)
+    fp.finish_media_day()
+    assert sent == [{"today_stats": {"total_uptime": 12.3}, "media_finished": True}]
+    assert fp.tracker.finished is True
+
+
 def test_config_parser_and_settings_validator_accept_same_formats():
     from config import _parse_video_start
     import settings_manager as sm
@@ -114,3 +134,25 @@ def test_config_parser_and_settings_validator_accept_same_formats():
     for bad in ("18:00", "2026/09/30 18:00", "2026-09-30"):
         assert _parse_video_start(bad) is None
         assert sm._validate_video_start(bad, "x") is not None
+
+
+def test_uses_media_clock_reflects_setup():
+    fp = _shell()
+    assert fp.uses_media_clock is False
+    fp._media_clock_start = START.timestamp()
+    assert fp.uses_media_clock is True
+
+
+@pytest.mark.parametrize(
+    "seconds, expected",
+    [
+        (0.0, "0 小時 0 分 0 秒"),
+        (3.1, "0 小時 0 分 3 秒"),
+        (3725.6, "1 小時 2 分 6 秒"),
+        (21645.0, "6 小時 0 分 45 秒"),
+    ],
+)
+def test_run_summary_line_formats_total_uptime(seconds, expected):
+    fp = _shell()
+    fp.tracker.run_seconds = seconds
+    assert fp.run_summary_line() == f"📊 此次運行總監測時長：{expected}"

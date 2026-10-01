@@ -262,6 +262,7 @@ def run_gui_mode():
     last_frame = None  # 暫停時重複顯示用；一開始尚未讀過畫面時為 None
 
     media_day_finished = False  # 本機錄影播完只寫一次多天歷史
+    media_run_finished = False  # 影片時鐘模式播完自動結束：清理完後在終端最後一行印總監測時長
     try:
         while True:
             if not paused or last_frame is None:
@@ -274,6 +275,11 @@ def run_gui_mode():
                             processor.finish_media_day()
                         except Exception as e:
                             print(f"⚠ 影片播完寫入多天歷史失敗：{e}")
+                        # 影片時鐘模式＝為基線收集資料：播完就結束，統計停在影片結尾
+                        if processor.uses_media_clock:
+                            print("🏁 影片已推論完畢，資料收集完成：系統自動結束（統計停在影片結尾）")
+                            media_run_finished = True
+                            break
                     time.sleep(0.01)
                     continue
                 last_frame, *_ = processor.process(frame)
@@ -325,6 +331,8 @@ def run_gui_mode():
                 processor.show_bbox = not processor.show_bbox
     finally:
         processor.cleanup()
+    if media_run_finished:
+        print(processor.run_summary_line())
 
 
 if __name__ == "__main__":

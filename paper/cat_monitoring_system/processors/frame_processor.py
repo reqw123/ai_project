@@ -865,6 +865,18 @@ class FrameProcessor:
             "（時長／時段／日期照影片時間，跟處理快慢無關；播完寫入那一天）"
         )
 
+    @property
+    def uses_media_clock(self) -> bool:
+        """本機錄影且設了影片開始錄影時間（統計照影片時間）時為 True。"""
+        return self._media_clock_start is not None
+
+    def run_summary_line(self) -> str:
+        """影片播完自動結束時印在終端最後一行：此次運行的總監測時長（系統運行時間，照影片時間累計）。"""
+        total = int(round(self.tracker.run_seconds))
+        h, rem = divmod(total, 3600)
+        m, sec = divmod(rem, 60)
+        return f"📊 此次運行總監測時長：{h} 小時 {m} 分 {sec} 秒"
+
     def _media_now_ts(self) -> float:
         """影片時鐘：錄影開始時間 + 目前影片位置（秒）。"""
         return self._media_clock_start + self._current_source_timestamp()
@@ -883,11 +895,12 @@ class FrameProcessor:
             return
         try:
             if self.nodered:
-                self.nodered.send_data(
-                    self._build_nodered_payload(
-                        self._display_behavior_id, self._display_confidence
-                    )
+                payload = self._build_nodered_payload(
+                    self._display_behavior_id, self._display_confidence
                 )
+                # 標記這是影片的最後一筆：儀表板收到就停在這個值，不再往前補算顯示
+                payload["media_finished"] = True
+                self.nodered.send_data(payload)
         except Exception as e:
             print(f"⚠ 影片播完時推送最後統計給 Node-RED 失敗（不影響寫入多天歷史）：{e}")
         day = self.tracker.finish_media_day()
@@ -1231,8 +1244,11 @@ class FrameProcessor:
             },
         }
 
-    def cleanup(self):
-        """釋放攝影機/串流資源，關閉 CSV 記錄器與 Node-RED 連線、通知所有插件關閉。"""
+    def cleanup(self, flush_timeout: float = 0.0):
+        """釋放攝影機/串流資源，關閉 CSV 記錄器與 Node-RED 連線、通知所有插件關閉。
+
+        flush_timeout > 0：關閉 Node-RED 連線前最多等這麼多秒，讓還在佇列裡的最後一筆
+        推送送出去（影片播完自動結束時用；預設 0＝不等，維持原本 Ctrl+C 的快速結束）。"""
         if self._grabber is not None:
             self._grabber.stop()
         self.cap.release()
@@ -1241,7 +1257,7 @@ class FrameProcessor:
         if self.segment_logger:
             self.segment_logger.close()
         if self.nodered:
-            self.nodered.close()
+            self.nodered.close(wait=flush_timeout)
         for _plugin in self._plugins:
             try:
                 _plugin.close()

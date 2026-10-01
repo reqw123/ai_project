@@ -3,6 +3,8 @@ MJPEG 串流管理
 """
 
 import logging
+import os
+import sys
 import threading
 import time
 from collections import deque
@@ -14,6 +16,20 @@ _TARGET_MODEL_FPS = STGCNConfig.TARGET_MODEL_FPS
 _ENABLE_FPS_DOWNSAMPLE = STGCNConfig.ENABLE_FPS_DOWNSAMPLE
 _STREAM_DISPLAY_SIZE = VisualizationConfig.STREAM_DISPLAY_SIZE
 _CLIP_SECONDS = VisualizationConfig.CLIP_SECONDS
+
+# 本機錄影（影片時鐘模式）播完後自動結束行程前，等 Node-RED 最後一筆推送送出的上限秒數
+_MEDIA_EXIT_FLUSH_SECONDS = 3.0
+
+
+def _exit_process() -> None:
+    """結束整個行程（Flask 主執行緒卡在 accept()，只能用 os._exit）；獨立成函式方便測試替換。
+    os._exit 不會清空輸出緩衝區，先 flush，否則輸出導到檔案時最後幾行訊息會不見。"""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+    os._exit(0)
 
 
 class SharedFrameStreamer:
@@ -110,6 +126,11 @@ class SharedFrameStreamer:
                                 _finish_day()
                             except Exception as e:
                                 logging.error("finish_media_day 失敗：%s", e)
+                        # 影片時鐘模式＝為基線收集資料的錄影推論：播完代表那一天的資料已收齊，
+                        # 直接結束行程，確保統計停在影片結尾，不會再有任何東西被計入那一天
+                        if getattr(self.frame_processor, "uses_media_clock", False):
+                            self._exit_after_media_finished()
+                            return
                     continue
 
                 raw_frame_count += 1
@@ -152,6 +173,20 @@ class SharedFrameStreamer:
             except Exception as e:
                 logging.error("SharedFrameStreamer._update_frame error: %s", e)
                 time.sleep(0.1)  # 防止 tight error loop 佔滿 CPU
+
+    def _exit_after_media_finished(self) -> None:
+        """錄影資料收集完畢：送完 Node-RED 最後一筆、關閉記錄器後結束行程。"""
+        self.running = False
+        print("🏁 影片已推論完畢，資料收集完成：系統自動結束（統計停在影片結尾）")
+        try:
+            self.frame_processor.cleanup(flush_timeout=_MEDIA_EXIT_FLUSH_SECONDS)
+        except Exception as e:
+            logging.error("影片播完自動結束前清理失敗（仍會結束行程）：%s", e)
+        try:
+            print(self.frame_processor.run_summary_line())  # 終端最後一行
+        except Exception as e:
+            logging.error("計算此次運行總監測時長失敗：%s", e)
+        _exit_process()
 
     def get_jpeg(self) -> bytes | None:
         """回傳最新已編碼的 JPEG bytes。
