@@ -37,7 +37,7 @@
     "auto_start_processing": true,
     "scheduled_start_time": "",
     "scheduled_end_time": "",
-    "video_start_time": "2026-09-30 18:00"
+    "video_start_time": ""
   },
   "flask": {
     "host": "0.0.0.0",

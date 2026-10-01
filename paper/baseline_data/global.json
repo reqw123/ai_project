@@ -1,50 +1,50 @@
 {
   "python_ip": "192.168.0.171",
   "v2_today": {
-    "date": "2026/9/30",
+    "date": "2026/10/1",
     "walk": {
-      "count": 131,
-      "time": 266.6
+      "count": 8,
+      "time": 2
     },
     "lick": {
-      "count": 49,
-      "time": 1022.8
+      "count": 0,
+      "time": 0
     },
     "scratch": {
-      "count": 18,
-      "time": 193.3
+      "count": 10,
+      "time": 48.2
     },
     "shake": {
-      "count": 18,
-      "time": 27.4
+      "count": 7,
+      "time": 5.5
     },
     "stop": {
-      "count": 89,
-      "time": 213.9
+      "count": 16,
+      "time": 14.9
     },
-    "active_time": 1724,
+    "active_time": 70.7,
     "low_conf": {
-      "count": 307,
-      "time": 462
+      "count": 53,
+      "time": 47.2
     },
     "not_detected_time": 0,
-    "monitoring_seconds": 2187.5,
-    "cat_visible_time": 2187.5,
-    "total_uptime": 2187.5,
-    "run_seconds": 2187.5,
+    "monitoring_seconds": 119.3,
+    "cat_visible_time": 119.3,
+    "total_uptime": 119.3,
+    "run_seconds": 119.3,
     "low_conf_breakdown": {
-      "warmup": 3.5,
-      "uncertain": 188.6,
-      "sqa": 269.9
+      "warmup": 16.3,
+      "uncertain": 6.5,
+      "sqa": 24.4
     },
     "visible_ratio": 100,
-    "active_non_rest_time": 1510.1000000000001,
-    "active_ratio": 69.03,
-    "rest_ratio": 9.78,
-    "lick_pct_of_day": 46.757,
-    "scratch_pct_of_day": 8.837,
-    "lick_pct_of_active": 67.731,
-    "scratch_pct_of_active": 12.8
+    "active_non_rest_time": 55.7,
+    "active_ratio": 46.69,
+    "rest_ratio": 12.49,
+    "lick_pct_of_day": 0,
+    "scratch_pct_of_day": 40.402,
+    "lick_pct_of_active": 0,
+    "scratch_pct_of_active": 86.535
   },
   "v2_hourly": {
     "10": {
@@ -1840,6 +1840,85 @@
         }
       },
       "risk": null
+    },
+    {
+      "date": "2026/9/30",
+      "lick_count": 64,
+      "lick_time": 1276.6,
+      "scratch_count": 26,
+      "scratch_time": 254,
+      "shake_count": 26,
+      "shake_time": 36.5,
+      "walk_count": 167,
+      "walk_time": 340.5,
+      "stop_count": 120,
+      "stop_time": 271.7,
+      "active_time": 2179.4,
+      "low_conf_count": 408,
+      "low_conf_time": 594.8,
+      "low_conf_warmup_time": 10,
+      "low_conf_uncertain_time": 237.5,
+      "low_conf_sqa_time": 347.4,
+      "not_detected_time": 0,
+      "run_seconds": 2774.4,
+      "run_hours": 0.77,
+      "monitoring_seconds": 2774.4,
+      "monitoring_hours": 0.77,
+      "cat_visible_seconds": 2774.4,
+      "visible_ratio": 100,
+      "stop_ratio": 0.125,
+      "active_non_rest_time": 1907.6,
+      "active_ratio": 68.76,
+      "rest_ratio": 9.79,
+      "lick_pct_of_day": 46.014,
+      "scratch_pct_of_day": 9.155,
+      "lick_pct_of_active": 66.922,
+      "scratch_pct_of_active": 13.315,
+      "periods": {
+        "00-06": {
+          "walk": 266.969929933548,
+          "lick": 1022.0745711326599,
+          "scratch": 193.57891726493835,
+          "shake": 27.432105779647827,
+          "stop": 213.46737790107727,
+          "monitoring_sec": 2185.4750351905823,
+          "visible_sec": 2185.4750351905823,
+          "not_detected_sec": 0,
+          "low_conf_sec": 461.95213317871094,
+          "total": 1723.5229020118713
+        },
+        "06-12": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "12-18": {
+          "walk": 0,
+          "lick": 0,
+          "scratch": 0,
+          "shake": 0,
+          "stop": 0,
+          "monitoring_sec": 0,
+          "total": 0
+        },
+        "18-24": {
+          "walk": 74.01731944084167,
+          "lick": 253.52161693572998,
+          "scratch": 61.3467698097229,
+          "shake": 9.160160303115845,
+          "stop": 57.93483018875122,
+          "monitoring_sec": 588.877373456955,
+          "visible_sec": 588.877373456955,
+          "not_detected_sec": 0,
+          "low_conf_sec": 132.89667677879333,
+          "total": 455.9806966781616
+        }
+      },
+      "risk": null
     }
   ],
   "v2_user_settings": {
@@ -1970,6 +2049,35 @@
           "legacy": true
         }
       ]
+    },
+    {
+      "date": "2026/9/30",
+      "tags": [
+        "其他",
+        "如廁異常"
+      ],
+      "note": "",
+      "voice": [
+        {
+          "ts": 1790769370.756,
+          "report_id": 11,
+          "category": "other",
+          "label": "其他",
+          "text": "牠今天肚子痛"
+        },
+        {
+          "ts": 1790780757.406,
+          "report_id": 12,
+          "category": "litter",
+          "label": "如廁異常",
+          "text": "貓咪今天一直拉肚子"
+        }
+      ],
+      "manual": [],
+      "counts": {
+        "其他": 1,
+        "如廁異常": 1
+      }
     }
   ],
   "v2_excluded_dates": [
@@ -1982,7 +2090,7 @@
     "2026/9/29"
   ],
   "v2_baseline": {
-    "computed_at": "2026-09-29T16:14:51.847Z",
+    "computed_at": "2026-09-30T16:00:15.015Z",
     "baseline_period": "all",
     "period_hours": null,
     "count_metrics_available": true,
@@ -2019,7 +2127,7 @@
         "sample_count": 15,
         "rolling_mean": 3610.09,
         "rolling_std": 550.13,
-        "last_update": "2026-09-29T16:14:51.845Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "walk_count": {
         "mean": 144.67,
@@ -2031,7 +2139,7 @@
         "sample_count": 15,
         "rolling_mean": 285.19,
         "rolling_std": 371.26,
-        "last_update": "2026-09-29T16:14:51.845Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "low_conf_duration": {
         "mean": 1049.85,
@@ -2043,7 +2151,7 @@
         "sample_count": 15,
         "rolling_mean": 1174.2,
         "rolling_std": 382.33,
-        "last_update": "2026-09-29T16:14:51.845Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "inactive_duration": {
         "mean": 14396.03,
@@ -2055,7 +2163,7 @@
         "sample_count": 15,
         "rolling_mean": 13260.1,
         "rolling_std": 3625.04,
-        "last_update": "2026-09-29T16:14:51.845Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "stop_count": {
         "mean": 86.2,
@@ -2067,7 +2175,7 @@
         "sample_count": 15,
         "rolling_mean": 140.66,
         "rolling_std": 143.97,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "active_ratio": {
         "mean": 93.19,
@@ -2079,7 +2187,7 @@
         "sample_count": 15,
         "rolling_mean": 92.21,
         "rolling_std": 2.8,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "daily_monitoring": {
         "mean": 21991.26,
@@ -2091,7 +2199,7 @@
         "sample_count": 15,
         "rolling_mean": 21300.79,
         "rolling_std": 2787.11,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       }
     },
     "layer2": {
@@ -2105,7 +2213,7 @@
         "sample_count": 15,
         "rolling_mean": 78.44,
         "rolling_std": 93.12,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "lick_duration": {
         "mean": 2139.43,
@@ -2117,7 +2225,7 @@
         "sample_count": 15,
         "rolling_mean": 2577.84,
         "rolling_std": 1092.17,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "scratch_frequency": {
         "mean": 19.6,
@@ -2129,7 +2237,7 @@
         "sample_count": 15,
         "rolling_mean": 38.65,
         "rolling_std": 50.72,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "scratch_duration": {
         "mean": 193.57,
@@ -2141,7 +2249,7 @@
         "sample_count": 15,
         "rolling_mean": 298.99,
         "rolling_std": 260.49,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       },
       "head_shake_frequency": {
         "mean": 18.4,
@@ -2153,7 +2261,7 @@
         "sample_count": 15,
         "rolling_mean": 37.46,
         "rolling_std": 50.76,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.014Z"
       }
     },
     "layer3_hourly": {
@@ -2167,7 +2275,7 @@
         "sample_count": 15,
         "rolling_mean": 1536.46,
         "rolling_std": 429.12,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.015Z"
       },
       "06-12": {
         "mean": 5686.25,
@@ -2179,7 +2287,7 @@
         "sample_count": 15,
         "rolling_mean": 5185.58,
         "rolling_std": 1448.29,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.015Z"
       },
       "12-18": {
         "mean": 8845.27,
@@ -2191,7 +2299,7 @@
         "sample_count": 15,
         "rolling_mean": 8066.44,
         "rolling_std": 2252.89,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.015Z"
       },
       "18-24": {
         "mean": 4843.84,
@@ -2203,7 +2311,7 @@
         "sample_count": 15,
         "rolling_mean": 4417.34,
         "rolling_std": 1233.73,
-        "last_update": "2026-09-29T16:14:51.846Z"
+        "last_update": "2026-09-30T16:00:15.015Z"
       }
     },
     "metrics": {
@@ -16688,17 +16796,67 @@
     ]
   },
   "v2_hourly_persist": {
-    "date": "2026/9/30",
+    "date": "2026/10/1",
     "hourly": {
-      "00": {
-        "walk": 268.95700788497925,
-        "lick": 1022.0745711326599,
-        "scratch": 193.57891726493835,
-        "shake": 27.432105779647827,
-        "stop": 213.46737790107727,
-        "monitoring_sec": 2187.4621131420135,
-        "visible_sec": 2187.4621131420135,
-        "low_conf_sec": 461.95213317871094
+      "15": {
+        "walk": 0.4624159336090088,
+        "lick": 0,
+        "scratch": 15.44603943824768,
+        "shake": 2.052858352661133,
+        "stop": 4.4471824169158936,
+        "monitoring_sec": 34.14238667488098,
+        "visible_sec": 34.14238667488098,
+        "low_conf_sec": 11.733890533447266
+      },
+      "16": {
+        "walk": 1.5822603702545166,
+        "lick": 0,
+        "scratch": 13.818134784698486,
+        "shake": 1.3694844245910645,
+        "stop": 5.292976140975952,
+        "monitoring_sec": 36.67413544654846,
+        "visible_sec": 36.67413544654846,
+        "low_conf_sec": 14.611279726028442
+      },
+      "17": {
+        "walk": 0.03722691535949707,
+        "lick": 0,
+        "scratch": 5.321173429489136,
+        "shake": 0.7143042087554932,
+        "stop": 1.6313986778259277,
+        "monitoring_sec": 16.550370693206787,
+        "visible_sec": 16.550370693206787,
+        "low_conf_sec": 8.846267461776733
+      },
+      "18": {
+        "walk": 0.03495287895202637,
+        "lick": 0,
+        "scratch": 9.518314838409424,
+        "shake": 1.4029197692871094,
+        "stop": 2.5204038619995117,
+        "monitoring_sec": 22.24689292907715,
+        "visible_sec": 22.24689292907715,
+        "low_conf_sec": 8.770301580429077
+      },
+      "19": {
+        "walk": 0,
+        "lick": 0,
+        "scratch": 5.057637453079224,
+        "shake": 0,
+        "stop": 1.2246415615081787,
+        "monitoring_sec": 8.1801598072052,
+        "visible_sec": 8.1801598072052,
+        "low_conf_sec": 1.8978807926177979
+      },
+      "01": {
+        "walk": 0,
+        "lick": 0,
+        "scratch": 0.12567520141601562,
+        "shake": 0,
+        "stop": 0,
+        "monitoring_sec": 1.4778082370758057,
+        "visible_sec": 1.4778082370758057,
+        "low_conf_sec": 1.35213303565979
       }
     }
   }
