@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import YOLOConfig as _YOLOConfig
 import _window_zoom  # Ctrl+加號／減號縮放視窗（tools/_window_zoom.py）
+import _playback_bar  # 視窗底部時間拉桿／HH:MM:SS／倍速節流（tools/_playback_bar.py）
 from detectors.keypoint_detector import KeypointDetector
 from detectors.behavior_classifier import BehaviorClassifier
 from processors.visualizer import Visualizer
@@ -168,6 +169,19 @@ WINDOW_SCALE_STEP = 0.10  # Ctrl+加號／減號每按一次縮放的幅度（�
 WINDOW_SCALE_MIN = 0.50
 WINDOW_SCALE_MAX = 2.00
 LOOP_PLAYBACK = True  # 是否循環播放
+# 播放倍速（視窗測試模式）：1.0＝跟影片實際時間一樣快；執行中按 = / + 加速、- 減速、0 回到 1x，
+# 階梯見 tools/_playback_bar.py 的 SPEED_STEPS（0.25x～256x）。
+DEFAULT_PLAYBACK_SPEED = 1.0
+# 倍速「大於」這個值、而且推論跟不上時就跳幀快轉（追上設定的倍速）。跳幀後 ST-GCN 的 16 幀序列不連續，
+# 行為分類暫停（畫面顯示 FAST-FWD），回到跟得上的速度、連續播滿 SEQUENCE_LENGTH 幀才恢復。
+# 這個值以下（含 1x）一律逐幀完整推論、不跳幀，推論跟不上時只是實際倍速達不到（畫面底部顯示 actual）。
+FRAME_SKIP_ABOVE_SPEED = 1.0
+# 快轉期間改用 PyAV 讀幀（跳關鍵幀約 15ms、略過一幀約 2ms；OpenCV 精確 seek 1080p 長影片要 0.4～2.9 秒、
+# grab() 一幀約 14ms），回到不跳幀的倍速時 OpenCV 精確 seek 一次接回原本的讀法。見 _playback_bar.FastForwardReader。
+# PyAV 不能用時退回：要跳的幀數在 FAST_FORWARD_GRAB_MAX_FRAMES 以內用 grab()，超過用 OpenCV seek。
+FAST_FORWARD_GRAB_MAX_FRAMES = 10
+SEEK_JUMP_SHORT_SEC = 10   # [ / ] 往回 / 往前跳幾秒
+SEEK_JUMP_LONG_SEC = 60    # { / }（Shift+[ / ]）往回 / 往前跳幾秒
 
 # ===== 音訊同步播放（可選，需先 pip install pygame）=====
 # 純粹「同時播放」，不做逐幀精確同步：畫面播放速度取決於推論耗時，
@@ -554,7 +568,7 @@ _PANEL_LAYOUT_CACHE: dict = {}
 def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, behavior_current_confidences=None, behavior_occurrence_counts=None, total_duration_sec=None):
     """行為面板：每列顯示行為名稱、信心長條（一個）、累積持續秒數、發生次數。
 
-    total_duration_sec：影片總秒數，顯示在 TIMER 後面（例如 "12.34s / 65.00s"）；
+    total_duration_sec：影片總秒數，顯示在 TIMER 後面（HH:MM:SS，例如 "00:00:12 / 01:05:00"）；
     呼叫端只有在來源是「讀得到總長度的影片檔」時才會傳這個值——即時串流／攝影機
     這類沒有固定總長度的來源，呼叫端會傳 None，這裡就只顯示已播放秒數，不會硬湊
     一個不存在的總長度出來。"""
@@ -639,9 +653,9 @@ def draw_behavior_duration_panel(frame, elapsed_sec, behavior_duration_sec, beha
     cv2.putText(frame, title, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, title_fs, (255, 245, 180), text_th, cv2.LINE_AA)
 
     if total_duration_sec is not None and total_duration_sec > 0:
-        timer = f"TIMER {float(elapsed_sec):7.2f}s / {float(total_duration_sec):.2f}s"
+        timer = f"TIMER {_playback_bar.fmt_hms(elapsed_sec)} / {_playback_bar.fmt_hms(total_duration_sec)}"
     else:
-        timer = f"TIMER {float(elapsed_sec):7.2f}s"
+        timer = f"TIMER {_playback_bar.fmt_hms(elapsed_sec)}"
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (0, 0, 0), shadow_th, cv2.LINE_AA)
     cv2.putText(frame, timer, (tx, timer_y), cv2.FONT_HERSHEY_SIMPLEX, meta_fs, (170, 250, 255), text_th, cv2.LINE_AA)
 
@@ -1274,13 +1288,13 @@ def main():
     # 還留在快取裡」的幀；已經在快取最新幀時按 d，改成往前正常推進一幀
     # （跟一般播放走同一條處理路徑，順序未被打亂，不影響 EMA/keypoints_buffer
     # 狀態），處理完自動再次暫停在這一幀。兩者合起來，只要逐格走，就能到達
-    # 影片中任何一幀（影片長度上限 5 分鐘，逐格前進可接受）。
-    # 快取筆數不設上限（可回捲到本次播放最早一幀），但每幀改存 JPEG 壓縮後
-    # 的 bytes、顯示時才解壓，避免長影片直接存未壓縮畫面陣列把記憶體塞爆
-    # （例如 1080p 原始陣列每幀約 6MB，10 分鐘影片就要上百 GB；JPEG 壓縮後
-    # 通常只要 1/20~1/40 大小，同樣長度大概幾 GB，可接受得多）。
+    # 影片中任何一幀（長影片要跳到別處用拉桿／[ ] { } 鍵）。
+    # 每幀存 JPEG 壓縮後的 bytes、顯示時才解壓（1080p 原始陣列每幀約 6MB，JPEG 只要 1/20~1/40），
+    # 而且只保留最近 FRAME_HISTORY_MAX_FRAMES 幀：影片最長到 6 小時，不設上限的話一路播下來
+    # 會累積幾十 GB 把記憶體塞爆。上限內（約 1 分多鐘）可以用 a 往回捲。
     FRAME_HISTORY_JPEG_QUALITY = 90
-    frame_history = deque()
+    FRAME_HISTORY_MAX_FRAMES = 1800
+    frame_history = deque(maxlen=FRAME_HISTORY_MAX_FRAMES)
     history_back_steps = 0  # 0 = 目前顯示最新幀；>0 代表往回看了幾幀
     step_one_frame_and_repause = False  # d 在快取最新幀時觸發：推進一幀後自動重新暫停
 
@@ -1289,9 +1303,58 @@ def main():
         return buf if ok else None
 
     def _show_history_frame(idx):
-        buf = frame_history[idx]
+        buf, pos = frame_history[idx]
         if buf is not None:
-            cv2.imshow(WINDOW_NAME, cv2.imdecode(buf, cv2.IMREAD_COLOR))
+            show_view(cv2.imdecode(buf, cv2.IMREAD_COLOR), pos)
+
+    # 視窗底部的播放控制列（時間拉桿＋HH:MM:SS／幀號／倍速，見 tools/_playback_bar.py）：
+    # 影片畫面縮到「視窗高度扣掉控制列」再把控制列接在下面，整張還是 DISPLAY_SIZE，視窗大小不變。
+    # 快取（frame_history）只存影片畫面＋幀號，控制列每次顯示時才畫，往回捲時拉桿位置跟著那一幀。
+    seek_bar = _playback_bar.SeekBar()
+    play_clock = _playback_bar.PlaybackClock()
+    playback_speed = DEFAULT_PLAYBACK_SPEED
+    band_h = _playback_bar.band_height(DISPLAY_SIZE[0]) if DISPLAY_SIZE is not None else 0
+    body_size = (DISPLAY_SIZE[0], DISPLAY_SIZE[1] - band_h) if DISPLAY_SIZE is not None else None
+    view_body, view_pos = None, 0  # 目前視窗上的影片畫面（不含控制列）與它的幀號（0 起算），暫停中重畫控制列用
+    frames_since_skip = SEQUENCE_LENGTH  # 上次跳幀快轉後連續播了幾幀；< SEQUENCE_LENGTH 代表行為分類還在暫停（FAST-FWD）
+    ff_reader = None         # 目前影片的快轉讀幀器（PyAV，第一次跳幀才開）
+    ff_frame = None          # 快轉跳轉已經解出來的下一幀（下一輪直接用，不再讀）
+    cap_out_of_sync = False  # 快轉改由 PyAV 讀幀後 cap 的讀取位置沒跟上；回到 cap 讀之前先 seek 到 raw_frames_read
+    SPEED_KEYS = (ord('='), ord('+'), ord('-'), ord('_'), ord('0'))
+    SEEK_JUMP_KEYS = {
+        ord('['): -SEEK_JUMP_SHORT_SEC, ord(']'): SEEK_JUMP_SHORT_SEC,
+        ord('{'): -SEEK_JUMP_LONG_SEC, ord('}'): SEEK_JUMP_LONG_SEC,
+    }
+
+    def show_view(body, pos):
+        """顯示一幀：影片畫面 body（已畫好疊圖）下面接播放控制列。"""
+        nonlocal view_body, view_pos
+        view_body, view_pos = body, pos
+        band = seek_bar.render(
+            body.shape[1], y_offset=body.shape[0], frame_idx=pos, total_frames=total_frames,
+            fps=source_fps, paused=paused, speed=playback_speed, actual_speed=play_clock.actual_speed,
+            fast_forward=frames_since_skip < SEQUENCE_LENGTH,
+        )
+        cv2.imshow(WINDOW_NAME, np.vstack([body, band]))
+
+    def refresh_view():
+        """暫停／拖曳中狀態變了（懸停預覽、倍速、PLAYING→PAUSED）：用同一張畫面重畫控制列。"""
+        if view_body is not None:
+            show_view(view_body, view_pos)
+
+    def change_speed(key):
+        nonlocal playback_speed
+        old = playback_speed
+        if key == ord('0'):
+            playback_speed = 1.0
+        else:
+            playback_speed = _playback_bar.step_speed(old, +1 if key in (ord('='), ord('+')) else -1)
+        if playback_speed == old:
+            print(f"\n播放倍速維持 {_playback_bar.speed_label(old)}（{'已是 1x' if key == ord('0') else '已到階梯盡頭'}）")
+        else:
+            print(f"\n播放倍速 {_playback_bar.speed_label(old)} → {_playback_bar.speed_label(playback_speed)}")
+        play_clock.reset()
+        sync_audio(view_pos / source_fps)
 
     # 即時顯示狀態
     behavior_id = LOW_CONF_ID
@@ -1359,8 +1422,15 @@ def main():
         nonlocal local_behavior_occurrence_counts, local_last_behavior_for_occurrence
         nonlocal _cat_missing_streak, _last_known_kpts, _last_known_kpt_conf
         nonlocal _last_known_bbox, _last_known_bbox_conf
-        nonlocal history_back_steps, step_one_frame_and_repause
+        nonlocal history_back_steps, step_one_frame_and_repause, frames_since_skip
+        nonlocal ff_frame, cap_out_of_sync
 
+        play_clock.reset()  # 重播／跳轉／換片後時間軸不連續，倍速節流與快轉從新位置重新起算
+        frames_since_skip = SEQUENCE_LENGTH
+        ff_frame = None          # 呼叫端都已經自己把 cap 移到新位置（或換了新影片），回到 cap 讀幀
+        cap_out_of_sync = False
+        if ff_reader is not None:
+            ff_reader.active = False
         keypoints_buffer.clear()
         bbox_buffer.clear()
         frame_history.clear()
@@ -1393,58 +1463,113 @@ def main():
         local_last_behavior_for_occurrence = LOW_CONF_ID
         reset_behavior_display_state()
 
-    def seek_to_seconds(target_sec):
-        """按 t 鍵跳轉播放位置用：把播放位置移到 target_sec 秒（超出範圍會夾到
-        [0, 影片總長] 之間），並清空累積的偵測/追蹤狀態——時間軸跳躍後，緩衝區裡
+    def break_behavior_sequence(reset_track):
+        """跳幀快轉後：16 幀序列已經不連續，清掉關鍵點緩衝／EMA／消失容忍與畫面上的行為標籤，
+        行為分類要等重新累積滿 SEQUENCE_LENGTH 幀才恢復。不動畫面快取與累計的統計面板數字
+        （跟 reset_video_runtime_state() 不同）；這一輪也不再是「完整播過一次」，不寫進 CSV 報告。"""
+        nonlocal prev_kpts, prev_kpt_conf, ema_kpts
+        nonlocal _cat_missing_streak, _last_known_kpts, _last_known_kpt_conf
+        nonlocal _last_known_bbox, _last_known_bbox_conf
+        nonlocal local_behavior_current_confidences, local_last_behavior_for_occurrence
+        nonlocal switched_before_first_pass_complete
+        keypoints_buffer.clear()
+        bbox_buffer.clear()
+        prev_kpts = prev_kpt_conf = ema_kpts = None
+        _cat_missing_streak = 0
+        _last_known_kpts = _last_known_kpt_conf = None
+        _last_known_bbox = _last_known_bbox_conf = None
+        local_behavior_current_confidences = np.zeros(5, dtype=np.float32)
+        local_last_behavior_for_occurrence = LOW_CONF_ID
+        reset_behavior_display_state()
+        if reset_track:
+            keypoint_detector.reset_track()  # 跳了一大段，畫面裡未必還是同一隻貓
+        if not first_pass_completed:
+            switched_before_first_pass_complete = True
+
+    def fast_forward_frames(n):
+        """往前略過 n 幀（快轉追上倍速）：改用 PyAV 讀幀器跳（關鍵幀／只解碼不轉色，快），解出的那一幀
+        放進 ff_frame 給下一輪用，之後也由它照順序供應畫面，直到回到不跳幀的倍速。PyAV 不能用才退回
+        OpenCV（少量 grab()、多的精確 seek，慢）。"""
+        nonlocal raw_frames_read, frames_since_skip, ff_reader, ff_frame, cap_out_of_sync
+        target = raw_frames_read + n
+        landed = None
+        if not is_stream_url:
+            if ff_reader is None:
+                ff_reader = _playback_bar.FastForwardReader(video_path, source_fps, expected_hw=(height, width))
+            landed = ff_reader.jump(target, raw_frames_read)
+        if landed is not None:
+            raw_frames_read, ff_frame = landed
+            cap_out_of_sync = True
+        elif cap_out_of_sync or n > FAST_FORWARD_GRAB_MAX_FRAMES:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+            raw_frames_read = target
+            cap_out_of_sync = False
+        else:
+            for _ in range(n):
+                if not cap.grab():
+                    break
+                raw_frames_read += 1
+        if frames_since_skip >= SEQUENCE_LENGTH:
+            print(f"\n⏩ 快轉跳幀中（{_playback_bar.speed_label(playback_speed)}，推論跟不上）：行為分類暫停")
+        frames_since_skip = 0
+        break_behavior_sequence(reset_track=n > source_fps)
+
+    def seek_to_frame(target_frame):
+        """跳轉播放位置（t 鍵、[ ] { } 鍵、拉桿共用）：把播放位置移到第 target_frame 幀（0 起算，
+        超出範圍會夾到 [0, total_frames-1]），並清空累積的偵測/追蹤狀態——時間軸跳躍後，緩衝區裡
         舊時間點的關鍵點序列/EMA/追蹤鎖定已經沒有意義，比照 'r' 重置鍵的處理方式
         清空（reset_video_runtime_state() 內部連 raw_frames_read 也會歸零，這裡
         呼叫完之後再手動改成跳轉後的幀數，對齊新的播放位置）。
 
-        呼叫前呼叫端要自行確認 total_frames > 0（讀不到總長度的來源，例如即時
-        串流，沒有『跳到第幾秒』這個概念，不支援跳轉）。"""
-        nonlocal raw_frames_read
-        clamped_sec = max(0.0, min(target_sec, duration))
-        target_frame = int(round(clamped_sec * source_fps))
-        target_frame = max(0, min(target_frame, max(0, total_frames - 1)))
-        cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-        reset_video_runtime_state()
-        raw_frames_read = target_frame
-        print(
-            f"\n⏩ 已跳轉到 {clamped_sec:.2f}s"
-            f"（第 {target_frame} 幀 / 共 {total_frames} 幀，影片總長 {duration:.2f}s）"
-        )
-
-    def handle_seek_key():
-        """按 t 鍵的共用處理邏輯（播放中／暫停中兩個按鍵分支都會呼叫）：確認這個
-        來源支援跳轉（total_frames > 0），跟使用者要秒數（用 input()，讀取這個
-        終端機視窗的輸入，不是 OpenCV 視窗——按 t 之後要切到執行這支腳本的終端機
-        視窗輸入數字），驗證後呼叫 seek_to_seconds()。跳轉發生在「這支影片第一輪
-        還沒播完」的時候，比照這支腳本裡其他所有會打斷正常線性播放的操作（切
-        影片/切資料夾/分類移動影片），把 switched_before_first_pass_complete
+        跳轉發生在「這支影片第一輪還沒播完」的時候，比照這支腳本裡其他所有會打斷正常線性
+        播放的操作（切影片/切資料夾/分類移動影片），把 switched_before_first_pass_complete
         標成 True——時間軸被跳著看過，這一輪統計已經不是「完整播過一次」，不該
         被當成正常結果寫進最終的 CSV 報告。
 
+        讀不到總長度的來源（例如即時串流）沒有『跳到第幾秒』這個概念，回傳 False 不跳轉。"""
+        nonlocal raw_frames_read, switched_before_first_pass_complete
+        if total_frames <= 0:
+            print("\n⚠ 這個來源沒有已知的總長度（例如即時串流），無法跳轉時間點")
+            return False
+        if not first_pass_completed:
+            switched_before_first_pass_complete = True
+        target_frame = max(0, min(int(target_frame), max(0, total_frames - 1)))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+        reset_video_runtime_state()
+        raw_frames_read = target_frame
+        play_clock.reset()
+        sync_audio(target_frame / source_fps)
+        print(
+            f"\n⏩ 已跳轉到 {_playback_bar.fmt_hms(target_frame / source_fps)}"
+            f"（第 {target_frame + 1} 幀 / 共 {total_frames} 幀，影片總長 {_playback_bar.fmt_hms(duration)}）"
+        )
+        return True
+
+    def handle_seek_key():
+        """按 t 鍵的共用處理邏輯（播放中／暫停中兩個按鍵分支都會呼叫）：跟使用者要時間
+        （用 input()，讀取這個終端機視窗的輸入，不是 OpenCV 視窗——按 t 之後要切到執行
+        這支腳本的終端機視窗輸入），驗證後呼叫 seek_to_frame()。可以輸入秒數（95.5）、
+        分:秒（1:35）或 時:分:秒（1:02:03），長達數小時的影片直接打時間比算秒數方便。
+
         回傳 True 代表真的跳轉成功了（呼叫端可能想藉此決定要不要恢復播放）。"""
-        nonlocal switched_before_first_pass_complete
         if total_frames <= 0:
             print("\n⚠ 這個來源沒有已知的總長度（例如即時串流），無法跳轉時間點")
             return False
         try:
-            raw_answer = input(f"\n跳轉到第幾秒？(0~{duration:.2f}，Enter 取消): ").strip()
+            raw_answer = input(
+                f"\n跳轉到哪裡？秒數或 時:分:秒（例 95.5、1:35、1:02:03；"
+                f"00:00:00~{_playback_bar.fmt_hms(duration)}，Enter 取消): "
+            ).strip()
         except EOFError:
             raw_answer = ""
         if not raw_answer:
             print("已取消跳轉")
             return False
-        try:
-            target_sec = float(raw_answer)
-        except ValueError:
+        target_sec = _playback_bar.parse_time_input(raw_answer)
+        if target_sec is None:
             print(f"⚠ 輸入無效「{raw_answer}」，未跳轉")
             return False
-        if not first_pass_completed:
-            switched_before_first_pass_complete = True
-        seek_to_seconds(target_sec)
-        return True
+        return seek_to_frame(int(round(min(target_sec, duration) * source_fps)))
 
     window_scale = 1.0  # Ctrl+加號／減號調整的視窗縮放倍率
     if display_window:
@@ -1455,6 +1580,7 @@ def main():
                 cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         else:
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_AUTOSIZE)
+        cv2.setMouseCallback(WINDOW_NAME, seek_bar.on_mouse)  # 底部時間拉桿：點擊／拖曳跳轉、滾輪微調
 
     # ===== 音訊同步播放初始化 =====
     audio_enabled = False
@@ -1484,6 +1610,20 @@ def main():
                 pygame.mixer.music.stop()
             except Exception:
                 pass
+
+    def sync_audio(at_sec):
+        """跳轉／換倍速後讓音訊跟上畫面：pygame 不能變速，非 1x 時先靜音（暫停），1x 時從 at_sec 重新播放。"""
+        if not audio_enabled:
+            return
+        try:
+            if playback_speed != 1.0:
+                pygame.mixer.music.pause()
+                return
+            pygame.mixer.music.play(start=max(0.0, float(at_sec)))
+            if paused:
+                pygame.mixer.music.pause()
+        except Exception as e:
+            print(f"⚠ 音訊同步失敗: {e}")
 
     open_fail_streak = 0  # 連續「打不開」的影片數；達到清單長度代表全部都打不開，要結束而不是無限輪播
     while not stop_requested:
@@ -1579,7 +1719,11 @@ def main():
         print(f"模型輸入時基: {model_input_fps:.2f} fps (frame_step={frame_step})")
         print(f"時長: {duration:.1f} 秒")
         if is_test_mode:
-            print("控制: ESC=退出  space=暫停  r=重置  t=跳轉時間點  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  Ctrl+加號/減號=縮放視窗  Shift+A/B/C/D/E=移入 walk/lick/scratch/shake/stop 資料夾")
+            print("控制: ESC=退出  space=暫停/繼續  p=暫停  g=繼續  r=重置  t=跳轉時間點(秒數或 時:分:秒)  1/2=上/下部  z/x/c/v/b=切換資料夾  i=資訊  Ctrl+加號/減號=縮放視窗  Shift+A/B/C/D/E=移入 walk/lick/scratch/shake/stop 資料夾")
+            print(f"播放: [ / ]=倒退/快轉 {SEEK_JUMP_SHORT_SEC} 秒  {{ / }}=倒退/快轉 {SEEK_JUMP_LONG_SEC} 秒  =/+=加速  -=減速  0=回到 1x"
+                  f"（目前 {_playback_bar.speed_label(playback_speed)}，階梯 {'/'.join(_playback_bar.speed_label(v) for v in _playback_bar.SPEED_STEPS)}）"
+                  f"  底部拉桿可點擊/拖曳跳轉、滾輪 ±{_playback_bar.WHEEL_STEP_SEC:g} 秒  a/d=暫停後逐幀")
+            print(f"      超過 {_playback_bar.speed_label(FRAME_SKIP_ABOVE_SPEED)} 而推論跟不上時會跳幀快轉，期間行為分類暫停（畫面顯示 FAST-FWD）")
         if loop_playback:
             print("🔁 循環播放模式（當前影片播完會重播）")
         print("-" * 60)
@@ -1600,6 +1744,12 @@ def main():
         consecutive_read_failures = 0
 
         reset_behavior_display_state()
+        seek_bar.cancel()   # 上一支影片殘留的拖曳／跳轉請求不能套到這一支
+        play_clock.reset()
+        frames_since_skip = SEQUENCE_LENGTH
+        ff_reader = None
+        ff_frame = None
+        cap_out_of_sync = False
 
         # EMA 狀態：跨幀累積，切影片或貓消失時重置
         ema_kpts = None  # shape (17, 2)，儲存上一幀的 EMA 平滑座標
@@ -1633,7 +1783,27 @@ def main():
         restart_audio()
 
         while True:
-            ret, frame = cap.read()
+            if ff_frame is not None:
+                # 快轉跳轉解好的那一幀（raw_frames_read 已經設成它的幀號，下面 +1 之後＝已讀幀數）
+                ret, frame, ff_frame = True, ff_frame, None
+            elif cap_out_of_sync and playback_speed > FRAME_SKIP_ABOVE_SPEED and ff_reader is not None and ff_reader.active:
+                # 快轉中：照順序由 PyAV 讀下一幀；讀到結尾 → ret=False 走下面播完的流程
+                _nxt = ff_reader.next()
+                if _nxt is None:
+                    ret, frame = False, None
+                else:
+                    (raw_frames_read, frame), ret = _nxt, True
+            else:
+                if cap_out_of_sync:
+                    # 回到不跳幀的倍速：cap 還停在快轉前的位置，精確 seek 到目前位置再讀（只會慢這一次）。
+                    # 這也是一次跳轉：ST-GCN 緩衝區清空重新蒐集，1x 的分類只吃 OpenCV 連續讀出來的幀
+                    # （不混快轉時 PyAV 解的幀，seek 萬一沒落在精確那一幀也不會讓序列不連續）
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, raw_frames_read)
+                    cap_out_of_sync = False
+                    if ff_reader is not None:
+                        ff_reader.active = False
+                    break_behavior_sequence(reset_track=False)
+                ret, frame = cap.read()
             if not ret:
                 if is_stream_url:
                     print(f"⚠ 串流讀取失敗，嘗試重新連線: {video_path}")
@@ -1682,6 +1852,9 @@ def main():
             # 這類沒有固定總長度的來源（is_stream_url 或 duration<=0）一律忽略這部分，
             # TIMER 只顯示已播放秒數（見 draw_behavior_duration_panel 的說明）。
             panel_total_duration = duration if (not is_stream_url and duration > 0) else None
+            # 面板 TIMER 顯示「這一幀的開始時間」，跟底部控制列同一個基準（第 1 幀＝00:00:00）；
+            # frame_time_sec（這一幀的結束時間）照舊給統計／CSV 用
+            panel_elapsed_sec = max(0, raw_frames_read - 1) / source_fps if source_fps > 0 else 0.0
 
             # YOLO-Pose 偵測（單一追蹤目標，供 ST-GCN 行為分類/統計使用，行為不變）。
             # 多貓偵測（純顯示用）：以前是另外對同一幀再跑一次 YOLO 取得所有實例
@@ -1897,7 +2070,7 @@ def main():
             if display_window:
                 preview_scale, preview_pad_x, preview_pad_y = 1.0, 0, 0
                 if DISPLAY_SIZE is not None:
-                    show_frame, preview_scale, preview_pad_x, preview_pad_y = resize_with_letterbox(frame, DISPLAY_SIZE)
+                    show_frame, preview_scale, preview_pad_x, preview_pad_y = resize_with_letterbox(frame, body_size)
                     if kpts is not None:
                         scaled_kpts, scaled_bbox = scale_kpts_and_bbox_for_letterbox(
                             kpts,
@@ -1921,7 +2094,7 @@ def main():
                     else:
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
-                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts, total_duration_sec=panel_total_duration)
+                        draw_behavior_duration_panel(show_frame, panel_elapsed_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts, total_duration_sec=panel_total_duration)
                 else:
                     show_frame = frame.copy()
                     if kpts is not None:
@@ -1940,7 +2113,7 @@ def main():
                     else:
                         draw_no_cat_overlay(show_frame)
                     if show_overlay_info:
-                        draw_behavior_duration_panel(show_frame, frame_time_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts, total_duration_sec=panel_total_duration)
+                        draw_behavior_duration_panel(show_frame, panel_elapsed_sec, local_behavior_duration_sec, local_behavior_current_confidences, local_behavior_occurrence_counts, total_duration_sec=panel_total_duration)
                 _h, _w = show_frame.shape[:2]
                 _ui = compute_ui_scale(_w, _h)
                 # 多貓畫框：把這一幀偵測到、但不是目前追蹤鎖定目標的貓也畫出來
@@ -1974,21 +2147,36 @@ def main():
                             cv2.FONT_HERSHEY_SIMPLEX, _fs, (160, 210, 255), _th, cv2.LINE_AA)
                 # 目前播放的影片檔名（右下角；左下是行為統計面板、右上是導覽列）
                 draw_video_name_label(show_frame, video_path, current_video_idx, len(video_paths), ui_scale=_ui)
-                cv2.imshow(WINDOW_NAME, show_frame)
-                # 進來的都是「新推進」的一幀（scrub 瀏覽只重播快取，不會走到這裡），
-                # 所以每次都重置回捲位置到最新，跟 reset_video_runtime_state() 的
-                # 用意一致：history_back_steps 只在暫停瀏覽時才有意義。
-                frame_history.append(_encode_frame_for_history(show_frame))
-                history_back_steps = 0
 
                 # 暫停時按 d 走到快取最新幀觸發的「推進一幀」：這一幀處理完就補上，
-                # 立刻重新暫停，不會繼續往下播放
+                # 立刻重新暫停，不會繼續往下播放（放在顯示之前，控制列才會直接顯示 PAUSED）
                 if step_one_frame_and_repause:
                     step_one_frame_and_repause = False
                     paused = True
-                    print(f"\n⏭ 已推進至下一幀（第 {raw_frames_read} 幀）")
+                    print(f"\n⏭ 已推進至下一幀（第 {raw_frames_read} 幀，{_playback_bar.fmt_hms((raw_frames_read - 1) / source_fps)}）")
 
-                key = cv2.waitKey(1) & 0xFF
+                cur_pos = max(0, raw_frames_read - 1)  # 這一幀的幀號（0 起算）
+                show_view(show_frame, cur_pos)
+                # 進來的都是「新推進」的一幀（scrub 瀏覽只重播快取，不會走到這裡），
+                # 所以每次都重置回捲位置到最新，跟 reset_video_runtime_state() 的
+                # 用意一致：history_back_steps 只在暫停瀏覽時才有意義。
+                frame_history.append((_encode_frame_for_history(show_frame), cur_pos))
+                history_back_steps = 0
+                if frames_since_skip < SEQUENCE_LENGTH:
+                    frames_since_skip += 1
+                    if frames_since_skip == SEQUENCE_LENGTH:
+                        print("\n▶ 已停止跳幀，行為分類恢復")
+
+                # 依播放倍速節流：等到這一幀「該出現的時間」才往下（推論比這慢就不等；允許快轉時由下方跳幀追上）
+                _allow_skip = playback_speed > FRAME_SKIP_ABOVE_SPEED and total_frames > 0
+                key = cv2.waitKey(
+                    1 if paused else play_clock.delay_ms(cur_pos / source_fps, playback_speed, catch_up=_allow_skip)
+                ) & 0xFF
+                # 正在拖曳拉桿：停在目前這一幀等放開（拖曳中只更新預覽，放開才跳轉，見 _playback_bar.SeekBar）
+                while seek_bar.dragging:
+                    cv2.waitKey(30)
+                    if seek_bar.dirty:
+                        refresh_view()
                 _zoom = _window_zoom.poll(WINDOW_NAME) if not DISPLAY_FULLSCREEN else 0
                 if _zoom:
                     window_scale = _window_zoom.clamp_scale(
@@ -2048,8 +2236,21 @@ def main():
                 if key == ord('t'):
                     handle_seek_key()
                     continue
-                if key == ord(' '):
-                    paused = not paused
+                # 拉桿放開／滾輪、[ ] { } 鍵：跳轉後接著播放
+                _seek_target = seek_bar.take_pending()
+                if _seek_target is None and key in SEEK_JUMP_KEYS:
+                    _seek_target = cur_pos + int(round(SEEK_JUMP_KEYS[key] * source_fps))
+                if _seek_target is not None:
+                    seek_to_frame(_seek_target)
+                    continue
+                if key in SPEED_KEYS:
+                    change_speed(key)
+                # p＝只暫停（語音「暫停影片」送這個鍵：播放中才有作用，已暫停時在下面的暫停迴圈裡不處理）；
+                # g＝只繼續（在暫停迴圈裡處理，播放中按了沒反應）。空白鍵照舊是暫停／繼續來回切換。
+                if key in (ord(' '), ord('p')):
+                    paused = True if key == ord('p') else not paused
+                    if not paused:
+                        play_clock.reset()  # 暫停的那段時間不能算成「該快轉過去」
                     if audio_enabled:
                         try:
                             pygame.mixer.music.pause() if paused else pygame.mixer.music.unpause()
@@ -2070,6 +2271,7 @@ def main():
                         _show_history_frame(len(frame_history) - 1 - history_back_steps)
                     # key == 'd'：剛從即時播放暫停下來就已經是快取最新幀，沒有更前面可跳，略過即可
                 if paused:
+                    refresh_view()  # 控制列改顯示 PAUSED
                     while paused:
                         k2 = cv2.waitKey(50) & 0xFF
                         _zoom = _window_zoom.poll(WINDOW_NAME) if not DISPLAY_FULLSCREEN else 0
@@ -2080,7 +2282,24 @@ def main():
                             cv2.resizeWindow(
                                 WINDOW_NAME, int(DISPLAY_SIZE[0] * window_scale), int(DISPLAY_SIZE[1] * window_scale),
                             )
-                        if k2 == ord(' '):
+                        if seek_bar.dirty:
+                            refresh_view()  # 拉桿懸停／拖曳預覽
+                        # 拉桿放開／滾輪、[ ] { } 鍵：跟 t 一樣只推進跳轉目標那一幀，讀完自動重新暫停。
+                        # 相對跳轉以「目前畫面那一幀」為準（a 往回捲到快取裡的舊幀時也是）。
+                        _seek_target = seek_bar.take_pending()
+                        if _seek_target is None and k2 in SEEK_JUMP_KEYS:
+                            _seek_target = view_pos + int(round(SEEK_JUMP_KEYS[k2] * source_fps))
+                        if _seek_target is not None:
+                            if seek_to_frame(_seek_target):
+                                paused = False
+                                step_one_frame_and_repause = True
+                                break
+                            continue
+                        if k2 in SPEED_KEYS:
+                            change_speed(k2)
+                            refresh_view()
+                            continue
+                        if k2 in (ord(' '), ord('g')):   # g＝只繼續（語音「繼續播放」）；p 在這裡不處理＝已暫停就維持暫停
                             paused = False
                             if audio_enabled:
                                 try:
@@ -2163,16 +2382,29 @@ def main():
                                 paused = False
                                 step_one_frame_and_repause = True
                                 break
+                    play_clock.reset()  # 暫停的那段時間不能算成「該快轉過去」
 
             if stop_requested or switch_delta != 0:
                 break
 
             # 降採樣時跳過後續 frame_step-1 幀，避免不必要的完整解碼
             if frame_step > 1:
-                for _ in range(frame_step - 1):
-                    if not cap.grab():
-                        break
-                    raw_frames_read += 1
+                if cap_out_of_sync:
+                    pass  # 快轉中由 PyAV 讀幀，進度靠上面的跳幀追上倍速，這裡不另外略過
+                else:
+                    for _ in range(frame_step - 1):
+                        if not cap.grab():
+                            break
+                        raw_frames_read += 1
+
+            # 快轉：倍速 > FRAME_SKIP_ABOVE_SPEED 而推論跟不上時，直接跳到「現在應該播到」的那一幀
+            if (display_window and not paused and not step_one_frame_and_repause
+                    and playback_speed > FRAME_SKIP_ABOVE_SPEED and total_frames > 0):
+                _due = play_clock.due_frame(source_fps)
+                if _due is not None:
+                    _skip = min(int(_due), total_frames - 1) - raw_frames_read
+                    if _skip > 0:
+                        fast_forward_frames(_skip)
 
             # 每 100 幀顯示進度（僅第一次循環顯示）
             if local_loop_count == 0 and local_frames_processed % 100 == 0:
@@ -2180,6 +2412,8 @@ def main():
                 print(f"  影片[{current_video_idx}] 處理進度: {raw_frames_read}/{total_frames} ({pct:.1f}%)")
 
         cap.release()
+        if ff_reader is not None:
+            ff_reader.close()
         stop_audio()
 
         # 只有完整播放第一輪且非中途切換，才提交本影片統計
